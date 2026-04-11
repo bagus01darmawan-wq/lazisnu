@@ -1,20 +1,19 @@
-// OTP Service - Generate, Store, and Verify OTP codes
+// OTP Service - Generate, Store, and Verify OTP codes using Redis
 
-import { config } from '../config/env';
+import { getRedis } from '../config/redis';
 
-// In-memory store for development (use Redis in production)
+// OTP validity in seconds (5 minutes)
+const OTP_EXPIRY_SECONDS = 5 * 60;
+// Rate limit: max OTP requests per window
+const RATE_LIMIT_MAX = 3;
+const RATE_LIMIT_WINDOW_SECONDS = 5 * 60;
+
+// Fallback in-memory store when Redis is not configured
 const otpStore: Map<string, { otp: string; expiresAt: number }> = new Map();
-
-// OTP validity duration in milliseconds (5 minutes)
-const OTP_EXPIRY = 5 * 60 * 1000;
 
 /**
  * OTP Service
- * Handles generation, storage, and verification of OTP codes
- *
- * For production:
- * - Use Redis instead of in-memory store
- * - Integrate with WhatsApp Business API for sending
+ * Uses Redis if REDIS_URL is configured, falls back to in-memory for development.
  */
 export const otpService = {
   /**
@@ -22,18 +21,21 @@ export const otpService = {
    */
   generateAndStore: async (phone: string): Promise<{ success: boolean; otp: string }> => {
     try {
-      // Generate 6-digit OTP
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
-      const expiresAt = Date.now() + OTP_EXPIRY;
+      const redis = getRedis();
 
-      // In production, use Redis:
-      // await redis.set(`otp:${phone}`, otp, 'EX', 300);
-
-      // For now, use in-memory store
-      otpStore.set(phone, { otp, expiresAt });
-
-      // Auto-cleanup expired OTPs periodically
-      cleanupExpiredOTPs();
+      if (redis) {
+        // Store in Redis with TTL
+        await redis.set(`otp:${phone}`, otp, 'EX', OTP_EXPIRY_SECONDS);
+      } else {
+        // Fallback: in-memory store
+        const expiresAt = Date.now() + OTP_EXPIRY_SECONDS * 1000;
+        otpStore.set(phone, { otp, expiresAt });
+        // Cleanup expired entries
+        for (const [key, val] of otpStore.entries()) {
+          if (Date.now() > val.expiresAt) otpStore.delete(key);
+        }
+      }
 
       return { success: true, otp };
     } catch (error) {
@@ -47,32 +49,21 @@ export const otpService = {
    */
   verify: async (phone: string, otp: string): Promise<boolean> => {
     try {
-      // In production, use Redis:
-      // const storedOTP = await redis.get(`otp:${phone}`);
-      // return storedOTP === otp;
+      const redis = getRedis();
 
-      // For now, use in-memory store
-      const stored = otpStore.get(phone);
-
-      if (!stored) {
-        return false;
+      if (redis) {
+        const storedOTP = await redis.get(`otp:${phone}`);
+        return storedOTP === otp;
+      } else {
+        // Fallback: in-memory store
+        const stored = otpStore.get(phone);
+        if (!stored) return false;
+        if (Date.now() > stored.expiresAt) {
+          otpStore.delete(phone);
+          return false;
+        }
+        return stored.otp === otp;
       }
-
-      // Check if OTP has expired
-      if (Date.now() > stored.expiresAt) {
-        otpStore.delete(phone);
-        return false;
-      }
-
-      // Verify OTP matches
-      const isValid = stored.otp === otp;
-
-      // Clean up after verification attempt
-      if (isValid || Date.now() > stored.expiresAt) {
-        otpStore.delete(phone);
-      }
-
-      return isValid;
     } catch (error) {
       console.error('OTP verification error:', error);
       return false;
@@ -83,56 +74,59 @@ export const otpService = {
    * Delete OTP after successful verification
    */
   delete: async (phone: string): Promise<void> => {
-    otpStore.delete(phone);
-
-    // In production:
-    // await redis.del(`otp:${phone}`);
+    try {
+      const redis = getRedis();
+      if (redis) {
+        await redis.del(`otp:${phone}`);
+      } else {
+        otpStore.delete(phone);
+      }
+    } catch (error) {
+      console.error('OTP delete error:', error);
+    }
   },
 
   /**
-   * Get remaining time for OTP (in seconds)
+   * Get remaining TTL for OTP (in seconds)
    */
   getRemainingTime: async (phone: string): Promise<number> => {
-    const stored = otpStore.get(phone);
-
-    if (!stored) {
+    try {
+      const redis = getRedis();
+      if (redis) {
+        const ttl = await redis.ttl(`otp:${phone}`);
+        return Math.max(0, ttl);
+      } else {
+        const stored = otpStore.get(phone);
+        if (!stored) return 0;
+        return Math.max(0, Math.floor((stored.expiresAt - Date.now()) / 1000));
+      }
+    } catch {
       return 0;
     }
-
-    const remaining = stored.expiresAt - Date.now();
-    return Math.max(0, Math.floor(remaining / 1000));
   },
 
   /**
-   * Check if rate limit is exceeded
-   * Limits: 3 OTP requests per phone per 5 minutes
+   * Check rate limit: max 3 OTP requests per 5 minutes per phone
+   * Returns true if allowed, false if rate limited
    */
   checkRateLimit: async (phone: string): Promise<boolean> => {
-    // In production, use Redis with rate limit:
-    // const count = await redis.incr(`otp_rate:${phone}`);
-    // if (count === 1) await redis.expire(`otp_rate:${phone}`, 300);
-    // return count > 3;
-
-    // For development, skip rate limiting
-    return true;
+    try {
+      const redis = getRedis();
+      if (redis) {
+        const key = `otp_rate:${phone}`;
+        const count = await redis.incr(key);
+        if (count === 1) {
+          // First request: set expiry
+          await redis.expire(key, RATE_LIMIT_WINDOW_SECONDS);
+        }
+        return count <= RATE_LIMIT_MAX;
+      }
+      // In development without Redis, always allow
+      return true;
+    } catch {
+      return true;
+    }
   },
 };
-
-/**
- * Cleanup expired OTPs from memory
- */
-function cleanupExpiredOTPs() {
-  const now = Date.now();
-  for (const [phone, data] of otpStore.entries()) {
-    if (now > data.expiresAt) {
-      otpStore.delete(phone);
-    }
-  }
-}
-
-// Auto-cleanup every minute
-if (config.NODE_ENV === 'development') {
-  setInterval(cleanupExpiredOTPs, 60000);
-}
 
 export default otpService;

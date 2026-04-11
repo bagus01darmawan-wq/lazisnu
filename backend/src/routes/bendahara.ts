@@ -1,4 +1,4 @@
-// Bendahara Routes - Financial Reports API
+﻿// Bendahara Routes - Financial Reports API
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../config/database';
@@ -14,66 +14,47 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
     try {
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const yearStart = new Date(now.getFullYear(), 0, 1);
 
-      // Current month collections
-      const monthCollections = await prisma.collections.findMany({
+      const monthCollections = await prisma.collection.findMany({
         where: {
-          collected_at: { gte: monthStart.toISOString() },
-          sync_status: 'COMPLETED',
+          collectedAt: { gte: monthStart },
+          syncStatus: 'COMPLETED',
         },
         include: {
           can: {
             include: {
-              branch: {
-                include: { district: true }
-              }
-            }
-          }
-        }
+              branch: { include: { district: true } },
+            },
+          },
+          officer: { select: { id: true, fullName: true } },
+        },
       });
 
-      // Group by district
-      const byDistrict: Record<string, { total: number; count: number }> = {};
+      // Aggregate
+      const byDistrict: Record<string, { name: string; total: number; count: number }> = {};
       const byOfficer: Record<string, { name: string; total: number; count: number }> = {};
-      let cashTotal = 0;
-      let cashCount = 0;
-      let transferTotal = 0;
-      let transferCount = 0;
+      let cashTotal = 0, cashCount = 0, transferTotal = 0, transferCount = 0;
 
       for (const col of monthCollections) {
-        const districtId = col.can.branch.district.id;
+        const districtId = col.can.branch.districtId;
         const districtName = col.can.branch.district.name;
-        const officerId = col.officer_id;
+        const amount = Number(col.amount);
 
         if (!byDistrict[districtId]) {
-          byDistrict[districtId] = { total: 0, count: 0 };
+          byDistrict[districtId] = { name: districtName, total: 0, count: 0 };
         }
-        byDistrict[districtId].total += Number(col.amount);
+        byDistrict[districtId].total += amount;
         byDistrict[districtId].count++;
 
-        if (!byOfficer[officerId]) {
-          byOfficer[officerId] = { name: col.officer_id, total: 0, count: 0 };
+        if (!byOfficer[col.officerId]) {
+          byOfficer[col.officerId] = { name: col.officer.fullName, total: 0, count: 0 };
         }
-        byOfficer[officerId].total += Number(col.amount);
-        byOfficer[officerId].count++;
+        byOfficer[col.officerId].total += amount;
+        byOfficer[col.officerId].count++;
 
-        if (col.payment_method === 'CASH') {
-          cashTotal += Number(col.amount);
-          cashCount++;
-        } else {
-          transferTotal += Number(col.amount);
-          transferCount++;
-        }
+        if (col.paymentMethod === 'CASH') { cashTotal += amount; cashCount++; }
+        else { transferTotal += amount; transferCount++; }
       }
-
-      // Get officer names
-      const officerIds = Object.keys(byOfficer);
-      const officers = await prisma.officers.findMany({
-        where: { id: { in: officerIds } },
-        select: { id: true, full_name: true },
-      });
-      const officerMap = new Map(officers.map(o => [o.id, o.full_name]));
 
       return reply.send({
         success: true,
@@ -86,29 +67,26 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
             cash_count: cashCount,
             transfer_count: transferCount,
           },
-          by_district: Object.entries(byDistrict).map(([id, data]) => ({
+          by_district: Object.entries(byDistrict).map(([id, d]) => ({
             district_id: id,
-            district_name: monthCollections.find(c => c.can.branch.district.id === id)?.can.branch.district.name || 'Unknown',
-            total: data.total,
-            count: data.count,
+            district_name: d.name,
+            total: d.total,
+            count: d.count,
           })),
-          by_officer: officerIds.map(id => ({
+          by_officer: Object.entries(byOfficer).map(([id, o]) => ({
             officer_id: id,
-            officer_name: officerMap.get(id) || 'Unknown',
-            total: byOfficer[id].total,
-            count: byOfficer[id].count,
+            officer_name: o.name,
+            total: o.total,
+            count: o.count,
           })),
-          by_payment_method: {
-            cash: cashTotal,
-            transfer: transferTotal,
-          },
-          recent_transactions: monthCollections.slice(-10).map(c => ({
+          by_payment_method: { cash: cashTotal, transfer: transferTotal },
+          recent_transactions: monthCollections.slice(-10).map((c) => ({
             id: c.id,
             amount: Number(c.amount),
-            payment_method: c.payment_method,
-            collected_at: c.collected_at,
-            officer_name: officerMap.get(c.officer_id) || 'Unknown',
-            owner_name: c.can.owner_name,
+            payment_method: c.paymentMethod,
+            collected_at: c.collectedAt,
+            officer_name: c.officer.fullName,
+            owner_name: c.can.ownerName,
           })),
         },
       });
@@ -137,54 +115,50 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
       const limit = parseInt(query.limit || '20');
       const skip = (page - 1) * limit;
 
-      const where: any = { sync_status: 'COMPLETED' };
+      const where: any = { syncStatus: 'COMPLETED' };
 
       if (query.start_date && query.end_date) {
-        where.collected_at = {
-          gte: query.start_date,
-          lte: query.end_date,
+        where.collectedAt = {
+          gte: new Date(query.start_date),
+          lte: new Date(query.end_date),
         };
       }
-
-      if (query.officer_id) {
-        where.officer_id = query.officer_id;
-      }
-
+      if (query.officer_id) where.officerId = query.officer_id;
       if (query.district_id) {
-        where.can = { branch: { district_id: query.district_id } };
+        where.can = { branch: { districtId: query.district_id } };
       }
 
       const [collections, total] = await Promise.all([
-        prisma.collections.findMany({
+        prisma.collection.findMany({
           where,
           include: {
             can: {
               include: {
-                branch: { include: { district: true } }
-              }
+                branch: { include: { district: true } },
+              },
             },
-            officer: { select: { full_name: true, employee_code: true } },
+            officer: { select: { fullName: true, employeeCode: true } },
           },
-          orderBy: { collected_at: 'desc' },
+          orderBy: { collectedAt: 'desc' },
           skip,
           take: limit,
         }),
-        prisma.collections.count({ where }),
+        prisma.collection.count({ where }),
       ]);
 
       return reply.send({
         success: true,
         data: {
-          collections: collections.map(c => ({
+          collections: collections.map((c) => ({
             id: c.id,
-            qr_code: c.can.qr_code,
-            owner_name: c.can.owner_name,
-            owner_address: c.can.owner_address,
+            qr_code: c.can.qrCode,
+            owner_name: c.can.ownerName,
+            owner_address: c.can.ownerAddress,
             amount: Number(c.amount),
-            payment_method: c.payment_method,
-            collected_at: c.collected_at,
-            officer_name: c.officer.full_name,
-            officer_code: c.officer.employee_code,
+            payment_method: c.paymentMethod,
+            collected_at: c.collectedAt,
+            officer_name: c.officer.fullName,
+            officer_code: c.officer.employeeCode,
             branch_name: c.can.branch.name,
             district_name: c.can.branch.district.name,
           })),
@@ -205,18 +179,24 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
     try {
       const { id } = request.params as { id: string };
 
-      const collection = await prisma.collections.findUnique({
-        where: { id },
-        include: {
-          can: {
-            include: {
-              branch: { include: { district: true } }
-            }
+      const [collection, notification] = await Promise.all([
+        prisma.collection.findUnique({
+          where: { id },
+          include: {
+            can: {
+              include: {
+                branch: { include: { district: true } },
+              },
+            },
+            officer: { select: { fullName: true, phone: true, employeeCode: true } },
+            notifications: { orderBy: { createdAt: 'desc' }, take: 1 },
           },
-          officer: { select: { full_name: true, phone: true, employee_code: true } },
-          assignments: { select: { status: true } },
-        },
-      });
+        }),
+        prisma.notification.findFirst({
+          where: { collectionId: id },
+          orderBy: { createdAt: 'desc' },
+        }),
+      ]);
 
       if (!collection) {
         return reply.status(404).send({
@@ -225,36 +205,32 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Get notification status
-      const notification = await prisma.notifications.findFirst({
-        where: { collection_id: id },
-        orderBy: { created_at: 'desc' },
-      });
-
       return reply.send({
         success: true,
         data: {
           id: collection.id,
           can: {
-            qr_code: collection.can.qr_code,
-            owner_name: collection.can.owner_name,
-            owner_address: collection.can.owner_address,
-            owner_phone: collection.can.owner_phone,
+            qr_code: collection.can.qrCode,
+            owner_name: collection.can.ownerName,
+            owner_address: collection.can.ownerAddress,
+            owner_phone: collection.can.ownerPhone,
           },
           officer: {
-            name: collection.officer.full_name,
+            name: collection.officer.fullName,
             phone: collection.officer.phone,
-            code: collection.officer.employee_code,
+            code: collection.officer.employeeCode,
           },
           amount: Number(collection.amount),
-          payment_method: collection.payment_method,
-          collected_at: collection.collected_at,
-          submitted_at: collection.submitted_at,
-          synced_at: collection.synced_at,
-          sync_status: collection.sync_status,
+          payment_method: collection.paymentMethod,
+          collected_at: collection.collectedAt,
+          submitted_at: collection.submittedAt,
+          synced_at: collection.syncedAt,
+          sync_status: collection.syncStatus,
           notification_status: notification?.status || 'NOT_SENT',
           latitude: collection.latitude,
           longitude: collection.longitude,
+          branch_name: collection.can.branch.name,
+          district_name: collection.can.branch.district.name,
         },
       });
     } catch (error) {
@@ -275,65 +251,51 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
       const month = parseInt(query.month || (new Date().getMonth() + 1).toString());
 
       const startDate = new Date(year, month - 1, 1);
-      const endDate = new Date(year, month, 0);
+      const endDate = new Date(year, month, 0, 23, 59, 59);
 
-      const collections = await prisma.collections.findMany({
+      const collections = await prisma.collection.findMany({
         where: {
-          collected_at: {
-            gte: startDate.toISOString(),
-            lte: endDate.toISOString(),
-          },
-          sync_status: 'COMPLETED',
+          collectedAt: { gte: startDate, lte: endDate },
+          syncStatus: 'COMPLETED',
         },
         include: {
-          can: {
-            include: { branch: { include: { district: true } } }
-          },
-          officer: { select: { id: true, full_name: true } },
+          can: { include: { branch: { include: { district: true } } } },
+          officer: { select: { id: true, fullName: true } },
         },
       });
 
-      // Calculate summaries
-      let totalAmount = 0;
-      let cashAmount = 0;
-      let transferAmount = 0;
-
-      const byDistrict: Record<string, number> = {};
-      const byBranch: Record<string, number> = {};
+      let totalAmount = 0, cashAmount = 0, transferAmount = 0;
+      const byDistrict: Record<string, { name: string; amount: number }> = {};
+      const byBranch: Record<string, { name: string; amount: number }> = {};
       const byOfficer: Record<string, { name: string; amount: number; count: number }> = {};
 
       for (const col of collections) {
         const amount = Number(col.amount);
         totalAmount += amount;
 
-        if (col.payment_method === 'CASH') {
-          cashAmount += amount;
-        } else {
-          transferAmount += amount;
-        }
+        if (col.paymentMethod === 'CASH') cashAmount += amount;
+        else transferAmount += amount;
 
-        const districtId = col.can.branch.district.id;
-        const branchId = col.can.branch.id;
+        const districtId = col.can.branch.districtId;
+        const branchId = col.can.branchId;
         const officerId = col.officer.id;
 
-        byDistrict[districtId] = (byDistrict[districtId] || 0) + amount;
-        byBranch[branchId] = (byBranch[branchId] || 0) + amount;
+        if (!byDistrict[districtId]) {
+          byDistrict[districtId] = { name: col.can.branch.district.name, amount: 0 };
+        }
+        byDistrict[districtId].amount += amount;
+
+        if (!byBranch[branchId]) {
+          byBranch[branchId] = { name: col.can.branch.name, amount: 0 };
+        }
+        byBranch[branchId].amount += amount;
 
         if (!byOfficer[officerId]) {
-          byOfficer[officerId] = { name: col.officer.full_name, amount: 0, count: 0 };
+          byOfficer[officerId] = { name: col.officer.fullName, amount: 0, count: 0 };
         }
         byOfficer[officerId].amount += amount;
         byOfficer[officerId].count++;
       }
-
-      // Get district and branch names
-      const [districts, branches] = await Promise.all([
-        prisma.districts.findMany({ where: { id: { in: Object.keys(byDistrict) } } }),
-        prisma.branches.findMany({ where: { id: { in: Object.keys(byBranch) } } }),
-      ]);
-
-      const districtMap = new Map(districts.map(d => [d.id, d.name]));
-      const branchMap = new Map(branches.map(b => [b.id, b.name]));
 
       return reply.send({
         success: true,
@@ -343,25 +305,25 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
             total_amount: totalAmount,
             total_count: collections.length,
             cash_amount: cashAmount,
-            cash_count: collections.filter(c => c.payment_method === 'CASH').length,
+            cash_count: collections.filter((c) => c.paymentMethod === 'CASH').length,
             transfer_amount: transferAmount,
-            transfer_count: collections.filter(c => c.payment_method === 'TRANSFER').length,
+            transfer_count: collections.filter((c) => c.paymentMethod === 'TRANSFER').length,
           },
-          by_district: Object.entries(byDistrict).map(([id, amount]) => ({
+          by_district: Object.entries(byDistrict).map(([id, d]) => ({
             district_id: id,
-            district_name: districtMap.get(id) || 'Unknown',
-            amount,
+            district_name: d.name,
+            amount: d.amount,
           })),
-          by_branch: Object.entries(byBranch).map(([id, amount]) => ({
+          by_branch: Object.entries(byBranch).map(([id, b]) => ({
             branch_id: id,
-            branch_name: branchMap.get(id) || 'Unknown',
-            amount,
+            branch_name: b.name,
+            amount: b.amount,
           })),
-          by_officer: Object.entries(byOfficer).map(([id, data]) => ({
+          by_officer: Object.entries(byOfficer).map(([id, o]) => ({
             officer_id: id,
-            officer_name: data.name,
-            amount: data.amount,
-            count: data.count,
+            officer_name: o.name,
+            amount: o.amount,
+            count: o.count,
           })),
         },
       });
@@ -374,7 +336,7 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // GET /bendahara/export
+  // GET /bendahara/export (CSV)
   fastify.get('/export', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const query = request.query as {
@@ -383,24 +345,28 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
         format?: string;
       };
 
-      const collections = await prisma.collections.findMany({
+      if (!query.start_date || !query.end_date) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'start_date dan end_date wajib diisi' },
+        });
+      }
+
+      const collections = await prisma.collection.findMany({
         where: {
-          collected_at: {
-            gte: query.start_date,
-            lte: query.end_date,
+          collectedAt: {
+            gte: new Date(query.start_date),
+            lte: new Date(query.end_date),
           },
-          sync_status: 'COMPLETED',
+          syncStatus: 'COMPLETED',
         },
         include: {
-          can: {
-            include: { branch: { include: { district: true } } }
-          },
-          officer: { select: { full_name: true, employee_code: true } },
+          can: { include: { branch: { include: { district: true } } } },
+          officer: { select: { fullName: true, employeeCode: true } },
         },
-        orderBy: { collected_at: 'asc' },
+        orderBy: { collectedAt: 'asc' },
       });
 
-      // Generate CSV
       const headers = [
         'Tanggal',
         'Kode QR',
@@ -414,27 +380,27 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
         'Nominal',
       ];
 
-      const rows = collections.map(c => [
-        new Date(c.collected_at).toISOString().split('T')[0],
-        c.can.qr_code,
-        c.can.owner_name,
-        `"${c.can.owner_address.replace(/"/g, '""')}"`,
-        c.officer.full_name,
-        c.officer.employee_code,
+      const rows = collections.map((c) => [
+        new Date(c.collectedAt).toISOString().split('T')[0],
+        c.can.qrCode,
+        c.can.ownerName,
+        `"${c.can.ownerAddress.replace(/"/g, '""')}"`,
+        c.officer.fullName,
+        c.officer.employeeCode,
         c.can.branch.name,
         c.can.branch.district.name,
-        c.payment_method,
+        c.paymentMethod,
         Number(c.amount).toString(),
       ]);
 
-      const csv = [
-        headers.join(','),
-        ...rows.map(r => r.join(',')),
-      ].join('\n');
+      const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
 
-      reply.header('Content-Type', 'text/csv');
-      reply.header('Content-Disposition', `attachment; filename="report-${query.start_date}-${query.end_date}.csv"`);
-      return reply.send(csv);
+      reply.header('Content-Type', 'text/csv; charset=utf-8');
+      reply.header(
+        'Content-Disposition',
+        `attachment; filename="laporan-lazisnu-${query.start_date}-${query.end_date}.csv"`
+      );
+      return reply.send('\uFEFF' + csv); // BOM for Excel compatibility
     } catch (error) {
       fastify.log.error(error);
       return reply.status(500).send({

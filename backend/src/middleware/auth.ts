@@ -12,10 +12,11 @@ export interface JWTPayload {
   districtId?: string;
 }
 
-// Extend FastifyRequest
+// Extend FastifyRequest to add typed `currentUser`
+// We use `currentUser` instead of `user` to avoid conflict with @fastify/jwt
 declare module 'fastify' {
   interface FastifyRequest {
-    user?: JWTPayload;
+    currentUser?: JWTPayload;
   }
 }
 
@@ -37,16 +38,15 @@ export async function authenticate(
       });
     }
 
-    const token = authHeader.split(' ')[1];
     const decoded = await request.jwtVerify<JWTPayload>();
 
     // Verify user still exists and is active
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      select: { id: true, is_active: true },
+      select: { id: true, isActive: true },
     });
 
-    if (!user || !user.is_active) {
+    if (!user || !user.isActive) {
       return reply.status(401).send({
         success: false,
         error: {
@@ -56,8 +56,8 @@ export async function authenticate(
       });
     }
 
-    // Attach user to request
-    request.user = decoded;
+    // Attach typed user to request
+    request.currentUser = decoded;
   } catch (error) {
     return reply.status(401).send({
       success: false,
@@ -69,20 +69,18 @@ export async function authenticate(
   }
 }
 
-// Role-based access middleware
-export function authorize(...allowedRoles: string[]) {
+// Role-based access control — use as preHandler hook
+export function authorize(...allowedRoles: Array<JWTPayload['role']>) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    if (!request.user) {
+    const user = request.currentUser;
+    if (!user) {
       return reply.status(401).send({
         success: false,
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Unauthorized',
-        },
+        error: { code: 'UNAUTHORIZED', message: 'Unauthorized' },
       });
     }
 
-    if (!allowedRoles.includes(request.user.role)) {
+    if (!allowedRoles.includes(user.role)) {
       return reply.status(403).send({
         success: false,
         error: {
@@ -94,16 +92,11 @@ export function authorize(...allowedRoles: string[]) {
   };
 }
 
-// Generate tokens
+// Generate access + refresh tokens
 export function generateTokens(payload: JWTPayload, fastify: any) {
   const accessToken = fastify.jwt.sign(payload, { expiresIn: '15m' });
   const refreshToken = fastify.jwt.sign(payload, { expiresIn: '7d' });
-
   return { accessToken, refreshToken };
 }
 
-export default {
-  authenticate,
-  authorize,
-  generateTokens,
-};
+export default { authenticate, authorize, generateTokens };

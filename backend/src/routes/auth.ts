@@ -289,11 +289,11 @@ export async function authRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Verify refresh token
-      const decoded = await reply.jwtVerify<any>(refresh_token);
+      // Verify refresh token using request.jwtVerify with token option
+      const decoded = await request.server.jwt.verify<any>(refresh_token);
 
       // Generate new tokens
-      const tokens = generateTokens(decoded, fastify);
+      const tokens = generateTokens(decoded, request.server);
 
       return reply.send({
         success: true,

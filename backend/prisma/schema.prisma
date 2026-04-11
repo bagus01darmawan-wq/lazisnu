@@ -5,8 +5,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // Enum Types
@@ -46,6 +47,7 @@ model District {
   updatedAt  DateTime @updatedAt @map("updated_at")
 
   branches      Branch[]
+  officers      Officer[]
   users         User[]      @relation("DistrictUsers")
   collectionSummaries CollectionSummary[]
 }
@@ -105,12 +107,14 @@ model Officer {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  district     District     @relation(fields: [districtId], references: [id])
-  branch       Branch       @relation(fields: [branchId], references: [id])
-  assignments  Assignment[]
-  collections  Collection[]
-  syncQueues   SyncQueue[]
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  district          District        @relation(fields: [districtId], references: [id])
+  branch            Branch          @relation(fields: [branchId], references: [id])
+  assignments       Assignment[]    @relation("PrimaryOfficer")
+  backupAssignments Assignment[]    @relation("BackupOfficer")
+  collections       Collection[]
+  collectionSummaries CollectionSummary[]
+  syncQueues        SyncQueue[]
 
   @@index([districtId])
   @@index([branchId])

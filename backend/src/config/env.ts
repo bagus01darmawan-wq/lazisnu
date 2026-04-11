@@ -43,6 +43,9 @@ const envSchema = z.object({
 
   // Google Play Integrity
   PLAY_INTEGRITY_KEY: z.string().optional(),
+
+  // Internal API Key (for scheduler/internal routes)
+  INTERNAL_API_KEY: z.string().optional(),
 });
 
 const parseResult = envSchema.safeParse(process.env);

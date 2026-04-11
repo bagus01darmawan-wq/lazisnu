@@ -8,6 +8,7 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { config } from './config/env';
 import { prisma } from './config/database';
+import { disconnectRedis } from './config/redis';
 import { authRoutes } from './routes/auth';
 import { mobileRoutes } from './routes/mobile';
 import { adminRoutes } from './routes/admin';
@@ -22,14 +23,14 @@ const server = Fastify({
 async function registerPlugins() {
   // CORS
   await server.register(cors, {
-    origin: config.corsOrigins,
+    origin: config.CORS_ORIGINS.split(',').map((s) => s.trim()),
     credentials: true,
   });
 
   // JWT
   await server.register(jwt, {
-    secret: config.jwtSecret,
-    sign: { expiresIn: '7d' },
+    secret: config.JWT_SECRET,
+    sign: { expiresIn: config.JWT_EXPIRES_IN },
   });
 
   // Rate limiting
@@ -39,7 +40,7 @@ async function registerPlugins() {
   });
 
   // Swagger (API Documentation)
-  if (config.env !== 'production') {
+  if (config.NODE_ENV !== 'production') {
     await server.register(swagger, {
       openapi: {
         info: {
@@ -47,7 +48,7 @@ async function registerPlugins() {
           version: '1.0.0',
           description: 'API Documentation for Lazisnu Collector App',
         },
-        servers: [{ url: config.apiBaseUrl }],
+        servers: [{ url: config.API_BASE_URL }],
         components: {
           securitySchemes: {
             bearerAuth: {
@@ -124,8 +125,8 @@ async function start() {
     await registerRoutes();
 
     // Start listening
-    await server.listen({ port: config.port, host: '0.0.0.0' });
-    server.log.info(`Server running on port ${config.port}`);
+    await server.listen({ port: parseInt(config.PORT), host: '0.0.0.0' });
+    server.log.info(`Server running on port ${config.PORT}`);
   } catch (error) {
     server.log.error(error);
     process.exit(1);
@@ -133,18 +134,14 @@ async function start() {
 }
 
 // Graceful shutdown
-process.on('SIGTERM', async () => {
-  server.log.info('SIGTERM received, shutting down gracefully');
+const gracefulShutdown = async (signal: string) => {
+  server.log.info(`${signal} received, shutting down gracefully`);
   await server.close();
-  await prisma.$disconnect();
+  await Promise.all([prisma.$disconnect(), disconnectRedis()]);
   process.exit(0);
-});
+};
 
-process.on('SIGINT', async () => {
-  server.log.info('SIGINT received, shutting down gracefully');
-  await server.close();
-  await prisma.$disconnect();
-  process.exit(0);
-});
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 start();

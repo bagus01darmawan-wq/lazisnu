@@ -44,7 +44,7 @@ export async function mobileRoutes(fastify: FastifyInstance) {
   // GET /mobile/dashboard
   fastify.get('/dashboard', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const user = request.user!;
+      const user = request.currentUser!;
       const officerId = user.officerId;
 
       if (!officerId) {
@@ -60,52 +60,52 @@ export async function mobileRoutes(fastify: FastifyInstance) {
       weekStart.setDate(weekStart.getDate() - weekStart.getDay());
 
       // Get today's stats
-      const todayCollections = await prisma.collections.findMany({
+      const todayCollections = await prisma.collection.findMany({
         where: {
-          officer_id: officerId,
-          collected_at: { gte: today.toISOString() },
-          sync_status: 'COMPLETED',
+          officerId,
+          collectedAt: { gte: today },
+          syncStatus: 'COMPLETED',
         },
       });
 
       // Get week stats
-      const weekCollections = await prisma.collections.findMany({
+      const weekCollections = await prisma.collection.findMany({
         where: {
-          officer_id: officerId,
-          collected_at: { gte: weekStart.toISOString() },
-          sync_status: 'COMPLETED',
+          officerId,
+          collectedAt: { gte: weekStart },
+          syncStatus: 'COMPLETED',
         },
       });
 
       // Get pending tasks
-      const pendingAssignments = await prisma.assignments.findMany({
+      const pendingAssignments = await prisma.assignment.findMany({
         where: {
-          officer_id: officerId,
+          officerId,
           status: 'ACTIVE',
         },
         include: {
           can: {
             select: {
               id: true,
-              qr_code: true,
-              owner_name: true,
-              owner_address: true,
+              qrCode: true,
+              ownerName: true,
+              ownerAddress: true,
               latitude: true,
               longitude: true,
             },
           },
         },
         take: 10,
-        orderBy: { assigned_at: 'asc' },
+        orderBy: { assignedAt: 'asc' },
       });
 
       // Get recent collections
-      const recentCollections = await prisma.collections.findMany({
-        where: { officer_id: officerId, sync_status: 'COMPLETED' },
+      const recentCollections = await prisma.collection.findMany({
+        where: { officerId, syncStatus: 'COMPLETED' },
         include: {
-          can: { select: { qr_code: true, owner_name: true } },
+          can: { select: { qrCode: true, ownerName: true } },
         },
-        orderBy: { collected_at: 'desc' },
+        orderBy: { collectedAt: 'desc' },
         take: 5,
       });
 
@@ -121,21 +121,21 @@ export async function mobileRoutes(fastify: FastifyInstance) {
             collected: weekCollections.length,
             total_amount: weekCollections.reduce((sum, c) => sum + Number(c.amount), 0),
           },
-          pending_tasks: pendingAssignments.map(a => ({
+          pending_tasks: pendingAssignments.map((a) => ({
             id: a.id,
-            qr_code: a.can.qr_code,
-            owner_name: a.can.owner_name,
-            address: a.can.owner_address,
+            qr_code: a.can.qrCode,
+            owner_name: a.can.ownerName,
+            address: a.can.ownerAddress,
             latitude: a.can.latitude,
             longitude: a.can.longitude,
-            assigned_at: a.assigned_at,
+            assigned_at: a.assignedAt,
           })),
-          recent_collections: recentCollections.map(c => ({
+          recent_collections: recentCollections.map((c) => ({
             id: c.id,
-            qr_code: c.can.qr_code,
-            owner_name: c.can.owner_name,
+            qr_code: c.can.qrCode,
+            owner_name: c.can.ownerName,
             amount: Number(c.amount),
-            collected_at: c.collected_at,
+            collected_at: c.collectedAt,
           })),
         },
       });
@@ -151,7 +151,7 @@ export async function mobileRoutes(fastify: FastifyInstance) {
   // GET /mobile/tasks
   fastify.get('/tasks', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const user = request.user!;
+      const user = request.currentUser!;
       const officerId = user.officerId;
       const query = request.query as { status?: string; page?: string; limit?: string };
 
@@ -167,48 +167,48 @@ export async function mobileRoutes(fastify: FastifyInstance) {
       const status = query.status || 'ACTIVE';
       const skip = (page - 1) * limit;
 
-      const whereClause: any = { officer_id: officerId };
+      const whereClause: any = { officerId };
       if (status !== 'ALL') {
         whereClause.status = status;
       }
 
       const [assignments, total] = await Promise.all([
-        prisma.assignments.findMany({
+        prisma.assignment.findMany({
           where: whereClause,
           include: {
             can: {
               select: {
                 id: true,
-                qr_code: true,
-                owner_name: true,
-                owner_phone: true,
-                owner_address: true,
+                qrCode: true,
+                ownerName: true,
+                ownerPhone: true,
+                ownerAddress: true,
                 latitude: true,
                 longitude: true,
               },
             },
           },
-          orderBy: { assigned_at: 'asc' },
+          orderBy: { assignedAt: 'asc' },
           skip,
           take: limit,
         }),
-        prisma.assignments.count({ where: whereClause }),
+        prisma.assignment.count({ where: whereClause }),
       ]);
 
       return reply.send({
         success: true,
         data: {
-          tasks: assignments.map(a => ({
+          tasks: assignments.map((a) => ({
             id: a.id,
-            qr_code: a.can.qr_code,
-            owner_name: a.can.owner_name,
-            owner_phone: a.can.owner_phone,
-            owner_address: a.can.owner_address,
+            qr_code: a.can.qrCode,
+            owner_name: a.can.ownerName,
+            owner_phone: a.can.ownerPhone,
+            owner_address: a.can.ownerAddress,
             latitude: a.can.latitude,
             longitude: a.can.longitude,
             status: a.status,
-            assigned_at: a.assigned_at,
-            period: `${a.period_year}-${String(a.period_month).padStart(2, '0')}`,
+            assigned_at: a.assignedAt,
+            period: `${a.periodYear}-${String(a.periodMonth).padStart(2, '0')}`,
           })),
           pagination: {
             page,
@@ -231,23 +231,23 @@ export async function mobileRoutes(fastify: FastifyInstance) {
   fastify.get('/scan/:qrCode', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { qrCode } = request.params as { qrCode: string };
-      const user = request.user!;
+      const user = request.currentUser!;
       const officerId = user.officerId;
 
       // Find can by QR code
-      const can = await prisma.cans.findUnique({
-        where: { qr_code: qrCode },
+      const can = await prisma.can.findUnique({
+        where: { qrCode },
         include: {
           collections: {
-            orderBy: { collected_at: 'desc' },
+            orderBy: { collectedAt: 'desc' },
             take: 1,
           },
           assignments: {
             where: {
-              officer_id: officerId,
+              officerId,
               status: 'ACTIVE',
-              period_year: new Date().getFullYear(),
-              period_month: new Date().getMonth() + 1,
+              periodYear: new Date().getFullYear(),
+              periodMonth: new Date().getMonth() + 1,
             },
           },
         },
@@ -267,16 +267,15 @@ export async function mobileRoutes(fastify: FastifyInstance) {
         success: true,
         data: {
           id: can.id,
-          qr_code: can.qr_code,
-          owner_name: can.owner_name,
-          owner_phone: can.owner_phone,
-          owner_address: can.owner_address,
+          qr_code: can.qrCode,
+          owner_name: can.ownerName,
+          owner_phone: can.ownerPhone,
+          owner_address: can.ownerAddress,
           latitude: can.latitude,
           longitude: can.longitude,
-          last_collection: lastCollection ? {
-            amount: Number(lastCollection.amount),
-            date: lastCollection.collected_at,
-          } : null,
+          last_collection: lastCollection
+            ? { amount: Number(lastCollection.amount), date: lastCollection.collectedAt }
+            : null,
           status: activeAssignment?.status || 'UNASSIGNED',
           assignment_id: activeAssignment?.id,
         },
@@ -294,7 +293,7 @@ export async function mobileRoutes(fastify: FastifyInstance) {
   fastify.post('/collections', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = collectionSchema.parse(request.body);
-      const user = request.user!;
+      const user = request.currentUser!;
       const officerId = user.officerId;
 
       if (!officerId) {
@@ -304,12 +303,11 @@ export async function mobileRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Check if already submitted (by offline_id or can_id)
+      // Idempotency check via offline_id
       if (body.offline_id) {
-        const existing = await prisma.collections.findUnique({
-          where: { offline_id: body.offline_id },
+        const existing = await prisma.collection.findUnique({
+          where: { offlineId: body.offline_id },
         });
-
         if (existing) {
           return reply.status(409).send({
             success: false,
@@ -319,60 +317,65 @@ export async function mobileRoutes(fastify: FastifyInstance) {
       }
 
       // Create collection record
-      const collection = await prisma.collections.create({
+      const collection = await prisma.collection.create({
         data: {
-          assignment_id: body.assignment_id,
-          can_id: body.can_id,
-          officer_id: officerId,
+          assignmentId: body.assignment_id,
+          canId: body.can_id,
+          officerId,
           amount: body.amount,
-          payment_method: body.payment_method,
-          transfer_receipt_url: body.transfer_receipt_url,
-          collected_at: body.collected_at,
-          submitted_at: new Date(),
-          synced_at: new Date(),
-          sync_status: 'COMPLETED',
-          server_timestamp: new Date(),
-          device_info: body.device_info as any,
+          paymentMethod: body.payment_method,
+          transferReceiptUrl: body.transfer_receipt_url,
+          collectedAt: new Date(body.collected_at),
+          submittedAt: new Date(),
+          syncedAt: new Date(),
+          syncStatus: 'COMPLETED',
+          serverTimestamp: new Date(),
+          deviceInfo: body.device_info as any,
           latitude: body.latitude,
           longitude: body.longitude,
-          offline_id: body.offline_id,
+          offlineId: body.offline_id,
         },
         include: {
           can: true,
+          officer: { select: { fullName: true } },
         },
       });
 
       // Update assignment status
-      await prisma.assignments.update({
+      await prisma.assignment.update({
         where: { id: body.assignment_id },
-        data: { status: 'COMPLETED', completed_at: new Date() },
+        data: { status: 'COMPLETED', completedAt: new Date() },
       });
 
       // Update can's last collected info
-      await prisma.cans.update({
+      await prisma.can.update({
         where: { id: body.can_id },
         data: {
-          last_collected_at: body.collected_at,
-          total_collected: { increment: body.amount },
-          collection_count: { increment: 1 },
+          lastCollectedAt: new Date(body.collected_at),
+          totalCollected: { increment: body.amount },
+          collectionCount: { increment: 1 },
         },
       });
 
       // Send WhatsApp notification to owner
-      let whatsappStatus = 'PENDING';
-      try {
-        if (collection.can.owner_whatsapp) {
-          await sendWhatsAppNotification(
-            collection.can.owner_whatsapp,
-            collection.can.owner_name,
+      let whatsappStatus = 'SKIPPED';
+      if (collection.can.ownerWhatsapp) {
+        try {
+          const waResult = await sendWhatsAppNotification(
+            collection.can.ownerWhatsapp,
+            collection.can.ownerName,
             body.amount,
-            officerId // Need to get officer name from user
+            collection.officer.fullName,
+            {
+              collectionId: collection.id,
+              collectedAt: body.collected_at,
+            }
           );
-          whatsappStatus = 'SENT';
+          whatsappStatus = waResult.status;
+        } catch (waError) {
+          fastify.log.error({ err: waError }, 'WhatsApp send failed');
+          whatsappStatus = 'FAILED';
         }
-      } catch (waError) {
-        fastify.log.error('WhatsApp send failed:', waError);
-        whatsappStatus = 'FAILED';
       }
 
       return reply.status(201).send({
@@ -391,7 +394,6 @@ export async function mobileRoutes(fastify: FastifyInstance) {
           error: { code: 'VALIDATION_ERROR', message: 'Input tidak valid', details: error.errors },
         });
       }
-
       fastify.log.error(error);
       return reply.status(500).send({
         success: false,
@@ -400,11 +402,11 @@ export async function mobileRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // POST /mobile/collections/batch
+  // POST /mobile/collections/batch (offline sync)
   fastify.post('/collections/batch', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = batchCollectionSchema.parse(request.body);
-      const user = request.user!;
+      const user = request.currentUser!;
       const officerId = user.officerId;
 
       if (!officerId) {
@@ -414,27 +416,58 @@ export async function mobileRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const results = [];
+      const results: any[] = [];
       let succeeded = 0;
       let failed = 0;
 
       for (const item of body.collections) {
         try {
-          const collection = await prisma.collections.create({
+          // Idempotency check
+          const existing = await prisma.collection.findUnique({
+            where: { offlineId: item.offline_id },
+          });
+
+          if (existing) {
+            results.push({
+              offline_id: item.offline_id,
+              server_id: existing.id,
+              status: 'ALREADY_SYNCED',
+            });
+            succeeded++;
+            continue;
+          }
+
+          const collection = await prisma.collection.create({
             data: {
-              assignment_id: item.assignment_id,
-              can_id: item.can_id,
-              officer_id: officerId,
+              assignmentId: item.assignment_id,
+              canId: item.can_id,
+              officerId,
               amount: item.amount,
-              payment_method: item.payment_method,
-              collected_at: item.collected_at,
-              submitted_at: new Date(),
-              synced_at: new Date(),
-              sync_status: 'COMPLETED',
-              server_timestamp: new Date(),
+              paymentMethod: item.payment_method,
+              collectedAt: new Date(item.collected_at),
+              submittedAt: new Date(),
+              syncedAt: new Date(),
+              syncStatus: 'COMPLETED',
+              serverTimestamp: new Date(),
               latitude: item.latitude,
               longitude: item.longitude,
-              offline_id: item.offline_id,
+              offlineId: item.offline_id,
+            },
+          });
+
+          // Update assignment
+          await prisma.assignment.update({
+            where: { id: item.assignment_id },
+            data: { status: 'COMPLETED', completedAt: new Date() },
+          }).catch(() => {/* ignore if already completed */});
+
+          // Update can totals
+          await prisma.can.update({
+            where: { id: item.can_id },
+            data: {
+              lastCollectedAt: new Date(item.collected_at),
+              totalCollected: { increment: item.amount },
+              collectionCount: { increment: 1 },
             },
           });
 
@@ -470,7 +503,6 @@ export async function mobileRoutes(fastify: FastifyInstance) {
           error: { code: 'VALIDATION_ERROR', message: 'Input tidak valid' },
         });
       }
-
       fastify.log.error(error);
       return reply.status(500).send({
         success: false,
@@ -482,7 +514,7 @@ export async function mobileRoutes(fastify: FastifyInstance) {
   // GET /mobile/sync/status
   fastify.get('/sync/status', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const user = request.user!;
+      const user = request.currentUser!;
       const officerId = user.officerId;
 
       if (!officerId) {
@@ -492,28 +524,29 @@ export async function mobileRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const pendingCollections = await prisma.collections.count({
-        where: {
-          officer_id: officerId,
-          sync_status: { in: ['PENDING', 'FAILED'] },
-        },
-      });
-
-      const oldestPending = await prisma.collections.findFirst({
-        where: {
-          officer_id: officerId,
-          sync_status: { in: ['PENDING', 'FAILED'] },
-        },
-        orderBy: { collected_at: 'asc' },
-        select: { collected_at: true },
-      });
+      const [pendingCount, oldestPending] = await Promise.all([
+        prisma.collection.count({
+          where: {
+            officerId,
+            syncStatus: { in: ['PENDING', 'FAILED'] },
+          },
+        }),
+        prisma.collection.findFirst({
+          where: {
+            officerId,
+            syncStatus: { in: ['PENDING', 'FAILED'] },
+          },
+          orderBy: { collectedAt: 'asc' },
+          select: { collectedAt: true },
+        }),
+      ]);
 
       return reply.send({
         success: true,
         data: {
-          pending_count: pendingCollections,
+          pending_count: pendingCount,
           last_sync_at: new Date().toISOString(),
-          oldest_pending: oldestPending?.collected_at || null,
+          oldest_pending: oldestPending?.collectedAt || null,
         },
       });
     } catch (error) {
@@ -528,7 +561,7 @@ export async function mobileRoutes(fastify: FastifyInstance) {
   // GET /mobile/profile
   fastify.get('/profile', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const user = request.user!;
+      const user = request.currentUser!;
       const officerId = user.officerId;
 
       if (!officerId) {
@@ -538,13 +571,22 @@ export async function mobileRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const officer = await prisma.officers.findUnique({
-        where: { id: officerId },
-        include: {
-          branch: { select: { id: true, name: true } },
-          district: { select: { id: true, name: true } },
-        },
-      });
+      const [officer, totalCollections, totalAmount] = await Promise.all([
+        prisma.officer.findUnique({
+          where: { id: officerId },
+          include: {
+            branch: { select: { id: true, name: true } },
+            district: { select: { id: true, name: true } },
+          },
+        }),
+        prisma.collection.count({
+          where: { officerId, syncStatus: 'COMPLETED' },
+        }),
+        prisma.collection.aggregate({
+          where: { officerId, syncStatus: 'COMPLETED' },
+          _sum: { amount: true },
+        }),
+      ]);
 
       if (!officer) {
         return reply.status(404).send({
@@ -553,30 +595,83 @@ export async function mobileRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Get stats
-      const totalCollections = await prisma.collections.count({
-        where: { officer_id: officerId, sync_status: 'COMPLETED' },
-      });
-
-      const totalAmount = await prisma.collections.aggregate({
-        where: { officer_id: officerId, sync_status: 'COMPLETED' },
-        _sum: { amount: true },
-      });
-
       return reply.send({
         success: true,
         data: {
           id: officer.id,
-          employee_code: officer.employee_code,
-          full_name: officer.full_name,
+          employee_code: officer.employeeCode,
+          full_name: officer.fullName,
           phone: officer.phone,
-          photo_url: officer.photo_url,
+          photo_url: officer.photoUrl,
           branch: { id: officer.branch.id, name: officer.branch.name },
           district: { id: officer.district.id, name: officer.district.name },
-          assigned_zone: officer.assigned_zone,
+          assigned_zone: officer.assignedZone,
           stats: {
             total_collections: totalCollections,
-            total_amount: totalAmount._sum.amount || 0,
+            total_amount: Number(totalAmount._sum.amount) || 0,
+          },
+        },
+      });
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({
+        success: false,
+        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
+      });
+    }
+  });
+
+  // GET /mobile/history
+  fastify.get('/history', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = request.currentUser!;
+      const officerId = user.officerId;
+      const query = request.query as { page?: string; limit?: string };
+
+      if (!officerId) {
+        return reply.status(403).send({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'Bukan akun petugas' },
+        });
+      }
+
+      const page = parseInt(query.page || '1');
+      const limit = parseInt(query.limit || '20');
+      const skip = (page - 1) * limit;
+
+      const [collections, total] = await Promise.all([
+        prisma.collection.findMany({
+          where: { officerId, syncStatus: 'COMPLETED' },
+          include: {
+            can: { select: { qrCode: true, ownerName: true, ownerAddress: true } },
+          },
+          orderBy: { collectedAt: 'desc' },
+          skip,
+          take: limit,
+        }),
+        prisma.collection.count({
+          where: { officerId, syncStatus: 'COMPLETED' },
+        }),
+      ]);
+
+      return reply.send({
+        success: true,
+        data: {
+          collections: collections.map((c) => ({
+            id: c.id,
+            qr_code: c.can.qrCode,
+            owner_name: c.can.ownerName,
+            owner_address: c.can.ownerAddress,
+            amount: Number(c.amount),
+            payment_method: c.paymentMethod,
+            collected_at: c.collectedAt,
+            sync_status: c.syncStatus,
+          })),
+          pagination: {
+            page,
+            limit,
+            total,
+            total_pages: Math.ceil(total / limit),
           },
         },
       });

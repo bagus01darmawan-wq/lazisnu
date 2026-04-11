@@ -26,6 +26,10 @@ const createOfficerSchema = z.object({
   photo_url: z.string().url().optional(),
 });
 
+const updateOfficerSchema = createOfficerSchema.partial().extend({
+  is_active: z.boolean().optional(),
+});
+
 const createAssignmentSchema = z.object({
   can_id: z.string().uuid(),
   officer_id: z.string().uuid(),
@@ -34,124 +38,125 @@ const createAssignmentSchema = z.object({
   period_month: z.number().min(1).max(12),
 });
 
-const reportQuerySchema = z.object({
-  start_date: z.string(),
-  end_date: z.string(),
-  officer_id: z.string().uuid().optional(),
-  branch_id: z.string().uuid().optional(),
-  district_id: z.string().uuid().optional(),
-  page: z.string().default('1'),
-  limit: z.string().default('20'),
-});
+const ranting = { preHandler: [authorize('ADMIN_RANTING')] };
+const kecamatan = { preHandler: [authorize('ADMIN_KECAMATAN')] };
+const rantingOrKec = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
 
 export async function adminRoutes(fastify: FastifyInstance) {
-  // Apply auth middleware
+  // Apply auth middleware to all routes in this plugin
   fastify.addHook('preHandler', authenticate);
 
   // ========== ADMIN RANTING ROUTES ==========
 
   // GET /admin/branch/dashboard
-  fastify.get('/branch/dashboard',
-    authorize('ADMIN_RANTING'),
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      try {
-        const user = request.user!;
-        const branchId = user.branchId;
+  fastify.get('/branch/dashboard', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = request.currentUser!;
+      const branchId = user.branchId;
 
-        if (!branchId) {
-          return reply.status(403).send({
-            success: false,
-            error: { code: 'FORBIDDEN', message: 'Bukan admin ranting' },
-          });
-        }
+      if (!branchId) {
+        return reply.status(403).send({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'Bukan admin ranting' },
+        });
+      }
 
-        const now = new Date();
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-        // Get stats
-        const [cans, officers, monthCollections] = await Promise.all([
-          prisma.cans.count({ where: { branch_id: branchId } }),
-          prisma.officers.count({ where: { branch_id: branchId, is_active: true } }),
-          prisma.collections.findMany({
+      const [canCount, officerCount, monthCollections, pendingCount, recentCollections] =
+        await Promise.all([
+          prisma.can.count({ where: { branchId } }),
+          prisma.officer.count({ where: { branchId, isActive: true } }),
+          prisma.collection.findMany({
             where: {
-              can: { branch_id: branchId },
-              collected_at: { gte: monthStart.toISOString() },
-              sync_status: 'COMPLETED',
+              can: { branchId },
+              collectedAt: { gte: monthStart },
+              syncStatus: 'COMPLETED',
             },
+            include: { officer: { select: { id: true, fullName: true } } },
+          }),
+          prisma.assignment.count({
+            where: { can: { branchId }, status: 'ACTIVE' },
+          }),
+          prisma.collection.findMany({
+            where: { can: { branchId }, syncStatus: 'COMPLETED' },
+            include: {
+              can: { select: { qrCode: true, ownerName: true } },
+              officer: { select: { fullName: true } },
+            },
+            orderBy: { collectedAt: 'desc' },
+            take: 5,
           }),
         ]);
 
-        // Group by officer
-        const byOfficer = monthCollections.reduce((acc, c) => {
-          const key = c.officer_id;
-          if (!acc[key]) acc[key] = { count: 0, amount: 0 };
+      const byOfficer = monthCollections.reduce(
+        (acc: Record<string, any>, c) => {
+          const key = c.officerId;
+          if (!acc[key]) acc[key] = { name: c.officer.fullName, count: 0, amount: 0 };
           acc[key].count++;
           acc[key].amount += Number(c.amount);
           return acc;
-        }, {} as Record<string, { count: number; amount: number }>);
+        },
+        {}
+      );
 
-        // Get officer names
-        const officerIds = Object.keys(byOfficer);
-        const officerData = await prisma.officers.findMany({
-          where: { id: { in: officerIds } },
-          select: { id: true, full_name: true },
-        });
-
-        const officerMap = new Map(officerData.map(o => [o.id, o.full_name]));
-
-        return reply.send({
-          success: true,
-          data: {
-            summary: {
-              total_cans: cans,
-              active_cans: cans,
-              total_officers: officers,
-              active_officers: officers,
-              month_collection: Object.values(byOfficer).reduce((s, o) => s + o.amount, 0),
-              month_count: monthCollections.length,
-            },
-            recent_collections: [],
-            pending_tasks: 0,
-            by_officer: officerIds.map(id => ({
-              officer_id: id,
-              officer_name: officerMap.get(id) || 'Unknown',
-              collected: byOfficer[id].count,
-              amount: byOfficer[id].amount,
-            })),
+      return reply.send({
+        success: true,
+        data: {
+          summary: {
+            total_cans: canCount,
+            total_officers: officerCount,
+            month_collection: monthCollections.reduce((s, c) => s + Number(c.amount), 0),
+            month_count: monthCollections.length,
+            pending_tasks: pendingCount,
           },
-        });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          success: false,
-          error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
-        });
-      }
+          recent_collections: recentCollections.map((c) => ({
+            id: c.id,
+            qr_code: c.can.qrCode,
+            owner_name: c.can.ownerName,
+            amount: Number(c.amount),
+            officer_name: c.officer.fullName,
+            collected_at: c.collectedAt,
+          })),
+          by_officer: Object.entries(byOfficer).map(([id, d]) => {
+            const od = d as { name: string; count: number; amount: number };
+            return { officer_id: id, officer_name: od.name, collected: od.count, amount: od.amount };
+          }),
+        },
+      });
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({
+        success: false,
+        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
+      });
     }
-  );
+  });
 
-  // CRUD Cans
-  fastify.get('/cans', authorize('ADMIN_RANTING'), async (request: FastifyRequest, reply: FastifyReply) => {
+  // ========== CANS CRUD ==========
+
+  fastify.get('/cans', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const user = request.user!;
+      const user = request.currentUser!;
       const query = request.query as { page?: string; limit?: string; search?: string; status?: string };
       const page = parseInt(query.page || '1');
       const limit = parseInt(query.limit || '20');
       const skip = (page - 1) * limit;
 
-      const where: any = { branch_id: user.branchId };
+      const where: any = { branchId: user.branchId };
       if (query.search) {
         where.OR = [
-          { owner_name: { contains: query.search, mode: 'insensitive' } },
-          { qr_code: { contains: query.search, mode: 'insensitive' } },
+          { ownerName: { contains: query.search, mode: 'insensitive' } },
+          { qrCode: { contains: query.search, mode: 'insensitive' } },
         ];
       }
-      if (query.status === 'ACTIVE') where.is_active = true;
-      if (query.status === 'INACTIVE') where.is_active = false;
+      if (query.status === 'ACTIVE') where.isActive = true;
+      if (query.status === 'INACTIVE') where.isActive = false;
 
       const [cans, total] = await Promise.all([
-        prisma.cans.findMany({ where, skip, take: limit, orderBy: { created_at: 'desc' } }),
-        prisma.cans.count({ where }),
+        prisma.can.findMany({ where, skip, take: limit, orderBy: { createdAt: 'desc' } }),
+        prisma.can.count({ where }),
       ]);
 
       return reply.send({
@@ -160,191 +165,151 @@ export async function adminRoutes(fastify: FastifyInstance) {
       });
     } catch (error) {
       fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
-      });
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
     }
   });
 
-  fastify.post('/cans', authorize('ADMIN_RANTING'), async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/cans', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const user = request.user!;
+      const user = request.currentUser!;
       const body = createCanSchema.parse(request.body);
-
-      // Generate QR code
-      const branch = await prisma.branches.findUnique({ where: { id: user.branchId } });
-      const regionCode = branch?.region_code || 'XX';
-      const count = await prisma.cans.count({ where: { branch_id: user.branchId } });
+      const branch = await prisma.branch.findUnique({ where: { id: user.branchId! } });
+      const regionCode = branch?.code || 'XX';
+      const count = await prisma.can.count({ where: { branchId: user.branchId! } });
       const qrCode = `LZNU-${regionCode}-${String(count + 1).padStart(5, '0')}`;
 
-      const can = await prisma.cans.create({
+      const can = await prisma.can.create({
         data: {
-          ...body,
-          branch_id: user.branchId!,
-          qr_code: qrCode,
+          branchId: user.branchId!,
+          qrCode,
+          ownerName: body.owner_name,
+          ownerPhone: body.owner_phone,
+          ownerAddress: body.owner_address,
+          ownerWhatsapp: body.owner_whatsapp,
+          latitude: body.latitude,
+          longitude: body.longitude,
+          locationNotes: body.location_notes,
         },
       });
-
       return reply.status(201).send({ success: true, data: can });
     } catch (error: any) {
       if (error instanceof z.ZodError) {
-        return reply.status(400).send({
-          success: false,
-          error: { code: 'VALIDATION_ERROR', message: 'Input tidak valid', details: error.errors },
-        });
+        return reply.status(400).send({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Input tidak valid', details: error.errors } });
       }
       fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
-      });
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
     }
   });
 
-  fastify.get('/cans/:id', authorize('ADMIN_RANTING'), async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/cans/:id', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
-      const can = await prisma.cans.findUnique({ where: { id } });
-
-      if (!can || can.branch_id !== request.user!.branchId) {
-        return reply.status(404).send({
-          success: false,
-          error: { code: 'NOT_FOUND', message: 'Kaleng tidak ditemukan' },
-        });
+      const can = await prisma.can.findUnique({
+        where: { id },
+        include: {
+          collections: {
+            orderBy: { collectedAt: 'desc' },
+            take: 10,
+            include: { officer: { select: { fullName: true } } },
+          },
+        },
+      });
+      if (!can || can.branchId !== request.currentUser!.branchId) {
+        return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Kaleng tidak ditemukan' } });
       }
-
       return reply.send({ success: true, data: can });
     } catch (error) {
       fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
-      });
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
     }
   });
 
-  fastify.put('/cans/:id', authorize('ADMIN_RANTING'), async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.put('/cans/:id', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
       const body = updateCanSchema.parse(request.body);
-
-      const existing = await prisma.cans.findUnique({ where: { id } });
-      if (!existing || existing.branch_id !== request.user!.branchId) {
-        return reply.status(404).send({
-          success: false,
-          error: { code: 'NOT_FOUND', message: 'Kaleng tidak ditemukan' },
-        });
+      const existing = await prisma.can.findUnique({ where: { id } });
+      if (!existing || existing.branchId !== request.currentUser!.branchId) {
+        return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Kaleng tidak ditemukan' } });
       }
-
-      const can = await prisma.cans.update({ where: { id }, data: body });
+      const can = await prisma.can.update({
+        where: { id },
+        data: {
+          ownerName: body.owner_name,
+          ownerPhone: body.owner_phone,
+          ownerAddress: body.owner_address,
+          ownerWhatsapp: body.owner_whatsapp,
+          latitude: body.latitude,
+          longitude: body.longitude,
+          locationNotes: body.location_notes,
+        },
+      });
       return reply.send({ success: true, data: can });
     } catch (error) {
       fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
-      });
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
     }
   });
 
-  fastify.delete('/cans/:id', authorize('ADMIN_RANTING'), async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.delete('/cans/:id', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
-      const existing = await prisma.cans.findUnique({ where: { id } });
-
-      if (!existing || existing.branch_id !== request.user!.branchId) {
-        return reply.status(404).send({
-          success: false,
-          error: { code: 'NOT_FOUND', message: 'Kaleng tidak ditemukan' },
-        });
+      const existing = await prisma.can.findUnique({ where: { id } });
+      if (!existing || existing.branchId !== request.currentUser!.branchId) {
+        return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Kaleng tidak ditemukan' } });
       }
-
-      await prisma.cans.update({ where: { id }, data: { is_active: false } });
+      await prisma.can.update({ where: { id }, data: { isActive: false } });
       return reply.status(204).send();
     } catch (error) {
       fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
-      });
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
     }
   });
 
-  // Generate QR Code
-  fastify.post('/cans/:id/generate-qr', authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN'), async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/cans/:id/generate-qr', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
-      const can = await prisma.cans.findUnique({ where: { id } });
-
+      const can = await prisma.can.findUnique({ where: { id } });
       if (!can) {
-        return reply.status(404).send({
-          success: false,
-          error: { code: 'NOT_FOUND', message: 'Kaleng tidak ditemukan' },
-        });
+        return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Kaleng tidak ditemukan' } });
       }
-
-      // Generate QR code as data URL
-      const qrDataUrl = await QRCode.toDataURL(can.qr_code, {
-        width: 300,
-        margin: 2,
-        color: { dark: '#000000', light: '#ffffff' },
+      const qrDataUrl = await QRCode.toDataURL(can.qrCode, {
+        width: 300, margin: 2, color: { dark: '#000000', light: '#ffffff' },
       });
-
-      // In production, upload to R2 and return URL
-      const qrImageUrl = qrDataUrl; // For dev, return data URL
-
       return reply.send({
         success: true,
-        data: {
-          qr_code: can.qr_code,
-          qr_image_url: qrImageUrl,
-          print_url: qrImageUrl, // Same for now
-        },
+        data: { qr_code: can.qrCode, qr_image_url: qrDataUrl, print_url: qrDataUrl },
       });
     } catch (error) {
       fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
-      });
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
     }
   });
 
-  // CRUD Officers
-  fastify.get('/officers', authorize('ADMIN_RANTING'), async (request: FastifyRequest, reply: FastifyReply) => {
+  // ========== OFFICERS CRUD ==========
+
+  fastify.get('/officers', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const user = request.user!;
+      const user = request.currentUser!;
       const query = request.query as { page?: string; limit?: string; search?: string };
       const page = parseInt(query.page || '1');
       const limit = parseInt(query.limit || '20');
       const skip = (page - 1) * limit;
 
-      const where: any = { branch_id: user.branchId };
+      const where: any = { branchId: user.branchId };
       if (query.search) {
         where.OR = [
-          { full_name: { contains: query.search, mode: 'insensitive' } },
-          { employee_code: { contains: query.search, mode: 'insensitive' } },
+          { fullName: { contains: query.search, mode: 'insensitive' } },
+          { employeeCode: { contains: query.search, mode: 'insensitive' } },
         ];
       }
 
       const [officers, total] = await Promise.all([
-        prisma.officers.findMany({
-          where,
-          skip,
-          take: limit,
-          orderBy: { created_at: 'desc' },
-          select: {
-            id: true,
-            employee_code: true,
-            full_name: true,
-            phone: true,
-            photo_url: true,
-            assigned_zone: true,
-            is_active: true,
-          },
+        prisma.officer.findMany({
+          where, skip, take: limit, orderBy: { createdAt: 'desc' },
+          select: { id: true, employeeCode: true, fullName: true, phone: true, photoUrl: true, assignedZone: true, isActive: true },
         }),
-        prisma.officers.count({ where }),
+        prisma.officer.count({ where }),
       ]);
 
       return reply.send({
@@ -353,52 +318,123 @@ export async function adminRoutes(fastify: FastifyInstance) {
       });
     } catch (error) {
       fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
+    }
+  });
+
+  fastify.post('/officers', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = request.currentUser!;
+      const body = createOfficerSchema.parse(request.body);
+      const count = await prisma.officer.count({ where: { branchId: user.branchId! } });
+      const branch = await prisma.branch.findUnique({ where: { id: user.branchId! } });
+      const employeeCode = `${branch?.code || 'XX'}-${String(count + 1).padStart(4, '0')}`;
+
+      const userRecord = await prisma.user.create({
+        data: {
+          email: `${body.phone}@petugas.lazisnu.id`,
+          passwordHash: '',
+          fullName: body.full_name,
+          phone: body.phone,
+          role: 'PETUGAS',
+          branchId: user.branchId,
+          districtId: user.districtId,
+        },
       });
+
+      const officer = await prisma.officer.create({
+        data: {
+          userId: userRecord.id,
+          employeeCode,
+          fullName: body.full_name,
+          phone: body.phone,
+          photoUrl: body.photo_url,
+          districtId: user.districtId!,
+          branchId: user.branchId!,
+          assignedZone: body.assigned_zone,
+        },
+      });
+      return reply.status(201).send({ success: true, data: officer });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Input tidak valid', details: error.errors } });
+      }
+      fastify.log.error(error);
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
+    }
+  });
+
+  fastify.put('/officers/:id', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const body = updateOfficerSchema.parse(request.body);
+      const existing = await prisma.officer.findUnique({ where: { id } });
+      if (!existing || existing.branchId !== request.currentUser!.branchId) {
+        return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Petugas tidak ditemukan' } });
+      }
+      const officer = await prisma.officer.update({
+        where: { id },
+        data: { fullName: body.full_name, phone: body.phone, photoUrl: body.photo_url, assignedZone: body.assigned_zone, isActive: body.is_active },
+      });
+      return reply.send({ success: true, data: officer });
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
+    }
+  });
+
+  fastify.delete('/officers/:id', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const existing = await prisma.officer.findUnique({ where: { id } });
+      if (!existing || existing.branchId !== request.currentUser!.branchId) {
+        return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Petugas tidak ditemukan' } });
+      }
+      await prisma.officer.update({ where: { id }, data: { isActive: false } });
+      return reply.status(204).send();
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
     }
   });
 
   // ========== ADMIN KECAMATAN ROUTES ==========
 
-  fastify.get('/district/dashboard', authorize('ADMIN_KECAMATAN'), async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/district/dashboard', kecamatan, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const user = request.user!;
+      const user = request.currentUser!;
       const districtId = user.districtId;
-
       if (!districtId) {
-        return reply.status(403).send({
-          success: false,
-          error: { code: 'FORBIDDEN', message: 'Bukan admin kecamatan' },
-        });
+        return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Bukan admin kecamatan' } });
       }
 
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
       const [branches, totalCans, totalOfficers, monthCollections] = await Promise.all([
-        prisma.branches.findMany({ where: { district_id: districtId } }),
-        prisma.cans.count({ where: { branch: { district_id: districtId } } }),
-        prisma.officers.count({ where: { district_id: districtId, is_active: true } }),
-        prisma.collections.findMany({
+        prisma.branch.findMany({
+          where: { districtId },
+          include: { _count: { select: { cans: true, officers: true } } },
+        }),
+        prisma.can.count({ where: { branch: { districtId } } }),
+        prisma.officer.count({ where: { districtId, isActive: true } }),
+        prisma.collection.findMany({
           where: {
-            can: { branch: { district_id: districtId } },
-            collected_at: { gte: monthStart.toISOString() },
-            sync_status: 'COMPLETED',
+            can: { branch: { districtId } },
+            collectedAt: { gte: monthStart },
+            syncStatus: 'COMPLETED',
           },
-          include: { officer: true },
+          include: { officer: { select: { branchId: true } } },
         }),
       ]);
 
-      // Group by branch
-      const byBranch = monthCollections.reduce((acc, c) => {
-        const key = c.officer.branch_id;
+      const byBranch = monthCollections.reduce((acc: Record<string, any>, c) => {
+        const key = c.officer.branchId;
         if (!acc[key]) acc[key] = { count: 0, amount: 0 };
         acc[key].count++;
         acc[key].amount += Number(c.amount);
         return acc;
-      }, {} as Record<string, { count: number; amount: number }>);
+      }, {});
 
       return reply.send({
         success: true,
@@ -407,123 +443,97 @@ export async function adminRoutes(fastify: FastifyInstance) {
             total_branches: branches.length,
             total_cans: totalCans,
             total_officers: totalOfficers,
-            active_officers: totalOfficers,
             month_collection: monthCollections.reduce((s, c) => s + Number(c.amount), 0),
             month_count: monthCollections.length,
           },
-          by_branch: branches.map(b => ({
+          by_branch: branches.map((b) => ({
             branch_id: b.id,
             branch_name: b.name,
-            cans: 0, // Would need additional query
-            officers: 0,
+            cans: b._count.cans,
+            officers: b._count.officers,
             collection: byBranch[b.id]?.amount || 0,
             count: byBranch[b.id]?.count || 0,
           })),
-          top_officers: [],
-          pending_sync: 0,
         },
       });
     } catch (error) {
       fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
-      });
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
     }
   });
 
   // ========== SHARED ROUTES ==========
 
-  // Get assignments
-  fastify.get('/assignments', authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN'), async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/assignments', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const query = request.query as { year?: string; month?: string; officer_id?: string; branch_id?: string };
+      const query = request.query as { year?: string; month?: string; officer_id?: string; page?: string; limit?: string };
       const page = parseInt(query.page || '1');
       const limit = parseInt(query.limit || '20');
       const skip = (page - 1) * limit;
 
       const where: any = {};
-      if (query.year) where.period_year = parseInt(query.year);
-      if (query.month) where.period_month = parseInt(query.month);
-      if (query.officer_id) where.officer_id = query.officer_id;
+      if (query.year) where.periodYear = parseInt(query.year);
+      if (query.month) where.periodMonth = parseInt(query.month);
+      if (query.officer_id) where.officerId = query.officer_id;
 
-      const user = request.user!;
+      const user = request.currentUser!;
       if (user.role === 'ADMIN_RANTING' && user.branchId) {
-        where.can = { branch_id: user.branchId };
+        where.can = { branchId: user.branchId };
       } else if (user.role === 'ADMIN_KECAMATAN' && user.districtId) {
-        where.can = { branch: { district_id: user.districtId } };
+        where.can = { branch: { districtId: user.districtId } };
       }
 
       const [assignments, total] = await Promise.all([
-        prisma.assignments.findMany({
+        prisma.assignment.findMany({
           where,
           include: {
-            can: { select: { qr_code: true, owner_name: true } },
-            officer: { select: { full_name: true, employee_code: true } },
+            can: { select: { qrCode: true, ownerName: true } },
+            officer: { select: { fullName: true, employeeCode: true } },
           },
-          skip,
-          take: limit,
-          orderBy: { assigned_at: 'desc' },
+          skip, take: limit, orderBy: { assignedAt: 'desc' },
         }),
-        prisma.assignments.count({ where }),
+        prisma.assignment.count({ where }),
       ]);
 
       return reply.send({
         success: true,
-        data: {
-          assignments,
-          pagination: { page, limit, total, total_pages: Math.ceil(total / limit) },
-        },
+        data: { assignments, pagination: { page, limit, total, total_pages: Math.ceil(total / limit) } },
       });
     } catch (error) {
       fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
-      });
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
     }
   });
 
-  // Create assignment
-  fastify.post('/assignments', authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN'), async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/assignments', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = createAssignmentSchema.parse(request.body);
-
-      // Check for existing assignment
-      const existing = await prisma.assignments.findFirst({
-        where: {
-          can_id: body.can_id,
-          period_year: body.period_year,
-          period_month: body.period_month,
+      const existing = await prisma.assignment.findFirst({
+        where: { canId: body.can_id, periodYear: body.period_year, periodMonth: body.period_month },
+      });
+      if (existing) {
+        return reply.status(409).send({ success: false, error: { code: 'CONFLICT', message: 'Kaleng sudah ditugaskan bulan ini' } });
+      }
+      const assignment = await prisma.assignment.create({
+        data: {
+          canId: body.can_id,
+          officerId: body.officer_id,
+          backupOfficerId: body.backup_officer_id,
+          periodYear: body.period_year,
+          periodMonth: body.period_month,
         },
       });
-
-      if (existing) {
-        return reply.status(409).send({
-          success: false,
-          error: { code: 'CONFLICT', message: 'Kaleng sudah ditugaskan bulan ini' },
-        });
-      }
-
-      const assignment = await prisma.assignments.create({ data: body });
       return reply.status(201).send({ success: true, data: assignment });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return reply.status(400).send({
-          success: false,
-          error: { code: 'VALIDATION_ERROR', message: 'Input tidak valid', details: error.errors },
-        });
+        return reply.status(400).send({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Input tidak valid', details: error.errors } });
       }
       fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
-      });
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
     }
   });
 
-  // Update assignment (for reassignment)
-  fastify.put('/assignments/:id', authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN'), async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.put('/assignments/:id', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
       const body = z.object({
@@ -533,14 +543,19 @@ export async function adminRoutes(fastify: FastifyInstance) {
         notes: z.string().optional(),
       }).parse(request.body);
 
-      const assignment = await prisma.assignments.update({ where: { id }, data: body });
+      const assignment = await prisma.assignment.update({
+        where: { id },
+        data: {
+          officerId: body.officer_id,
+          backupOfficerId: body.backup_officer_id,
+          status: body.status,
+          notes: body.notes,
+        },
+      });
       return reply.send({ success: true, data: assignment });
     } catch (error) {
       fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
-      });
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
     }
   });
 }
