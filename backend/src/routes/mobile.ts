@@ -2,7 +2,9 @@
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { prisma } from '../config/database';
+import { db } from '../config/database';
+import * as schema from '../database/schema';
+import { eq, and, desc, asc, gte, inArray, sql } from 'drizzle-orm';
 import { authenticate } from '../middleware/auth';
 import { sendWhatsAppNotification } from '../services/whatsapp';
 
@@ -60,53 +62,37 @@ export async function mobileRoutes(fastify: FastifyInstance) {
       weekStart.setDate(weekStart.getDate() - weekStart.getDay());
 
       // Get today's stats
-      const todayCollections = await prisma.collection.findMany({
-        where: {
-          officerId,
-          collectedAt: { gte: today },
-          syncStatus: 'COMPLETED',
-        },
+      const todayCollections = await db.query.collections.findMany({
+        where: and(eq(schema.collections.officerId, officerId), gte(schema.collections.collectedAt, today), eq(schema.collections.syncStatus, 'COMPLETED')),
       });
 
       // Get week stats
-      const weekCollections = await prisma.collection.findMany({
-        where: {
-          officerId,
-          collectedAt: { gte: weekStart },
-          syncStatus: 'COMPLETED',
-        },
+      const weekCollections = await db.query.collections.findMany({
+        where: and(eq(schema.collections.officerId, officerId), gte(schema.collections.collectedAt, weekStart), eq(schema.collections.syncStatus, 'COMPLETED')),
       });
 
       // Get pending tasks
-      const pendingAssignments = await prisma.assignment.findMany({
-        where: {
-          officerId,
-          status: 'ACTIVE',
-        },
-        include: {
+      const pendingAssignments = await db.query.assignments.findMany({
+        where: and(eq(schema.assignments.officerId, officerId), eq(schema.assignments.status, 'ACTIVE')),
+        with: {
           can: {
-            select: {
-              id: true,
-              qrCode: true,
-              ownerName: true,
-              ownerAddress: true,
-              latitude: true,
-              longitude: true,
+            columns: {
+              id: true, qrCode: true, ownerName: true, ownerAddress: true, latitude: true, longitude: true,
             },
           },
         },
-        take: 10,
-        orderBy: { assignedAt: 'asc' },
+        limit: 10,
+        orderBy: [asc(schema.assignments.assignedAt)],
       });
 
       // Get recent collections
-      const recentCollections = await prisma.collection.findMany({
-        where: { officerId, syncStatus: 'COMPLETED' },
-        include: {
-          can: { select: { qrCode: true, ownerName: true } },
+      const recentCollections = await db.query.collections.findMany({
+        where: and(eq(schema.collections.officerId, officerId), eq(schema.collections.syncStatus, 'COMPLETED')),
+        with: {
+          can: { columns: { qrCode: true, ownerName: true } },
         },
-        orderBy: { collectedAt: 'desc' },
-        take: 5,
+        orderBy: [desc(schema.collections.collectedAt)],
+        limit: 5,
       });
 
       return reply.send({
@@ -167,32 +153,27 @@ export async function mobileRoutes(fastify: FastifyInstance) {
       const status = query.status || 'ACTIVE';
       const skip = (page - 1) * limit;
 
-      const whereClause: any = { officerId };
+      const conditions: any[] = [eq(schema.assignments.officerId, officerId!)];
       if (status !== 'ALL') {
-        whereClause.status = status;
+        conditions.push(eq(schema.assignments.status, status as any));
       }
+      const whereClause = and(...conditions);
 
       const [assignments, total] = await Promise.all([
-        prisma.assignment.findMany({
+        db.query.assignments.findMany({
           where: whereClause,
-          include: {
+          with: {
             can: {
-              select: {
-                id: true,
-                qrCode: true,
-                ownerName: true,
-                ownerPhone: true,
-                ownerAddress: true,
-                latitude: true,
-                longitude: true,
+              columns: {
+                id: true, qrCode: true, ownerName: true, ownerPhone: true, ownerAddress: true, latitude: true, longitude: true,
               },
             },
           },
-          orderBy: { assignedAt: 'asc' },
-          skip,
-          take: limit,
+          orderBy: [asc(schema.assignments.assignedAt)],
+          offset: skip,
+          limit,
         }),
-        prisma.assignment.count({ where: whereClause }),
+        db.$count(schema.assignments, whereClause),
       ]);
 
       return reply.send({
@@ -235,20 +216,20 @@ export async function mobileRoutes(fastify: FastifyInstance) {
       const officerId = user.officerId;
 
       // Find can by QR code
-      const can = await prisma.can.findUnique({
-        where: { qrCode },
-        include: {
+      const can = await db.query.cans.findFirst({
+        where: eq(schema.cans.qrCode, qrCode),
+        with: {
           collections: {
-            orderBy: { collectedAt: 'desc' },
-            take: 1,
+            orderBy: [desc(schema.collections.collectedAt)],
+            limit: 1,
           },
           assignments: {
-            where: {
-              officerId,
-              status: 'ACTIVE',
-              periodYear: new Date().getFullYear(),
-              periodMonth: new Date().getMonth() + 1,
-            },
+            where: and(
+              eq(schema.assignments.officerId, officerId!),
+              eq(schema.assignments.status, 'ACTIVE'),
+              eq(schema.assignments.periodYear, new Date().getFullYear()),
+              eq(schema.assignments.periodMonth, new Date().getMonth() + 1)
+            ),
           },
         },
       });
@@ -305,8 +286,8 @@ export async function mobileRoutes(fastify: FastifyInstance) {
 
       // Idempotency check via offline_id
       if (body.offline_id) {
-        const existing = await prisma.collection.findUnique({
-          where: { offlineId: body.offline_id },
+        const existing = await db.query.collections.findFirst({
+          where: eq(schema.collections.offlineId, body.offline_id),
         });
         if (existing) {
           return reply.status(409).send({
@@ -317,12 +298,11 @@ export async function mobileRoutes(fastify: FastifyInstance) {
       }
 
       // Create collection record
-      const collection = await prisma.collection.create({
-        data: {
+      const insertedColls = await db.insert(schema.collections).values({
           assignmentId: body.assignment_id,
           canId: body.can_id,
           officerId,
-          amount: body.amount,
+          amount: body.amount.toString(),
           paymentMethod: body.payment_method,
           transferReceiptUrl: body.transfer_receipt_url,
           collectedAt: new Date(body.collected_at),
@@ -331,41 +311,34 @@ export async function mobileRoutes(fastify: FastifyInstance) {
           syncStatus: 'COMPLETED',
           serverTimestamp: new Date(),
           deviceInfo: body.device_info as any,
-          latitude: body.latitude,
-          longitude: body.longitude,
+          latitude: body.latitude?.toString(),
+          longitude: body.longitude?.toString(),
           offlineId: body.offline_id,
-        },
-        include: {
-          can: true,
-          officer: { select: { fullName: true } },
-        },
-      });
+      }).returning();
+      const collection = insertedColls[0];
+
+      const insertedOfficer = await db.query.officers.findFirst({ where: eq(schema.officers.id, officerId) });
+      const insertedCan = await db.query.cans.findFirst({ where: eq(schema.cans.id, body.can_id) });
 
       // Update assignment status
-      await prisma.assignment.update({
-        where: { id: body.assignment_id },
-        data: { status: 'COMPLETED', completedAt: new Date() },
-      });
+      await db.update(schema.assignments).set({ status: 'COMPLETED', completedAt: new Date() }).where(eq(schema.assignments.id, body.assignment_id));
 
       // Update can's last collected info
-      await prisma.can.update({
-        where: { id: body.can_id },
-        data: {
+      await db.update(schema.cans).set({
           lastCollectedAt: new Date(body.collected_at),
-          totalCollected: { increment: body.amount },
-          collectionCount: { increment: 1 },
-        },
-      });
+          totalCollected: sql`${schema.cans.totalCollected} + ${body.amount}`,
+          collectionCount: sql`${schema.cans.collectionCount} + 1`
+      }).where(eq(schema.cans.id, body.can_id));
 
       // Send WhatsApp notification to owner
       let whatsappStatus = 'SKIPPED';
-      if (collection.can.ownerWhatsapp) {
+      if (insertedCan?.ownerWhatsapp) {
         try {
           const waResult = await sendWhatsAppNotification(
-            collection.can.ownerWhatsapp,
-            collection.can.ownerName,
+            insertedCan.ownerWhatsapp,
+            insertedCan.ownerName,
             body.amount,
-            collection.officer.fullName,
+            insertedOfficer!.fullName,
             {
               collectionId: collection.id,
               collectedAt: body.collected_at,
@@ -423,8 +396,8 @@ export async function mobileRoutes(fastify: FastifyInstance) {
       for (const item of body.collections) {
         try {
           // Idempotency check
-          const existing = await prisma.collection.findUnique({
-            where: { offlineId: item.offline_id },
+          const existing = await db.query.collections.findFirst({
+            where: eq(schema.collections.offlineId, item.offline_id),
           });
 
           if (existing) {
@@ -437,39 +410,32 @@ export async function mobileRoutes(fastify: FastifyInstance) {
             continue;
           }
 
-          const collection = await prisma.collection.create({
-            data: {
+          const insertedColls = await db.insert(schema.collections).values({
               assignmentId: item.assignment_id,
               canId: item.can_id,
               officerId,
-              amount: item.amount,
+              amount: item.amount.toString(),
               paymentMethod: item.payment_method,
               collectedAt: new Date(item.collected_at),
               submittedAt: new Date(),
               syncedAt: new Date(),
               syncStatus: 'COMPLETED',
               serverTimestamp: new Date(),
-              latitude: item.latitude,
-              longitude: item.longitude,
+              latitude: item.latitude?.toString(),
+              longitude: item.longitude?.toString(),
               offlineId: item.offline_id,
-            },
-          });
+          }).returning();
+          const collection = insertedColls[0];
 
           // Update assignment
-          await prisma.assignment.update({
-            where: { id: item.assignment_id },
-            data: { status: 'COMPLETED', completedAt: new Date() },
-          }).catch(() => {/* ignore if already completed */});
+          await db.update(schema.assignments).set({ status: 'COMPLETED', completedAt: new Date() }).where(eq(schema.assignments.id, item.assignment_id)).catch(() => {});
 
           // Update can totals
-          await prisma.can.update({
-            where: { id: item.can_id },
-            data: {
+          await db.update(schema.cans).set({
               lastCollectedAt: new Date(item.collected_at),
-              totalCollected: { increment: item.amount },
-              collectionCount: { increment: 1 },
-            },
-          });
+              totalCollected: sql`${schema.cans.totalCollected} + ${item.amount}`,
+              collectionCount: sql`${schema.cans.collectionCount} + 1`
+          }).where(eq(schema.cans.id, item.can_id));
 
           results.push({
             offline_id: item.offline_id,
@@ -525,19 +491,11 @@ export async function mobileRoutes(fastify: FastifyInstance) {
       }
 
       const [pendingCount, oldestPending] = await Promise.all([
-        prisma.collection.count({
-          where: {
-            officerId,
-            syncStatus: { in: ['PENDING', 'FAILED'] },
-          },
-        }),
-        prisma.collection.findFirst({
-          where: {
-            officerId,
-            syncStatus: { in: ['PENDING', 'FAILED'] },
-          },
-          orderBy: { collectedAt: 'asc' },
-          select: { collectedAt: true },
+        db.$count(schema.collections, and(eq(schema.collections.officerId, officerId), inArray(schema.collections.syncStatus, ['PENDING', 'FAILED']))),
+        db.query.collections.findFirst({
+          where: and(eq(schema.collections.officerId, officerId), inArray(schema.collections.syncStatus, ['PENDING', 'FAILED'])),
+          orderBy: [asc(schema.collections.collectedAt)],
+          columns: { collectedAt: true },
         }),
       ]);
 
@@ -571,22 +529,19 @@ export async function mobileRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const [officer, totalCollections, totalAmount] = await Promise.all([
-        prisma.officer.findUnique({
-          where: { id: officerId },
-          include: {
-            branch: { select: { id: true, name: true } },
-            district: { select: { id: true, name: true } },
+      const [officer, totalCollections, sumResult] = await Promise.all([
+        db.query.officers.findFirst({
+          where: eq(schema.officers.id, officerId),
+          with: {
+            branch: { columns: { id: true, name: true } },
+            district: { columns: { id: true, name: true } },
           },
         }),
-        prisma.collection.count({
-          where: { officerId, syncStatus: 'COMPLETED' },
-        }),
-        prisma.collection.aggregate({
-          where: { officerId, syncStatus: 'COMPLETED' },
-          _sum: { amount: true },
-        }),
+        db.$count(schema.collections, and(eq(schema.collections.officerId, officerId), eq(schema.collections.syncStatus, 'COMPLETED'))),
+        db.select({ total: sql<string>`sum(${schema.collections.amount})` }).from(schema.collections)
+          .where(and(eq(schema.collections.officerId, officerId), eq(schema.collections.syncStatus, 'COMPLETED')))
       ]);
+      const totalAmount = Number(sumResult[0]?.total || 0);
 
       if (!officer) {
         return reply.status(404).send({
@@ -603,12 +558,12 @@ export async function mobileRoutes(fastify: FastifyInstance) {
           full_name: officer.fullName,
           phone: officer.phone,
           photo_url: officer.photoUrl,
-          branch: { id: officer.branch.id, name: officer.branch.name },
-          district: { id: officer.district.id, name: officer.district.name },
+          branch: officer.branch ? { id: officer.branch.id, name: officer.branch.name } : { id: '', name: '' },
+          district: officer.district ? { id: officer.district.id, name: officer.district.name } : { id: '', name: '' },
           assigned_zone: officer.assignedZone,
           stats: {
             total_collections: totalCollections,
-            total_amount: Number(totalAmount._sum.amount) || 0,
+            total_amount: totalAmount,
           },
         },
       });
@@ -640,18 +595,16 @@ export async function mobileRoutes(fastify: FastifyInstance) {
       const skip = (page - 1) * limit;
 
       const [collections, total] = await Promise.all([
-        prisma.collection.findMany({
-          where: { officerId, syncStatus: 'COMPLETED' },
-          include: {
-            can: { select: { qrCode: true, ownerName: true, ownerAddress: true } },
+        db.query.collections.findMany({
+          where: and(eq(schema.collections.officerId, officerId), eq(schema.collections.syncStatus, 'COMPLETED')),
+          with: {
+            can: { columns: { qrCode: true, ownerName: true, ownerAddress: true } },
           },
-          orderBy: { collectedAt: 'desc' },
-          skip,
-          take: limit,
+          orderBy: [desc(schema.collections.collectedAt)],
+          offset: skip,
+          limit,
         }),
-        prisma.collection.count({
-          where: { officerId, syncStatus: 'COMPLETED' },
-        }),
+        db.$count(schema.collections, and(eq(schema.collections.officerId, officerId), eq(schema.collections.syncStatus, 'COMPLETED'))),
       ]);
 
       return reply.send({

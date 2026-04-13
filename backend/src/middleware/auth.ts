@@ -1,7 +1,9 @@
 // JWT Authentication Middleware
 
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { prisma } from '../config/database';
+import { db } from '../config/database';
+import * as schema from '../database/schema';
+import { eq } from 'drizzle-orm';
 
 // JWT Payload type
 export interface JWTPayload {
@@ -41,9 +43,9 @@ export async function authenticate(
     const decoded = await request.jwtVerify<JWTPayload>();
 
     // Verify user still exists and is active
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-      select: { id: true, isActive: true },
+    const user = await db.query.users.findFirst({
+      where: eq(schema.users.id, decoded.userId),
+      columns: { id: true, isActive: true },
     });
 
     if (!user || !user.isActive) {

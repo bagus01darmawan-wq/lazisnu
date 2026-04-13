@@ -3,7 +3,9 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { prisma } from '../config/database';
+import { db } from '../config/database';
+import { users, officers } from '../database/schema';
+import { eq } from 'drizzle-orm';
 import { generateTokens } from '../middleware/auth';
 import { otpService } from '../services/otp';
 
@@ -24,15 +26,31 @@ const verifyOTPSchema = z.object({
 
 export async function authRoutes(fastify: FastifyInstance) {
   // POST /auth/login
-  fastify.post('/login', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/login', {
+    schema: {
+      tags: ['Auth'],
+      summary: 'Login dengan nomor HP dan password',
+      body: {
+        type: 'object',
+        required: ['phone', 'password'],
+        properties: {
+          phone: { type: 'string', minLength: 10, maxLength: 15 },
+          password: { type: 'string', minLength: 6 },
+        },
+      },
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = loginSchema.parse(request.body);
 
       // Find user by phone
-      const user = await prisma.user.findUnique({
-        where: { phone: body.phone },
-        include: { officers: true },
-      });
+      const userRes = await db.select().from(users).where(eq(users.phone, body.phone)).limit(1);
+      const user = userRes[0];
+      
+      let userOfficers: any[] = [];
+      if (user) {
+        userOfficers = await db.select().from(officers).where(eq(officers.userId, user.id));
+      }
 
       if (!user) {
         return reply.status(401).send({
@@ -69,13 +87,12 @@ export async function authRoutes(fastify: FastifyInstance) {
       }
 
       // Update last login
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { lastLogin: new Date() },
-      });
+      await db.update(users)
+        .set({ lastLogin: new Date() })
+        .where(eq(users.id, user.id));
 
       // Generate tokens
-      const officer = user.officers[0];
+      const officer = userOfficers[0];
       const payload = {
         userId: user.id,
         role: user.role,
@@ -125,14 +142,25 @@ export async function authRoutes(fastify: FastifyInstance) {
   });
 
   // POST /auth/request-otp
-  fastify.post('/request-otp', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/request-otp', {
+    schema: {
+      tags: ['Auth'],
+      summary: 'Request OTP via WhatsApp (untuk login petugas)',
+      body: {
+        type: 'object',
+        required: ['phone'],
+        properties: {
+          phone: { type: 'string', minLength: 10, maxLength: 15 },
+        },
+      },
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = requestOTPSchema.parse(request.body);
 
       // Check if user/officer exists
-      const user = await prisma.user.findUnique({
-        where: { phone: body.phone },
-      });
+      const userRes = await db.select().from(users).where(eq(users.phone, body.phone)).limit(1);
+      const user = userRes[0];
 
       if (!user) {
         // For security, don't reveal if user exists or not
@@ -188,7 +216,20 @@ export async function authRoutes(fastify: FastifyInstance) {
   });
 
   // POST /auth/verify-otp
-  fastify.post('/verify-otp', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/verify-otp', {
+    schema: {
+      tags: ['Auth'],
+      summary: 'Verifikasi OTP untuk login petugas',
+      body: {
+        type: 'object',
+        required: ['phone', 'otp'],
+        properties: {
+          phone: { type: 'string', minLength: 10, maxLength: 15 },
+          otp: { type: 'string', minLength: 6, maxLength: 6 },
+        },
+      },
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = verifyOTPSchema.parse(request.body);
 
@@ -206,10 +247,13 @@ export async function authRoutes(fastify: FastifyInstance) {
       }
 
       // Find officer by phone (for petugas login with OTP)
-      const officer = await prisma.officer.findFirst({
-        where: { phone: body.phone },
-        include: { user: true },
-      });
+      const officerRes = await db.select().from(officers).where(eq(officers.phone, body.phone)).limit(1);
+      const officer = officerRes[0] as any;
+      
+      if (officer) {
+        const userRes = await db.select().from(users).where(eq(users.id, officer.userId)).limit(1);
+        officer.user = userRes[0];
+      }
 
       if (!officer || !officer.user) {
         return reply.status(404).send({
@@ -225,10 +269,9 @@ export async function authRoutes(fastify: FastifyInstance) {
       await otpService.delete(body.phone);
 
       // Update last login
-      await prisma.user.update({
-        where: { id: officer.user.id },
-        data: { lastLogin: new Date() },
-      });
+      await db.update(users)
+        .set({ lastLogin: new Date() })
+        .where(eq(users.id, officer.user.id));
 
       // Generate tokens
       const payload = {
@@ -315,3 +358,4 @@ export async function authRoutes(fastify: FastifyInstance) {
 }
 
 export default authRoutes;
+

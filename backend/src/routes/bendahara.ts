@@ -1,7 +1,9 @@
-﻿// Bendahara Routes - Financial Reports API
+// Bendahara Routes - Financial Reports API
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { prisma } from '../config/database';
+import { db } from '../config/database';
+import * as schema from '../database/schema';
+import { eq, and, desc, asc, gte, lte } from 'drizzle-orm';
 import { authenticate, authorize } from '../middleware/auth';
 
 export async function bendaharaRoutes(fastify: FastifyInstance) {
@@ -15,18 +17,15 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      const monthCollections = await prisma.collection.findMany({
-        where: {
-          collectedAt: { gte: monthStart },
-          syncStatus: 'COMPLETED',
-        },
-        include: {
+      const monthCollections = await db.query.collections.findMany({
+        where: and(gte(schema.collections.collectedAt, monthStart), eq(schema.collections.syncStatus, 'COMPLETED')),
+        with: {
           can: {
-            include: {
-              branch: { include: { district: true } },
+            with: {
+              branch: { with: { district: true } },
             },
           },
-          officer: { select: { id: true, fullName: true } },
+          officer: { columns: { id: true, fullName: true } },
         },
       });
 
@@ -115,36 +114,34 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
       const limit = parseInt(query.limit || '20');
       const skip = (page - 1) * limit;
 
-      const where: any = { syncStatus: 'COMPLETED' };
-
+      const conditions = [eq(schema.collections.syncStatus, 'COMPLETED')];
       if (query.start_date && query.end_date) {
-        where.collectedAt = {
-          gte: new Date(query.start_date),
-          lte: new Date(query.end_date),
-        };
+        conditions.push(and(gte(schema.collections.collectedAt, new Date(query.start_date)), lte(schema.collections.collectedAt, new Date(query.end_date)))!);
       }
-      if (query.officer_id) where.officerId = query.officer_id;
-      if (query.district_id) {
-        where.can = { branch: { districtId: query.district_id } };
-      }
+      if (query.officer_id) conditions.push(eq(schema.collections.officerId, query.officer_id));
+      const whereClause = and(...conditions);
 
-      const [collections, total] = await Promise.all([
-        prisma.collection.findMany({
-          where,
-          include: {
+      let [collections, total] = await Promise.all([
+        db.query.collections.findMany({
+          where: whereClause,
+          with: {
             can: {
-              include: {
-                branch: { include: { district: true } },
+              with: {
+                branch: { with: { district: true } },
               },
             },
-            officer: { select: { fullName: true, employeeCode: true } },
+            officer: { columns: { fullName: true, employeeCode: true } },
           },
-          orderBy: { collectedAt: 'desc' },
-          skip,
-          take: limit,
+          orderBy: [desc(schema.collections.collectedAt)]
         }),
-        prisma.collection.count({ where }),
+        db.$count(schema.collections, whereClause)
       ]);
+
+      if (query.district_id) {
+        collections = collections.filter(c => c.can.branch.districtId === query.district_id);
+        total = collections.length;
+      }
+      collections = collections.slice(skip, skip + limit);
 
       return reply.send({
         success: true,
@@ -180,21 +177,21 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
       const { id } = request.params as { id: string };
 
       const [collection, notification] = await Promise.all([
-        prisma.collection.findUnique({
-          where: { id },
-          include: {
+        db.query.collections.findFirst({
+          where: eq(schema.collections.id, id),
+          with: {
             can: {
-              include: {
-                branch: { include: { district: true } },
+              with: {
+                branch: { with: { district: true } },
               },
             },
-            officer: { select: { fullName: true, phone: true, employeeCode: true } },
-            notifications: { orderBy: { createdAt: 'desc' }, take: 1 },
+            officer: { columns: { fullName: true, phone: true, employeeCode: true } },
+            notifications: { orderBy: [desc(schema.notifications.createdAt)], limit: 1 },
           },
         }),
-        prisma.notification.findFirst({
-          where: { collectionId: id },
-          orderBy: { createdAt: 'desc' },
+        db.query.notifications.findFirst({
+          where: eq(schema.notifications.collectionId, id),
+          orderBy: [desc(schema.notifications.createdAt)],
         }),
       ]);
 
@@ -253,14 +250,11 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
       const startDate = new Date(year, month - 1, 1);
       const endDate = new Date(year, month, 0, 23, 59, 59);
 
-      const collections = await prisma.collection.findMany({
-        where: {
-          collectedAt: { gte: startDate, lte: endDate },
-          syncStatus: 'COMPLETED',
-        },
-        include: {
-          can: { include: { branch: { include: { district: true } } } },
-          officer: { select: { id: true, fullName: true } },
+      const collections = await db.query.collections.findMany({
+        where: and(gte(schema.collections.collectedAt, startDate), lte(schema.collections.collectedAt, endDate), eq(schema.collections.syncStatus, 'COMPLETED')),
+        with: {
+          can: { with: { branch: { with: { district: true } } } },
+          officer: { columns: { id: true, fullName: true } },
         },
       });
 
@@ -352,19 +346,13 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const collections = await prisma.collection.findMany({
-        where: {
-          collectedAt: {
-            gte: new Date(query.start_date),
-            lte: new Date(query.end_date),
-          },
-          syncStatus: 'COMPLETED',
+      const collections = await db.query.collections.findMany({
+        where: and(gte(schema.collections.collectedAt, new Date(query.start_date)), lte(schema.collections.collectedAt, new Date(query.end_date)), eq(schema.collections.syncStatus, 'COMPLETED')),
+        with: {
+          can: { with: { branch: { with: { district: true } } } },
+          officer: { columns: { fullName: true, employeeCode: true } },
         },
-        include: {
-          can: { include: { branch: { include: { district: true } } } },
-          officer: { select: { fullName: true, employeeCode: true } },
-        },
-        orderBy: { collectedAt: 'asc' },
+        orderBy: [asc(schema.collections.collectedAt)],
       });
 
       const headers = [
