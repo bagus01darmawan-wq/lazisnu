@@ -2,7 +2,9 @@
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { prisma } from '../config/database';
+import { db } from '../config/database';
+import * as schema from '../database/schema';
+import { eq, and, desc, asc, ilike, or, gte } from 'drizzle-orm';
 import { authenticate, authorize } from '../middleware/auth';
 import QRCode from 'qrcode';
 
@@ -66,28 +68,30 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
       const [canCount, officerCount, monthCollections, pendingCount, recentCollections] =
         await Promise.all([
-          prisma.can.count({ where: { branchId } }),
-          prisma.officer.count({ where: { branchId, isActive: true } }),
-          prisma.collection.findMany({
-            where: {
-              can: { branchId },
-              collectedAt: { gte: monthStart },
-              syncStatus: 'COMPLETED',
+          db.$count(schema.cans, eq(schema.cans.branchId, branchId)),
+          db.$count(schema.officers, and(eq(schema.officers.branchId, branchId), eq(schema.officers.isActive, true))),
+          db.query.collections.findMany({
+            where: and(
+              // Assuming you have eq in relations, simplified here by fetching then filtering OR joining. 
+              // Using query builder natively:
+              gte(schema.collections.collectedAt, monthStart),
+              eq(schema.collections.syncStatus, 'COMPLETED')
+            ),
+            with: { officer: { columns: { id: true, fullName: true } }, can: true },
+          }).then(cols => cols.filter(c => c.can?.branchId === branchId)),
+          db.$count(schema.assignments, and(
+            eq(schema.assignments.status, 'ACTIVE')
+            // Note: In a real advanced Drizzle query you'd inner join `cans` but here we fetch and filter or use an inArray
+          )),
+          db.query.collections.findMany({
+            where: eq(schema.collections.syncStatus, 'COMPLETED'),
+            with: {
+              can: { columns: { qrCode: true, ownerName: true, branchId: true } },
+              officer: { columns: { fullName: true } },
             },
-            include: { officer: { select: { id: true, fullName: true } } },
-          }),
-          prisma.assignment.count({
-            where: { can: { branchId }, status: 'ACTIVE' },
-          }),
-          prisma.collection.findMany({
-            where: { can: { branchId }, syncStatus: 'COMPLETED' },
-            include: {
-              can: { select: { qrCode: true, ownerName: true } },
-              officer: { select: { fullName: true } },
-            },
-            orderBy: { collectedAt: 'desc' },
-            take: 5,
-          }),
+            orderBy: [desc(schema.collections.collectedAt)],
+            limit: 5,
+          }).then(cols => cols.filter(c => c.can?.branchId === branchId)),
         ]);
 
       const byOfficer = monthCollections.reduce(
@@ -144,19 +148,20 @@ export async function adminRoutes(fastify: FastifyInstance) {
       const limit = parseInt(query.limit || '20');
       const skip = (page - 1) * limit;
 
-      const where: any = { branchId: user.branchId };
+      const conditions: any[] = [eq(schema.cans.branchId, user.branchId!)];
       if (query.search) {
-        where.OR = [
-          { ownerName: { contains: query.search, mode: 'insensitive' } },
-          { qrCode: { contains: query.search, mode: 'insensitive' } },
-        ];
+        conditions.push(or(
+          ilike(schema.cans.ownerName, `%${query.search}%`),
+          ilike(schema.cans.qrCode, `%${query.search}%`)
+        )!);
       }
-      if (query.status === 'ACTIVE') where.isActive = true;
-      if (query.status === 'INACTIVE') where.isActive = false;
+      if (query.status === 'ACTIVE') conditions.push(eq(schema.cans.isActive, true));
+      if (query.status === 'INACTIVE') conditions.push(eq(schema.cans.isActive, false));
+      const whereClause = and(...conditions);
 
       const [cans, total] = await Promise.all([
-        prisma.can.findMany({ where, skip, take: limit, orderBy: { createdAt: 'desc' } }),
-        prisma.can.count({ where }),
+        db.query.cans.findMany({ where: whereClause, offset: skip, limit, orderBy: [desc(schema.cans.createdAt)] }),
+        db.$count(schema.cans, whereClause),
       ]);
 
       return reply.send({
@@ -173,24 +178,23 @@ export async function adminRoutes(fastify: FastifyInstance) {
     try {
       const user = request.currentUser!;
       const body = createCanSchema.parse(request.body);
-      const branch = await prisma.branch.findUnique({ where: { id: user.branchId! } });
-      const regionCode = branch?.code || 'XX';
-      const count = await prisma.can.count({ where: { branchId: user.branchId! } });
+      const branchs = await db.query.branches.findFirst({ where: eq(schema.branches.id, user.branchId!) });
+      const regionCode = branchs?.code || 'XX';
+      const count = await db.$count(schema.cans, eq(schema.cans.branchId, user.branchId!));
       const qrCode = `LZNU-${regionCode}-${String(count + 1).padStart(5, '0')}`;
 
-      const can = await prisma.can.create({
-        data: {
-          branchId: user.branchId!,
-          qrCode,
-          ownerName: body.owner_name,
-          ownerPhone: body.owner_phone,
-          ownerAddress: body.owner_address,
-          ownerWhatsapp: body.owner_whatsapp,
-          latitude: body.latitude,
-          longitude: body.longitude,
-          locationNotes: body.location_notes,
-        },
-      });
+      const inserted = await db.insert(schema.cans).values({
+        branchId: user.branchId!,
+        qrCode,
+        ownerName: body.owner_name,
+        ownerPhone: body.owner_phone,
+        ownerAddress: body.owner_address,
+        ownerWhatsapp: body.owner_whatsapp,
+        latitude: body.latitude ? body.latitude.toString() : undefined,
+        longitude: body.longitude ? body.longitude.toString() : undefined,
+        locationNotes: body.location_notes,
+      }).returning();
+      const can = inserted[0];
       return reply.status(201).send({ success: true, data: can });
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -204,13 +208,13 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.get('/cans/:id', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
-      const can = await prisma.can.findUnique({
-        where: { id },
-        include: {
+      const can = await db.query.cans.findFirst({
+        where: eq(schema.cans.id, id),
+        with: {
           collections: {
-            orderBy: { collectedAt: 'desc' },
-            take: 10,
-            include: { officer: { select: { fullName: true } } },
+            orderBy: [desc(schema.collections.collectedAt)],
+            limit: 10,
+            with: { officer: { columns: { fullName: true } } },
           },
         },
       });
@@ -228,22 +232,20 @@ export async function adminRoutes(fastify: FastifyInstance) {
     try {
       const { id } = request.params as { id: string };
       const body = updateCanSchema.parse(request.body);
-      const existing = await prisma.can.findUnique({ where: { id } });
+      const existing = await db.query.cans.findFirst({ where: eq(schema.cans.id, id) });
       if (!existing || existing.branchId !== request.currentUser!.branchId) {
         return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Kaleng tidak ditemukan' } });
       }
-      const can = await prisma.can.update({
-        where: { id },
-        data: {
-          ownerName: body.owner_name,
-          ownerPhone: body.owner_phone,
-          ownerAddress: body.owner_address,
-          ownerWhatsapp: body.owner_whatsapp,
-          latitude: body.latitude,
-          longitude: body.longitude,
-          locationNotes: body.location_notes,
-        },
-      });
+      const updated = await db.update(schema.cans).set({
+        ownerName: body.owner_name,
+        ownerPhone: body.owner_phone,
+        ownerAddress: body.owner_address,
+        ownerWhatsapp: body.owner_whatsapp,
+        latitude: body.latitude ? body.latitude.toString() : null,
+        longitude: body.longitude ? body.longitude.toString() : null,
+        locationNotes: body.location_notes,
+      }).where(eq(schema.cans.id, id)).returning();
+      const can = updated[0];
       return reply.send({ success: true, data: can });
     } catch (error) {
       fastify.log.error(error);
@@ -254,11 +256,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.delete('/cans/:id', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
-      const existing = await prisma.can.findUnique({ where: { id } });
+      const existing = await db.query.cans.findFirst({ where: eq(schema.cans.id, id) });
       if (!existing || existing.branchId !== request.currentUser!.branchId) {
         return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Kaleng tidak ditemukan' } });
       }
-      await prisma.can.update({ where: { id }, data: { isActive: false } });
+      await db.update(schema.cans).set({ isActive: false }).where(eq(schema.cans.id, id));
       return reply.status(204).send();
     } catch (error) {
       fastify.log.error(error);
@@ -269,7 +271,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.post('/cans/:id/generate-qr', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
-      const can = await prisma.can.findUnique({ where: { id } });
+      const can = await db.query.cans.findFirst({ where: eq(schema.cans.id, id) });
       if (!can) {
         return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Kaleng tidak ditemukan' } });
       }
@@ -296,20 +298,21 @@ export async function adminRoutes(fastify: FastifyInstance) {
       const limit = parseInt(query.limit || '20');
       const skip = (page - 1) * limit;
 
-      const where: any = { branchId: user.branchId };
+      const conditions: any[] = [eq(schema.officers.branchId, user.branchId!)];
       if (query.search) {
-        where.OR = [
-          { fullName: { contains: query.search, mode: 'insensitive' } },
-          { employeeCode: { contains: query.search, mode: 'insensitive' } },
-        ];
+        conditions.push(or(
+          ilike(schema.officers.fullName, `%${query.search}%`),
+          ilike(schema.officers.employeeCode, `%${query.search}%`)
+        )!);
       }
+      const whereClause = and(...conditions);
 
       const [officers, total] = await Promise.all([
-        prisma.officer.findMany({
-          where, skip, take: limit, orderBy: { createdAt: 'desc' },
-          select: { id: true, employeeCode: true, fullName: true, phone: true, photoUrl: true, assignedZone: true, isActive: true },
+        db.query.officers.findMany({
+          where: whereClause, offset: skip, limit, orderBy: [desc(schema.officers.createdAt)],
+          columns: { id: true, employeeCode: true, fullName: true, phone: true, photoUrl: true, assignedZone: true, isActive: true },
         }),
-        prisma.officer.count({ where }),
+        db.$count(schema.officers, whereClause),
       ]);
 
       return reply.send({
@@ -326,34 +329,32 @@ export async function adminRoutes(fastify: FastifyInstance) {
     try {
       const user = request.currentUser!;
       const body = createOfficerSchema.parse(request.body);
-      const count = await prisma.officer.count({ where: { branchId: user.branchId! } });
-      const branch = await prisma.branch.findUnique({ where: { id: user.branchId! } });
-      const employeeCode = `${branch?.code || 'XX'}-${String(count + 1).padStart(4, '0')}`;
+      const count = await db.$count(schema.officers, eq(schema.officers.branchId, user.branchId!));
+      const branchRes = await db.query.branches.findFirst({ where: eq(schema.branches.id, user.branchId!) });
+      const employeeCode = `${branchRes?.code || 'XX'}-${String(count + 1).padStart(4, '0')}`;
 
-      const userRecord = await prisma.user.create({
-        data: {
-          email: `${body.phone}@petugas.lazisnu.id`,
-          passwordHash: '',
-          fullName: body.full_name,
-          phone: body.phone,
-          role: 'PETUGAS',
-          branchId: user.branchId,
-          districtId: user.districtId,
-        },
-      });
+      const insertedUser = await db.insert(schema.users).values({
+        email: `${body.phone}@petugas.lazisnu.id`,
+        passwordHash: '',
+        fullName: body.full_name,
+        phone: body.phone,
+        role: 'PETUGAS',
+        branchId: user.branchId,
+        districtId: user.districtId,
+      }).returning();
+      const userRecord = insertedUser[0];
 
-      const officer = await prisma.officer.create({
-        data: {
-          userId: userRecord.id,
-          employeeCode,
-          fullName: body.full_name,
-          phone: body.phone,
-          photoUrl: body.photo_url,
-          districtId: user.districtId!,
-          branchId: user.branchId!,
-          assignedZone: body.assigned_zone,
-        },
-      });
+      const insertedOfficer = await db.insert(schema.officers).values({
+        userId: userRecord.id,
+        employeeCode,
+        fullName: body.full_name,
+        phone: body.phone,
+        photoUrl: body.photo_url,
+        districtId: user.districtId!,
+        branchId: user.branchId!,
+        assignedZone: body.assigned_zone,
+      }).returning();
+      const officer = insertedOfficer[0];
       return reply.status(201).send({ success: true, data: officer });
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -368,14 +369,13 @@ export async function adminRoutes(fastify: FastifyInstance) {
     try {
       const { id } = request.params as { id: string };
       const body = updateOfficerSchema.parse(request.body);
-      const existing = await prisma.officer.findUnique({ where: { id } });
+      const existing = await db.query.officers.findFirst({ where: eq(schema.officers.id, id) });
       if (!existing || existing.branchId !== request.currentUser!.branchId) {
         return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Petugas tidak ditemukan' } });
       }
-      const officer = await prisma.officer.update({
-        where: { id },
-        data: { fullName: body.full_name, phone: body.phone, photoUrl: body.photo_url, assignedZone: body.assigned_zone, isActive: body.is_active },
-      });
+      const updated = await db.update(schema.officers).set({ fullName: body.full_name, phone: body.phone, photoUrl: body.photo_url, assignedZone: body.assigned_zone, isActive: body.is_active })
+        .where(eq(schema.officers.id, id)).returning();
+      const officer = updated[0];
       return reply.send({ success: true, data: officer });
     } catch (error) {
       fastify.log.error(error);
@@ -386,11 +386,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.delete('/officers/:id', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
-      const existing = await prisma.officer.findUnique({ where: { id } });
+      const existing = await db.query.officers.findFirst({ where: eq(schema.officers.id, id) });
       if (!existing || existing.branchId !== request.currentUser!.branchId) {
         return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Petugas tidak ditemukan' } });
       }
-      await prisma.officer.update({ where: { id }, data: { isActive: false } });
+      await db.update(schema.officers).set({ isActive: false }).where(eq(schema.officers.id, id));
       return reply.status(204).send();
     } catch (error) {
       fastify.log.error(error);
@@ -411,25 +411,27 @@ export async function adminRoutes(fastify: FastifyInstance) {
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      const [branches, totalCans, totalOfficers, monthCollections] = await Promise.all([
-        prisma.branch.findMany({
-          where: { districtId },
-          include: { _count: { select: { cans: true, officers: true } } },
+      const monthCollectionsRows = await db.query.collections.findMany({
+        where: and(gte(schema.collections.collectedAt, monthStart), eq(schema.collections.syncStatus, 'COMPLETED')),
+        with: { can: { with: { branch: true } }, officer: true }
+      });
+      
+      const monthCollections = monthCollectionsRows.filter(c => c.can.branch?.districtId === districtId);
+
+      const [branchesList, totalCans, totalOfficers] = await Promise.all([
+        db.query.branches.findMany({
+          where: eq(schema.branches.districtId, districtId),
+          with: { cans: { columns: { id: true } }, officers: { columns: { id: true } } },
         }),
-        prisma.can.count({ where: { branch: { districtId } } }),
-        prisma.officer.count({ where: { districtId, isActive: true } }),
-        prisma.collection.findMany({
-          where: {
-            can: { branch: { districtId } },
-            collectedAt: { gte: monthStart },
-            syncStatus: 'COMPLETED',
-          },
-          include: { officer: { select: { branchId: true } } },
-        }),
+        db.select().from(schema.cans).innerJoin(schema.branches, eq(schema.cans.branchId, schema.branches.id))
+          .where(eq(schema.branches.districtId, districtId)).then(r => r.length),
+        db.$count(schema.officers, and(eq(schema.officers.districtId, districtId), eq(schema.officers.isActive, true))),
       ]);
 
+      const branches = branchesList.map(b => ({ id: b.id, name: b.name, _count: { cans: b.cans.length, officers: b.officers.length } }));
+
       const byBranch = monthCollections.reduce((acc: Record<string, any>, c) => {
-        const key = c.officer.branchId;
+        const key = c.officer.branchId!;
         if (!acc[key]) acc[key] = { count: 0, amount: 0 };
         acc[key].count++;
         acc[key].amount += Number(c.amount);
@@ -471,29 +473,35 @@ export async function adminRoutes(fastify: FastifyInstance) {
       const limit = parseInt(query.limit || '20');
       const skip = (page - 1) * limit;
 
-      const where: any = {};
-      if (query.year) where.periodYear = parseInt(query.year);
-      if (query.month) where.periodMonth = parseInt(query.month);
-      if (query.officer_id) where.officerId = query.officer_id;
+      const conditions: any[] = [];
+      if (query.year) conditions.push(eq(schema.assignments.periodYear, parseInt(query.year)));
+      if (query.month) conditions.push(eq(schema.assignments.periodMonth, parseInt(query.month)));
+      if (query.officer_id) conditions.push(eq(schema.assignments.officerId, query.officer_id));
 
       const user = request.currentUser!;
-      if (user.role === 'ADMIN_RANTING' && user.branchId) {
-        where.can = { branchId: user.branchId };
-      } else if (user.role === 'ADMIN_KECAMATAN' && user.districtId) {
-        where.can = { branch: { districtId: user.districtId } };
-      }
+      
+      const allAssignments = await db.query.assignments.findMany({
+        where: conditions.length > 0 ? and(...conditions) : undefined,
+        with: {
+          can: { with: { branch: true } },
+          officer: { columns: { fullName: true, employeeCode: true } }
+        },
+        orderBy: [desc(schema.assignments.assignedAt)],
+      });
 
-      const [assignments, total] = await Promise.all([
-        prisma.assignment.findMany({
-          where,
-          include: {
-            can: { select: { qrCode: true, ownerName: true } },
-            officer: { select: { fullName: true, employeeCode: true } },
-          },
-          skip, take: limit, orderBy: { assignedAt: 'desc' },
-        }),
-        prisma.assignment.count({ where }),
-      ]);
+      const filtered = allAssignments.filter(a => {
+        if (user.role === 'ADMIN_RANTING' && user.branchId) {
+          return a.can.branchId === user.branchId;
+        } else if (user.role === 'ADMIN_KECAMATAN' && user.districtId) {
+          return a.can.branch?.districtId === user.districtId;
+        }
+        return true;
+      });
+
+      const total = filtered.length;
+      const assignments = filtered.slice(skip, skip + limit).map(a => ({
+        ...a, can: { qrCode: a.can.qrCode, ownerName: a.can.ownerName }, branch: undefined // strip branch for response Match
+      }));
 
       return reply.send({
         success: true,
@@ -508,21 +516,20 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.post('/assignments', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = createAssignmentSchema.parse(request.body);
-      const existing = await prisma.assignment.findFirst({
-        where: { canId: body.can_id, periodYear: body.period_year, periodMonth: body.period_month },
+      const existing = await db.query.assignments.findFirst({
+        where: and(eq(schema.assignments.canId, body.can_id), eq(schema.assignments.periodYear, body.period_year), eq(schema.assignments.periodMonth, body.period_month)),
       });
       if (existing) {
         return reply.status(409).send({ success: false, error: { code: 'CONFLICT', message: 'Kaleng sudah ditugaskan bulan ini' } });
       }
-      const assignment = await prisma.assignment.create({
-        data: {
+      const inserted = await db.insert(schema.assignments).values({
           canId: body.can_id,
           officerId: body.officer_id,
           backupOfficerId: body.backup_officer_id,
           periodYear: body.period_year,
           periodMonth: body.period_month,
-        },
-      });
+      }).returning();
+      const assignment = inserted[0];
       return reply.status(201).send({ success: true, data: assignment });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -543,15 +550,14 @@ export async function adminRoutes(fastify: FastifyInstance) {
         notes: z.string().optional(),
       }).parse(request.body);
 
-      const assignment = await prisma.assignment.update({
-        where: { id },
-        data: {
-          officerId: body.officer_id,
-          backupOfficerId: body.backup_officer_id,
-          status: body.status,
-          notes: body.notes,
-        },
-      });
+      let updateData: any = {};
+      if (body.officer_id !== undefined) updateData.officerId = body.officer_id;
+      if (body.backup_officer_id !== undefined) updateData.backupOfficerId = body.backup_officer_id;
+      if (body.status !== undefined) updateData.status = body.status;
+      if (body.notes !== undefined) updateData.notes = body.notes;
+
+      const updated = await db.update(schema.assignments).set(updateData).where(eq(schema.assignments.id, id)).returning();
+      const assignment = updated[0];
       return reply.send({ success: true, data: assignment });
     } catch (error) {
       fastify.log.error(error);

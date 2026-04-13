@@ -2,7 +2,9 @@
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { prisma } from '../config/database';
+import { db } from '../config/database';
+import * as schema from '../database/schema';
+import { eq, and, asc, gte, lte, inArray, notInArray, sql } from 'drizzle-orm';
 import { config } from '../config/env';
 
 const generateTasksSchema = z.object({
@@ -30,23 +32,23 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
       const { year, month } = body;
 
       // Find cans that don't have assignments for this period yet
-      const existingAssignments = await prisma.assignment.findMany({
-        where: { periodYear: year, periodMonth: month },
-        select: { canId: true },
+      const existingAssignments = await db.query.assignments.findMany({
+        where: and(eq(schema.assignments.periodYear, year), eq(schema.assignments.periodMonth, month)),
+        columns: { canId: true },
       });
       const assignedCanIds = existingAssignments.map((a) => a.canId);
 
-      const cansToAssign = await prisma.can.findMany({
-        where: {
-          isActive: true,
-          id: { notIn: assignedCanIds },
-        },
-        include: {
+      const cansToAssign = await db.query.cans.findMany({
+        where: and(
+          eq(schema.cans.isActive, true),
+          assignedCanIds.length > 0 ? notInArray(schema.cans.id, assignedCanIds) : undefined
+        ),
+        with: {
           branch: {
-            include: {
+            with: {
               officers: {
-                where: { isActive: true },
-                orderBy: { createdAt: 'asc' },
+                where: eq(schema.officers.isActive, true),
+                orderBy: [asc(schema.officers.createdAt)],
               },
             },
           },
@@ -78,10 +80,7 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
       }
 
       if (assignmentData.length > 0) {
-        await prisma.assignment.createMany({
-          data: assignmentData,
-          skipDuplicates: true,
-        });
+        await db.insert(schema.assignments).values(assignmentData).onConflictDoNothing();
       }
 
       return reply.send({
@@ -123,21 +122,17 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
       const startDate = new Date(year, month - 1, 1);
       const endDate = new Date(year, month, 0, 23, 59, 59);
 
-      const collections = await prisma.collection.findMany({
-        where: {
-          collectedAt: { gte: startDate, lte: endDate },
-          syncStatus: 'COMPLETED',
-        },
-        include: {
-          can: { include: { branch: true } },
+      const collections = await db.query.collections.findMany({
+        where: and(gte(schema.collections.collectedAt, startDate), lte(schema.collections.collectedAt, endDate), eq(schema.collections.syncStatus, 'COMPLETED')),
+        with: {
+          can: { with: { branch: true } },
           officer: true,
         },
       });
 
       // Delete existing summaries for this period
-      await prisma.collectionSummary.deleteMany({
-        where: { periodYear: year, periodMonth: month },
-      });
+      await db.delete(schema.collectionSummaries)
+        .where(and(eq(schema.collectionSummaries.periodYear, year), eq(schema.collectionSummaries.periodMonth, month)));
 
       type SummaryAcc = {
         total: number; count: number;
@@ -200,7 +195,10 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
         })),
       ];
 
-      await prisma.collectionSummary.createMany({ data: summaries });
+      if (summaries.length > 0) {
+        // cast because periodYear etc requires numbers but typescript infers type arrays correctly
+        await db.insert(schema.collectionSummaries).values(summaries as any[]);
+      }
 
       return reply.send({
         success: true,
@@ -230,21 +228,15 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
       const currentYear = now.getFullYear();
       const monthStart = new Date(currentYear, currentMonth - 1, 1);
 
-      const [totalCans, totalOfficers, monthCollections, pendingSync] = await Promise.all([
-        prisma.can.count({ where: { isActive: true } }),
-        prisma.officer.count({ where: { isActive: true } }),
-        prisma.collection.aggregate({
-          where: {
-            collectedAt: { gte: monthStart },
-            syncStatus: 'COMPLETED',
-          },
-          _count: true,
-          _sum: { amount: true },
-        }),
-        prisma.collection.count({
-          where: { syncStatus: { in: ['PENDING', 'FAILED'] } },
-        }),
+      const [totalCans, totalOfficers, sumResultRows, pendingSync] = await Promise.all([
+        db.$count(schema.cans, eq(schema.cans.isActive, true)),
+        db.$count(schema.officers, eq(schema.officers.isActive, true)),
+        db.select({ count: sql<number>`count(*)`, amount: sql<number>`sum(${schema.collections.amount})` })
+          .from(schema.collections)
+          .where(and(gte(schema.collections.collectedAt, monthStart), eq(schema.collections.syncStatus, 'COMPLETED'))),
+        db.$count(schema.collections, inArray(schema.collections.syncStatus, ['PENDING', 'FAILED'])),
       ]);
+      const monthCollections = sumResultRows[0];
 
       return reply.send({
         success: true,
@@ -252,8 +244,8 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
           total_cans: totalCans,
           total_officers: totalOfficers,
           current_month: {
-            collections: monthCollections._count,
-            amount: Number(monthCollections._sum.amount) || 0,
+            collections: Number(monthCollections.count) || 0,
+            amount: Number(monthCollections.amount) || 0,
           },
           pending_sync: pendingSync,
           server_time: now.toISOString(),

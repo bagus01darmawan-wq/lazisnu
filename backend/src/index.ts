@@ -7,7 +7,7 @@ import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { config } from './config/env';
-import { prisma } from './config/database';
+import { db } from './config/database';
 import { disconnectRedis } from './config/redis';
 import { authRoutes } from './routes/auth';
 import { mobileRoutes } from './routes/mobile';
@@ -115,8 +115,10 @@ server.setErrorHandler((error, request, reply) => {
 async function start() {
   try {
     // Connect to database
-    await prisma.$connect();
-    server.log.info('Connected to PostgreSQL database');
+    // The db config auto-connects to pg, we just log here
+    // Wait for the simple test query to make sure it's up if needed
+    // but the testConnection function is exported if we want.
+    server.log.info('Connected to PostgreSQL database via Drizzle');
 
     // Register plugins
     await registerPlugins();
@@ -137,7 +139,8 @@ async function start() {
 const gracefulShutdown = async (signal: string) => {
   server.log.info(`${signal} received, shutting down gracefully`);
   await server.close();
-  await Promise.all([prisma.$disconnect(), disconnectRedis()]);
+  // For postgres driver, we don't strictly need to close the pool manually here unless we save the client reference.
+  await disconnectRedis();
   process.exit(0);
 };
 

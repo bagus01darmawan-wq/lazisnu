@@ -2,7 +2,8 @@
 // Integrates with WhatsApp Business API (Meta Graph API)
 // and logs all messages to the Notification table.
 
-import { prisma } from '../config/database';
+import { db } from '../config/database';
+import * as schema from '../database/schema';
 import { config } from '../config/env';
 
 interface WhatsAppResponse {
@@ -133,8 +134,7 @@ export async function sendWhatsAppNotification(
 
   // Always log to Notification table
   try {
-    await prisma.notification.create({
-      data: {
+    await db.insert(schema.notifications).values({
         collectionId: options?.collectionId ?? null,
         recipientPhone: formattedPhone,
         recipientName: ownerName,
@@ -144,7 +144,6 @@ export async function sendWhatsAppNotification(
         sentAt: result.status === 'SENT' ? new Date() : null,
         waMessageId: result.status === 'SENT' ? result.message_id : null,
         errorMessage: result.status === 'FAILED' ? `Failed to send: ${result.message_id}` : null,
-      },
     });
   } catch (dbError) {
     // Log DB error but don't fail the main operation
@@ -213,8 +212,7 @@ export async function sendTemplateMessage(
 
   // Log to DB
   try {
-    await prisma.notification.create({
-      data: {
+    await db.insert(schema.notifications).values({
         collectionId: collectionId ?? null,
         recipientPhone: formattedPhone,
         messageTemplate: templateName,
@@ -223,7 +221,6 @@ export async function sendTemplateMessage(
         sentAt: result.status === 'SENT' ? new Date() : null,
         waMessageId: result.status === 'SENT' ? result.message_id : null,
         errorMessage: result.status === 'FAILED' ? `Template send failed` : null,
-      },
     });
   } catch (dbError) {
     console.error('Failed to log template notification to DB:', dbError);
