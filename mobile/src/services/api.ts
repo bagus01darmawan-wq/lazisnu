@@ -173,10 +173,15 @@ export const collectionService = {
 export const networkService = {
   checkConnection: async (): Promise<boolean> => {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
       const response = await fetch(`${API_BASE_URL}/health`, {
         method: 'GET',
-        timeout: 5000,
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
       return response.ok;
     } catch {
       return false;
