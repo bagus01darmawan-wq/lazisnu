@@ -1,22 +1,25 @@
 // Mobile API Service - Lazisnu Collector App
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MMKV } from 'react-native-mmkv';
 import { ApiResponse, Collection, Task } from '../types';
 
-const API_BASE_URL = 'https://api.lazisnu.id/v1';
+export const storage = new MMKV();
 
-// Token management
+// For USB debugging, localhost magically connects to computer via adb reverse.
+const API_BASE_URL = 'http://localhost:3000/v1';
+
+// Token management (MMKV is synchronous)
 export const getToken = async (): Promise<string | null> => {
-  return await AsyncStorage.getItem('access_token');
+  return storage.getString('access_token') || null;
 };
 
 export const setToken = async (token: string): Promise<void> => {
-  await AsyncStorage.setItem('access_token', token);
+  storage.set('access_token', token);
 };
 
 export const clearToken = async (): Promise<void> => {
-  await AsyncStorage.removeItem('access_token');
-  await AsyncStorage.removeItem('refresh_token');
+  storage.delete('access_token');
+  storage.delete('refresh_token');
 };
 
 // API helper
