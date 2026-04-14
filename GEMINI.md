@@ -547,21 +547,28 @@ NEXT_PUBLIC_APP_NAME=Lazisnu Infaq System
 > Update bagian ini setiap berganti sprint/fase.
 
 ```
-FASE AKTIF : FASE 0 — Setup Environment
-MINGGU     : 1–2
-TARGET     : Semua tools terinstall, akun siap, repository aktif
+FASE AKTIF : FASE 1 — Mobile & Backend Core Development
+MINGGU     : 3–4
+TARGET     : Mobile build stabil, Integrasi API dasar, UI Auth & Dashboard
 
 SEDANG DIKERJAKAN:
-- [ ] Instalasi WSL2 + Ubuntu di Windows
-- [ ] Setup Node.js via NVM di WSL2
-- [ ] Setup PostgreSQL & Redis di WSL2
-- [ ] Setup VS Code + extensions
-- [ ] Setup Android Studio + emulator
+- [x] Instalasi WSL2 + Ubuntu di Windows (Selesai)
+- [x] Setup Node.js via NVM di WSL2 (Selesai)
+- [x] Setup PostgreSQL & Redis di WSL2 (Selesai)
+- [x] Setup VS Code + extensions (Selesai)
+- [x] Setup Android Studio + emulator (Selesai)
+- [x] Fix Android Build Conflict (androidx.core downgrade to 1.12.0) (Selesai)
+- [x] Fix API Service (Fetch Timeout implementation) (Selesai)
+- [x] Initial Push to GitHub Main Branch (Selesai)
+- [/] Koneksi Mobile ke Backend Local (adb reverse)
+- [/] Debugging Login Flow di Mobile
+- [ ] UI Design: Dashboard & Collection Form
 
-SELANJUTNYA (FASE 1 — Minggu 3–4):
-- Desain UI Figma: 15 layar mobile + 13 halaman web
-- Docker Compose setup
-- Daftarkan template WhatsApp ke Meta (lakukan SEGERA — proses 1-2 minggu)
+SELANJUTNYA (FASE 2 — Minggu 5–6):
+- QR Scanner implementation (react-native-camera-kit)
+- Offline Queue management (MMKV)
+- WhatsApp Template registration to Meta
+- Docker Compose for production-like staging
 ```
 
 ---
