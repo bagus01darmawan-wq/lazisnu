@@ -13,7 +13,7 @@ trigger: model_decision
 ```
 FASE AKTIF : FASE 6 — Sprint 2 Web Dashboard & Technical Debt Refactor
 MINGGU     : 11–12
-STATUS     : 🔄 Refactor Pilar Inti & Persiapan Next.js Dashboard
+STATUS     : ✅ Monorepo Restructure & BullMQ WhatsApp Integrated
 ```
 
 ---
@@ -27,8 +27,8 @@ Pilar 1: Immortality & Immutability
   [ ] Endpoint /resubmit (Sequence++) - PRIORITAS LANJUTAN
 
 Pilar 2: WhatsApp & Reliability
-  [ ] BullMQ + Redis integration - PRIORITAS 2
-  [ ] WhatsApp Async Worker - PRIORITAS 2
+  [x] BullMQ + Redis integration - COMPLETED
+  [x] WhatsApp Async Worker - COMPLETED (Asynchronous processing enabled)
 
 Pilar 3: Audit Trail
   [ ] Global Audit Logger middleware - PRIORITAS 3
@@ -39,15 +39,15 @@ Pilar 3: Audit Trail
 ## Konteks untuk Agent
 
 ```
-Codebase saat ini berada di FASE 6 (Web Dashboard).
+Codebase saat ini sudah terstruktur sebagai MONOREPO (apps/backend, apps/web, apps/mobile).
 Backend (Fastify + Drizzle) sudah berjalan di port 3000.
-Database sudah di-reset dan di-migrate dengan tipe data BIGINT untuk nominal di semua tabel (collections, cans, summaries).
+Database sudah di-reset dan di-migrate dengan tipe data BIGINT untuk nominal di semua tabel.
 Immutability Rule untuk 'collections' sudah aktif di level database.
 
 Status Service:
 - PostgreSQL: Aktif
-- Redis: Standby (Belum digunakan BullMQ)
-- WhatsApp: Mock/Dev Mode (Sync)
+- Redis: Aktif (Digunakan oleh BullMQ)
+- WhatsApp: Async Worker dengan BullMQ enabled
 ```
 
 ---
