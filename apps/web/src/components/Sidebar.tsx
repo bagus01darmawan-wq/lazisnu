@@ -1,106 +1,101 @@
-import { Link, useLocation } from 'react-router-dom';
-import { useAuthStore } from '../stores/authStore';
-import { Home, Box, Users, ClipboardList, FileText, Building2, Receipt, LogOut } from 'lucide-react';
-import clsx from 'clsx';
+'use client';
 
-const Sidebar = () => {
+import React from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { getMenuItems, UserRole } from '@/lib/menu-config';
+import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/store/useAuthStore';
+import { LogOut, User as UserIcon, Loader2 } from 'lucide-react';
+
+interface SidebarProps {
+  role?: UserRole;
+  userName?: string;
+}
+
+const Sidebar = ({ role: initialRole, userName: initialUserName }: SidebarProps) => {
+  const pathname = usePathname();
   const { user, logout } = useAuthStore();
-  const location = useLocation();
+  
+  // Use store data or fallback to props
+  const role = user?.role || initialRole;
+  const userName = user?.full_name || initialUserName;
 
-  const getMenuItems = () => {
-    const role = user?.role;
+  if (!role) {
+    return (
+      <aside className="w-64 bg-slate-900 flex items-center justify-center h-screen fixed">
+        <Loader2 className="animate-spin text-green-500" size={24} />
+      </aside>
+    );
+  }
 
-    if (role === 'ADMIN_RANTING') {
-      return [
-        { path: '/admin/branch', icon: Home, label: 'Dashboard' },
-        { path: '/admin/branch/cans', icon: Box, label: 'Kaleng' },
-        { path: '/admin/branch/officers', icon: Users, label: 'Petugas' },
-        { path: '/admin/branch/assignments', icon: ClipboardList, label: 'Penugasan' },
-        { path: '/admin/branch/reports', icon: FileText, label: 'Laporan' },
-      ];
-    }
-
-    if (role === 'ADMIN_KECAMATAN') {
-      return [
-        { path: '/admin/district', icon: Home, label: 'Dashboard' },
-        { path: '/admin/district/branches', icon: Building2, label: 'Semua Ranting' },
-        { path: '/admin/district/reports', icon: FileText, label: 'Laporan' },
-      ];
-    }
-
-    if (role === 'BENDAHARA') {
-      return [
-        { path: '/bendahara', icon: Home, label: 'Dashboard' },
-        { path: '/bendahara/transactions', icon: Receipt, label: 'Transaksi' },
-        { path: '/bendahara/export', icon: FileText, label: 'Export CSV' },
-      ];
-    }
-
-    return [];
-  };
-
-  const menuItems = getMenuItems();
+  const menuItems = getMenuItems(role);
 
   return (
-    <aside className="w-64 bg-primary-800 text-white flex flex-col">
-      {/* Logo */}
-      <div className="h-16 flex items-center px-6 border-b border-primary-700">
+    <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col h-screen fixed left-0 top-0 z-40 border-r border-slate-800 shadow-xl">
+      {/* Brand Header */}
+      <div className="h-20 flex items-center px-6 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-primary-500 rounded-lg flex items-center justify-center">
-            <span className="text-xl font-bold">L</span>
+          <div className="w-10 h-10 bg-green-600 rounded-xl flex items-center justify-center shadow-lg shadow-green-900/20">
+            <span className="text-white font-bold text-xl">L</span>
           </div>
           <div>
-            <div className="font-semibold">LAZISNU</div>
-            <div className="text-xs text-primary-300">Collector App</div>
+            <h1 className="text-white font-bold tracking-tight">LAZISNU</h1>
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Collector Dashboard</p>
           </div>
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 py-4">
+      {/* Navigation Menu */}
+      <nav className="flex-1 overflow-y-auto py-6 px-3 space-y-1 custom-scrollbar">
         {menuItems.map((item) => {
           const Icon = item.icon;
-          const isActive = location.pathname === item.path ||
-            (item.path !== '/' && location.pathname.startsWith(item.path));
+          const isActive = pathname === item.path || (item.path !== '/dashboard' && pathname.startsWith(item.path));
 
           return (
             <Link
               key={item.path}
-              to={item.path}
-              className={clsx(
-                'flex items-center gap-3 px-6 py-3 transition-colors',
-                isActive
-                  ? 'bg-primary-700 border-r-4 border-primary-400'
-                  : 'hover:bg-primary-700/50'
+              href={item.path}
+              className={cn(
+                'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group',
+                isActive 
+                  ? 'bg-green-600/10 text-green-500 font-semibold' 
+                  : 'hover:bg-slate-800 hover:text-white'
               )}
             >
-              <Icon size={20} />
-              <span>{item.label}</span>
+              <Icon 
+                size={20} 
+                className={cn(
+                  'transition-transform group-hover:scale-110',
+                  isActive ? 'text-green-500' : 'text-slate-500 group-hover:text-white'
+                )} 
+              />
+              <span className="text-sm">{item.title}</span>
+              {isActive && (
+                <div className="ml-auto w-1.5 h-1.5 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+              )}
             </Link>
           );
         })}
       </nav>
 
-      {/* User & Logout */}
-      <div className="p-4 border-t border-primary-700">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center">
-            <span className="text-sm font-medium">
-              {user?.full_name?.charAt(0) || 'U'}
-            </span>
+      {/* User Footer Section */}
+      <div className="p-4 bg-slate-900/80 border-t border-slate-800">
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/50 border border-slate-700/50 mb-3">
+          <div className="w-10 h-10 bg-slate-700 rounded-full flex items-center justify-center text-slate-300">
+            <UserIcon size={18} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium truncate">{user?.full_name || 'User'}</div>
-            <div className="text-xs text-primary-300 capitalize">
-              {user?.role?.replace('_', ' ').toLowerCase() || 'Unknown'}
-            </div>
+            <p className="text-xs font-bold text-white truncate">{userName}</p>
+            <p className="text-[10px] text-slate-500 uppercase font-bold">{role.replace('_', ' ')}</p>
           </div>
         </div>
-        <button
-          onClick={logout}
-          className="w-full flex items-center gap-2 px-4 py-2 bg-primary-700 hover:bg-primary-600 rounded-lg transition-colors text-sm"
+        
+        <button 
+          onClick={() => logout()}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-red-900/20 hover:text-red-500 transition-all duration-300 text-sm font-semibold group"
         >
-          <LogOut size={18} />
+          <LogOut size={18} className="transition-transform group-hover:-translate-x-1" />
           <span>Keluar</span>
         </button>
       </div>

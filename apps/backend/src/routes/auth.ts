@@ -5,13 +5,13 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { db } from '../config/database';
 import { users, officers } from '../database/schema';
-import { eq } from 'drizzle-orm';
+import { eq, or } from 'drizzle-orm';
 import { generateTokens } from '../middleware/auth';
 import { otpService } from '../services/otp';
 
 // Request schemas
 const loginSchema = z.object({
-  phone: z.string().min(10).max(15),
+  identifier: z.string().min(3),
   password: z.string().min(6),
 });
 
@@ -29,22 +29,27 @@ export async function authRoutes(fastify: FastifyInstance) {
   fastify.post('/login', {
     schema: {
       tags: ['Auth'],
-      summary: 'Login dengan nomor HP dan password',
+      summary: 'Login dengan nomor HP atau email dan password',
       body: {
         type: 'object',
-        required: ['phone', 'password'],
+        required: ['identifier', 'password'],
         properties: {
-          phone: { type: 'string', minLength: 10, maxLength: 15 },
+          identifier: { type: 'string', minLength: 3 },
           password: { type: 'string', minLength: 6 },
         },
       },
     },
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    handler: async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = loginSchema.parse(request.body);
 
-      // Find user by phone
-      const userRes = await db.select().from(users).where(eq(users.phone, body.phone)).limit(1);
+      // Find user by email or phone
+      const userRes = await db.select().from(users).where(
+        or(
+          eq(users.email, body.identifier),
+          eq(users.phone, body.identifier)
+        )
+      ).limit(1);
       const user = userRes[0];
       
       let userOfficers: any[] = [];
@@ -57,7 +62,7 @@ export async function authRoutes(fastify: FastifyInstance) {
           success: false,
           error: {
             code: 'INVALID_CREDENTIALS',
-            message: 'Nomor HP atau password salah',
+            message: 'Email/Nomor HP atau password salah',
           },
         });
       }
@@ -70,7 +75,7 @@ export async function authRoutes(fastify: FastifyInstance) {
           success: false,
           error: {
             code: 'INVALID_CREDENTIALS',
-            message: 'Nomor HP atau password salah',
+            message: 'Email/Nomor HP atau password salah',
           },
         });
       }
@@ -138,6 +143,7 @@ export async function authRoutes(fastify: FastifyInstance) {
           message: 'Terjadi kesalahan server',
         },
       });
+    }
     }
   });
 

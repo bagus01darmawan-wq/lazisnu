@@ -17,6 +17,7 @@ import ReportsPage from './pages/admin/ReportsPage';
 // Pages - Admin Kecamatan
 import AdminDistrictDashboard from './pages/admin/AdminDistrictDashboard';
 import AllBranchesPage from './pages/admin/AllBranchesPage';
+import AuditLogsPage from './pages/admin/AuditLogsPage';
 
 // Pages - Bendahara
 import BendaharaDashboard from './pages/bendahara/BendaharaDashboard';
@@ -54,6 +55,7 @@ function App() {
       }>
         <Route index element={<AdminDistrictDashboard />} />
         <Route path="branches" element={<AllBranchesPage />} />
+        <Route path="audit-logs" element={<AuditLogsPage />} />
         <Route path="reports" element={<ReportsPage />} />
       </Route>
 

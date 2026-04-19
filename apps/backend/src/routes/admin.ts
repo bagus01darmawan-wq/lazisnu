@@ -4,7 +4,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { eq, and, desc, asc, ilike, or, gte } from 'drizzle-orm';
+import { eq, and, desc, asc, ilike, or, gte, inArray, sql } from 'drizzle-orm';
 import { authenticate, authorize } from '../middleware/auth';
 import QRCode from 'qrcode';
 
@@ -145,27 +145,52 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
   // ========== CANS CRUD ==========
 
-  fastify.get('/cans', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/cans', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const user = request.currentUser!;
-      const query = request.query as { page?: string; limit?: string; search?: string; status?: string };
+      fastify.log.info({ user }, 'Fetching cans for user');
+      const query = request.query as { page?: string; limit?: string; search?: string; status?: string; branch_id?: string };
       const page = parseInt(query.page || '1');
       const limit = parseInt(query.limit || '20');
       const skip = (page - 1) * limit;
 
-      const conditions: any[] = [eq(schema.cans.branchId, user.branchId!)];
-      if (query.search) {
-        conditions.push(or(
-          ilike(schema.cans.ownerName, `%${query.search}%`),
-          ilike(schema.cans.qrCode, `%${query.search}%`)
-        )!);
+      let whereClause;
+      const searchCondition = query.search ? or(
+        ilike(schema.cans.ownerName, `%${query.search}%`),
+        ilike(schema.cans.qrCode, `%${query.search}%`)
+      ) : undefined;
+
+      if (user.role === 'ADMIN_KECAMATAN') {
+        const districtBranches = await db.select({ id: schema.branches.id })
+          .from(schema.branches)
+          .where(eq(schema.branches.districtId, user.districtId!));
+        const branchIds = districtBranches.map(b => b.id);
+        
+        if (branchIds.length === 0) return reply.send({ success: true, data: { cans: [], pagination: { total: 0 } } });
+
+        let filterBranchId: string | undefined = undefined;
+        if (query.branch_id && branchIds.includes(query.branch_id)) {
+          filterBranchId = query.branch_id;
+        }
+        
+        whereClause = and(
+          inArray(schema.cans.branchId, branchIds),
+          filterBranchId ? eq(schema.cans.branchId, filterBranchId) : undefined,
+          searchCondition,
+          query.status === 'ACTIVE' ? eq(schema.cans.isActive, true) : undefined,
+          query.status === 'INACTIVE' ? eq(schema.cans.isActive, false) : undefined
+        );
+      } else {
+        whereClause = and(
+          eq(schema.cans.branchId, user.branchId!),
+          searchCondition,
+          query.status === 'ACTIVE' ? eq(schema.cans.isActive, true) : undefined,
+          query.status === 'INACTIVE' ? eq(schema.cans.isActive, false) : undefined
+        );
       }
-      if (query.status === 'ACTIVE') conditions.push(eq(schema.cans.isActive, true));
-      if (query.status === 'INACTIVE') conditions.push(eq(schema.cans.isActive, false));
-      const whereClause = and(...conditions);
 
       const [cans, total] = await Promise.all([
-        db.query.cans.findMany({ where: whereClause, offset: skip, limit, orderBy: [desc(schema.cans.createdAt)] }),
+        db.select().from(schema.cans).where(whereClause).limit(limit).offset(skip).orderBy(desc(schema.cans.createdAt)),
         db.$count(schema.cans, whereClause),
       ]);
 
@@ -179,17 +204,25 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.post('/cans', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/cans', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const user = request.currentUser!;
-      const body = createCanSchema.parse(request.body);
-      const branchs = await db.query.branches.findFirst({ where: eq(schema.branches.id, user.branchId!) });
-      const regionCode = branchs?.code || 'XX';
-      const count = await db.$count(schema.cans, eq(schema.cans.branchId, user.branchId!));
+      const body = createCanSchema.extend({ branch_id: z.string().uuid().optional() }).parse(request.body);
+      
+      const targetBranchId = (user.role === 'ADMIN_KECAMATAN' ? body.branch_id : user.branchId);
+      if (!targetBranchId) {
+        return reply.status(400).send({ success: false, error: { code: 'MISSING_BRANCH', message: 'ID Ranting wajib ditentukan' } });
+      }
+
+      const branch = await db.query.branches.findFirst({ where: eq(schema.branches.id, targetBranchId) });
+      if (!branch) return reply.status(404).send({ success: false, error: { message: 'Ranting tidak ditemukan' } });
+
+      const regionCode = branch.code || 'XX';
+      const count = await db.$count(schema.cans, eq(schema.cans.branchId, targetBranchId));
       const qrCode = `LZNU-${regionCode}-${String(count + 1).padStart(5, '0')}`;
 
       const inserted = await db.insert(schema.cans).values({
-        branchId: user.branchId!,
+        branchId: targetBranchId,
         qrCode,
         ownerName: body.owner_name,
         ownerPhone: body.owner_phone,
@@ -210,9 +243,10 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.get('/cans/:id', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/cans/:id', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
+      const user = request.currentUser!;
       const can = await db.query.cans.findFirst({
         where: eq(schema.cans.id, id),
         with: {
@@ -223,8 +257,16 @@ export async function adminRoutes(fastify: FastifyInstance) {
           },
         },
       });
-      if (!can || can.branchId !== request.currentUser!.branchId) {
-        return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Kaleng tidak ditemukan' } });
+
+      if (!can) return reply.status(404).send({ success: false, error: { message: 'Kaleng tidak ditemukan' } });
+
+      // Access control
+      if (user.role === 'ADMIN_RANTING' && can.branchId !== user.branchId) {
+        return reply.status(403).send({ success: false, error: { message: 'Bukan milik ranting ini' } });
+      }
+      if (user.role === 'ADMIN_KECAMATAN') {
+        const branch = await db.query.branches.findFirst({ where: eq(schema.branches.id, can.branchId) });
+        if (branch?.districtId !== user.districtId) return reply.status(403).send({ success: false, error: { message: 'Bukan milik kecamatan ini' } });
       }
       return reply.send({ success: true, data: can });
     } catch (error) {
@@ -233,7 +275,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.put('/cans/:id', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.put('/cans/:id', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
       const body = updateCanSchema.parse(request.body);
@@ -258,7 +300,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.delete('/cans/:id', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.delete('/cans/:id', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
       const existing = await db.query.cans.findFirst({ where: eq(schema.cans.id, id) });
@@ -295,27 +337,35 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
   // ========== OFFICERS CRUD ==========
 
-  fastify.get('/officers', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/officers', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const user = request.currentUser!;
-      const query = request.query as { page?: string; limit?: string; search?: string };
+      const query = request.query as { page?: string; limit?: string; search?: string; branch_id?: string };
       const page = parseInt(query.page || '1');
       const limit = parseInt(query.limit || '20');
       const skip = (page - 1) * limit;
 
-      const conditions: any[] = [eq(schema.officers.branchId, user.branchId!)];
+      let whereClause;
+      if (user.role === 'ADMIN_KECAMATAN') {
+        whereClause = and(
+          eq(schema.officers.districtId, user.districtId!),
+          query.branch_id ? eq(schema.officers.branchId, query.branch_id) : undefined
+        );
+      } else {
+        whereClause = eq(schema.officers.branchId, user.branchId!);
+      }
+
       if (query.search) {
-        conditions.push(or(
+        whereClause = and(whereClause, or(
           ilike(schema.officers.fullName, `%${query.search}%`),
           ilike(schema.officers.employeeCode, `%${query.search}%`)
-        )!);
+        ));
       }
-      const whereClause = and(...conditions);
 
       const [officers, total] = await Promise.all([
         db.query.officers.findMany({
           where: whereClause, offset: skip, limit, orderBy: [desc(schema.officers.createdAt)],
-          columns: { id: true, employeeCode: true, fullName: true, phone: true, photoUrl: true, assignedZone: true, isActive: true },
+          columns: { id: true, employeeCode: true, fullName: true, phone: true, photoUrl: true, assignedZone: true, isActive: true, branchId: true },
         }),
         db.$count(schema.officers, whereClause),
       ]);
@@ -330,13 +380,19 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.post('/officers', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/officers', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const user = request.currentUser!;
-      const body = createOfficerSchema.parse(request.body);
-      const count = await db.$count(schema.officers, eq(schema.officers.branchId, user.branchId!));
-      const branchRes = await db.query.branches.findFirst({ where: eq(schema.branches.id, user.branchId!) });
-      const employeeCode = `${branchRes?.code || 'XX'}-${String(count + 1).padStart(4, '0')}`;
+      const body = createOfficerSchema.extend({ branch_id: z.string().uuid().optional() }).parse(request.body);
+      
+      const targetBranchId = (user.role === 'ADMIN_KECAMATAN' ? body.branch_id : user.branchId);
+      if (!targetBranchId) return reply.status(400).send({ success: false, error: { message: 'Ranting wajib diisi' } });
+
+      const branchRes = await db.query.branches.findFirst({ where: eq(schema.branches.id, targetBranchId) });
+      if (!branchRes) return reply.status(404).send({ success: false, error: { message: 'Ranting tidak ditemukan' } });
+
+      const count = await db.$count(schema.officers, eq(schema.officers.branchId, targetBranchId));
+      const employeeCode = `${branchRes.code || 'XX'}-${String(count + 1).padStart(4, '0')}`;
 
       const insertedUser = await db.insert(schema.users).values({
         email: `${body.phone}@petugas.lazisnu.id`,
@@ -344,7 +400,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
         fullName: body.full_name,
         phone: body.phone,
         role: 'PETUGAS',
-        branchId: user.branchId,
+        branchId: targetBranchId,
         districtId: user.districtId,
       }).returning();
       const userRecord = insertedUser[0];
@@ -356,7 +412,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
         phone: body.phone,
         photoUrl: body.photo_url,
         districtId: user.districtId!,
-        branchId: user.branchId!,
+        branchId: targetBranchId,
         assignedZone: body.assigned_zone,
       }).returning();
       const officer = insertedOfficer[0];
@@ -370,13 +426,21 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.put('/officers/:id', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.put('/officers/:id', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
+      const user = request.currentUser!;
       const body = updateOfficerSchema.parse(request.body);
       const existing = await db.query.officers.findFirst({ where: eq(schema.officers.id, id) });
-      if (!existing || existing.branchId !== request.currentUser!.branchId) {
-        return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Petugas tidak ditemukan' } });
+      
+      if (!existing) return reply.status(404).send({ success: false, error: { message: 'Petugas tidak ditemukan' } });
+
+      // Access control
+      if (user.role === 'ADMIN_RANTING' && existing.branchId !== user.branchId) {
+        return reply.status(403).send({ success: false, error: { message: 'Akses ditolak' } });
+      }
+      if (user.role === 'ADMIN_KECAMATAN' && existing.districtId !== user.districtId) {
+        return reply.status(403).send({ success: false, error: { message: 'Akses ditolak' } });
       }
       const updated = await db.update(schema.officers).set({ fullName: body.full_name, phone: body.phone, photoUrl: body.photo_url, assignedZone: body.assigned_zone, isActive: body.is_active })
         .where(eq(schema.officers.id, id)).returning();
@@ -388,13 +452,17 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.delete('/officers/:id', ranting, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.delete('/officers/:id', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
+      const user = request.currentUser!;
       const existing = await db.query.officers.findFirst({ where: eq(schema.officers.id, id) });
-      if (!existing || existing.branchId !== request.currentUser!.branchId) {
-        return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Petugas tidak ditemukan' } });
-      }
+
+      if (!existing) return reply.status(404).send({ success: false, error: { message: 'Petugas tidak ditemukan' } });
+
+      if (user.role === 'ADMIN_RANTING' && existing.branchId !== user.branchId) return reply.status(403).send();
+      if (user.role === 'ADMIN_KECAMATAN' && existing.districtId !== user.districtId) return reply.status(403).send();
+
       await db.update(schema.officers).set({ isActive: false }).where(eq(schema.officers.id, id));
       return reply.status(204).send();
     } catch (error) {
@@ -404,6 +472,21 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // ========== ADMIN KECAMATAN ROUTES ==========
+
+  // ========== BRANCHES ==========
+
+  fastify.get('/branches', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = request.currentUser!;
+      const districtId = user.districtId;
+      if (!districtId) return reply.send({ success: true, data: [] });
+
+      const branches = await db.select().from(schema.branches).where(eq(schema.branches.districtId, districtId));
+      return reply.send({ success: true, data: branches });
+    } catch (error) {
+      return reply.status(500).send({ success: false, error: { message: 'Gagal mengambil data ranting' } });
+    }
+  });
 
   fastify.get('/district/dashboard', kecamatan, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
@@ -623,7 +706,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
         // 6. Log activity
         await tx.insert(schema.activityLogs).values({
-          userId: user.id,
+          userId: user.userId,
           actionType: 'RESUBMIT_COLLECTION',
           entityType: 'collections',
           entityId: newRecord.id,

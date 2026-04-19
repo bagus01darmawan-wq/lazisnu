@@ -39,6 +39,12 @@ const batchCollectionSchema = z.object({
   })),
 });
 
+const resubmitSchema = z.object({
+  nominal: z.number().positive(),
+  payment_method: z.enum(['CASH', 'TRANSFER']),
+  alasan_resubmit: z.string().min(5, "Alasan resubmit minimal 5 karakter"),
+});
+
 export async function mobileRoutes(fastify: FastifyInstance) {
   // Apply auth middleware to all routes
   fastify.addHook('preHandler', authenticate);
@@ -629,6 +635,150 @@ export async function mobileRoutes(fastify: FastifyInstance) {
         },
       });
     } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({
+        success: false,
+        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
+      });
+    }
+  });
+
+  // POST /mobile/collections/:id/resubmit
+  fastify.post('/collections/:id/resubmit', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const body = resubmitSchema.parse(request.body);
+      const user = request.currentUser!;
+      const officerId = user.officerId;
+
+      if (!officerId) {
+        return reply.status(403).send({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'Bukan akun petugas' },
+        });
+      }
+
+      // 1. Get current record
+      const oldCollection = await db.query.collections.findFirst({
+        where: and(
+          eq(schema.collections.id, id),
+          eq(schema.collections.officerId, officerId)
+        ),
+        with: {
+          assignment: true,
+          can: true
+        }
+      });
+
+      if (!oldCollection) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Data koleksi tidak ditemukan' },
+        });
+      }
+
+      if (!oldCollection.isLatest) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'NOT_LATEST', message: 'Hanya record terbaru yang bisa di-resubmit' },
+        });
+      }
+
+      // 2. Execute resubmit in transaction
+      const newCollection = await db.transaction(async (tx) => {
+        // Step A: Mark old as not latest (Allowed by rules.md exceptions)
+        await tx.update(schema.collections)
+          .set({ isLatest: false, updatedAt: new Date() })
+          .where(eq(schema.collections.id, id));
+
+        // Step B: Insert new record
+        const inserted = await tx.insert(schema.collections).values({
+          assignmentId: oldCollection.assignmentId,
+          canId: oldCollection.canId,
+          officerId: oldCollection.officerId,
+          nominal: BigInt(body.nominal),
+          paymentMethod: body.payment_method,
+          collectedAt: oldCollection.collectedAt, // keep original collection date
+          submittedAt: new Date(),
+          syncedAt: new Date(),
+          syncStatus: 'COMPLETED',
+          serverTimestamp: new Date(),
+          submitSequence: oldCollection.submitSequence + 1,
+          isLatest: true,
+          alasanResubmit: body.alasan_resubmit,
+          deviceInfo: oldCollection.deviceInfo,
+          latitude: oldCollection.latitude,
+          longitude: oldCollection.longitude,
+        }).returning();
+
+        // Step C: Update can totals (correction)
+        await tx.update(schema.cans)
+          .set({
+            totalCollected: sql`${schema.cans.totalCollected} - ${oldCollection.nominal} + ${BigInt(body.nominal)}`,
+            updatedAt: new Date()
+          })
+          .where(eq(schema.cans.id, oldCollection.canId));
+
+        return inserted[0];
+      });
+
+      // 3. Set audit context for the logger
+      request.auditContext = {
+        oldData: {
+          id: oldCollection.id,
+          nominal: oldCollection.nominal.toString(),
+          paymentMethod: oldCollection.paymentMethod,
+          submitSequence: oldCollection.submitSequence,
+        },
+        newData: {
+          id: newCollection.id,
+          nominal: newCollection.nominal.toString(),
+          paymentMethod: newCollection.paymentMethod,
+          submitSequence: newCollection.submitSequence,
+          alasanResubmit: newCollection.alasanResubmit,
+        }
+      };
+
+      // 4. Send WhatsApp Notification
+      let whatsappStatus = 'SKIPPED';
+      if (oldCollection.can?.ownerWhatsapp) {
+        try {
+          const officer = await db.query.officers.findFirst({ where: eq(schema.officers.id, officerId) });
+          const waResult = await sendWhatsAppNotification(
+            oldCollection.can.ownerWhatsapp,
+            oldCollection.can.ownerName,
+            body.nominal,
+            officer?.fullName || 'Petugas Lazisnu',
+            {
+              collectionId: newCollection.id,
+              collectedAt: oldCollection.collectedAt.toISOString(),
+              isResubmit: true
+            }
+          );
+          whatsappStatus = waResult.status;
+        } catch (waError) {
+          fastify.log.error({ err: waError }, 'WhatsApp resubmit send failed');
+          whatsappStatus = 'FAILED';
+        }
+      }
+
+      return reply.send({
+        success: true,
+        data: {
+          id: newCollection.id,
+          submit_sequence: newCollection.submitSequence,
+          whatsapp_status: whatsappStatus,
+          message: 'Koreksi data berhasil disimpan',
+        },
+      });
+
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'Input tidak valid', details: error.errors },
+        });
+      }
       fastify.log.error(error);
       return reply.status(500).send({
         success: false,

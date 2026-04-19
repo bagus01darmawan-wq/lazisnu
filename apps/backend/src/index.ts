@@ -11,9 +11,11 @@ import { db } from './config/database';
 import { disconnectRedis } from './config/redis';
 import { authRoutes } from './routes/auth';
 import { mobileRoutes } from './routes/mobile';
-import { adminRoutes } from './routes/admin';
+import adminRoutes from './routes/admin';
+import auditRoutes from './routes/admin/audit';
 import { bendaharaRoutes } from './routes/bendahara';
 import { schedulerRoutes } from './routes/scheduler';
+import { auditLogger } from './middleware/audit-logger';
 import './workers/whatsapp.worker'; // Import to initialize worker
 
 const server = Fastify({
@@ -65,6 +67,9 @@ async function registerPlugins() {
       routePrefix: '/docs',
     });
   }
+
+  // Global hooks
+  server.addHook('onResponse', auditLogger);
 }
 
 // Register routes
@@ -80,6 +85,7 @@ async function registerRoutes() {
 
   // Admin routes (protected - admin)
   await server.register(adminRoutes, { prefix: '/v1/admin' });
+  await server.register(auditRoutes, { prefix: '/v1/admin' });
 
   // Bendahara routes (protected - bendahara)
   await server.register(bendaharaRoutes, { prefix: '/v1/bendahara' });

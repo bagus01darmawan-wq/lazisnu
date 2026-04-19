@@ -7,7 +7,7 @@ dotenv.config();
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'staging', 'production']).default('development'),
-  PORT: z.string().default('3000'),
+  PORT: z.string().default('3001'),
 
   // Database
   DATABASE_URL: z.string().url(),
@@ -23,7 +23,7 @@ const envSchema = z.object({
   CORS_ORIGINS: z.string().default('*'),
 
   // API
-  API_BASE_URL: z.string().default('http://localhost:3000'),
+  API_BASE_URL: z.string().default('http://localhost:3001'),
 
   // WhatsApp Business API
   WA_BUSINESS_API_URL: z.string().optional(),

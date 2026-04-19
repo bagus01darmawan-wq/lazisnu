@@ -19,6 +19,10 @@ export interface JWTPayload {
 declare module 'fastify' {
   interface FastifyRequest {
     currentUser?: JWTPayload;
+    auditContext?: {
+      oldData?: any;
+      newData?: any;
+    };
   }
 }
 
