@@ -162,7 +162,7 @@ const DashboardScreen: React.FC = () => {
               <View style={styles.taskContent}>
                 <Text style={styles.taskOwner}>{task.owner_name}</Text>
                 <Text style={styles.taskAddress} numberOfLines={1}>
-                  {task.address}
+                  {task.owner_address}
                 </Text>
               </View>
               <Icon name="chevron-right" size={20} color="#999" />
@@ -192,13 +192,13 @@ const DashboardScreen: React.FC = () => {
                 <Icon name="cash" size={20} color="#4CAF50" />
               </View>
               <View style={styles.collectionContent}>
-                <Text style={styles.collectionOwner}>{collection.owner_name}</Text>
+                <Text style={styles.collectionOwner}>{(collection as any).owner_name}</Text>
                 <Text style={styles.collectionDate}>
                   {new Date(collection.collected_at).toLocaleDateString('id-ID')}
                 </Text>
               </View>
               <Text style={styles.collectionAmount}>
-                {formatCurrency(collection.amount)}
+                {formatCurrency(collection.nominal)}
               </Text>
             </View>
           ))

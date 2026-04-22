@@ -16,7 +16,8 @@ import auditRoutes from './routes/admin/audit';
 import { bendaharaRoutes } from './routes/bendahara';
 import { schedulerRoutes } from './routes/scheduler';
 import { auditLogger } from './middleware/audit-logger';
-import './workers/whatsapp.worker'; // Import to initialize worker
+import './workers/whatsapp.worker'; // Initialize WhatsApp worker
+import { schedulerWorker, registerMonthlyAssignmentCron } from './workers/scheduler.worker'; // Initialize Scheduler worker
 
 const server = Fastify({
   logger: true,
@@ -136,6 +137,9 @@ async function start() {
     // Start listening
     await server.listen({ port: parseInt(config.PORT), host: '0.0.0.0' });
     server.log.info(`Server running on port ${config.PORT}`);
+
+    // Register BullMQ cron jobs (after server starts)
+    await registerMonthlyAssignmentCron();
   } catch (error) {
     server.log.error(error);
     process.exit(1);
@@ -146,7 +150,7 @@ async function start() {
 const gracefulShutdown = async (signal: string) => {
   server.log.info(`${signal} received, shutting down gracefully`);
   await server.close();
-  // For postgres driver, we don't strictly need to close the pool manually here unless we save the client reference.
+  await schedulerWorker.close();
   await disconnectRedis();
   process.exit(0);
 };

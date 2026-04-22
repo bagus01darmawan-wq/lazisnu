@@ -8,6 +8,8 @@ import { users, officers } from '../database/schema';
 import { eq, or } from 'drizzle-orm';
 import { generateTokens } from '../middleware/auth';
 import { otpService } from '../services/otp';
+import { redisConnection } from '../config/redis';
+import { ApiResponse, User } from '@lazisnu/shared-types';
 
 // Request schemas
 const loginSchema = z.object({
@@ -67,7 +69,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Verify password - use camelCase (Prisma auto-converts)
+      // Verify password - Lazisnu uses Drizzle ORM (camelCase mapped)
       const isValidPassword = await bcrypt.compare(body.password, user.passwordHash);
 
       if (!isValidPassword) {
@@ -252,15 +254,12 @@ export async function authRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Find officer by phone (for petugas login with OTP)
-      const officerRes = await db.select().from(officers).where(eq(officers.phone, body.phone)).limit(1);
-      const officer = officerRes[0] as any;
+      // Find officer and user (for petugas login with OTP)
+      const officer = await db.query.officers.findFirst({
+        where: eq(officers.phone, body.phone),
+        with: { user: true }
+      });
       
-      if (officer) {
-        const userRes = await db.select().from(users).where(eq(users.id, officer.userId)).limit(1);
-        officer.user = userRes[0];
-      }
-
       if (!officer || !officer.user) {
         return reply.status(404).send({
           success: false,
@@ -278,6 +277,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       await db.update(users)
         .set({ lastLogin: new Date() })
         .where(eq(users.id, officer.user.id));
+
 
       // Generate tokens
       const payload = {
@@ -331,17 +331,23 @@ export async function authRoutes(fastify: FastifyInstance) {
       if (!refresh_token) {
         return reply.status(400).send({
           success: false,
-          error: {
-            code: 'MISSING_TOKEN',
-            message: 'Refresh token diperlukan',
-          },
+          error: { code: 'MISSING_TOKEN', message: 'Refresh token diperlukan' },
         });
       }
 
-      // Verify refresh token using request.jwtVerify with token option
+      // 1. Cek Redis blacklist
+      const isBlacklisted = await redisConnection.get(`blacklist:rt:${refresh_token}`);
+      if (isBlacklisted) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'TOKEN_BLACKLISTED', message: 'Token telah dicabut (sudah logout)' },
+        });
+      }
+
+      // 2. Verify refresh token
       const decoded = await request.server.jwt.verify<any>(refresh_token);
 
-      // Generate new tokens
+      // 3. Generate new tokens
       const tokens = generateTokens(decoded, request.server);
 
       return reply.send({
@@ -354,11 +360,99 @@ export async function authRoutes(fastify: FastifyInstance) {
     } catch (error) {
       return reply.status(401).send({
         success: false,
-        error: {
-          code: 'INVALID_TOKEN',
-          message: 'Refresh token tidak valid',
-        },
+        error: { code: 'INVALID_TOKEN', message: 'Refresh token tidak valid' },
       });
+    }
+  });
+
+  // POST /auth/logout
+  fastify.post('/logout', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { refresh_token } = request.body as { refresh_token: string };
+
+      if (refresh_token) {
+        try {
+          // Decode untuk mendapatkan expiry
+          const decoded = await request.server.jwt.verify<any>(refresh_token);
+          const now = Math.floor(Date.now() / 1000);
+          const ttl = decoded.exp - now;
+
+          if (ttl > 0) {
+            // Simpan ke Redis blacklist
+            await redisConnection.set(`blacklist:rt:${refresh_token}`, '1', 'EX', ttl);
+          }
+        } catch (e) {
+          // Jika token sudah tidak valid/expired, abaikan saja
+        }
+      }
+
+      return reply.send({
+        success: true,
+        message: 'Logout berhasil',
+      });
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({
+        success: false,
+        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan saat logout' },
+      });
+    }
+  });
+
+  // GET /auth/me
+  fastify.get('/me', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      await request.jwtVerify();
+      const decoded = request.user as any;
+
+      const userRes = await db.select().from(users).where(eq(users.id, decoded.userId)).limit(1);
+      const user = userRes[0];
+
+      if (!user) {
+        return reply.status(404).send({ success: false, error: { code: 'USER_NOT_FOUND', message: 'User tidak ditemukan' } });
+      }
+      if (!user.isActive) {
+        return reply.status(403).send({ success: false, error: { code: 'ACCOUNT_DISABLED', message: 'Akun tidak aktif' } });
+      }
+
+      let officerData: any = null;
+      if (decoded.officerId) {
+        const officerRes = await db.select().from(officers).where(eq(officers.id, decoded.officerId)).limit(1);
+        if (officerRes[0]) {
+          const o = officerRes[0];
+          officerData = {
+            id: o.id,
+            employee_code: o.employeeCode,
+            photo_url: o.photoUrl,
+            assigned_zone: o.assignedZone,
+            is_active: o.isActive,
+          };
+        }
+      }
+
+      const responseData: ApiResponse<User & { officer?: any }> = {
+        success: true,
+        data: {
+          id: user.id,
+          email: user.email,
+          full_name: user.fullName,
+          phone: user.phone,
+          role: user.role as any,
+          branch_id: user.branchId || undefined,
+          district_id: user.districtId || undefined,
+          is_active: user.isActive,
+          last_login: user.lastLogin ? user.lastLogin.toISOString() : undefined,
+          officer: officerData,
+        },
+      };
+
+      return reply.send(responseData);
+    } catch (error: any) {
+      if (error.statusCode === 401 || error.code?.includes('JWT')) {
+        return reply.status(401).send({ success: false, error: { code: 'UNAUTHORIZED', message: 'Token tidak valid atau expired' } });
+      }
+      fastify.log.error(error);
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
     }
   });
 }

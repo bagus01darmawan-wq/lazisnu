@@ -6,7 +6,7 @@ export interface QueuedCollection {
   offline_id: string;
   assignment_id: string;
   can_id: string;
-  amount: number;
+  nominal: number;
   payment_method: 'CASH' | 'TRANSFER';
   transfer_receipt_url?: string;
   collected_at: string;

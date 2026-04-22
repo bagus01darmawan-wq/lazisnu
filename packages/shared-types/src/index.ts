@@ -1,20 +1,10 @@
-// Navigation Types
-export type RootStackParamList = {
-  Login: undefined;
-  OTP: { phone: string };
-  Main: undefined;
-};
-
-export type MainTabParamList = {
-  Dashboard: undefined;
-  Tasks: undefined;
-  Scan: undefined;
-  History: undefined;
-  Profile: undefined;
-};
-
 // User Types
-export type UserRole = 'ADMIN_KECAMATAN' | 'ADMIN_RANTING' | 'BENDAHARA' | 'PETUGAS';
+export enum UserRole {
+  ADMIN_KECAMATAN = 'ADMIN_KECAMATAN',
+  ADMIN_RANTING = 'ADMIN_RANTING',
+  BENDAHARA = 'BENDAHARA',
+  PETUGAS = 'PETUGAS',
+}
 
 export interface User {
   id: string;
@@ -24,6 +14,8 @@ export interface User {
   role: UserRole;
   branch_id?: string;
   district_id?: string;
+  last_login?: string;
+  is_active?: boolean;
 }
 
 export interface Officer {
@@ -57,7 +49,12 @@ export interface Can {
 }
 
 // Assignment Types
-export type AssignmentStatus = 'ACTIVE' | 'COMPLETED' | 'POSTPONED' | 'REASSIGNED';
+export enum AssignmentStatus {
+  ACTIVE = 'ACTIVE',
+  COMPLETED = 'COMPLETED',
+  POSTPONED = 'POSTPONED',
+  REASSIGNED = 'REASSIGNED',
+}
 
 export interface Assignment {
   id: string;
@@ -73,21 +70,37 @@ export interface Assignment {
 }
 
 // Collection Types
-export type PaymentMethod = 'CASH' | 'TRANSFER';
-export type SyncStatus = 'PENDING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+export enum PaymentMethod {
+  CASH = 'CASH',
+  TRANSFER = 'TRANSFER',
+}
+export enum SyncStatus {
+  PENDING = 'PENDING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  CANCELLED = 'CANCELLED',
+}
 
 export interface Collection {
   id: string;
   assignment_id: string;
   can_id: string;
   officer_id: string;
-  amount: number;
+  nominal: number;
   payment_method: PaymentMethod;
   transfer_receipt_url?: string;
   collected_at: string;
   submitted_at?: string;
   synced_at?: string;
   sync_status: SyncStatus;
+  whatsapp_status?: string;
+  whatsapp_sent?: boolean;
+  notes?: string;
+  can?: {
+    qr_code: string;
+    owner_name: string;
+    owner_address: string;
+  };
   server_timestamp?: string;
   device_info?: DeviceInfo;
   latitude?: number;
@@ -114,7 +127,7 @@ export interface Task {
   assigned_at: string;
   period: string;
   last_collection?: {
-    amount: number;
+    nominal: number;
     date: string;
   };
 }
@@ -157,7 +170,7 @@ export interface OfflineCollection {
   offline_id: string;
   assignment_id: string;
   can_id: string;
-  amount: number;
+  nominal: number;
   payment_method: PaymentMethod;
   transfer_receipt_url?: string;
   collected_at: string;
@@ -172,7 +185,7 @@ export interface OfflineCollection {
 export interface CollectionReport {
   id: string;
   collected_at: string;
-  amount: number;
+  nominal: number;
   payment_method: PaymentMethod;
   sync_status: SyncStatus;
   officer_name: string;

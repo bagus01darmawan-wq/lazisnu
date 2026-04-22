@@ -43,7 +43,9 @@ export default function LoginPage() {
 
       if (response.success) {
         authHelper.setToken(response.data.access_token);
-        Cookies.set('user_role', response.data.user.role, { expires: 1 });
+        if (response.data.refresh_token) {
+          authHelper.setRefreshToken(response.data.refresh_token);
+        }
         setUser(response.data.user);
 
         // Redirect to dashboard

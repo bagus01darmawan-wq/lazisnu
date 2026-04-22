@@ -12,10 +12,11 @@ if (useMock) {
   const RedisMock = require('ioredis-mock');
   redisConnection = new RedisMock();
 } else {
+  const redisUrl = config.REDIS_URL as string;
   redisConnection = new Redis({
-    host: new URL(config.REDIS_URL).hostname,
-    port: parseInt(new URL(config.REDIS_URL).port || '6379'),
-    password: new URL(config.REDIS_URL).password || undefined,
+    host: new URL(redisUrl).hostname,
+    port: parseInt(new URL(redisUrl).port || '6379'),
+    password: new URL(redisUrl).password || undefined,
     maxRetriesPerRequest: null, // Required by BullMQ
   });
 }
@@ -24,6 +25,10 @@ export async function disconnectRedis() {
   if (redisConnection && typeof redisConnection.quit === 'function') {
     await redisConnection.quit();
   }
+}
+
+export function getRedis() {
+  return redisConnection;
 }
 
 export { redisConnection };

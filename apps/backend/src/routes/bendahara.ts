@@ -3,7 +3,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { eq, and, desc, asc, gte, lte } from 'drizzle-orm';
+import { eq, and, desc, asc, gte, lte, inArray } from 'drizzle-orm';
 import { authenticate, authorize } from '../middleware/auth';
 
 export async function bendaharaRoutes(fastify: FastifyInstance) {
@@ -119,29 +119,45 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
         conditions.push(and(gte(schema.collections.collectedAt, new Date(query.start_date)), lte(schema.collections.collectedAt, new Date(query.end_date)))!);
       }
       if (query.officer_id) conditions.push(eq(schema.collections.officerId, query.officer_id));
+
+      // DB-level district filter: get can IDs in that district first
+      if (query.district_id) {
+        const districtBranches = await db.select({ id: schema.branches.id })
+          .from(schema.branches)
+          .where(eq(schema.branches.districtId, query.district_id));
+        const branchIds = districtBranches.map(b => b.id);
+
+        if (branchIds.length === 0) {
+          return reply.send({ success: true, data: { collections: [], pagination: { page, limit, total: 0, total_pages: 0 } } });
+        }
+
+        const districtCans = await db.select({ id: schema.cans.id })
+          .from(schema.cans)
+          .where(inArray(schema.cans.branchId, branchIds));
+        const canIds = districtCans.map(c => c.id);
+
+        if (canIds.length === 0) {
+          return reply.send({ success: true, data: { collections: [], pagination: { page, limit, total: 0, total_pages: 0 } } });
+        }
+
+        conditions.push(inArray(schema.collections.canId, canIds));
+      }
+
       const whereClause = and(...conditions);
 
-      let [collections, total] = await Promise.all([
+      const [collections, total] = await Promise.all([
         db.query.collections.findMany({
           where: whereClause,
           with: {
-            can: {
-              with: {
-                branch: { with: { district: true } },
-              },
-            },
+            can: { with: { branch: { with: { district: true } } } },
             officer: { columns: { fullName: true, employeeCode: true } },
           },
-          orderBy: [desc(schema.collections.collectedAt)]
+          orderBy: [desc(schema.collections.collectedAt)],
+          limit,
+          offset: skip,
         }),
-        db.$count(schema.collections, whereClause)
+        db.$count(schema.collections, whereClause),
       ]);
-
-      if (query.district_id) {
-        collections = collections.filter(c => c.can.branch.districtId === query.district_id);
-        total = collections.length;
-      }
-      collections = collections.slice(skip, skip + limit);
 
       return reply.send({
         success: true,

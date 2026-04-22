@@ -76,7 +76,7 @@ const TasksScreen: React.FC = () => {
           <View style={styles.lastCollection}>
             <Text style={styles.lastCollectionLabel}>Penjemputan Terakhir</Text>
             <Text style={styles.lastCollectionAmount}>
-              {formatCurrency(item.last_collection.amount)}
+              {formatCurrency(item.last_collection.nominal)}
             </Text>
           </View>
         )}

@@ -46,6 +46,9 @@ const envSchema = z.object({
 
   // Internal API Key (for scheduler/internal routes)
   INTERNAL_API_KEY: z.string().optional(),
+
+  // APP Secret for QR Signing
+  APP_SECRET: z.string().default('development-secret-for-qr-signing'),
 });
 
 const parseResult = envSchema.safeParse(process.env);

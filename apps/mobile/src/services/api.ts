@@ -1,14 +1,14 @@
 // Mobile API Service - Lazisnu Collector App
 
 import { MMKV } from 'react-native-mmkv';
-import { ApiResponse, Collection, Task } from '../types';
+import { ApiResponse, Collection, Task } from '@lazisnu/shared-types';
 
 export const storage = new MMKV();
 
-// For USB debugging, localhost magically connects to computer via adb reverse.
-const API_BASE_URL = 'http://localhost:3000/v1';
+const API_BASE_URL = 'http://10.0.2.2:3001/v1';
 
-// Token management (MMKV is synchronous)
+// ── Token Management (MMKV is synchronous) ──────────────────────────────────
+
 export const getToken = async (): Promise<string | null> => {
   return storage.getString('access_token') || null;
 };
@@ -17,15 +17,65 @@ export const setToken = async (token: string): Promise<void> => {
   storage.set('access_token', token);
 };
 
+export const getRefreshToken = (): string | null => {
+  return storage.getString('refresh_token') || null;
+};
+
+export const setRefreshToken = (token: string): void => {
+  storage.set('refresh_token', token);
+};
+
 export const clearToken = async (): Promise<void> => {
   storage.delete('access_token');
   storage.delete('refresh_token');
 };
 
-// API helper
+// ── Token Refresh Logic ──────────────────────────────────────────────────────
+
+let isRefreshing = false;
+let refreshSubscribers: Array<(token: string) => void> = [];
+
+function onRefreshed(newToken: string) {
+  refreshSubscribers.forEach(cb => cb(newToken));
+  refreshSubscribers = [];
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return null;
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+
+    const data = await response.json();
+    if (response.ok && data.data?.access_token) {
+      const newToken = data.data.access_token;
+      await setToken(newToken);
+      // Jika refresh token baru diterima, simpan juga
+      if (data.data.refresh_token) {
+        setRefreshToken(data.data.refresh_token);
+      }
+      return newToken;
+    }
+    // Refresh gagal — paksa logout
+    await clearToken();
+    return null;
+  } catch {
+    await clearToken();
+    return null;
+  }
+}
+
+// ── API Request with Auto-Refresh ────────────────────────────────────────────
+
 const apiRequest = async <T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  _isRetry = false
 ): Promise<ApiResponse<T>> => {
   try {
     const token = await getToken();
@@ -39,6 +89,47 @@ const apiRequest = async <T>(
       ...options,
       headers,
     });
+
+    // ── Handle 401: coba refresh token, lalu retry ──
+    if (response.status === 401 && !_isRetry) {
+      if (isRefreshing) {
+        // Tunggu refresh yang sedang berjalan
+        return new Promise((resolve) => {
+          refreshSubscribers.push(async (newToken) => {
+            const retryResponse = await fetch(`${API_BASE_URL}${endpoint}`, {
+              ...options,
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${newToken}`,
+                ...options.headers,
+              },
+            });
+            const retryData = await retryResponse.json();
+            if (retryResponse.ok) {
+              resolve({ success: true, data: retryData.data || retryData });
+            } else {
+              resolve({ success: false, error: { code: 'UNAUTHORIZED', message: 'Sesi telah berakhir' } });
+            }
+          });
+        });
+      }
+
+      isRefreshing = true;
+      const newToken = await refreshAccessToken();
+      isRefreshing = false;
+
+      if (newToken) {
+        onRefreshed(newToken);
+        // Retry original request dengan token baru
+        return apiRequest<T>(endpoint, options, true);
+      } else {
+        // Refresh token gagal / expired — session habis
+        return {
+          success: false,
+          error: { code: 'SESSION_EXPIRED', message: 'Sesi telah berakhir. Silakan login kembali.' },
+        };
+      }
+    }
 
     const data = await response.json();
 
@@ -65,12 +156,20 @@ const apiRequest = async <T>(
   }
 };
 
-// Auth Services
+// ── Auth Services ────────────────────────────────────────────────────────────
+
 export const authService = {
-  login: async (phone: string, password: string) => {
+  login: async (identifier: string, password: string) => {
     return apiRequest('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ phone, password }),
+      body: JSON.stringify({ identifier, password }),
+    });
+  },
+
+  loginWithPhone: async (phone: string, password: string) => {
+    return apiRequest('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ identifier: phone, password }),
     });
   },
 
@@ -94,9 +193,26 @@ export const authService = {
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
   },
+
+  logout: async () => {
+    const refreshToken = getRefreshToken();
+    // Beritahu backend untuk blacklist refresh token
+    if (refreshToken) {
+      await apiRequest('/auth/logout', {
+        method: 'POST',
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      }).catch(() => {}); // Abaikan error jaringan saat logout
+    }
+    await clearToken();
+  },
+
+  me: async () => {
+    return apiRequest('/auth/me');
+  },
 };
 
-// Dashboard Services
+// ── Dashboard Services ────────────────────────────────────────────────────────
+
 export const dashboardService = {
   getDashboard: async () => {
     return apiRequest('/mobile/dashboard');
@@ -107,7 +223,8 @@ export const dashboardService = {
   },
 };
 
-// Tasks Services
+// ── Tasks Services ────────────────────────────────────────────────────────────
+
 export const tasksService = {
   getTasks: async (params?: { status?: string; page?: number; limit?: number }) => {
     const queryParams = new URLSearchParams();
@@ -120,16 +237,17 @@ export const tasksService = {
   },
 
   getTaskByQR: async (qrCode: string) => {
-    return apiRequest(`/mobile/scan/${qrCode}`);
+    return apiRequest(`/mobile/scan/${encodeURIComponent(qrCode)}`);
   },
 };
 
-// Collection Services
+// ── Collection Services ───────────────────────────────────────────────────────
+
 export const collectionService = {
   submitCollection: async (data: {
     assignment_id: string;
     can_id: string;
-    amount: number;
+    nominal: number;
     payment_method: 'CASH' | 'TRANSFER';
     transfer_receipt_url?: string;
     collected_at: string;
@@ -152,7 +270,7 @@ export const collectionService = {
     offline_id: string;
     assignment_id: string;
     can_id: string;
-    amount: number;
+    nominal: number;
     payment_method: 'CASH' | 'TRANSFER';
     collected_at: string;
     latitude?: number;
@@ -167,9 +285,18 @@ export const collectionService = {
   getSyncStatus: async () => {
     return apiRequest('/mobile/sync/status');
   },
+
+  getHistory: async (params?: { page?: number; limit?: number }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    const query = queryParams.toString();
+    return apiRequest(`/mobile/history${query ? `?${query}` : ''}`);
+  },
 };
 
-// Network Check
+// ── Network Check ─────────────────────────────────────────────────────────────
+
 export const networkService = {
   checkConnection: async (): Promise<boolean> => {
     try {

@@ -14,7 +14,10 @@
     "seed": "tsx src/database/seed.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1034.0",
+    "@aws-sdk/s3-request-presigner": "^3.1034.0",
     "@fastify/cors": "^9.0.1",
+    "@lazisnu/shared-types": "file:../../packages/shared-types",
     "@fastify/jwt": "^8.0.0",
     "@fastify/rate-limit": "^9.1.0",
     "@fastify/swagger": "^8.14.0",
@@ -24,6 +27,7 @@
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.45.2",
     "fastify": "^4.27.0",
+    "firebase-admin": "^13.8.0",
     "ioredis": "^5.4.1",
     "nodemailer": "^6.9.13",
     "postgres": "^3.4.9",

@@ -226,7 +226,7 @@ const ScanScreen: React.FC = () => {
                         style: 'currency',
                         currency: 'IDR',
                         minimumFractionDigits: 0,
-                      }).format(scannedData.last_collection.amount)}
+                      }).format(scannedData.last_collection.nominal)}
                     </Text>
                   </View>
                 </View>
@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    border: 4,
+    borderWidth: 4,
     borderColor: '#1E88E5',
     borderTopColor: 'transparent',
   },

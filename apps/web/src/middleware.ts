@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { decodeJwt } from 'jose';
 
 export function middleware(request: NextRequest) {
   const token = request.cookies.get('lazisnu_token')?.value;
@@ -15,22 +16,27 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
-  // 3. Simple Role Check (Assuming role is stored in another cookie or JWT)
-  // In a real app, you would decode the JWT here
-  const userRole = request.cookies.get('user_role')?.value;
-
+  // 3. Proper Role Check using JWT decoding
   if (token && !isAuthPage) {
-    const path = request.nextUrl.pathname;
+    try {
+      const payload = decodeJwt(token);
+      const userRole = payload.role as string;
 
-    // Restricted routes for Admin Kecamatan
-    if ((path.includes('/users') || path.includes('/audit-log') || path.includes('/wa-monitor')) && 
-        userRole !== 'ADMIN_KECAMATAN') {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
-    
-    // Restricted routes for Reports (all except petugas)
-    if (path.includes('/reports') && userRole === 'PETUGAS') {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+      const path = request.nextUrl.pathname;
+
+      // Restricted routes for Admin Kecamatan
+      if ((path.includes('/users') || path.includes('/audit-log') || path.includes('/wa-monitor')) && 
+          userRole !== 'ADMIN_KECAMATAN') {
+        return NextResponse.redirect(new URL('/dashboard', request.url));
+      }
+      
+      // Restricted routes for Reports (all except petugas)
+      if (path.includes('/reports') && userRole === 'PETUGAS') {
+        return NextResponse.redirect(new URL('/dashboard', request.url));
+      }
+    } catch (e) {
+      // Invalid token format
+      return NextResponse.redirect(new URL('/login', request.url));
     }
   }
 

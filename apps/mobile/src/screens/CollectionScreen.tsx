@@ -55,7 +55,7 @@ const CollectionScreen: React.FC = () => {
     const result = await submitCollection({
       assignment_id: task.id,
       can_id: task.id,
-      amount: numericAmount,
+      nominal: numericAmount,
       payment_method: paymentMethod,
       collected_at: new Date().toISOString(),
       offline_id: `local-${Date.now()}`,

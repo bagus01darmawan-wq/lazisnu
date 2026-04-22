@@ -85,7 +85,7 @@ const HistoryScreen: React.FC = () => {
       <View style={styles.cardFooter}>
         <View style={styles.amountContainer}>
           <Text style={styles.amountLabel}>Nominal</Text>
-          <Text style={styles.amountValue}>{formatCurrency(item.amount)}</Text>
+          <Text style={styles.amountValue}>{formatCurrency(item.nominal)}</Text>
         </View>
         <View style={styles.statusContainer}>
           <Icon
@@ -166,7 +166,7 @@ const HistoryScreen: React.FC = () => {
         <View style={styles.summaryItem}>
           <Text style={styles.summaryValue}>
             {formatCurrency(
-              collections.reduce((sum, c) => sum + c.amount, 0)
+              collections.reduce((sum: number, c: Collection) => sum + c.nominal, 0)
             )}
           </Text>
           <Text style={styles.summaryLabel}>Total Nominal</Text>

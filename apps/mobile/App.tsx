@@ -3,6 +3,7 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { syncService } from './src/services/offline/sync';
+import CodePush from 'react-native-code-push';
 
 const App = () => {
   useEffect(() => {
@@ -22,4 +23,5 @@ const App = () => {
   );
 };
 
-export default App;
+const codePushOptions = { checkFrequency: CodePush.CheckFrequency.ON_APP_RESUME };
+export default CodePush(codePushOptions)(App);

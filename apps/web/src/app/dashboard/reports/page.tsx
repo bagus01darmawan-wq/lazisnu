@@ -1,93 +1,45 @@
-'use client';
-
-import React, { useState, useEffect } from 'react';
-import { Table } from '@/components/ui/Table';
+import React from 'react';
 import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { ColumnDef } from '@tanstack/react-table';
-import api from '@/lib/api';
-import { 
-  FileText, 
-  Download, 
-  Filter, 
-  Calendar,
-  FileSpreadsheet,
-  TrendingUp,
-  Wallet
-} from 'lucide-react';
-import { format } from 'date-fns';
-import { id } from 'date-fns/locale';
-import { useAuthStore } from '@/store/useAuthStore';
+import { Download, Filter, FileSpreadsheet, TrendingUp, Wallet, Calendar } from 'lucide-react';
+import { cookies } from 'next/headers';
+import { decodeJwt } from 'jose';
+import ReportsClient from './ReportsClient';
 
-export default function ReportsPage() {
-  const { user } = useAuthStore();
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<any>(null);
+async function getReportData() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('lazisnu_token')?.value;
 
-  const fetchReports = async () => {
-    setLoading(true);
-    try {
-      const endpoint = user?.role === 'ADMIN_KECAMATAN' ? '/admin/district/dashboard' : '/admin/branch/dashboard';
-      const response: any = await api.get(endpoint);
-      if (response.success) {
-        setData(response.data.recent_collections || []);
-        setStats(response.data.summary);
-      }
-    } catch (error) {
-      console.error('Failed to fetch reports:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (!token) return { data: [], stats: null };
 
-  useEffect(() => {
-    fetchReports();
-  }, []);
+  try {
+    const payload = decodeJwt(token);
+    const role = payload.role as string;
+    const endpoint = role === 'ADMIN_KECAMATAN' ? '/admin/district/dashboard' : '/admin/branch/dashboard';
+    
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    const res = await fetch(`${API_URL}/v1${endpoint}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      cache: 'no-store',
+    });
 
-  const columns: ColumnDef<any>[] = [
-    {
-      accessorKey: 'collected_at',
-      header: 'Tanggal',
-      cell: ({ row }) => (
-        <span className="text-xs font-medium text-slate-500">
-          {format(new Date(row.original.collected_at), 'PPP', { locale: id })}
-        </span>
-      ),
-    },
-    {
-      accessorKey: 'qr_code',
-      header: 'Kode Kaleng',
-      cell: ({ row }) => <span className="font-bold text-slate-900">{row.original.qr_code}</span>,
-    },
-    {
-      accessorKey: 'owner_name',
-      header: 'Penyumbang',
-      cell: ({ row }) => <span className="text-sm font-medium">{row.original.owner_name}</span>,
-    },
-    {
-      accessorKey: 'officer_name',
-      header: 'Petugas',
-      cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-           <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold">
-             {row.original.officer_name.charAt(0)}
-           </div>
-           <span className="text-sm">{row.original.officer_name}</span>
-        </div>
-      ),
-    },
-    {
-      accessorKey: 'nominal',
-      header: 'Nominal',
-      cell: ({ row }) => (
-        <span className="font-bold text-green-600">
-          Rp {Number(row.original.nominal).toLocaleString('id-ID')}
-        </span>
-      ),
-    },
-  ];
+    if (!res.ok) return { data: [], stats: null };
+
+    const json = await res.json();
+    return {
+      data: json.data?.recent_collections || [],
+      stats: json.data?.summary || null,
+    };
+  } catch (error) {
+    console.error('Server fetch error:', error);
+    return { data: [], stats: null };
+  }
+}
+
+export default async function ReportsPage() {
+  const { data, stats } = await getReportData();
 
   return (
     <div className="space-y-6">
@@ -161,7 +113,7 @@ export default function ReportsPage() {
             Transaksi Terakhir
           </h3>
         </div>
-        <Table columns={columns} data={data} loading={loading} />
+        <ReportsClient data={data} />
       </div>
     </div>
   );

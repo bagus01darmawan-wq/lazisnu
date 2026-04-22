@@ -3,57 +3,57 @@ trigger: model_decision
 ---
 
 # Rule: Project Overview
-# Scope: Semua agent / semua task
-# Baca file ini pertama sebelum file rules lainnya.
+# Scope: All agents / all tasks
+# Read this file first before other rules files.
 
 ---
 
-## Identitas Project
+## Project Identity
 
-**Nama**: Lazisnu Infaq Collection System
-**Tujuan**: Sistem digital pengumpulan infaq/sodaqoh untuk lembaga Lazisnu.
-**Pengguna utama**: ~100 petugas lapangan yang mengambil uang dari kaleng/kotak infaq di rumah donatur.
+**Name**: Lazisnu Infaq Collection System
+**Goal**: Digital system for infaq/sodaqoh collection for Lazisnu institution.
+**Main Users**: ~100 field officers who collect money from infaq cans/boxes at donor homes.
 
 ---
 
-## Tiga Pilar Utama — Jangan Pernah Dilanggar
+## Three Main Pillars — Never Violate
 
 ```
 1. IMMUTABLE AUDIT TRAIL
-   Data koleksi tidak bisa dihapus atau diubah.
-   Koreksi hanya boleh via re-submit (INSERT baru dengan flag).
+   Collection data cannot be deleted or changed.
+   Corrections only via re-submit (INSERT new record with flag).
 
-2. WHATSAPP SEBAGAI VERIFIKASI EKSTERNAL
-   Setiap submit koleksi WAJIB memicu notifikasi WA ke pemilik kaleng
-   berisi nominal aktual. Ini adalah mekanisme anti-fraud utama.
+2. WHATSAPP AS EXTERNAL VERIFICATION
+   Every collection submission MUST trigger a WA notification to the can owner
+   containing the actual nominal. This is the primary anti-fraud mechanism.
 
 3. OFFLINE-FIRST
-   Petugas beroperasi di area tanpa sinyal.
-   Semua operasi harus bisa berjalan offline dan sync otomatis saat ada koneksi.
+   Officers operate in areas without signal.
+   All operations must work offline and sync automatically when connected.
 ```
 
 ---
 
-## Alur Kerja Inti (Happy Path)
+## Core Workflow (Happy Path)
 
 ```
-Petugas buka app
-  → Tap task kaleng dari daftar
-  → Scan QR code pada kaleng
-  → Sistem validasi QR (kaleng valid? assignment aktif? belum disubmit periode ini?)
-  → Input nominal uang yang diterima (Cash atau Transfer)
-  → Review & konfirmasi (tidak bisa dibatalkan setelah ini)
-  → Submit → WA terkirim otomatis ke pemilik kaleng
-  → Task ditandai selesai
+Officer opens app
+  → Tap can task from list
+  → Scan QR code on the can
+  → System validates QR (valid can? active assignment? not submitted this period?)
+  → Input nominal received (Cash or Transfer)
+  → Review & confirm (cannot be cancelled after this)
+  → Submit → WA sent automatically to can owner
+  → Task marked as completed
 ```
 
 ---
 
-## Tech Stack Ringkas
+## Compact Tech Stack
 
-| Layer | Teknologi |
+| Layer | Technology |
 |---|---|
-| Mobile | React Native + TypeScript (Android prioritas) |
+| Mobile | React Native + TypeScript (Android priority) |
 | Web Dashboard | Next.js 14 App Router + TypeScript + Tailwind |
 | Backend API | Node.js + Fastify + TypeScript |
 | Database | PostgreSQL 16 |
@@ -61,21 +61,17 @@ Petugas buka app
 | Storage | Cloudflare R2 (QR PDF) |
 | Push Notif | Firebase Cloud Messaging |
 | WhatsApp | Meta WhatsApp Business API |
-| OTA Update | Microsoft App Center CodePush |
-| Security | Google Play Integrity API |
-| Monitoring | Firebase Crashlytics + Sentry |
-| CI/CD | GitHub Actions → Railway |
 
 ---
 
 ## User Roles
 
-| Role | Platform | Akses |
+| Role | Platform | Access |
 |---|---|---|
-| `admin_kecamatan` | Web | Super admin — semua data semua ranting |
-| `admin_ranting` | Web (responsive di HP) | Data rantingnya sendiri saja |
-| `petugas` | Mobile App | Task yang diassign kepadanya saja |
-| `bendahara` | Web Dashboard | Read-only laporan + operasional |
+| `ADMIN_KECAMATAN` | Web | Super admin — all data across all branches |
+| `ADMIN_RANTING` | Web | Data for their own branch only |
+| `PETUGAS` | Mobile App | Tasks assigned to them only |
+| `BENDAHARA` | Web Dashboard | Read-only reports + operational data |
 
 ---
 
