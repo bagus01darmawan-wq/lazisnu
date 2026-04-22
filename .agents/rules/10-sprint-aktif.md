@@ -11,9 +11,9 @@ trigger: model_decision
 ## Status Saat Ini
 
 ```
-FASE AKTIF : FASE 6 — Sprint 3: Bug Fixes & Stabilisasi Production
+FASE AKTIF : FASE 6 — Sprint 4: Finalisasi & Persiapan UAT
 MINGGU     : 13–14
-STATUS     : ✅ Web Dashboard Next.js Migration COMPLETE | 🔧 Critical Bug Fixes Pending
+STATUS     : ✅ Modularization COMPLETE | ✅ Critical Bug Fixes DONE | 🚀 Preparing for UAT
 ```
 
 ---
@@ -30,7 +30,7 @@ Pilar 1: Immortality & Immutability
 Pilar 2: WhatsApp & Reliability
   [x] BullMQ + Redis integration - COMPLETED
   [x] WhatsApp Async Worker - COMPLETED
-  [ ] WhatsApp status response fix (waResult.status undefined bug) - PENDING
+  [x] WhatsApp status response fix (waResult.status undefined bug) - COMPLETED
 
 Pilar 3: Audit Trail
   [x] Global Audit Logger middleware - COMPLETED
@@ -51,18 +51,18 @@ Pilar 4: Web Dashboard (Next.js Migration)
 
 ```
 PRIORITAS 1 — Production Blocker:
-  [ ] Mobile API Base URL: localhost:3000 → 10.0.2.2:3001
-  [ ] Field mismatch: mobile mengirim 'amount', backend expect 'nominal'
-  [ ] QR Token: HMAC-SHA256 signing BELUM diimplementasikan (fraud risk!)
-  [ ] Refresh token: BELUM ada blacklist Redis + endpoint /auth/logout
-  [ ] WhatsApp: waResult.status undefined di mobile.ts route
+  [x] Mobile API Base URL: localhost:3000 → 10.0.2.2:3001
+  [x] Field mismatch: mobile mengirim 'amount', backend expect 'nominal'
+  [x] QR Token: HMAC-SHA256 signing IMPLEMENTED (utils/qr.ts)
+  [x] Refresh token: Redis blacklist + endpoint /auth/logout IMPLEMENTED
+  [x] WhatsApp: waResult.status undefined fix IMPLEMENTED
 
 PRIORITAS 2 — Stabilitas:
-  [ ] Packages shared-types & shared-utils masih kosong
-  [ ] GET /assignments: filter role di JS bukan DB-level (performance)
-  [ ] GET /bendahara/collections: pagination manual setelah filter JS
-  [ ] Update .agents/rules agar sinkron dengan implementasi aktual
-  [ ] Mobile stores: ganti AsyncStorage → MMKV sepenuhnya
+  [x] Packages shared-types & shared-utils (INITIALIZED)
+  [x] GET /assignments: filter role di DB-level (COMPLETED)
+  [x] GET /bendahara/collections: pagination DB-level (COMPLETED)
+  [x] Update .agents/rules agar sinkron dengan implementasi aktual (COMPLETED)
+  [x] Mobile stores: ganti AsyncStorage → MMKV sepenuhnya (COMPLETED)
 ```
 
 ---
@@ -70,41 +70,34 @@ PRIORITAS 2 — Stabilitas:
 ## Konteks untuk Agent
 
 ```
-Codebase saat ini sudah terstruktur sebagai MONOREPO (apps/backend, apps/web, apps/mobile).
-Backend (Fastify + Drizzle) berjalan di port 3001.
-Database: PostgreSQL dengan schema aktual menggunakan nama INGGRIS:
-  - 'collections' (bukan 'koleksi')
-  - 'cans' (bukan 'kaleng')
-  - 'branches' (bukan 'ranting')
-  - 'districts' (bukan 'kecamatan')
+Codebase saat ini sudah terstruktur sebagai MONOREPO dengan modularisasi route.
+Backend (Fastify + Drizzle) menggunakan folder structure per-domain (admin/, mobile/).
+Database: PostgreSQL dengan schema aktual menggunakan nama INGGRIS (collections, cans, districts, branches).
 
-Role enum di DB: ADMIN_KECAMATAN, ADMIN_RANTING, BENDAHARA, PETUGAS (UPPERCASE)
+Kesiapan Ekosistem Saat Ini:
+  - Backend: 95% (Hanya sisa minor fitur opsional)
+  - Web: 85% (Optimasi Server Components & Error Boundary pending)
+  - Mobile: 80% (Refactoring UI & CodePush pending)
 
-Status Service:
-  - PostgreSQL: Aktif
-  - Redis: Aktif (Digunakan oleh BullMQ)
-  - WhatsApp: Async Worker dengan BullMQ enabled
-  - Web Dashboard: Next.js 14 berjalan di port 3000
-
-⚠️ PERHATIAN AGENT: Rules di .agents/rules/ menggunakan nama tabel/field
-BAHASA INDONESIA yang BERBEDA dari implementasi aktual. Selalu cek schema.ts
-sebagai sumber kebenaran, bukan rules dokumentasi untuk nama field/tabel.
+⚠️ PERHATIAN AGENT: Gunakan @lazisnu/shared-types untuk interface bersama.
+Jangan mendefinisikan ulang User atau Collection di level app jika sudah ada di package.
 ```
 
 ---
 
-## Analisis Komprehensif (18 April 2026)
+## Analisis Komprehensif (22 April 2026)
 
 ```
-Analisis menyeluruh telah dilakukan mencakup:
-  - Ketidaksinkronan rules vs implementasi (KRITIS)
-  - 5 production-blocker bugs teridentifikasi
-  - Kesiapan ekosistem: Backend 65%, Web 55%, Mobile 50%, Packages 0%
-  - 20 item perbaikan berprioritas (lihat analisis_project_lazisnu.md)
+Update Terakhir:
+  - Seluruh "God Files" (admin.ts, mobile.ts) telah dimodularisasi ke folder routes/.
+  - Security pilar diperkuat dengan HMAC-SHA256 QR dan Redis Refresh Token Blacklist.
+  - Performa query ditingkatkan dengan DB-level filtering dan proper pagination.
+  - Sinkronisasi antara mobile (MMKV) dan backend (nominal field) telah diverifikasi.
 ```
 
 ---
 
 *Lazisnu Infaq Collection System — rules/10-sprint-aktif.md*
 *⚠️ Update file ini setiap berganti sprint/fase*
-*Last updated: 2026-04-19*
+*Last updated: 2026-04-22*
+

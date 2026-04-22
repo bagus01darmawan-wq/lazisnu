@@ -1,16 +1,35 @@
 import React from 'react';
-import { Loader2 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 export default function DashboardLoading() {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] w-full">
-      <div className="relative">
-        {/* Outer pulsating ring */}
-        <div className="absolute inset-0 border-4 border-green-100 rounded-full animate-ping"></div>
-        {/* Inner spinning loader */}
-        <Loader2 className="w-12 h-12 text-green-600 animate-spin relative z-10" />
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-48 rounded-lg" />
+          <Skeleton className="h-4 w-64 rounded-lg" />
+        </div>
+        <div className="flex gap-2">
+          <Skeleton className="h-10 w-24 rounded-xl" />
+          <Skeleton className="h-10 w-32 rounded-xl" />
+        </div>
       </div>
-      <p className="mt-6 text-sm font-medium text-slate-500 animate-pulse">Memuat data...</p>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Skeleton className="h-32 rounded-2xl" />
+        <Skeleton className="h-32 rounded-2xl" />
+        <Skeleton className="h-32 rounded-2xl" />
+      </div>
+
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-40 rounded-lg" />
+        <div className="bg-white rounded-2xl border border-slate-100 p-6 space-y-4">
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+        </div>
+      </div>
     </div>
   );
 }

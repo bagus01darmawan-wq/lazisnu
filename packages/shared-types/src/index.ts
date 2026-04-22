@@ -193,6 +193,7 @@ export interface CollectionReport {
   branch_name: string;
   district_name: string;
   owner_name: string;
+  owner_address: string;
   qr_code: string;
 }
 

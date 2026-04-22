@@ -1,6 +1,4 @@
-// History Screen - Mobile App
-
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, memo } from 'react';
 import {
   View,
   Text,
@@ -12,58 +10,45 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useCollectionsStore } from '../stores';
-import { Collection } from '../types';
+import { Collection } from '@lazisnu/shared-types';
+import { Colors, Spacing, Typography, Shadows } from '../theme';
 
-const HistoryScreen: React.FC = () => {
-  const {
-    collections,
-    fetchCollections,
-    isLoading,
-    page,
-    totalPages,
-    loadMore,
-  } = useCollectionsStore();
-  const [filter, setFilter] = useState<'ALL' | 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH'>('ALL');
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+  }).format(amount);
+};
 
-  useEffect(() => {
-    fetchCollections(filter);
-  }, [filter]);
+const formatDate = (dateStr: string) => {
+  return new Date(dateStr).toLocaleDateString('id-ID', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('id-ID', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
+const CollectionItem = memo(({ item }: { item: Collection }) => {
   const getPaymentMethodIcon = (method: string) => {
     return method === 'CASH' ? 'cash' : 'bank-transfer';
   };
 
-  const renderCollectionItem = ({ item }: { item: Collection }) => (
+  return (
     <View style={styles.collectionCard}>
       <View style={styles.cardHeader}>
         <View style={styles.dateContainer}>
-          <Icon name="calendar" size={14} color="#666" />
+          <Icon name="calendar" size={14} color={Colors.text.muted} />
           <Text style={styles.dateText}>{formatDate(item.collected_at)}</Text>
         </View>
         <View style={styles.methodBadge}>
           <Icon
             name={getPaymentMethodIcon(item.payment_method)}
             size={12}
-            color="#1E88E5"
+            color={Colors.secondary.main}
           />
           <Text style={styles.methodText}>
             {item.payment_method === 'CASH' ? 'Tunai' : 'Transfer'}
@@ -73,7 +58,7 @@ const HistoryScreen: React.FC = () => {
 
       <View style={styles.cardBody}>
         <View style={styles.qrInfo}>
-          <Icon name="qrcode" size={20} color="#1E88E5" />
+          <Icon name="qrcode" size={18} color={Colors.secondary.main} />
           <Text style={styles.qrCode}>{item.can?.qr_code || 'N/A'}</Text>
         </View>
         <Text style={styles.ownerName}>{item.can?.owner_name || 'Pemilik'}</Text>
@@ -91,12 +76,12 @@ const HistoryScreen: React.FC = () => {
           <Icon
             name={item.whatsapp_sent ? 'check-circle' : 'clock-outline'}
             size={14}
-            color={item.whatsapp_sent ? '#4CAF50' : '#FF9800'}
+            color={item.whatsapp_sent ? Colors.status.success : Colors.status.warning}
           />
           <Text
             style={[
               styles.statusText,
-              { color: item.whatsapp_sent ? '#4CAF50' : '#FF9800' },
+              { color: item.whatsapp_sent ? Colors.status.success : Colors.status.warning },
             ]}
           >
             {item.whatsapp_sent ? 'Notifikasi Terkirim' : 'Menunggu'}
@@ -106,33 +91,41 @@ const HistoryScreen: React.FC = () => {
 
       {item.notes && (
         <View style={styles.notesContainer}>
-          <Icon name="note-text" size={14} color="#999" />
+          <Icon name="note-text" size={14} color={Colors.text.muted} />
           <Text style={styles.notesText}>{item.notes}</Text>
         </View>
       )}
     </View>
   );
+});
+
+const HistoryScreen: React.FC = () => {
+  const {
+    collections,
+    fetchCollections,
+    isLoading,
+    page,
+    totalPages,
+    loadMore,
+  } = useCollectionsStore();
+  const [filter, setFilter] = useState<'ALL' | 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH'>('ALL');
+
+  useEffect(() => {
+    fetchCollections(filter);
+  }, [filter, fetchCollections]);
+
+  const renderCollectionItem = useCallback(({ item }: { item: Collection }) => (
+    <CollectionItem item={item} />
+  ), []);
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
-      <Icon name="history" size={64} color="#ddd" />
+      <Icon name="history" size={64} color={Colors.slate[200]} />
       <Text style={styles.emptyTitle}>Belum Ada Riwayat</Text>
       <Text style={styles.emptyText}>
         Riwayat penjemputan Anda akan muncul di sini
       </Text>
     </View>
-  );
-
-  const renderFilterChip = (f: 'ALL' | 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH', label: string) => (
-    <TouchableOpacity
-      key={f}
-      style={[styles.filterChip, filter === f && styles.filterChipActive]}
-      onPress={() => setFilter(f)}
-    >
-      <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
-        {label}
-      </Text>
-    </TouchableOpacity>
   );
 
   const filterOptions: { key: 'ALL' | 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH'; label: string }[] = [
@@ -144,19 +137,27 @@ const HistoryScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      {/* Filter Chips */}
       <View style={styles.filterContainer}>
         <FlatList
           horizontal
           showsHorizontalScrollIndicator={false}
           data={filterOptions}
-          renderItem={({ item }) => renderFilterChip(item.key, item.label)}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              key={item.key}
+              style={[styles.filterChip, filter === item.key && styles.filterChipActive]}
+              onPress={() => setFilter(item.key)}
+            >
+              <Text style={[styles.filterText, filter === item.key && styles.filterTextActive]}>
+                {item.label}
+              </Text>
+            </TouchableOpacity>
+          )}
           keyExtractor={(item) => item.key}
           contentContainerStyle={styles.filterList}
         />
       </View>
 
-      {/* Summary Card */}
       <View style={styles.summaryCard}>
         <View style={styles.summaryItem}>
           <Text style={styles.summaryValue}>{collections.length}</Text>
@@ -166,14 +167,13 @@ const HistoryScreen: React.FC = () => {
         <View style={styles.summaryItem}>
           <Text style={styles.summaryValue}>
             {formatCurrency(
-              collections.reduce((sum: number, c: Collection) => sum + c.nominal, 0)
+              collections.reduce((sum: number, c: Collection) => sum + Number(c.nominal), 0)
             )}
           </Text>
           <Text style={styles.summaryLabel}>Total Nominal</Text>
         </View>
       </View>
 
-      {/* Collection List */}
       <FlatList
         data={collections}
         renderItem={renderCollectionItem}
@@ -182,8 +182,9 @@ const HistoryScreen: React.FC = () => {
         ListEmptyComponent={renderEmpty}
         refreshControl={
           <RefreshControl
-            refreshing={isLoading}
+            refreshing={isLoading && page === 1}
             onRefresh={() => fetchCollections(filter)}
+            colors={[Colors.primary.main]}
           />
         }
         onEndReached={() => {
@@ -191,12 +192,15 @@ const HistoryScreen: React.FC = () => {
             loadMore();
           }
         }}
-        onEndReachedThreshold={0.3}
+        onEndReachedThreshold={0.5}
         ListFooterComponent={
-          isLoading && page < totalPages ? (
-            <ActivityIndicator style={styles.loadingFooter} color="#1E88E5" />
+          isLoading && page > 1 ? (
+            <ActivityIndicator style={styles.loadingFooter} color={Colors.primary.main} />
           ) : null
         }
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        windowSize={5}
       />
     </View>
   );
@@ -205,109 +209,106 @@ const HistoryScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: Colors.background,
   },
   filterContainer: {
-    backgroundColor: '#fff',
-    paddingVertical: 12,
+    backgroundColor: Colors.card,
+    paddingVertical: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: Colors.slate[100],
   },
   filterList: {
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.md,
   },
   filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     borderRadius: 20,
-    backgroundColor: '#f5f5f5',
-    marginRight: 8,
+    backgroundColor: Colors.slate[100],
+    marginRight: Spacing.sm,
   },
   filterChipActive: {
-    backgroundColor: '#1E88E5',
+    backgroundColor: Colors.primary.main,
   },
   filterText: {
-    fontSize: 13,
-    color: '#666',
+    fontSize: Typography.caption.fontSize,
+    color: Colors.text.secondary,
     fontWeight: '500',
   },
   filterTextActive: {
-    color: '#fff',
+    color: Colors.text.white,
   },
   summaryCard: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginTop: 12,
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: Colors.card,
+    marginHorizontal: Spacing.md,
+    marginTop: Spacing.md,
+    borderRadius: 16,
+    padding: Spacing.md,
+    ...Shadows.soft,
   },
   summaryItem: {
     flex: 1,
     alignItems: 'center',
   },
   summaryValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1E88E5',
+    fontSize: Typography.h3.fontSize,
+    fontWeight: '800',
+    color: Colors.primary.main,
     marginBottom: 4,
   },
   summaryLabel: {
-    fontSize: 11,
-    color: '#666',
+    fontSize: Typography.caption.fontSize,
+    color: Colors.text.muted,
   },
   summaryDivider: {
     width: 1,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: Colors.slate[100],
   },
   listContainer: {
-    padding: 16,
+    padding: Spacing.md,
     flexGrow: 1,
   },
   collectionCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    marginBottom: 12,
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    marginBottom: Spacing.md,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    ...Shadows.soft,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
+    padding: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: Colors.slate[50],
   },
   dateContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   dateText: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: Typography.caption.fontSize,
+    color: Colors.text.secondary,
     marginLeft: 4,
   },
   methodBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#e3f2fd',
+    backgroundColor: Colors.secondary.light,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
   },
   methodText: {
-    fontSize: 11,
-    color: '#1E88E5',
-    fontWeight: '500',
+    fontSize: Typography.caption.fontSize - 1,
+    color: Colors.secondary.dark,
+    fontWeight: '600',
     marginLeft: 4,
   },
   cardBody: {
-    padding: 12,
+    padding: Spacing.md,
   },
   qrInfo: {
     flexDirection: 'row',
@@ -315,57 +316,61 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   qrCode: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1E88E5',
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.secondary.main,
     marginLeft: 6,
   },
   ownerName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: Typography.body1.fontSize,
+    fontWeight: '700',
+    color: Colors.text.primary,
     marginBottom: 2,
   },
   ownerAddress: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: Typography.body2.fontSize,
+    color: Colors.text.secondary,
   },
   cardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingBottom: 12,
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.md,
   },
   amountContainer: {},
   amountLabel: {
-    fontSize: 10,
-    color: '#999',
+    fontSize: Typography.caption.fontSize - 2,
+    color: Colors.text.muted,
     marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   amountValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#4CAF50',
+    fontSize: Typography.h3.fontSize,
+    fontWeight: '800',
+    color: Colors.status.success,
   },
   statusContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   statusText: {
-    fontSize: 11,
-    fontWeight: '500',
+    fontSize: Typography.caption.fontSize,
+    fontWeight: '600',
     marginLeft: 4,
   },
   notesContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingBottom: 12,
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.md,
+    backgroundColor: Colors.slate[50],
+    paddingTop: 8,
   },
   notesText: {
-    fontSize: 12,
-    color: '#999',
+    fontSize: Typography.caption.fontSize,
+    color: Colors.text.muted,
     marginLeft: 4,
     fontStyle: 'italic',
   },
@@ -376,15 +381,15 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: Typography.h3.fontSize,
+    fontWeight: '700',
+    color: Colors.text.primary,
     marginTop: 16,
     marginBottom: 8,
   },
   emptyText: {
-    fontSize: 14,
-    color: '#999',
+    fontSize: Typography.body2.fontSize,
+    color: Colors.text.muted,
     textAlign: 'center',
   },
   loadingFooter: {

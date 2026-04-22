@@ -1,16 +1,17 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Download, Filter, FileSpreadsheet, TrendingUp, Wallet, Calendar } from 'lucide-react';
 import { cookies } from 'next/headers';
 import { decodeJwt } from 'jose';
 import ReportsClient from './ReportsClient';
+import { Skeleton } from '@/components/ui/Skeleton';
 
-async function getReportData() {
+async function getStatsData() {
   const cookieStore = await cookies();
   const token = cookieStore.get('lazisnu_token')?.value;
 
-  if (!token) return { data: [], stats: null };
+  if (!token) return null;
 
   try {
     const payload = decodeJwt(token);
@@ -19,27 +20,56 @@ async function getReportData() {
     
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
     const res = await fetch(`${API_URL}/v1${endpoint}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      cache: 'no-store',
+      headers: { Authorization: `Bearer ${token}` },
+      next: { revalidate: 60, tags: ['reports', 'stats'] }, // Cache for 60s
     });
 
-    if (!res.ok) return { data: [], stats: null };
-
+    if (!res.ok) return null;
     const json = await res.json();
-    return {
-      data: json.data?.recent_collections || [],
-      stats: json.data?.summary || null,
-    };
+    return json.data?.summary || null;
   } catch (error) {
-    console.error('Server fetch error:', error);
-    return { data: [], stats: null };
+    console.error('Stats fetch error:', error);
+    return null;
   }
 }
 
+async function TransactionList() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('lazisnu_token')?.value;
+
+  if (!token) return <ReportsClient data={[]} />;
+
+  try {
+    const payload = decodeJwt(token);
+    const role = payload.role as string;
+    const endpoint = role === 'ADMIN_KECAMATAN' ? '/admin/district/dashboard' : '/admin/branch/dashboard';
+    
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    const res = await fetch(`${API_URL}/v1${endpoint}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      next: { revalidate: 30, tags: ['reports', 'transactions'] },
+    });
+
+    if (!res.ok) return <ReportsClient data={[]} />;
+    const json = await res.json();
+    return <ReportsClient data={json.data?.recent_collections || []} />;
+  } catch (error) {
+    return <ReportsClient data={[]} />;
+  }
+}
+
+function TableSkeleton() {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 p-6 space-y-4">
+      {[...Array(5)].map((_, i) => (
+        <Skeleton key={i} className="h-10 w-full rounded-lg" />
+      ))}
+    </div>
+  );
+}
+
 export default async function ReportsPage() {
-  const { data, stats } = await getReportData();
+  const stats = await getStatsData();
 
   return (
     <div className="space-y-6">
@@ -113,7 +143,9 @@ export default async function ReportsPage() {
             Transaksi Terakhir
           </h3>
         </div>
-        <ReportsClient data={data} />
+        <Suspense fallback={<TableSkeleton />}>
+          <TransactionList />
+        </Suspense>
       </div>
     </div>
   );

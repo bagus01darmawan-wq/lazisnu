@@ -1,6 +1,4 @@
-// Tasks Screen - Mobile App
-
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, memo } from 'react';
 import {
   View,
   Text,
@@ -13,7 +11,77 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTasksStore } from '../stores';
-import { Task } from '../types';
+import { Task } from '@lazisnu/shared-types';
+import { Colors, Spacing, Typography, Shadows } from '../theme';
+
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+  }).format(amount);
+};
+
+const TaskItem = memo(({ item, onScan }: { item: Task; onScan: (task: Task) => void }) => (
+  <TouchableOpacity
+    style={styles.taskCard}
+    onPress={() => item.status === 'ACTIVE' && onScan(item)}
+    activeOpacity={0.7}
+  >
+    <View style={styles.taskHeader}>
+      <View
+        style={[
+          styles.statusBadge,
+          item.status === 'ACTIVE' ? styles.statusActive : styles.statusCompleted,
+        ]}
+      >
+        <Text
+          style={[
+            styles.statusText,
+            item.status === 'ACTIVE' ? styles.statusTextActive : styles.statusTextCompleted,
+          ]}
+        >
+          {item.status === 'ACTIVE' ? 'Pending' : 'Selesai'}
+        </Text>
+      </View>
+      <Text style={styles.taskDate}>{item.period}</Text>
+    </View>
+
+    <View style={styles.taskBody}>
+      <View style={styles.taskInfo}>
+        <View style={styles.qrContainer}>
+          <Icon name="qrcode" size={18} color={Colors.secondary.main} />
+          <Text style={styles.qrCode}>{item.qr_code}</Text>
+        </View>
+        <Text style={styles.ownerName}>{item.owner_name}</Text>
+        <Text style={styles.ownerAddress} numberOfLines={2}>
+          {item.owner_address}
+        </Text>
+      </View>
+
+      {item.last_collection && (
+        <View style={styles.lastCollection}>
+          <Text style={styles.lastCollectionLabel}>Penjemputan Terakhir</Text>
+          <Text style={styles.lastCollectionAmount}>
+            {formatCurrency(item.last_collection.nominal)}
+          </Text>
+        </View>
+      )}
+    </View>
+
+    {item.status === 'ACTIVE' && (
+      <View style={styles.taskFooter}>
+        <TouchableOpacity
+          style={styles.scanButton}
+          onPress={() => onScan(item)}
+        >
+          <Icon name="qrcode-scan" size={16} color={Colors.primary.contrast} />
+          <Text style={styles.scanButtonText}>Scan QR</Text>
+        </TouchableOpacity>
+      </View>
+    )}
+  </TouchableOpacity>
+));
 
 const TasksScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -22,83 +90,19 @@ const TasksScreen: React.FC = () => {
 
   useEffect(() => {
     fetchTasks(filter);
-  }, [filter]);
+  }, [filter, fetchTasks]);
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
+  const handleScan = useCallback((task: Task) => {
+    navigation.navigate('Scan', { task });
+  }, [navigation]);
 
-  const renderTaskItem = ({ item }: { item: Task }) => (
-    <TouchableOpacity
-      style={styles.taskCard}
-      onPress={() => {
-        if (item.status === 'ACTIVE') {
-          navigation.navigate('Scan', { task: item });
-        }
-      }}
-    >
-      <View style={styles.taskHeader}>
-        <View
-          style={[
-            styles.statusBadge,
-            item.status === 'ACTIVE' ? styles.statusActive : styles.statusCompleted,
-          ]}
-        >
-          <Text
-            style={[
-              styles.statusText,
-              item.status === 'ACTIVE' ? styles.statusTextActive : styles.statusTextCompleted,
-            ]}
-          >
-            {item.status === 'ACTIVE' ? 'Pending' : 'Selesai'}
-          </Text>
-        </View>
-        <Text style={styles.taskDate}>{item.period}</Text>
-      </View>
-
-      <View style={styles.taskBody}>
-        <View style={styles.taskInfo}>
-          <View style={styles.qrContainer}>
-            <Icon name="qrcode" size={20} color="#1E88E5" />
-            <Text style={styles.qrCode}>{item.qr_code}</Text>
-          </View>
-          <Text style={styles.ownerName}>{item.owner_name}</Text>
-          <Text style={styles.ownerAddress} numberOfLines={2}>
-            {item.owner_address}
-          </Text>
-        </View>
-
-        {item.last_collection && (
-          <View style={styles.lastCollection}>
-            <Text style={styles.lastCollectionLabel}>Penjemputan Terakhir</Text>
-            <Text style={styles.lastCollectionAmount}>
-              {formatCurrency(item.last_collection.nominal)}
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {item.status === 'ACTIVE' && (
-        <View style={styles.taskFooter}>
-          <TouchableOpacity
-            style={styles.scanButton}
-            onPress={() => navigation.navigate('Scan', { task: item })}
-          >
-            <Icon name="qrcode-scan" size={18} color="#fff" />
-            <Text style={styles.scanButtonText}>Scan QR</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
+  const renderTaskItem = useCallback(({ item }: { item: Task }) => (
+    <TaskItem item={item} onScan={handleScan} />
+  ), [handleScan]);
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
-      <Icon name="clipboard-check" size={64} color="#ddd" />
+      <Icon name="clipboard-check" size={64} color={Colors.slate[200]} />
       <Text style={styles.emptyTitle}>Tidak Ada Tugas</Text>
       <Text style={styles.emptyText}>
         {filter === 'ACTIVE'
@@ -110,7 +114,6 @@ const TasksScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      {/* Filter Tabs */}
       <View style={styles.filterContainer}>
         {(['ACTIVE', 'COMPLETED', 'ALL'] as const).map((f) => (
           <TouchableOpacity
@@ -125,7 +128,6 @@ const TasksScreen: React.FC = () => {
         ))}
       </View>
 
-      {/* Task List */}
       <FlatList
         data={tasks}
         renderItem={renderTaskItem}
@@ -133,19 +135,26 @@ const TasksScreen: React.FC = () => {
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={renderEmpty}
         refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={() => fetchTasks(filter)} />
+          <RefreshControl 
+            refreshing={isLoading && page === 1} 
+            onRefresh={() => fetchTasks(filter)}
+            colors={[Colors.primary.main]}
+          />
         }
         onEndReached={() => {
           if (!isLoading && page < totalPages) {
             loadMore();
           }
         }}
-        onEndReachedThreshold={0.3}
+        onEndReachedThreshold={0.5}
         ListFooterComponent={
-          isLoading && page < totalPages ? (
-            <ActivityIndicator style={styles.loadingFooter} color="#1E88E5" />
+          isLoading && page > 1 ? (
+            <ActivityIndicator style={styles.loadingFooter} color={Colors.primary.main} />
           ) : null
         }
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        windowSize={5}
       />
     </View>
   );
@@ -154,56 +163,52 @@ const TasksScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: Colors.background,
   },
   filterContainer: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    backgroundColor: Colors.card,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm + 4,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: Colors.slate[100],
   },
   filterTab: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     borderRadius: 20,
-    marginRight: 8,
-    backgroundColor: '#f5f5f5',
+    marginRight: Spacing.sm,
+    backgroundColor: Colors.slate[100],
   },
   filterTabActive: {
-    backgroundColor: '#1E88E5',
+    backgroundColor: Colors.primary.main,
   },
   filterText: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: Typography.body2.fontSize,
+    color: Colors.text.secondary,
     fontWeight: '500',
   },
   filterTextActive: {
-    color: '#fff',
+    color: Colors.text.white,
   },
   listContainer: {
-    padding: 16,
+    padding: Spacing.md,
     flexGrow: 1,
   },
   taskCard: {
-    backgroundColor: '#fff',
+    backgroundColor: Colors.card,
     borderRadius: 16,
-    marginBottom: 12,
+    marginBottom: Spacing.md,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    ...Shadows.soft,
   },
   taskHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: Colors.slate[50],
   },
   statusBadge: {
     paddingHorizontal: 10,
@@ -211,87 +216,88 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   statusActive: {
-    backgroundColor: '#fff3e0',
+    backgroundColor: '#FFFBEB', // Amber 50
   },
   statusCompleted: {
-    backgroundColor: '#e8f5e9',
+    backgroundColor: Colors.primary.light,
   },
   statusText: {
-    fontSize: 12,
+    fontSize: Typography.caption.fontSize,
     fontWeight: '600',
   },
   statusTextActive: {
-    color: '#FF9800',
+    color: Colors.status.warning,
   },
   statusTextCompleted: {
-    color: '#4CAF50',
+    color: Colors.status.success,
   },
   taskDate: {
-    fontSize: 12,
-    color: '#999',
+    fontSize: Typography.caption.fontSize,
+    color: Colors.text.muted,
   },
   taskBody: {
-    padding: 16,
+    padding: Spacing.md,
   },
   taskInfo: {
-    marginBottom: 12,
+    marginBottom: Spacing.sm,
   },
   qrContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: Spacing.xs,
   },
   qrCode: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1E88E5',
+    color: Colors.secondary.main,
     marginLeft: 8,
   },
   ownerName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: Typography.h3.fontSize,
+    fontWeight: '700',
+    color: Colors.text.primary,
     marginBottom: 4,
   },
   ownerAddress: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: Typography.body2.fontSize,
+    color: Colors.text.secondary,
     lineHeight: 20,
   },
   lastCollection: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: Colors.slate[50],
+    padding: Spacing.sm + 4,
+    borderRadius: 12,
+    marginTop: Spacing.sm,
   },
   lastCollectionLabel: {
-    fontSize: 12,
-    color: '#999',
+    fontSize: Typography.caption.fontSize,
+    color: Colors.text.muted,
   },
   lastCollectionAmount: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#4CAF50',
+    fontWeight: '700',
+    color: Colors.status.success,
   },
   taskFooter: {
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-    padding: 12,
+    borderTopColor: Colors.slate[50],
+    padding: Spacing.sm + 4,
   },
   scanButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1E88E5',
-    borderRadius: 8,
-    paddingVertical: 10,
+    backgroundColor: Colors.primary.main,
+    borderRadius: 12,
+    paddingVertical: 12,
   },
   scanButtonText: {
-    color: '#fff',
+    color: Colors.text.white,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     marginLeft: 8,
   },
   emptyContainer: {
@@ -301,15 +307,15 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: Typography.h3.fontSize,
+    fontWeight: '700',
+    color: Colors.text.primary,
     marginTop: 16,
     marginBottom: 8,
   },
   emptyText: {
-    fontSize: 14,
-    color: '#999',
+    fontSize: Typography.body2.fontSize,
+    color: Colors.text.muted,
     textAlign: 'center',
   },
   loadingFooter: {

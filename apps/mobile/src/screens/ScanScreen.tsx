@@ -8,11 +8,12 @@ import {
   TouchableOpacity,
   Alert,
   BackHandler,
+  Vibration,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { tasksService } from '../services/api';
-import { Task } from '../types';
+import { Task } from '@lazisnu/shared-types';
 
 const ScanScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -44,6 +45,7 @@ const ScanScreen: React.FC = () => {
       const result = await tasksService.getTaskByQR(qrCode);
 
       if (result.success && result.data) {
+        Vibration.vibrate(50); // Haptic feedback
         setScannedData(result.data as Task);
       } else {
         Alert.alert(
