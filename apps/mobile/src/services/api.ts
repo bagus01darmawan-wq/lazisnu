@@ -5,7 +5,7 @@ import { ApiResponse, Collection, Task } from '@lazisnu/shared-types';
 
 export const storage = new MMKV();
 
-const API_BASE_URL = 'http://10.0.2.2:3001/v1';
+const API_BASE_URL = 'https://fleet-lower-terminals-medicare.trycloudflare.com/v1';
 
 // ── Token Management (MMKV is synchronous) ──────────────────────────────────
 
@@ -201,7 +201,7 @@ export const authService = {
       await apiRequest('/auth/logout', {
         method: 'POST',
         body: JSON.stringify({ refresh_token: refreshToken }),
-      }).catch(() => {}); // Abaikan error jaringan saat logout
+      }).catch(() => { }); // Abaikan error jaringan saat logout
     }
     await clearToken();
   },

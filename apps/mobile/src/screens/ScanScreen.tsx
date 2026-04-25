@@ -9,21 +9,33 @@ import {
   Alert,
   BackHandler,
   Vibration,
+  ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { tasksService } from '../services/api';
 import { Task } from '@lazisnu/shared-types';
+import { useTasksStore } from '../stores/useTasksStore';
+
+import { Camera, CameraType } from 'react-native-camera-kit';
 
 const ScanScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const { tasks } = useTasksStore();
   const [scannedData, setScannedData] = useState<Task | null>(null);
   const [isScanning, setIsScanning] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [isManualInput, setIsManualInput] = useState(false);
+  const [manualCode, setManualCode] = useState('');
 
   // Prevent back navigation
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (isManualInput) {
+        setIsManualInput(false);
+        return true;
+      }
       if (!isScanning) {
         setIsScanning(true);
         setScannedData(null);
@@ -33,65 +45,67 @@ const ScanScreen: React.FC = () => {
     });
 
     return () => backHandler.remove();
-  }, [isScanning]);
+  }, [isScanning, isManualInput]);
 
   const handleQRCodeScanned = async (qrCode: string) => {
-    if (isLoading) return;
+    if (isLoading || !isScanning) return;
 
     setIsLoading(true);
-    setIsScanning(false);
+    // Don't set isScanning(false) yet, we only stop if success
 
     try {
       const result = await tasksService.getTaskByQR(qrCode);
 
       if (result.success && result.data) {
-        Vibration.vibrate(50); // Haptic feedback
+        // SUCCESS: Vibrate + Navigate
+        Vibration.vibrate(70); 
+        setIsScanning(false);
         setScannedData(result.data as Task);
+        // We go to result view first, then user clicks continue
       } else {
+        // FAILURE: Warning Vibrate + Stay on Scan
+        Vibration.vibrate([0, 100, 50, 100]); 
         Alert.alert(
           'QR Tidak Ditemukan',
-          result.error?.message || 'QR code tidak valid atau tidak terdaftar',
-          [
-            {
-              text: 'Scan Ulang',
-              onPress: () => {
-                setIsScanning(true);
-                setScannedData(null);
-              },
-            },
-          ]
+          'Kode QR tidak valid atau tanda tangan digital salah.',
+          [{ text: 'SCAN ULANG', onPress: () => setIsLoading(false) }]
         );
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Gagal memindai QR code', [
-        {
-          text: 'Scan Ulang',
-          onPress: () => {
-            setIsScanning(true);
-            setScannedData(null);
-          },
-        },
+      Vibration.vibrate([0, 100, 50, 100]);
+      Alert.alert('Error', 'Gagal memproses QR code. Coba lagi.', [
+        { text: 'SCAN ULANG', onPress: () => setIsLoading(false) }
       ]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Mock QR scanner - in production, use react-native-camera or ML Kit
+  const handleManualSubmit = () => {
+    if (!manualCode.trim()) return;
+    
+    const normalizedCode = manualCode.trim().toUpperCase();
+    const task = tasks.find(t => t.qr_code.toUpperCase() === normalizedCode);
+    
+    if (task) {
+      setIsManualInput(false);
+      setManualCode('');
+      Vibration.vibrate(70);
+      handleQRCodeScanned(task.qr_code);
+    } else {
+      Vibration.vibrate([0, 100, 50, 100]);
+      Alert.alert('Gagal', 'Kode QR tidak ditemukan di daftar tugas Anda.');
+    }
+  };
+
   const simulateScan = () => {
-    // Simulate scanning a random QR code for demo purposes
-    const mockQRCodes = [
-      'LZNU-KC01-00001',
-      'LZNU-KC01-00002',
-      'LZNU-KC01-00003',
-    ];
+    const mockQRCodes = ['PNG-01-001', 'PNG-01-002', 'INVALID-QR'];
     const randomQR = mockQRCodes[Math.floor(Math.random() * mockQRCodes.length)];
     handleQRCodeScanned(randomQR);
   };
 
   const handleContinue = () => {
     if (scannedData) {
-      // Navigate to collection screen with the scanned task data
       navigation.navigate('Collection', { task: scannedData });
     }
   };
@@ -105,41 +119,81 @@ const ScanScreen: React.FC = () => {
   if (isScanning) {
     return (
       <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Icon name="close" size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Scan QR Code</Text>
-          <View style={styles.placeholder} />
-        </View>
+        {/* Camera Component */}
+        <Camera
+          style={StyleSheet.absoluteFill}
+          cameraType={CameraType.Back}
+          scanBarcode={true}
+          onReadCode={(event: any) => handleQRCodeScanned(event.nativeEvent.codeStringValue)}
+          showFrame={false}
+        />
 
-        {/* Scanner Area */}
-        <View style={styles.scannerContainer}>
-          <View style={styles.scannerFrame}>
-            <View style={[styles.corner, styles.topLeft]} />
-            <View style={[styles.corner, styles.topRight]} />
-            <View style={[styles.corner, styles.bottomLeft]} />
-            <View style={[styles.corner, styles.bottomRight]} />
+        {/* Overlay UI */}
+        <View style={styles.overlay}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+              <Icon name="close" size={28} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Scan QR Code</Text>
+            <View style={styles.placeholder} />
           </View>
 
-          <Text style={styles.instructionText}>
-            Arahkan kamera ke QR code{'\n'}yang ada di kaleng kotak infaq
-          </Text>
+          <View style={styles.scannerContainer}>
+            <View style={styles.scannerFrame}>
+              <View style={[styles.corner, styles.topLeft]} />
+              <View style={[styles.corner, styles.topRight]} />
+              <View style={[styles.corner, styles.bottomLeft]} />
+              <View style={[styles.corner, styles.bottomRight]} />
+              {isLoading && <ActivityIndicator size="large" color="#10B981" />}
+            </View>
 
-          {/* Mock Scan Button - Remove in production */}
-          <TouchableOpacity style={styles.mockScanButton} onPress={simulateScan}>
-            <Icon name="camera" size={20} color="#fff" />
-            <Text style={styles.mockScanText}>Tap to Simulate Scan (Demo)</Text>
-          </TouchableOpacity>
+            <Text style={styles.instructionText}>
+              Arahkan kamera ke QR code{'\n'}yang ada di kaleng kotak infaq
+            </Text>
+
+            <TouchableOpacity 
+              style={styles.manualButton} 
+              onPress={() => setIsManualInput(true)}
+            >
+              <Icon name="keyboard-outline" size={20} color="#fff" />
+              <Text style={styles.manualButtonText}>Input Manual</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.mockScanButton} onPress={simulateScan}>
+              <Text style={styles.mockScanText}>Tap to Simulate Scan (Demo)</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Flashlight Button */}
-        <View style={styles.bottomControls}>
-          <TouchableOpacity style={styles.controlButton}>
-            <Icon name="flashlight" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
+        {/* Manual Input Modal Simulation */}
+        {isManualInput && (
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Input Manual Kode Kaleng</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Contoh: PNG-01-001"
+                value={manualCode}
+                onChangeText={setManualCode}
+                autoFocus
+              />
+              <View style={styles.modalButtons}>
+                <TouchableOpacity 
+                  style={styles.modalCancel} 
+                  onPress={() => setIsManualInput(false)}
+                >
+                  <Text style={styles.modalCancelText}>Batal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.modalSubmit} 
+                  onPress={handleManualSubmit}
+                >
+                  <Text style={styles.modalSubmitText}>Proses</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
       </View>
     );
   }
@@ -334,26 +388,105 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 8,
   },
   instructionText: {
-    marginTop: 30,
-    fontSize: 16,
+    marginTop: 20,
+    fontSize: 14,
     color: '#fff',
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 20,
+    opacity: 0.8,
   },
-  mockScanButton: {
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  manualButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E88E5',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 30,
-    marginTop: 40,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  manualButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  mockScanButton: {
+    backgroundColor: 'rgba(30,136,229,0.5)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginTop: 30,
   },
   mockScanText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 12,
+    opacity: 0.7,
+  },
+  modalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    width: '85%',
+    borderRadius: 20,
+    padding: 24,
+    elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  modalInput: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#333',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    marginBottom: 24,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalCancel: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: '#f5f5f5',
+  },
+  modalCancelText: {
+    color: '#666',
+    fontSize: 16,
     fontWeight: '600',
-    marginLeft: 8,
+  },
+  modalSubmit: {
+    flex: 2,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: '#10B981',
+  },
+  modalSubmitText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   bottomControls: {
     alignItems: 'center',

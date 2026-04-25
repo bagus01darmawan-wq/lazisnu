@@ -193,9 +193,9 @@ const LoginScreen: React.FC = () => {
                       style={styles.eyeButton}
                     >
                       <Icon
-                        name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                        name={showPassword ? 'eye-off' : 'eye'}
                         size={22}
-                        color="#9CA3AF"
+                        color="#4B5563"
                       />
                     </TouchableOpacity>
                   </View>

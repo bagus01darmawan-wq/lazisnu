@@ -7,12 +7,15 @@ import {
   StyleSheet,
   RefreshControl,
   ActivityIndicator,
+  Clipboard,
+  ToastAndroid,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTasksStore } from '../stores';
 import { Task } from '@lazisnu/shared-types';
 import { Colors, Spacing, Typography, Shadows } from '../theme';
+import Animated, { FadeInUp, Layout } from 'react-native-reanimated';
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('id-ID', {
@@ -22,71 +25,83 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
-const TaskItem = memo(({ item, onScan }: { item: Task; onScan: (task: Task) => void }) => (
-  <TouchableOpacity
-    style={styles.taskCard}
-    onPress={() => item.status === 'ACTIVE' && onScan(item)}
-    activeOpacity={0.7}
+const TaskItem = memo(({ item, index, onScan, onCopy }: { item: Task; index: number; onScan: (task: Task) => void; onCopy: (text: string) => void }) => (
+  <Animated.View 
+    entering={FadeInUp.delay(index * 50).duration(400)}
+    layout={Layout.springify()}
   >
-    <View style={styles.taskHeader}>
-      <View
-        style={[
-          styles.statusBadge,
-          item.status === 'ACTIVE' ? styles.statusActive : styles.statusCompleted,
-        ]}
-      >
-        <Text
+    <TouchableOpacity
+      style={styles.taskCard}
+      onPress={() => item.status === 'ACTIVE' && onScan(item)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.taskHeader}>
+        <View
           style={[
-            styles.statusText,
-            item.status === 'ACTIVE' ? styles.statusTextActive : styles.statusTextCompleted,
+            styles.statusBadge,
+            item.status === 'ACTIVE' ? styles.statusActive : styles.statusCompleted,
           ]}
         >
-          {item.status === 'ACTIVE' ? 'Pending' : 'Selesai'}
-        </Text>
-      </View>
-      <Text style={styles.taskDate}>{item.period}</Text>
-    </View>
-
-    <View style={styles.taskBody}>
-      <View style={styles.taskInfo}>
-        <View style={styles.qrContainer}>
-          <Icon name="qrcode" size={18} color={Colors.secondary.main} />
-          <Text style={styles.qrCode}>{item.qr_code}</Text>
-        </View>
-        <Text style={styles.ownerName}>{item.owner_name}</Text>
-        <Text style={styles.ownerAddress} numberOfLines={2}>
-          {item.owner_address}
-        </Text>
-      </View>
-
-      {item.last_collection && (
-        <View style={styles.lastCollection}>
-          <Text style={styles.lastCollectionLabel}>Penjemputan Terakhir</Text>
-          <Text style={styles.lastCollectionAmount}>
-            {formatCurrency(item.last_collection.nominal)}
+          <Text
+            style={[
+              styles.statusText,
+              item.status === 'ACTIVE' ? styles.statusTextActive : styles.statusTextCompleted,
+            ]}
+          >
+            {item.status === 'ACTIVE' ? 'Pending' : 'Selesai'}
           </Text>
         </View>
-      )}
-    </View>
-
-    {item.status === 'ACTIVE' && (
-      <View style={styles.taskFooter}>
-        <TouchableOpacity
-          style={styles.scanButton}
-          onPress={() => onScan(item)}
-        >
-          <Icon name="qrcode-scan" size={16} color={Colors.primary.contrast} />
-          <Text style={styles.scanButtonText}>Scan QR</Text>
-        </TouchableOpacity>
+        <Text style={styles.taskDate}>{item.period}</Text>
       </View>
-    )}
-  </TouchableOpacity>
+
+      <View style={styles.taskBody}>
+        <View style={styles.taskInfo}>
+          <Text style={styles.ownerName}>{item.owner_name}</Text>
+          <View style={styles.qrBadge}>
+            <Text style={styles.qrCode}>{item.qr_code}</Text>
+            <TouchableOpacity onPress={() => onCopy(item.qr_code)} style={styles.copyBtn}>
+              <Icon name="content-copy" size={14} color={Colors.secondary.main} />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.ownerAddress} numberOfLines={2}>
+            {item.owner_address}
+          </Text>
+        </View>
+
+        {item.last_collection && (
+          <View style={styles.lastCollection}>
+            <Text style={styles.lastCollectionLabel}>Penjemputan Terakhir</Text>
+            <Text style={styles.lastCollectionAmount}>
+              {formatCurrency(item.last_collection.nominal)}
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {item.status === 'ACTIVE' && (
+        <View style={styles.taskFooter}>
+          <TouchableOpacity
+            style={styles.scanButton}
+            onPress={() => onScan(item)}
+          >
+            <Icon name="qrcode-scan" size={16} color={Colors.primary.contrast} />
+            <Text style={styles.scanButtonText}>Scan QR</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </TouchableOpacity>
+  </Animated.View>
 ));
 
 const TasksScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { tasks, fetchTasks, loadMore, isLoading, page, totalPages } = useTasksStore();
   const [filter, setFilter] = useState<'ACTIVE' | 'COMPLETED' | 'ALL'>('ACTIVE');
+
+  const copyToClipboard = (text: string) => {
+    Clipboard.setString(text);
+    ToastAndroid.show('Kode disalin!', ToastAndroid.SHORT);
+  };
 
   useEffect(() => {
     fetchTasks(filter);
@@ -96,8 +111,8 @@ const TasksScreen: React.FC = () => {
     navigation.navigate('Scan', { task });
   }, [navigation]);
 
-  const renderTaskItem = useCallback(({ item }: { item: Task }) => (
-    <TaskItem item={item} onScan={handleScan} />
+  const renderTaskItem = useCallback(({ item, index }: { item: Task; index: number }) => (
+    <TaskItem item={item} index={index} onScan={handleScan} onCopy={copyToClipboard} />
   ), [handleScan]);
 
   const renderEmpty = () => (
@@ -241,16 +256,24 @@ const styles = StyleSheet.create({
   taskInfo: {
     marginBottom: Spacing.sm,
   },
-  qrContainer: {
+  qrBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: Spacing.xs,
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginBottom: Spacing.sm,
+    alignSelf: 'flex-start',
   },
   qrCode: {
     fontSize: 14,
     fontWeight: '600',
     color: Colors.secondary.main,
-    marginLeft: 8,
+  },
+  copyBtn: {
+    marginLeft: 6,
+    padding: 2,
   },
   ownerName: {
     fontSize: Typography.h3.fontSize,

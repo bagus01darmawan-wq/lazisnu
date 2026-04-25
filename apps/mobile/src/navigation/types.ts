@@ -8,6 +8,6 @@ export type MainTabParamList = {
   Dashboard: undefined;
   Tasks: undefined;
   Scan: undefined;
-  History: undefined;
+  Collection: undefined;
   Profile: undefined;
 };

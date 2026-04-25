@@ -16,7 +16,7 @@ import {
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useCollectionStore } from '../stores';
-import { Task } from '../types';
+import { Task } from '@lazisnu/shared-types';
 
 type CollectionRouteProp = RouteProp<{ Collection: { task: Task } }, 'Collection'>;
 

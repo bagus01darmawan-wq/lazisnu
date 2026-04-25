@@ -12,6 +12,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useCollectionsStore } from '../stores';
 import { Collection } from '@lazisnu/shared-types';
 import { Colors, Spacing, Typography, Shadows } from '../theme';
+import Animated, { FadeInUp, Layout } from 'react-native-reanimated';
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('id-ID', {
@@ -32,70 +33,75 @@ const formatDate = (dateStr: string) => {
   });
 };
 
-const CollectionItem = memo(({ item }: { item: Collection }) => {
+const CollectionItem = memo(({ item, index }: { item: Collection; index: number }) => {
   const getPaymentMethodIcon = (method: string) => {
     return method === 'CASH' ? 'cash' : 'bank-transfer';
   };
 
   return (
-    <View style={styles.collectionCard}>
-      <View style={styles.cardHeader}>
-        <View style={styles.dateContainer}>
-          <Icon name="calendar" size={14} color={Colors.text.muted} />
-          <Text style={styles.dateText}>{formatDate(item.collected_at)}</Text>
+    <Animated.View 
+      entering={FadeInUp.delay(index * 50).duration(400)}
+      layout={Layout.springify()}
+    >
+      <View style={styles.collectionCard}>
+        <View style={styles.cardHeader}>
+          <View style={styles.dateContainer}>
+            <Icon name="calendar" size={14} color={Colors.text.muted} />
+            <Text style={styles.dateText}>{formatDate(item.collected_at)}</Text>
+          </View>
+          <View style={styles.methodBadge}>
+            <Icon
+              name={getPaymentMethodIcon(item.payment_method)}
+              size={12}
+              color={Colors.secondary.main}
+            />
+            <Text style={styles.methodText}>
+              {item.payment_method === 'CASH' ? 'Tunai' : 'Transfer'}
+            </Text>
+          </View>
         </View>
-        <View style={styles.methodBadge}>
-          <Icon
-            name={getPaymentMethodIcon(item.payment_method)}
-            size={12}
-            color={Colors.secondary.main}
-          />
-          <Text style={styles.methodText}>
-            {item.payment_method === 'CASH' ? 'Tunai' : 'Transfer'}
+
+        <View style={styles.cardBody}>
+          <View style={styles.qrInfo}>
+            <Icon name="qrcode" size={18} color={Colors.secondary.main} />
+            <Text style={styles.qrCode}>{item.can?.qr_code || 'N/A'}</Text>
+          </View>
+          <Text style={styles.ownerName}>{item.can?.owner_name || 'Pemilik'}</Text>
+          <Text style={styles.ownerAddress} numberOfLines={1}>
+            {item.can?.owner_address || '-'}
           </Text>
         </View>
-      </View>
 
-      <View style={styles.cardBody}>
-        <View style={styles.qrInfo}>
-          <Icon name="qrcode" size={18} color={Colors.secondary.main} />
-          <Text style={styles.qrCode}>{item.can?.qr_code || 'N/A'}</Text>
+        <View style={styles.cardFooter}>
+          <View style={styles.amountContainer}>
+            <Text style={styles.amountLabel}>Nominal</Text>
+            <Text style={styles.amountValue}>{formatCurrency(item.nominal)}</Text>
+          </View>
+          <View style={styles.statusContainer}>
+            <Icon
+              name={item.whatsapp_sent ? 'check-circle' : 'clock-outline'}
+              size={14}
+              color={item.whatsapp_sent ? Colors.status.success : Colors.status.warning}
+            />
+            <Text
+              style={[
+                styles.statusText,
+                { color: item.whatsapp_sent ? Colors.status.success : Colors.status.warning },
+              ]}
+            >
+              {item.whatsapp_sent ? 'Notifikasi Terkirim' : 'Menunggu'}
+            </Text>
+          </View>
         </View>
-        <Text style={styles.ownerName}>{item.can?.owner_name || 'Pemilik'}</Text>
-        <Text style={styles.ownerAddress} numberOfLines={1}>
-          {item.can?.owner_address || '-'}
-        </Text>
-      </View>
 
-      <View style={styles.cardFooter}>
-        <View style={styles.amountContainer}>
-          <Text style={styles.amountLabel}>Nominal</Text>
-          <Text style={styles.amountValue}>{formatCurrency(item.nominal)}</Text>
-        </View>
-        <View style={styles.statusContainer}>
-          <Icon
-            name={item.whatsapp_sent ? 'check-circle' : 'clock-outline'}
-            size={14}
-            color={item.whatsapp_sent ? Colors.status.success : Colors.status.warning}
-          />
-          <Text
-            style={[
-              styles.statusText,
-              { color: item.whatsapp_sent ? Colors.status.success : Colors.status.warning },
-            ]}
-          >
-            {item.whatsapp_sent ? 'Notifikasi Terkirim' : 'Menunggu'}
-          </Text>
-        </View>
+        {item.notes && (
+          <View style={styles.notesContainer}>
+            <Icon name="note-text" size={14} color={Colors.text.muted} />
+            <Text style={styles.notesText}>{item.notes}</Text>
+          </View>
+        )}
       </View>
-
-      {item.notes && (
-        <View style={styles.notesContainer}>
-          <Icon name="note-text" size={14} color={Colors.text.muted} />
-          <Text style={styles.notesText}>{item.notes}</Text>
-        </View>
-      )}
-    </View>
+    </Animated.View>
   );
 });
 
@@ -114,8 +120,8 @@ const HistoryScreen: React.FC = () => {
     fetchCollections(filter);
   }, [filter, fetchCollections]);
 
-  const renderCollectionItem = useCallback(({ item }: { item: Collection }) => (
-    <CollectionItem item={item} />
+  const renderCollectionItem = useCallback(({ item, index }: { item: Collection; index: number }) => (
+    <CollectionItem item={item} index={index} />
   ), []);
 
   const renderEmpty = () => (

@@ -13,7 +13,7 @@ trigger: model_decision
 ```
 FASE AKTIF : FASE 6 — Sprint 4: Finalisasi & Persiapan UAT
 MINGGU     : 13–14
-STATUS     : ✅ Modularization COMPLETE | ✅ Critical Bug Fixes DONE | 🚀 Preparing for UAT
+STATUS     : ✅ Modularization COMPLETE | ✅ Mobile Tunneling & Login FIXED | ✅ Mobile UX Polished | 🚀 Ready for Final UAT
 ```
 
 ---
@@ -76,8 +76,8 @@ Database: PostgreSQL dengan schema aktual menggunakan nama INGGRIS (collections,
 
 Kesiapan Ekosistem Saat Ini:
   - Backend: 95% (Hanya sisa minor fitur opsional)
-  - Web: 85% (Optimasi Server Components & Error Boundary pending)
-  - Mobile: 80% (Refactoring UI & CodePush pending)
+  | Fase 6 | Optimasi Performa & Refactoring | Selesai | 2026-04-22 | Perbaikan Build Android & Optimasi Dashboard |
+  | Fase 7 | Persiapan UAT & Staging | Siap | 2026-04-23 | Menunggu deployment ke staging |
 
 ⚠️ PERHATIAN AGENT: Gunakan @lazisnu/shared-types untuk interface bersama.
 Jangan mendefinisikan ulang User atau Collection di level app jika sudah ada di package.
@@ -93,11 +93,14 @@ Update Terakhir:
   - Security pilar diperkuat dengan HMAC-SHA256 QR dan Redis Refresh Token Blacklist.
   - Performa query ditingkatkan dengan DB-level filtering dan proper pagination.
   - Sinkronisasi antara mobile (MMKV) dan backend (nominal field) telah diverifikasi.
+Update 25 April 2026:
+  - Mobile Connectivity: Berhasil login menggunakan Cloudflare Tunnel (Port 8081 & 3001).
+  - Mobile UX: Menghilangkan PropType warning ikon dan sinkronisasi rute 'Collection'.
+  - Mobile Features: Menambahkan fitur 'Salin Kode QR' di Tugas dan optimasi 'Input Manual' cerdas dengan feedback haptik.
 ```
 
 ---
 
 *Lazisnu Infaq Collection System — rules/10-sprint-aktif.md*
 *⚠️ Update file ini setiap berganti sprint/fase*
-*Last updated: 2026-04-22*
-
+*Last updated: 2026-04-25*

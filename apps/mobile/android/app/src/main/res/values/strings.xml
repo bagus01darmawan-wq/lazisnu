@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">LazisnuCollectorApp</string>
+    <string name="CodePushDeploymentKey">placeholder-key</string>
 </resources>

@@ -117,7 +117,7 @@ const DashboardScreen: React.FC = () => {
           style={styles.actionButton}
           onPress={() => navigation.navigate('Scan')}
         >
-          <View style={[styles.actionIcon, { backgroundColor: '#1E88E5' }]}>
+          <View style={[styles.actionIcon, { backgroundColor: '#10B981' }]}>
             <Icon name="qrcode-scan" size={32} color="#fff" />
           </View>
           <Text style={styles.actionText}>Scan QR</Text>
@@ -127,8 +127,8 @@ const DashboardScreen: React.FC = () => {
           style={styles.actionButton}
           onPress={() => navigation.navigate('Tasks')}
         >
-          <View style={[styles.actionIcon, { backgroundColor: '#FF9800' }]}>
-            <Icon name="clipboard-list" size={32} color="#fff" />
+          <View style={[styles.actionIcon, { backgroundColor: '#F59E0B' }]}>
+            <Icon name="clipboard-text-clock-outline" size={32} color="#fff" />
           </View>
           <Text style={styles.actionText}>Lihat Tugas</Text>
         </TouchableOpacity>
@@ -137,8 +137,8 @@ const DashboardScreen: React.FC = () => {
           style={styles.actionButton}
           onPress={() => navigation.navigate('History')}
         >
-          <View style={[styles.actionIcon, { backgroundColor: '#4CAF50' }]}>
-            <Icon name="history" size={32} color="#fff" />
+          <View style={[styles.actionIcon, { backgroundColor: '#3B82F6' }]}>
+            <Icon name="calendar-clock-outline" size={32} color="#fff" />
           </View>
           <Text style={styles.actionText}>Riwayat</Text>
         </TouchableOpacity>
@@ -272,6 +272,7 @@ const styles = StyleSheet.create({
     marginTop: -20,
     borderRadius: 16,
     padding: 20,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,

@@ -13,6 +13,12 @@ class MainActivity : ReactActivity() {
    */
   override fun getMainComponentName(): String = "LazisnuCollectorApp"
 
+  override fun onCreate(savedInstanceState: android.os.Bundle?) {
+    super.onCreate(null)
+    // Memastikan screenshot diperbolehkan
+    window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+  }
+
   /**
    * Returns the instance of the [ReactActivityDelegate]. We use [DefaultReactActivityDelegate]
    * which allows you to enable New Architecture with a single boolean flags [fabricEnabled]
