@@ -1,0 +1,23 @@
+<<<<<<< SEARCH
+import { requireRole } from '../../middleware/role-guard';
+import { UserRole } from '@lazisnu/shared-types';
+import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
+import { getWhatsAppQueue } from '../../services/whatsapp';
+
+export async function waRoutes(fastify: FastifyInstance) {
+  const adminOnly = requireRole(UserRole.ADMIN_KECAMATAN);
+
+  // GET /admin/wa/failed
+  fastify.get('/wa/failed', { preHandler: [adminOnly] }, async (request: FastifyRequest, reply: FastifyReply) => {
+=======
+import { authorize } from '../../middleware/auth';
+import { UserRole } from '@lazisnu/shared-types';
+import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
+import { getWhatsAppQueue } from '../../services/whatsapp';
+
+export async function waRoutes(fastify: FastifyInstance) {
+  const adminOnly = authorize('ADMIN_KECAMATAN');
+
+  // GET /admin/wa/failed
+  fastify.get('/wa/failed', { preHandler: [adminOnly] }, async (request: FastifyRequest, reply: FastifyReply) => {
+>>>>>>> REPLACE

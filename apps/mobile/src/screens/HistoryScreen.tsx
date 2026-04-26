@@ -7,12 +7,16 @@ import {
   StyleSheet,
   RefreshControl,
   ActivityIndicator,
+  Modal,
+  TextInput,
+  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useCollectionsStore } from '../stores';
 import { Collection } from '@lazisnu/shared-types';
 import { Colors, Spacing, Typography, Shadows } from '../theme';
 import Animated, { FadeInUp, Layout } from 'react-native-reanimated';
+import api from '../services/api';
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('id-ID', {
@@ -33,10 +37,21 @@ const formatDate = (dateStr: string) => {
   });
 };
 
-const CollectionItem = memo(({ item, index }: { item: Collection; index: number }) => {
+const CollectionItem = memo(({ 
+  item, 
+  index, 
+  onResubmit 
+}: { 
+  item: Collection; 
+  index: number;
+  onResubmit: (id: string, currentNominal: number, method: 'CASH' | 'TRANSFER') => void 
+}) => {
   const getPaymentMethodIcon = (method: string) => {
     return method === 'CASH' ? 'cash' : 'bank-transfer';
   };
+
+  // Asumsikan isLatest jika tidak ada prop isLatest atau prop isLatest true
+  const isLatest = (item as any).isLatest !== false;
 
   return (
     <Animated.View 
@@ -100,6 +115,16 @@ const CollectionItem = memo(({ item, index }: { item: Collection; index: number 
             <Text style={styles.notesText}>{item.notes}</Text>
           </View>
         )}
+
+        {isLatest && (
+          <TouchableOpacity 
+            style={styles.resubmitButton}
+            onPress={() => onResubmit(item.id, Number(item.nominal), item.payment_method)}
+          >
+            <Icon name="refresh" size={16} color={Colors.primary.main} />
+            <Text style={styles.resubmitButtonText}>Koreksi Data</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </Animated.View>
   );
@@ -115,14 +140,63 @@ const HistoryScreen: React.FC = () => {
     loadMore,
   } = useCollectionsStore();
   const [filter, setFilter] = useState<'ALL' | 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH'>('ALL');
+  
+  // Resubmit Modal State
+  const [resubmitModalVisible, setResubmitModalVisible] = useState(false);
+  const [selectedCol, setSelectedCol] = useState<{id: string, nominal: string, method: 'CASH' | 'TRANSFER'} | null>(null);
+  const [alasanResubmit, setAlasanResubmit] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     fetchCollections(filter);
   }, [filter, fetchCollections]);
 
+  const handleOpenResubmit = useCallback((id: string, currentNominal: number, method: 'CASH' | 'TRANSFER') => {
+    setSelectedCol({ id, nominal: currentNominal.toString(), method });
+    setAlasanResubmit('');
+    setResubmitModalVisible(true);
+  }, []);
+
+  const submitResubmit = async () => {
+    if (!selectedCol) return;
+    if (alasanResubmit.trim().length < 5) {
+      Alert.alert('Error', 'Alasan koreksi minimal 5 karakter');
+      return;
+    }
+    if (!selectedCol.nominal || isNaN(Number(selectedCol.nominal))) {
+      Alert.alert('Error', 'Nominal harus berupa angka');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await api.collection.resubmitCollection(selectedCol.id, {
+        nominal: Number(selectedCol.nominal),
+        payment_method: selectedCol.method,
+        alasan_resubmit: alasanResubmit.trim(),
+      });
+
+      if (response.success) {
+        Alert.alert('Berhasil', 'Data berhasil dikoreksi', [
+          { text: 'OK', onPress: () => {
+              setResubmitModalVisible(false);
+              fetchCollections(filter); // Refresh data
+            }
+          }
+        ]);
+      } else {
+        Alert.alert('Gagal', response.error?.message || 'Terjadi kesalahan');
+      }
+    } catch (error) {
+      Alert.alert('Gagal', 'Terjadi kesalahan sistem');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const renderCollectionItem = useCallback(({ item, index }: { item: Collection; index: number }) => (
-    <CollectionItem item={item} index={index} />
-  ), []);
+    <CollectionItem item={item} index={index} onResubmit={handleOpenResubmit} />
+  ), [handleOpenResubmit]);
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
@@ -208,6 +282,60 @@ const HistoryScreen: React.FC = () => {
         maxToRenderPerBatch={10}
         windowSize={5}
       />
+
+      {/* Resubmit Modal */}
+      <Modal
+        visible={resubmitModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setResubmitModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Koreksi Penjemputan</Text>
+            
+            <Text style={styles.inputLabel}>Nominal Baru</Text>
+            <TextInput
+              style={styles.textInput}
+              keyboardType="numeric"
+              value={selectedCol?.nominal}
+              onChangeText={(text) => setSelectedCol(prev => prev ? {...prev, nominal: text} : null)}
+              placeholder="Masukkan nominal"
+            />
+
+            <Text style={styles.inputLabel}>Alasan Koreksi</Text>
+            <TextInput
+              style={[styles.textInput, styles.textArea]}
+              multiline
+              numberOfLines={3}
+              value={alasanResubmit}
+              onChangeText={setAlasanResubmit}
+              placeholder="Contoh: Salah ketik nominal"
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setResubmitModalVisible(false)}
+                disabled={isSubmitting}
+              >
+                <Text style={styles.cancelButtonText}>Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.submitButton]}
+                onPress={submitResubmit}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator color={Colors.text.white} size="small" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Simpan Koreksi</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -400,6 +528,86 @@ const styles = StyleSheet.create({
   },
   loadingFooter: {
     paddingVertical: 20,
+  },
+  resubmitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.slate[100],
+    backgroundColor: Colors.slate[50],
+  },
+  resubmitButtonText: {
+    fontSize: Typography.body2.fontSize,
+    color: Colors.primary.main,
+    fontWeight: '600',
+    marginLeft: Spacing.xs,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    padding: Spacing.lg,
+    width: '85%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: Typography.h3.fontSize,
+    fontWeight: 'bold',
+    color: Colors.text.primary,
+    marginBottom: Spacing.md,
+    textAlign: 'center',
+  },
+  inputLabel: {
+    fontSize: Typography.body2.fontSize,
+    color: Colors.text.secondary,
+    marginBottom: Spacing.xs,
+    marginTop: Spacing.sm,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: Colors.slate[200],
+    borderRadius: 8,
+    padding: Spacing.sm,
+    fontSize: Typography.body1.fontSize,
+    color: Colors.text.primary,
+  },
+  textArea: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: Spacing.lg,
+  },
+  modalButton: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: 8,
+    marginLeft: Spacing.sm,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: Colors.slate[100],
+  },
+  cancelButtonText: {
+    color: Colors.text.secondary,
+    fontWeight: '600',
+  },
+  submitButton: {
+    backgroundColor: Colors.primary.main,
+  },
+  submitButtonText: {
+    color: Colors.text.white,
+    fontWeight: '600',
   },
 });
 

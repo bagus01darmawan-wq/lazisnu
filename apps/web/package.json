@@ -9,7 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@hookform/resolvers": "^5.2.2",
+    "@hookform/resolvers": "^3.9.0",
     "@lazisnu/shared-types": "file:../../packages/shared-types",
     "@sentry/nextjs": "^10.49.0",
     "@tanstack/react-table": "^8.21.3",
@@ -27,7 +27,6 @@
     "recharts": "^3.8.1",
     "swr": "^2.4.1",
     "tailwind-merge": "^3.5.0",
-    "zod": "^4.3.6",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
@@ -38,6 +37,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "zod": "^3.23.8"
   }
 }

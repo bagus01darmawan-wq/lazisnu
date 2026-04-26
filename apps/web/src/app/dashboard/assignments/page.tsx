@@ -52,7 +52,7 @@ export default function AssignmentsPage() {
   });
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<AssignmentFormValues>({
-    resolver: zodResolver(assignmentSchema),
+    resolver: zodResolver(assignmentSchema as any),
     defaultValues: {
       period_year: currentYear,
       period_month: currentMonth
@@ -64,7 +64,7 @@ export default function AssignmentsPage() {
     try {
       const response: any = await api.get('/admin/assignments', { params: filter });
       if (response.success) {
-        setData(response.data.assignments);
+        setData(response.data.items || []);
       }
     } catch (error) {
       console.error('Failed to fetch assignments:', error);
@@ -79,9 +79,9 @@ export default function AssignmentsPage() {
         api.get('/admin/cans', { params: { status: 'ACTIVE', limit: 300 } }),
         api.get('/admin/officers', { params: { limit: 300, is_active: true } })
       ]);
-      // The API now returns { success: true, data: { cans, pagination } }
-      if (cansRes.success) setCans(cansRes.data.cans || []);
-      if (officersRes.success) setOfficers(officersRes.data.officers || []);
+      // The API now returns { success: true, data: { items, pagination } }
+      if (cansRes.success) setCans(cansRes.data.items || []);
+      if (officersRes.success) setOfficers(officersRes.data.items || []);
     } catch (error: any) {
       console.error('Failed to fetch dropdown data:', error.response?.data || error.message || error);
     }

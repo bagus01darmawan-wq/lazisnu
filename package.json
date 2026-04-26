@@ -1,0 +1,18 @@
+{
+  "name": "lazisnu-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "scripts": {
+    "dev:backend": "pnpm --filter lazisnu-backend dev",
+    "dev:web": "pnpm --filter web dev",
+    "start:mobile": "pnpm --filter lazisnu-collector-app start",
+    "build:backend": "pnpm --filter lazisnu-backend build",
+    "build:web": "pnpm --filter web build",
+    "build:shared": "pnpm --filter @lazisnu/shared-types build",
+    "build:all": "pnpm build:shared && pnpm build:backend && pnpm build:web"
+  }
+}

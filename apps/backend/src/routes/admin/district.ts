@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { eq, and, gte } from 'drizzle-orm';
+import { eq, and, gte, desc } from 'drizzle-orm';
 import { authorize } from '../../middleware/auth';
 import { sendSuccess, sendInternalError } from '../../utils/response';
 
@@ -47,7 +47,7 @@ export async function districtRoutes(fastify: FastifyInstance) {
         }),
         db.select().from(schema.cans).innerJoin(schema.branches, eq(schema.cans.branchId, schema.branches.id))
           .where(eq(schema.branches.districtId, districtId)).then(r => r.length),
-        db.$count(schema.officers, and(eq(schema.officers.districtId, districtId), eq(schema.officers.isActive, true))),
+        db.$count(schema.officers, and(eq(schema.officers.districtId, districtId), eq(schema.officers.isActive, true))).then(c => Number(c)),
       ]);
 
       const branches = branchesList.map(b => ({ id: b.id, name: b.name, _count: { cans: b.cans.length, officers: b.officers.length } }));
@@ -60,6 +60,20 @@ export async function districtRoutes(fastify: FastifyInstance) {
         return acc;
       }, {});
 
+      // Fetch recent collections for the whole district
+      const recentCollections = await db.query.collections.findMany({
+        where: eq(schema.collections.syncStatus, 'COMPLETED'),
+        with: {
+          can: { 
+            columns: { qrCode: true, ownerName: true, branchId: true },
+            with: { branch: true }
+          },
+          officer: { columns: { fullName: true } },
+        },
+        orderBy: [desc(schema.collections.collectedAt)],
+        limit: 10,
+      }).then(cols => cols.filter(c => c.can.branch?.districtId === districtId));
+
       return sendSuccess(reply, {
         summary: {
           total_branches: branches.length,
@@ -68,6 +82,14 @@ export async function districtRoutes(fastify: FastifyInstance) {
           month_collection: monthCollections.reduce((s, c) => s + Number(c.nominal), 0),
           month_count: monthCollections.length,
         },
+        recent_collections: recentCollections.map((c) => ({
+          id: c.id,
+          qr_code: c.can.qrCode,
+          owner_name: c.can.ownerName,
+          nominal: Number(c.nominal),
+          officer_name: c.officer.fullName,
+          collected_at: c.collectedAt,
+        })),
         by_branch: branches.map((b) => ({
           branch_id: b.id,
           branch_name: b.name,

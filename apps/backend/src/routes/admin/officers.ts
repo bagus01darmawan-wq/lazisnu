@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { eq, and, desc, ilike, or } from 'drizzle-orm';
+import { eq, and, desc, ilike, or, sql } from 'drizzle-orm';
 import { authorize } from '../../middleware/auth';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { getPaginationParams, formatPaginatedResponse } from '../../utils/pagination';
@@ -57,36 +57,62 @@ export async function officersRoutes(fastify: FastifyInstance) {
       const branchRes = await db.query.branches.findFirst({ where: eq(schema.branches.id, targetBranchId) });
       if (!branchRes) return sendError(reply, 404, 'NOT_FOUND', 'Ranting tidak ditemukan');
 
-      const count = await db.$count(schema.officers, eq(schema.officers.branchId, targetBranchId));
-      const employeeCode = `${branchRes.code || 'XX'}-${String(count + 1).padStart(4, '0')}`;
+      if (user.role === 'ADMIN_KECAMATAN' && !user.districtId) {
+        return sendError(reply, 400, 'MISSING_DISTRICT', 'Data wilayah admin tidak ditemukan. Silakan coba login ulang.');
+      }
 
-      const insertedUser = await db.insert(schema.users).values({
-        email: `${body.phone}@petugas.lazisnu.id`,
-        passwordHash: '',
-        fullName: body.full_name,
-        phone: body.phone,
-        role: 'PETUGAS',
-        branchId: targetBranchId,
-        districtId: user.districtId,
-      }).returning();
-      const userRecord = insertedUser[0];
+      const { insertedOfficer } = await db.transaction(async (tx) => {
+        const countRes = await tx.select({ count: sql<number>`count(*)` }).from(schema.officers)
+          .where(eq(schema.officers.branchId, targetBranchId));
+        const count = Number(countRes[0].count);
+        const employeeCode = `${branchRes.code || 'XX'}-${String(count + 1).padStart(4, '0')}`;
 
-      const insertedOfficer = await db.insert(schema.officers).values({
-        userId: userRecord.id,
-        employeeCode,
-        fullName: body.full_name,
-        phone: body.phone,
-        photoUrl: body.photo_url,
-        districtId: user.districtId!,
-        branchId: targetBranchId,
-        assignedZone: body.assigned_zone,
-      }).returning();
+        const [userRecord] = await tx.insert(schema.users).values({
+          email: `${body.phone}@petugas.lazisnu.id`,
+          passwordHash: '',
+          fullName: body.full_name,
+          phone: body.phone,
+          role: 'PETUGAS',
+          branchId: targetBranchId,
+          districtId: user.districtId,
+        }).returning();
+
+        const [newOfficer] = await tx.insert(schema.officers).values({
+          userId: userRecord.id,
+          employeeCode,
+          fullName: body.full_name,
+          phone: body.phone,
+          photoUrl: body.photo_url,
+          districtId: user.districtId!,
+          branchId: targetBranchId,
+          assignedZone: body.assigned_zone,
+        }).returning();
+
+        return { insertedOfficer: newOfficer };
+      });
       
-      return sendSuccess(reply, insertedOfficer[0], 201);
+      return sendSuccess(reply, insertedOfficer, 201);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
         return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
       }
+      
+      // Handle Unique Constraint Violations (Postgres 23505)
+      if (error.code === '23505') {
+        const detail = error.detail || '';
+        let message = 'Data petugas sudah terdaftar';
+        
+        if (detail.includes('phone')) {
+          message = 'Nomor HP sudah terdaftar. Gunakan nomor lain.';
+        } else if (detail.includes('email')) {
+          message = 'Email (berdasarkan nomor HP) sudah terdaftar.';
+        } else if (detail.includes('employee_code')) {
+          message = 'Kode petugas sudah terdaftar. Silakan coba simpan kembali.';
+        }
+        
+        return sendError(reply, 400, 'DUPLICATE_ERROR', message);
+      }
+
       return sendInternalError(reply, error, fastify.log);
     }
   });

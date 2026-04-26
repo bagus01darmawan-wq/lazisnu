@@ -48,7 +48,7 @@ export default function CansPage() {
   const { user } = useAuthStore();
 
   const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<CanFormValues>({
-    resolver: zodResolver(canSchema),
+    resolver: zodResolver(canSchema as any),
   });
 
   const fetchBranches = async () => {
@@ -63,10 +63,12 @@ export default function CansPage() {
     try {
       const response: any = await api.get('/admin/cans', { params: { search } });
       if (response.success) {
-        setData(response.data.cans);
+        setData(response.data.items || []);
       }
     } catch (error: any) {
-      console.error('Failed to fetch cans:', error.response?.data || error.message || error);
+      console.error('Fetch Cans Error:', error);
+      const errorMessage = error?.error?.message || error?.message || 'Gagal mengambil data kaleng';
+      // alert(errorMessage); // Don't alert on background fetch to avoid annoying user, but log it properly
     } finally {
       setLoading(false);
     }
@@ -90,8 +92,9 @@ export default function CansPage() {
         fetchCans();
       }
     } catch (error: any) {
-      console.error('Failed to create can:', error.response?.data || error.message || error);
-      alert(error.response?.data?.error?.message || 'Gagal membuat kaleng');
+      console.error('Submit Error:', error);
+      const errorMessage = error?.error?.message || error?.message || 'Gagal membuat kaleng';
+      alert(errorMessage);
     } finally {
       setSubmitting(false);
     }

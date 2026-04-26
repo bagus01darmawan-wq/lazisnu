@@ -293,6 +293,16 @@ export const collectionService = {
     const query = queryParams.toString();
     return apiRequest(`/mobile/history${query ? `?${query}` : ''}`);
   },
+
+  resubmitCollection: async (
+    id: string,
+    data: { nominal: number; payment_method: 'CASH' | 'TRANSFER'; alasan_resubmit: string }
+  ) => {
+    return apiRequest(`/mobile/collections/${id}/resubmit`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
 };
 
 // ── Network Check ─────────────────────────────────────────────────────────────

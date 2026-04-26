@@ -36,7 +36,8 @@ export default function WAMonitorPage() {
       const response: any = await api.get('/admin/audit-logs', { params: { limit: 20 } });
       if (response.success) {
         // Transform audit logs into a notification-like view for demo
-        setData(response.data.logs.map((log: any) => ({
+        const items = response.data.items || response.data.logs || [];
+        setData(items.map((log: any) => ({
           id: log.id,
           recipient: log.user?.fullName || 'Donatur',
           message: `Notifikasi ${log.actionType} pada ${log.entityType}`,
@@ -162,6 +163,32 @@ export default function WAMonitorPage() {
            </div>
         </div>
         <Table columns={columns} data={data} loading={loading} />
+      </div>
+      
+      {/* Failed Jobs (DLQ) Management */}
+      <div className="bg-white p-4 rounded-2xl border border-red-100 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+           <h3 className="font-bold text-red-800 flex items-center gap-2">
+             <XCircle size={18} className="text-red-600" />
+             Failed Messages (DLQ)
+           </h3>
+           <Button variant="outline" onClick={async () => {
+              try {
+                const response: any = await api.post('/admin/wa/flush-failed');
+                if (response.success) {
+                  alert('Antrean berhasil dibersihkan');
+                  fetchWAStatus();
+                }
+              } catch (e) {
+                alert('Gagal membersihkan antrean');
+              }
+            }}>
+              Clear All Failed
+            </Button>
+        </div>
+        <div className="text-sm text-slate-500 mb-4">
+          Pesan yang gagal dikirim setelah beberapa kali percobaan akan masuk ke sini.
+        </div>
       </div>
     </div>
   );

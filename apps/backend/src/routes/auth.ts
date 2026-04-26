@@ -45,15 +45,13 @@ export async function authRoutes(fastify: FastifyInstance) {
     try {
       const body = loginSchema.parse(request.body);
 
-      // Find user by email or phone
-      const userRes = await db.select().from(users).where(
-        or(
+      // Find user by email or phone with proper field mapping
+      const user = await db.query.users.findFirst({
+        where: or(
           eq(users.email, body.identifier),
           eq(users.phone, body.identifier)
         )
-      ).limit(1);
-      const user = userRes[0];
-      
+      });
       let userOfficers: any[] = [];
       if (user) {
         userOfficers = await db.select().from(officers).where(eq(officers.userId, user.id));

@@ -1,0 +1,10 @@
+<<<<<<< SEARCH
+export async function sendBulkNotifications(
+=======
+export function getWhatsAppQueue() {
+  const { whatsappQueue } = require('./queues');
+  return whatsappQueue;
+}
+
+export async function sendBulkNotifications(
+>>>>>>> REPLACE

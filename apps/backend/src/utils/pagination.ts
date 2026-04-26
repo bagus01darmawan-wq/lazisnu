@@ -20,19 +20,15 @@ export function getPaginationParams(query: any): PaginationParams {
 /**
  * Format data into standard paginated response
  */
-export function formatPaginatedResponse<T>(
-  items: T[],
-  total: number,
-  page: number,
-  limit: number
-): PaginatedResponse<T> {
+export function formatPaginatedResponse<T>(items: T[], total: any, page: number, limit: number) {
+  const totalNum = Number(total);
   return {
     items,
     pagination: {
       page,
       limit,
-      total,
-      total_pages: Math.ceil(total / limit),
+      total: totalNum,
+      total_pages: Math.ceil(totalNum / limit),
     },
   };
 }

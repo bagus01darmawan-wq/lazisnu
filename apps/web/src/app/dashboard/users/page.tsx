@@ -31,7 +31,7 @@ const officerSchema = z.object({
   full_name: z.string().min(1, 'Nama lengkap wajib diisi'),
   phone: z.string().min(10, 'Nomor HP minimal 10 digit'),
   assigned_zone: z.string().optional(),
-  photo_url: z.string().url('URL foto tidak valid').optional().or(z.literal('')),
+  photo_url: z.preprocess((val) => (val === '' ? undefined : val), z.string().url('URL foto tidak valid').optional()),
   branch_id: z.string().min(1, 'Pilih ranting').optional(),
 });
 
@@ -47,7 +47,7 @@ export default function UsersPage() {
   const { user } = useAuthStore();
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<OfficerFormValues>({
-    resolver: zodResolver(officerSchema),
+    resolver: zodResolver(officerSchema as any),
   });
 
   const fetchBranches = async () => {
@@ -62,7 +62,7 @@ export default function UsersPage() {
     try {
       const response: any = await api.get('/admin/officers', { params: { search } });
       if (response.success) {
-        setData(response.data.officers);
+        setData(response.data.items || []);
       }
     } catch (error: any) {
       console.error('Failed to fetch officers:', error.response?.data || error.message || error);
@@ -82,19 +82,20 @@ export default function UsersPage() {
   const onSubmit = async (values: OfficerFormValues) => {
     setSubmitting(true);
     try {
-      // Clean up empty photo_url
       const submitData = { ...values };
       if (!submitData.photo_url) delete submitData.photo_url;
 
       const response: any = await api.post('/admin/officers', submitData);
-      if (response.success) {
+      
+      if (response && response.success) {
         reset();
         setIsModalOpen(false);
         fetchOfficers();
       }
     } catch (error: any) {
-      console.error('Failed to create officer:', error.response?.data || error.message || error);
-      alert(error.response?.data?.error?.message || 'Gagal membuat petugas');
+      console.error('Submit Error:', error);
+      const errorMessage = error?.error?.message || error?.message || 'Gagal membuat petugas';
+      alert(errorMessage);
     } finally {
       setSubmitting(false);
     }
@@ -206,7 +207,7 @@ export default function UsersPage() {
           </div>
           <div>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Petugas</p>
-            <p className="text-xl font-bold text-slate-900">{data.length}</p>
+            <p className="text-xl font-bold text-slate-900">{data?.length || 0}</p>
           </div>
         </div>
       </div>

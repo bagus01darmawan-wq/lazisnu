@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { eq, and, desc, ilike, or } from 'drizzle-orm';
+import { eq, and, desc, ilike, or, sql } from 'drizzle-orm';
 import { authorize } from '../../middleware/auth';
 import QRCode from 'qrcode';
 import { signQRCode } from '../../utils/qr';
@@ -36,10 +36,26 @@ export async function cansRoutes(fastify: FastifyInstance) {
         query.status === 'INACTIVE' ? eq(schema.cans.isActive, false) : undefined
       );
 
-      const [cans, total] = await Promise.all([
-        db.select().from(schema.cans).where(whereClause).limit(limit).offset(offset).orderBy(desc(schema.cans.createdAt)),
+      const [cansRaw, total] = await Promise.all([
+        db.query.cans.findMany({
+          where: whereClause,
+          limit,
+          offset,
+          orderBy: [desc(schema.cans.createdAt)],
+        }),
         db.$count(schema.cans, whereClause),
       ]);
+
+      // Aggressively convert any BigInt to Number for serialization
+      const cans = cansRaw.map(can => {
+        const formattedCan = { ...can };
+        for (const key in formattedCan) {
+          if (typeof (formattedCan as any)[key] === 'bigint') {
+            (formattedCan as any)[key] = Number((formattedCan as any)[key]);
+          }
+        }
+        return formattedCan;
+      });
 
       return sendSuccess(reply, formatPaginatedResponse(cans, total, page, limit));
     } catch (error) {
@@ -61,7 +77,13 @@ export async function cansRoutes(fastify: FastifyInstance) {
       if (!branch) return sendError(reply, 404, 'NOT_FOUND', 'Ranting tidak ditemukan');
 
       const regionCode = branch.code || 'XX';
-      const count = await db.$count(schema.cans, eq(schema.cans.branchId, targetBranchId));
+      
+      // Use stable count query instead of db.$count
+      const countRes = await db.select({ count: sql<number>`count(*)` })
+        .from(schema.cans)
+        .where(eq(schema.cans.branchId, targetBranchId));
+        
+      const count = Number(countRes[0]?.count || 0);
       const qrCode = `LZNU-${regionCode}-${String(count + 1).padStart(5, '0')}`;
 
       const inserted = await db.insert(schema.cans).values({
@@ -78,6 +100,7 @@ export async function cansRoutes(fastify: FastifyInstance) {
       
       return sendSuccess(reply, inserted[0], 201);
     } catch (error: any) {
+      fastify.log.error('Can creation error:', error);
       if (error instanceof z.ZodError) {
         return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
       }
