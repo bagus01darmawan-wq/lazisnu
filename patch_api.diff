@@ -1,0 +1,29 @@
+<<<<<<< SEARCH
+  getHistory: async (params?: { page?: number; limit?: number }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    const query = queryParams.toString();
+    return apiRequest(`/mobile/history${query ? `?${query}` : ''}`);
+  },
+};
+=======
+  getHistory: async (params?: { page?: number; limit?: number }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    const query = queryParams.toString();
+    return apiRequest(`/mobile/history${query ? `?${query}` : ''}`);
+  },
+
+  resubmitCollection: async (
+    id: string,
+    data: { nominal: number; payment_method: 'CASH' | 'TRANSFER'; alasan_resubmit: string }
+  ) => {
+    return apiRequest(`/mobile/collections/${id}/resubmit`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+};
+>>>>>>> REPLACE

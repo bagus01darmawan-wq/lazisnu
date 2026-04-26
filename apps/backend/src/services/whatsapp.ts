@@ -254,6 +254,11 @@ export async function sendTemplateMessage(
 /**
  * Send bulk WhatsApp notifications with rate limiting (1 per second)
  */
+export function getWhatsAppQueue() {
+  const { whatsappQueue } = require('./queues');
+  return whatsappQueue;
+}
+
 export async function sendBulkNotifications(
   messages: Array<{
     phone: string;

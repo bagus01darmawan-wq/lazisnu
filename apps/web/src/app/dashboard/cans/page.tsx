@@ -63,10 +63,11 @@ export default function CansPage() {
     try {
       const response: any = await api.get('/admin/cans', { params: { search } });
       if (response.success) {
-        setData(response.data.cans);
+        setData(response.data.items || []);
       }
     } catch (error: any) {
-      console.error('Failed to fetch cans:', error.response?.data || error.message || error);
+      console.error('Fetch Cans Error:', error);
+      const errorMessage = error?.error?.message || error?.message || 'Gagal mengambil data kaleng';
     } finally {
       setLoading(false);
     }

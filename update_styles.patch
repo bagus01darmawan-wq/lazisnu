@@ -1,0 +1,95 @@
+<<<<<<< SEARCH
+  loadingFooter: {
+    paddingVertical: 20,
+  },
+});
+
+export default HistoryScreen;
+=======
+  loadingFooter: {
+    paddingVertical: 20,
+  },
+  resubmitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.slate[100],
+    backgroundColor: Colors.slate[50],
+  },
+  resubmitButtonText: {
+    fontSize: Typography.body2.fontSize,
+    color: Colors.primary.main,
+    fontWeight: '600',
+    marginLeft: Spacing.xs,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    padding: Spacing.lg,
+    width: '85%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: Typography.h3.fontSize,
+    fontWeight: 'bold',
+    color: Colors.text.primary,
+    marginBottom: Spacing.md,
+    textAlign: 'center',
+  },
+  inputLabel: {
+    fontSize: Typography.body2.fontSize,
+    color: Colors.text.secondary,
+    marginBottom: Spacing.xs,
+    marginTop: Spacing.sm,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: Colors.slate[200],
+    borderRadius: 8,
+    padding: Spacing.sm,
+    fontSize: Typography.body1.fontSize,
+    color: Colors.text.primary,
+  },
+  textArea: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: Spacing.lg,
+  },
+  modalButton: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: 8,
+    marginLeft: Spacing.sm,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: Colors.slate[100],
+  },
+  cancelButtonText: {
+    color: Colors.text.secondary,
+    fontWeight: '600',
+  },
+  submitButton: {
+    backgroundColor: Colors.primary.main,
+  },
+  submitButtonText: {
+    color: Colors.text.white,
+    fontWeight: '600',
+  },
+});
+
+export default HistoryScreen;
+>>>>>>> REPLACE

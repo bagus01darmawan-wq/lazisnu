@@ -64,7 +64,7 @@ export default function AssignmentsPage() {
     try {
       const response: any = await api.get('/admin/assignments', { params: filter });
       if (response.success) {
-        setData(response.data.assignments);
+        setData(response.data.items || []);
       }
     } catch (error) {
       console.error('Failed to fetch assignments:', error);

@@ -35,6 +35,17 @@ export async function registerMonthlyAssignmentCron() {
     }
   );
   console.log('✅ [Scheduler] Monthly assignment cron job terdaftar: setiap tgl 1 pukul 00:05 WIB');
+
+  // Cleanup Redis DLQ cron (Setiap Senin pukul 02:00)
+  await schedulerQueue.upsertJobScheduler(
+    'weekly-cleanup-redis-dlq',
+    { pattern: '0 2 * * 1' },
+    {
+      name: 'cleanup-redis-dlq',
+      data: { triggeredBy: 'cron' },
+    }
+  );
+  console.log('✅ [Scheduler] Redis DLQ cleanup cron job terdaftar: setiap Senin pukul 02:00');
 }
 
 // ── Job Logic ──────────────────────────────────────────────────────────────────
@@ -148,6 +159,18 @@ export const schedulerWorker = new Worker(
       const result = await generateMonthlyAssignments(year, month);
       console.log(`[Scheduler] Selesai: ${result.created} dibuat, ${result.skipped} dilewati.`);
       return result;
+    } else if (job.name === 'cleanup-redis-dlq') {
+      try {
+        const { getWhatsAppQueue } = require('../services/whatsapp');
+        const queue = getWhatsAppQueue();
+        const gracePeriod = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
+        await queue.clean(gracePeriod, 1000, 'failed');
+        console.log(`[Scheduler] Selesai: Failed jobs older than 7 days cleaned up.`);
+        return { success: true };
+      } catch (e) {
+        console.error('Failed to cleanup Redis DLQ', e);
+        return { success: false };
+      }
     }
   },
   {

@@ -62,7 +62,7 @@ export default function UsersPage() {
     try {
       const response: any = await api.get('/admin/officers', { params: { search } });
       if (response.success) {
-        setData(response.data.officers);
+        setData(response.data.items || []);
       }
     } catch (error: any) {
       console.error('Failed to fetch officers:', error.response?.data || error.message || error);

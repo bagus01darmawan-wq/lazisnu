@@ -1,0 +1,30 @@
+<<<<<<< SEARCH
+  const fetchCans = async () => {
+    setLoading(true);
+    try {
+      const response: any = await api.get('/admin/cans', { params: { search } });
+      if (response.success) {
+        setData(response.data.cans);
+      }
+    } catch (error: any) {
+      console.error('Failed to fetch cans:', error.response?.data || error.message || error);
+    } finally {
+      setLoading(false);
+    }
+  };
+=======
+  const fetchCans = async () => {
+    setLoading(true);
+    try {
+      const response: any = await api.get('/admin/cans', { params: { search } });
+      if (response.success) {
+        setData(response.data.items || response.data.cans || []); // Fallback to items, as formatPaginatedResponse likely returns items
+      }
+    } catch (error: any) {
+      console.error('Fetch Cans Error:', error);
+      const errorMessage = error?.error?.message || error?.message || 'Gagal mengambil data kaleng';
+    } finally {
+      setLoading(false);
+    }
+  };
+>>>>>>> REPLACE

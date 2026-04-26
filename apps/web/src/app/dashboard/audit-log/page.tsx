@@ -34,7 +34,7 @@ export default function AuditLogPage() {
       setLoading(true);
       const response: any = await api.get('/admin/audit-logs');
       if (response.success) {
-        setLogs(response.data.logs);
+        setLogs(response.data.items || response.data.logs || []);
       }
     } catch (error) {
       console.error('Fetch logs error:', error);
