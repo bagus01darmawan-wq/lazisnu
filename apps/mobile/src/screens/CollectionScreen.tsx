@@ -26,7 +26,7 @@ const CollectionScreen: React.FC = () => {
   const { task } = route.params;
   const { submitCollection, isSubmitting, error, reset } = useCollectionStore();
 
-  const [amount, setAmount] = useState('');
+  const [nominal, setNominal] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'TRANSFER'>('CASH');
   const [notes, setNotes] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
@@ -37,15 +37,15 @@ const CollectionScreen: React.FC = () => {
     return new Intl.NumberFormat('id-ID').format(num);
   };
 
-  const handleAmountChange = (text: string) => {
+  const handleNominalChange = (text: string) => {
     const numeric = text.replace(/\D/g, '');
-    setAmount(numeric);
+    setNominal(numeric);
   };
 
   const handleSubmit = async () => {
-    const numericAmount = parseInt(amount.replace(/\D/g, ''), 10);
+    const numericNominal = parseInt(nominal.replace(/\D/g, ''), 10);
 
-    if (!numericAmount || numericAmount <= 0) {
+    if (!numericNominal || numericNominal <= 0) {
       Alert.alert('Error', 'Nominal harus diisi');
       return;
     }
@@ -55,7 +55,7 @@ const CollectionScreen: React.FC = () => {
     const result = await submitCollection({
       assignment_id: task.id,
       can_id: task.id,
-      nominal: numericAmount,
+      nominal: numericNominal,
       payment_method: paymentMethod,
       collected_at: new Date().toISOString(),
       offline_id: `local-${Date.now()}`,
@@ -74,7 +74,7 @@ const CollectionScreen: React.FC = () => {
   };
 
   const handleNewCollection = () => {
-    setAmount('');
+    setNominal('');
     setNotes('');
     setPaymentMethod('CASH');
     setShowSuccess(false);
@@ -107,8 +107,8 @@ const CollectionScreen: React.FC = () => {
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Nominal</Text>
-              <Text style={[styles.summaryValue, styles.amountValue]}>
-                {formatCurrency(amount)}
+              <Text style={[styles.summaryValue, styles.nominalValue]}>
+                {formatCurrency(nominal)}
               </Text>
             </View>
             <View style={styles.summaryRow}>
@@ -180,15 +180,15 @@ const CollectionScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Amount Input */}
-        <View style={styles.amountSection}>
+        {/* Nominal Input */}
+        <View style={styles.nominalSection}>
           <Text style={styles.label}>Nominal Penjemputan</Text>
-          <View style={styles.amountInputContainer}>
+          <View style={styles.nominalInputContainer}>
             <Text style={styles.currencyPrefix}>Rp</Text>
             <TextInput
-              style={styles.amountInput}
-              value={formatCurrency(amount)}
-              onChangeText={handleAmountChange}
+              style={styles.nominalInput}
+              value={formatCurrency(nominal)}
+              onChangeText={handleNominalChange}
               placeholder="0"
               placeholderTextColor="#999"
               keyboardType="numeric"
@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
     color: '#333',
     flex: 1,
   },
-  amountSection: {
+  nominalSection: {
     marginBottom: 20,
   },
   label: {
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 8,
   },
-  amountInputContainer: {
+  nominalInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1E88E5',
   },
-  amountInput: {
+  nominalInput: {
     flex: 1,
     fontSize: 32,
     fontWeight: 'bold',
@@ -500,7 +500,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
   },
-  amountValue: {
+  nominalValue: {
     color: '#4CAF50',
   },
   whatsappInfo: {

@@ -2,12 +2,17 @@ import { z } from 'zod';
 
 export const createCanSchema = z.object({
   owner_name: z.string().min(1).max(100),
-  owner_phone: z.string().min(10).max(20),
-  owner_address: z.string().min(1),
-  owner_whatsapp: z.string().optional(),
-  latitude: z.number().optional(),
-  longitude: z.number().optional(),
-  location_notes: z.string().optional(),
+  owner_whatsapp: z.string().min(10).max(20),
+  branch_id: z.preprocess((v) => v === '' ? undefined : v, z.string().uuid().optional().nullable()),
+  dukuh_id: z.preprocess((v) => v === '' ? undefined : v, z.string().uuid().optional().nullable()),
+  rt: z.string().max(10).optional().nullable(),
+  rw: z.string().max(10).optional().nullable(),
+  qr_code: z.string().optional().nullable(),
+  owner_phone: z.string().optional().nullable(),
+  owner_address: z.string().optional().nullable(),
+  latitude: z.number().optional().nullable(),
+  longitude: z.number().optional().nullable(),
+  location_notes: z.string().optional().nullable(),
 });
 
 export const updateCanSchema = createCanSchema.partial();

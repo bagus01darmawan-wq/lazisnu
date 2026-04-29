@@ -39,8 +39,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       } else {
         set({ error: result.error?.message || 'Gagal memuat dashboard', isLoading: false });
       }
-    } catch (error: any) {
-      set({ error: error.message || 'Terjadi kesalahan', isLoading: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Terjadi kesalahan';
+      set({ error: message, isLoading: false });
     }
   },
 

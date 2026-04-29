@@ -3,7 +3,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { eq, and, desc, asc, gte, lte, inArray } from 'drizzle-orm';
+import { eq, and, desc, asc, gte, lte, inArray, sql } from 'drizzle-orm';
 import { authenticate, authorize } from '../middleware/auth';
 
 export async function bendaharaRoutes(fastify: FastifyInstance) {
@@ -11,13 +11,25 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', authenticate);
   fastify.addHook('preHandler', authorize('BENDAHARA'));
 
+  // Deduplicate helper: only take the latest submitSequence per assignment
+  const deduplicate = <T extends { assignmentId: string; submitSequence: number }>(cols: T[]): T[] => {
+    const map = new Map<string, T>();
+    cols.forEach(c => {
+      const existing = map.get(c.assignmentId);
+      if (!existing || c.submitSequence > existing.submitSequence) {
+        map.set(c.assignmentId, c);
+      }
+    });
+    return Array.from(map.values());
+  };
+
   // GET /bendahara/dashboard
   fastify.get('/dashboard', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      const monthCollections = await db.query.collections.findMany({
+      const allCollections = await db.query.collections.findMany({
         where: and(gte(schema.collections.collectedAt, monthStart), eq(schema.collections.syncStatus, 'COMPLETED')),
         with: {
           can: {
@@ -27,7 +39,10 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
           },
           officer: { columns: { id: true, fullName: true } },
         },
+        orderBy: [desc(schema.collections.collectedAt), desc(schema.collections.submitSequence)],
       });
+
+      const monthCollections = deduplicate(allCollections);
 
       // Aggregate
       const byDistrict: Record<string, { name: string; total: number; count: number }> = {};
@@ -145,19 +160,18 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
 
       const whereClause = and(...conditions);
 
-      const [collections, total] = await Promise.all([
-        db.query.collections.findMany({
-          where: whereClause,
-          with: {
-            can: { with: { branch: { with: { district: true } } } },
-            officer: { columns: { fullName: true, employeeCode: true } },
-          },
-          orderBy: [desc(schema.collections.collectedAt)],
-          limit,
-          offset: skip,
-        }),
-        db.$count(schema.collections, whereClause),
-      ]);
+      const allCollections = await db.query.collections.findMany({
+        where: whereClause,
+        with: {
+          can: { with: { branch: { with: { district: true } } } },
+          officer: { columns: { fullName: true, employeeCode: true } },
+        },
+        orderBy: [desc(schema.collections.collectedAt), desc(schema.collections.submitSequence)],
+      });
+
+      const uniqueCollections = deduplicate(allCollections);
+      const total = uniqueCollections.length;
+      const collections = uniqueCollections.slice(skip, skip + limit);
 
       return reply.send({
         success: true,
@@ -266,13 +280,16 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
       const startDate = new Date(year, month - 1, 1);
       const endDate = new Date(year, month, 0, 23, 59, 59);
 
-      const collections = await db.query.collections.findMany({
+      const allCollections = await db.query.collections.findMany({
         where: and(gte(schema.collections.collectedAt, startDate), lte(schema.collections.collectedAt, endDate), eq(schema.collections.syncStatus, 'COMPLETED')),
         with: {
           can: { with: { branch: { with: { district: true } } } },
           officer: { columns: { id: true, fullName: true } },
         },
+        orderBy: [desc(schema.collections.collectedAt), desc(schema.collections.submitSequence)],
       });
+
+      const collections = deduplicate(allCollections);
 
       let totalAmount = 0, cashAmount = 0, transferAmount = 0;
       const byDistrict: Record<string, { name: string; amount: number }> = {};
@@ -362,14 +379,16 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const collections = await db.query.collections.findMany({
+      const allCollections = await db.query.collections.findMany({
         where: and(gte(schema.collections.collectedAt, new Date(query.start_date)), lte(schema.collections.collectedAt, new Date(query.end_date)), eq(schema.collections.syncStatus, 'COMPLETED')),
         with: {
           can: { with: { branch: { with: { district: true } } } },
           officer: { columns: { fullName: true, employeeCode: true } },
         },
-        orderBy: [asc(schema.collections.collectedAt)],
+        orderBy: [asc(schema.collections.collectedAt), desc(schema.collections.submitSequence)],
       });
+
+      const collections = deduplicate(allCollections);
 
       const headers = [
         'Tanggal',

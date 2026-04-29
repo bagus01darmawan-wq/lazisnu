@@ -88,35 +88,6 @@ const Table = <TData,>({ columns, data, className, loading }: TableProps<TData>)
         </table>
       </div>
 
-      {/* Pagination */}
-      <div className="flex items-center justify-between px-2 py-4">
-        <div className="text-xs text-gray-500">
-          Menampilkan {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} sampai{' '}
-          {Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, data.length)} dari{' '}
-          {data.length} hasil
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            <ChevronLeft size={16} />
-          </Button>
-          <div className="text-xs font-bold text-gray-600 px-2">
-            Halaman {table.getState().pagination.pageIndex + 1}
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            <ChevronRight size={16} />
-          </Button>
-        </div>
-      </div>
     </div>
   );
 };

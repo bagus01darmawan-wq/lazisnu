@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { collectionService } from '../services/api';
-import { collectionStorage, syncManager } from '../services/offlineStorage';
+import { offlineQueue } from '../services/offline/queue';
+import { syncService } from '../services/offline/sync';
+import NetInfo from '@react-native-community/netinfo';
 import { Platform } from 'react-native';
 import { Collection } from '@lazisnu/shared-types';
 
@@ -31,7 +33,8 @@ export const useCollectionStore = create<CollectionState>((set) => ({
   submitCollection: async (data) => {
     set({ isSubmitting: true, error: null });
     try {
-      await collectionStorage.save({
+      // 1. Simpan ke Queue lokal (MMKV)
+      offlineQueue.enqueue({
         ...data,
         device_info: {
           model: Platform.Version.toString(),
@@ -40,20 +43,19 @@ export const useCollectionStore = create<CollectionState>((set) => ({
         },
       });
 
-      const isOnline = await syncManager.isOnline();
+      // 2. Cek koneksi & trigger sync jika online
+      const netInfo = await NetInfo.fetch();
+      const isOnline = !!(netInfo.isConnected && netInfo.isInternetReachable);
 
       if (isOnline) {
-        const result = await syncManager.sync();
-        if (result.success > 0) {
-          set({ isSubmitting: false, lastSubmitted: data as unknown as Collection });
-          return true;
-        }
+        await syncService.autoSync();
       }
 
       set({ isSubmitting: false, lastSubmitted: data as unknown as Collection });
       return true;
-    } catch (error: any) {
-      set({ error: error.message || 'Gagal menyimpan data', isSubmitting: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Gagal menyimpan data';
+      set({ error: message, isSubmitting: false });
       return false;
     }
   },
@@ -153,7 +155,7 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
           isLoading: false 
         });
       }
-    } catch (error: any) {
+    } catch (error) {
       set({ 
         collections: mockCollections,
         isLoading: false 

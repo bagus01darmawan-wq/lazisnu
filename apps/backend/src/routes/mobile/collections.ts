@@ -100,21 +100,31 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
       const limit = parseInt(query.limit || '20');
       const skip = (page - 1) * limit;
 
-      const [collections, total] = await Promise.all([
+      const [allCollections, totalCount] = await Promise.all([
         db.query.collections.findMany({
           where: and(eq(schema.collections.officerId, officerId), eq(schema.collections.syncStatus, 'COMPLETED')),
           with: { can: { columns: { qrCode: true, ownerName: true, ownerAddress: true } } },
-          orderBy: [desc(schema.collections.collectedAt)],
-          offset: skip,
-          limit,
+          orderBy: [desc(schema.collections.collectedAt), desc(schema.collections.submitSequence)],
         }),
         db.$count(schema.collections, and(eq(schema.collections.officerId, officerId), eq(schema.collections.syncStatus, 'COMPLETED'))),
       ]);
 
+      // Deduplicate: only take the latest submitSequence per assignment
+      const map = new Map<string, any>();
+      allCollections.forEach(c => {
+        if (!map.has(c.assignmentId)) {
+          map.set(c.assignmentId, c);
+        }
+      });
+      const uniqueCollections = Array.from(map.values());
+
+      // Manual pagination after deduplication
+      const paginatedCollections = uniqueCollections.slice(skip, skip + limit);
+
       return reply.send({
         success: true,
         data: {
-          collections: collections.map((c) => ({
+          collections: paginatedCollections.map((c) => ({
             id: c.id,
             qr_code: c.can.qrCode,
             owner_name: c.can.ownerName,
@@ -124,7 +134,12 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
             collected_at: c.collectedAt,
             sync_status: c.syncStatus,
           })),
-          pagination: { page, limit, total, total_pages: Math.ceil(total / limit) },
+          pagination: { 
+            page, 
+            limit, 
+            total: uniqueCollections.length, 
+            total_pages: Math.ceil(uniqueCollections.length / limit) 
+          },
         },
       });
     } catch (error) {
@@ -148,10 +163,20 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
       });
 
       if (!oldCollection) return sendError(reply, 404, 'NOT_FOUND', 'Data koleksi tidak ditemukan');
-      if (!oldCollection.isLatest) return sendError(reply, 400, 'NOT_LATEST', 'Hanya record terbaru yang bisa di-resubmit');
+
+      // Check if this ID is indeed the latest version for this assignment
+      const latest = await db.query.collections.findFirst({
+        where: eq(schema.collections.assignmentId, oldCollection.assignmentId),
+        orderBy: [desc(schema.collections.submitSequence)]
+      });
+
+      if (latest?.id !== oldCollection.id) {
+        return sendError(reply, 400, 'NOT_LATEST', 'Hanya record terbaru yang bisa di-resubmit');
+      }
 
       const newCollection = await db.transaction(async (tx) => {
-        await tx.update(schema.collections).set({ isLatest: false, updatedAt: new Date() }).where(eq(schema.collections.id, id));
+        // NOTE: Table collections is STRICTLY IMMUTABLE. No UPDATE or DELETE allowed.
+        // We do NOT update the old record's isLatest flag.
 
         const inserted = await tx.insert(schema.collections).values({
           assignmentId: oldCollection.assignmentId,

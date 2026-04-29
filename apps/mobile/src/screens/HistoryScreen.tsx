@@ -18,12 +18,12 @@ import { Colors, Spacing, Typography, Shadows } from '../theme';
 import Animated, { FadeInUp, Layout } from 'react-native-reanimated';
 import api from '../services/api';
 
-const formatCurrency = (amount: number) => {
+const formatCurrency = (nominal: number) => {
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
     minimumFractionDigits: 0,
-  }).format(amount);
+  }).format(nominal);
 };
 
 const formatDate = (dateStr: string) => {
@@ -88,9 +88,9 @@ const CollectionItem = memo(({
         </View>
 
         <View style={styles.cardFooter}>
-          <View style={styles.amountContainer}>
-            <Text style={styles.amountLabel}>Nominal</Text>
-            <Text style={styles.amountValue}>{formatCurrency(item.nominal)}</Text>
+          <View style={styles.nominalContainer}>
+            <Text style={styles.nominalLabel}>Nominal</Text>
+            <Text style={styles.nominalValue}>{formatCurrency(item.nominal)}</Text>
           </View>
           <View style={styles.statusContainer}>
             <Icon
@@ -472,15 +472,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingBottom: Spacing.md,
   },
-  amountContainer: {},
-  amountLabel: {
+  nominalContainer: {},
+  nominalLabel: {
     fontSize: Typography.caption.fontSize - 2,
     color: Colors.text.muted,
     marginBottom: 2,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  amountValue: {
+  nominalValue: {
     fontSize: Typography.h3.fontSize,
     fontWeight: '800',
     color: Colors.status.success,

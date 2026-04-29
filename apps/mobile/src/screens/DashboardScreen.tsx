@@ -24,12 +24,12 @@ const DashboardScreen: React.FC = () => {
     checkStatus();
   }, []);
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (nominal: number) => {
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
-    }).format(amount);
+    }).format(nominal);
   };
 
   return (
@@ -74,7 +74,7 @@ const DashboardScreen: React.FC = () => {
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={styles.statValue}>
-              {formatCurrency(todayStats?.total_amount || 0)}
+              {formatCurrency(todayStats?.total_nominal || 0)}
             </Text>
             <Text style={styles.statLabel}>Total</Text>
           </View>
@@ -103,7 +103,7 @@ const DashboardScreen: React.FC = () => {
             <Icon name="cash" size={24} color="#4CAF50" />
             <View style={styles.weekStatContent}>
               <Text style={styles.weekStatValue}>
-                {formatCurrency(weekStats?.total_amount || 0)}
+                {formatCurrency(weekStats?.total_nominal || 0)}
               </Text>
               <Text style={styles.weekStatLabel}>Total</Text>
             </View>
@@ -197,7 +197,7 @@ const DashboardScreen: React.FC = () => {
                   {new Date(collection.collected_at).toLocaleDateString('id-ID')}
                 </Text>
               </View>
-              <Text style={styles.collectionAmount}>
+              <Text style={styles.collectionNominal}>
                 {formatCurrency(collection.nominal)}
               </Text>
             </View>
@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 2,
   },
-  collectionAmount: {
+  collectionNominal: {
     fontSize: 14,
     fontWeight: 'bold',
     color: '#4CAF50',

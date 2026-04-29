@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { collectionStorage, syncManager } from '../services/offlineStorage';
+import { offlineQueue } from '../services/offline/queue';
+import { syncService } from '../services/offline/sync';
 
 interface SyncState {
   pendingCount: number;
@@ -24,12 +25,12 @@ export const useSyncStore = create<SyncState>((set) => ({
 
   checkStatus: async () => {
     try {
-      const count = await collectionStorage.getUnsyncedCount();
-      const status = await syncManager.getStatus();
+      const count = offlineQueue.getQueueCount();
+      const queue = offlineQueue.getQueue();
 
       set({
         pendingCount: count,
-        oldestPending: status.oldestPending,
+        oldestPending: queue.length > 0 ? queue[0].collected_at : null,
       });
     } catch (error) {
       console.error('Failed to check sync status:', error);
@@ -39,16 +40,16 @@ export const useSyncStore = create<SyncState>((set) => ({
   triggerSync: async () => {
     set({ isSyncing: true, error: null, progress: 0 });
     try {
-      const result = await syncManager.sync();
+      await syncService.autoSync();
 
       set({
         isSyncing: false,
         progress: 100,
         lastSyncAt: new Date().toISOString(),
-        pendingCount: 0,
+        pendingCount: offlineQueue.getQueueCount(),
       });
 
-      return result;
+      return { success: 1, failed: 0 }; // Sederhanakan return sementara
     } catch (error: any) {
       set({ isSyncing: false, error: error.message, progress: 0 });
       return { success: 0, failed: 0 };

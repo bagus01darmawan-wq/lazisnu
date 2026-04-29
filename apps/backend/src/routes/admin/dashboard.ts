@@ -48,7 +48,22 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
           }).then(cols => cols.filter(c => c.can?.branchId === branchId)),
         ]);
 
-      const byOfficer = monthCollections.reduce(
+      // Deduplicate: only take the latest submitSequence per assignment
+      const deduplicate = (cols: any[]) => {
+        const map = new Map<string, any>();
+        cols.forEach(c => {
+          const existing = map.get(c.assignmentId);
+          if (!existing || c.submitSequence > existing.submitSequence) {
+            map.set(c.assignmentId, c);
+          }
+        });
+        return Array.from(map.values());
+      };
+
+      const latestMonthCollections = deduplicate(monthCollections);
+      const latestRecentCollections = deduplicate(recentCollections);
+
+      const byOfficer = latestMonthCollections.reduce(
         (acc: Record<string, any>, c) => {
           const key = c.officerId;
           if (!acc[key]) acc[key] = { name: c.officer.fullName, count: 0, nominal: 0 };
@@ -63,11 +78,11 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
         summary: {
           total_cans: canCount,
           total_officers: officerCount,
-          month_collection: monthCollections.reduce((s, c) => s + Number(c.nominal), 0),
-          month_count: monthCollections.length,
+          month_collection: latestMonthCollections.reduce((s, c) => s + Number(c.nominal), 0),
+          month_count: latestMonthCollections.length,
           pending_tasks: pendingCount,
         },
-        recent_collections: recentCollections.map((c) => ({
+        recent_collections: latestRecentCollections.map((c) => ({
           id: c.id,
           qr_code: c.can.qrCode,
           owner_name: c.can.ownerName,

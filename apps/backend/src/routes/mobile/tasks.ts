@@ -49,17 +49,33 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         }),
       ]);
 
+      // Deduplicate collections: only take the one with the highest submitSequence for each assignment
+      const getLatestOnly = (cols: any[]) => {
+        const map = new Map<string, any>();
+        cols.forEach(c => {
+          const existing = map.get(c.assignmentId);
+          if (!existing || c.submitSequence > existing.submitSequence) {
+            map.set(c.assignmentId, c);
+          }
+        });
+        return Array.from(map.values());
+      };
+
+      const latestToday = getLatestOnly(todayCollections);
+      const latestWeek = getLatestOnly(weekCollections);
+      const latestRecent = getLatestOnly(recentCollections);
+
       return reply.send({
         success: true,
         data: {
           today_stats: {
-            collected: todayCollections.length,
-            total_amount: todayCollections.reduce((sum, c) => sum + Number(c.nominal), 0),
+            collected: latestToday.length,
+            total_nominal: latestToday.reduce((sum, c) => sum + Number(c.nominal), 0),
             remaining: pendingAssignments.length,
           },
           week_stats: {
-            collected: weekCollections.length,
-            total_amount: weekCollections.reduce((sum, c) => sum + Number(c.nominal), 0),
+            collected: latestWeek.length,
+            total_nominal: latestWeek.reduce((sum, c) => sum + Number(c.nominal), 0),
           },
           pending_tasks: pendingAssignments.map((a) => ({
             id: a.id,
@@ -70,7 +86,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
             longitude: a.can.longitude,
             assigned_at: a.assignedAt,
           })),
-          recent_collections: recentCollections.map((c) => ({
+          recent_collections: latestRecent.map((c) => ({
             id: c.id,
             qr_code: c.can.qrCode,
             owner_name: c.can.ownerName,

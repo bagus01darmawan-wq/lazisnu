@@ -2,6 +2,23 @@ import { FastifyReply } from 'fastify';
 import { ApiResponse } from '@lazisnu/shared-types';
 
 /**
+ * Recursively convert BigInt to Number for JSON serialization
+ */
+function handleBigInt(obj: any): any {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj === 'bigint') return Number(obj);
+  if (Array.isArray(obj)) return obj.map(handleBigInt);
+  if (typeof obj === 'object') {
+    const newObj: any = {};
+    for (const key in obj) {
+      newObj[key] = handleBigInt(obj[key]);
+    }
+    return newObj;
+  }
+  return obj;
+}
+
+/**
  * Standardize success response
  */
 export function sendSuccess<T>(reply: FastifyReply, data?: T, statusCode = 200) {
@@ -10,7 +27,7 @@ export function sendSuccess<T>(reply: FastifyReply, data?: T, statusCode = 200) 
   };
   
   if (data !== undefined) {
-    response.data = data;
+    response.data = handleBigInt(data);
   }
 
   return reply.status(statusCode).send(response);
