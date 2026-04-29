@@ -25,12 +25,14 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
         }
 
         // Check if this is the latest one for the assignment
-        const latest = await tx.query.collections.findFirst({
-          where: eq(schema.collections.assignmentId, old.assignmentId),
-          orderBy: [desc(schema.collections.submitSequence)]
-        });
+        const [latestRecord] = await tx.select({ maxSeq: sql<number>`max(${schema.collections.submitSequence})` })
+          .from(schema.collections)
+          .where(and(
+            eq(schema.collections.assignmentId, old.assignmentId),
+            eq(schema.collections.canId, old.canId)
+          ));
 
-        if (latest?.id !== old.id) {
+        if (old.submitSequence !== Number(latestRecord?.maxSeq || 0)) {
           throw new Error('NOT_LATEST');
         }
 

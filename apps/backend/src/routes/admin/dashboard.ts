@@ -1,7 +1,8 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { eq, and, desc, gte } from 'drizzle-orm';
+import { eq, and, desc, gte, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { authorize } from '../../middleware/auth';
 import { sendSuccess, sendInternalError } from '../../utils/response';
 
@@ -13,6 +14,17 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
       const user = request.currentUser!;
       const branchId = user.branchId;
 
+      const c2 = alias(schema.collections, 'c2');
+      const latestCollectionCondition = eq(
+        schema.collections.submitSequence,
+        db.select({ maxSeq: sql<number>`max(${c2.submitSequence})` })
+          .from(c2)
+          .where(and(
+            eq(c2.assignmentId, schema.collections.assignmentId),
+            eq(c2.canId, schema.collections.canId)
+          ))
+      );
+
       if (!branchId) {
         return reply.status(403).send({
           success: false,
@@ -23,14 +35,15 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      const [canCount, officerCount, monthCollections, pendingCount, recentCollections] =
+      const [canCount, officerCount, latestMonthCollections, pendingCount, latestRecentCollections] =
         await Promise.all([
           db.$count(schema.cans, eq(schema.cans.branchId, branchId)),
           db.$count(schema.officers, and(eq(schema.officers.branchId, branchId), eq(schema.officers.isActive, true))),
           db.query.collections.findMany({
             where: and(
               gte(schema.collections.collectedAt, monthStart),
-              eq(schema.collections.syncStatus, 'COMPLETED')
+              eq(schema.collections.syncStatus, 'COMPLETED'),
+              latestCollectionCondition
             ),
             with: { officer: { columns: { id: true, fullName: true } }, can: true },
           }).then(cols => cols.filter(c => c.can?.branchId === branchId)),
@@ -38,7 +51,10 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
             eq(schema.assignments.status, 'ACTIVE')
           )),
           db.query.collections.findMany({
-            where: eq(schema.collections.syncStatus, 'COMPLETED'),
+            where: and(
+              eq(schema.collections.syncStatus, 'COMPLETED'),
+              latestCollectionCondition
+            ),
             with: {
               can: { columns: { qrCode: true, ownerName: true, branchId: true } },
               officer: { columns: { fullName: true } },
@@ -47,21 +63,6 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
             limit: 5,
           }).then(cols => cols.filter(c => c.can?.branchId === branchId)),
         ]);
-
-      // Deduplicate: only take the latest submitSequence per assignment
-      const deduplicate = (cols: any[]) => {
-        const map = new Map<string, any>();
-        cols.forEach(c => {
-          const existing = map.get(c.assignmentId);
-          if (!existing || c.submitSequence > existing.submitSequence) {
-            map.set(c.assignmentId, c);
-          }
-        });
-        return Array.from(map.values());
-      };
-
-      const latestMonthCollections = deduplicate(monthCollections);
-      const latestRecentCollections = deduplicate(recentCollections);
 
       const byOfficer = latestMonthCollections.reduce(
         (acc: Record<string, any>, c) => {

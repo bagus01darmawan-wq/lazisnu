@@ -2,12 +2,24 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import { sendWhatsAppNotification } from '../../services/whatsapp';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { collectionSchema, resubmitSchema } from './schemas';
 
 export async function collectionsRoutes(fastify: FastifyInstance) {
+  const c2 = alias(schema.collections, 'c2');
+  const latestCollectionCondition = eq(
+    schema.collections.submitSequence,
+    db.select({ maxSeq: sql<number>`max(${c2.submitSequence})` })
+      .from(c2)
+      .where(and(
+        eq(c2.assignmentId, schema.collections.assignmentId),
+        eq(c2.canId, schema.collections.canId)
+      ))
+  );
+
   // POST /mobile/collections
   fastify.post('/collections', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
@@ -100,31 +112,32 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
       const limit = parseInt(query.limit || '20');
       const skip = (page - 1) * limit;
 
-      const [allCollections, totalCount] = await Promise.all([
+      const [collections, total] = await Promise.all([
         db.query.collections.findMany({
-          where: and(eq(schema.collections.officerId, officerId), eq(schema.collections.syncStatus, 'COMPLETED')),
+          where: and(
+            eq(schema.collections.officerId, officerId),
+            eq(schema.collections.syncStatus, 'COMPLETED'),
+            latestCollectionCondition
+          ),
           with: { can: { columns: { qrCode: true, ownerName: true, ownerAddress: true } } },
-          orderBy: [desc(schema.collections.collectedAt), desc(schema.collections.submitSequence)],
+          orderBy: [desc(schema.collections.collectedAt)],
+          offset: skip,
+          limit,
         }),
-        db.$count(schema.collections, and(eq(schema.collections.officerId, officerId), eq(schema.collections.syncStatus, 'COMPLETED'))),
+        db.$count(
+          schema.collections,
+          and(
+            eq(schema.collections.officerId, officerId),
+            eq(schema.collections.syncStatus, 'COMPLETED'),
+            latestCollectionCondition
+          )
+        ),
       ]);
-
-      // Deduplicate: only take the latest submitSequence per assignment
-      const map = new Map<string, any>();
-      allCollections.forEach(c => {
-        if (!map.has(c.assignmentId)) {
-          map.set(c.assignmentId, c);
-        }
-      });
-      const uniqueCollections = Array.from(map.values());
-
-      // Manual pagination after deduplication
-      const paginatedCollections = uniqueCollections.slice(skip, skip + limit);
 
       return reply.send({
         success: true,
         data: {
-          collections: paginatedCollections.map((c) => ({
+          collections: collections.map((c) => ({
             id: c.id,
             qr_code: c.can.qrCode,
             owner_name: c.can.ownerName,
@@ -137,8 +150,8 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
           pagination: { 
             page, 
             limit, 
-            total: uniqueCollections.length, 
-            total_pages: Math.ceil(uniqueCollections.length / limit) 
+            total, 
+            total_pages: Math.ceil(total / limit) 
           },
         },
       });
@@ -165,12 +178,14 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
       if (!oldCollection) return sendError(reply, 404, 'NOT_FOUND', 'Data koleksi tidak ditemukan');
 
       // Check if this ID is indeed the latest version for this assignment
-      const latest = await db.query.collections.findFirst({
-        where: eq(schema.collections.assignmentId, oldCollection.assignmentId),
-        orderBy: [desc(schema.collections.submitSequence)]
-      });
+      const [latestRecord] = await db.select({ maxSeq: sql<number>`max(${schema.collections.submitSequence})` })
+        .from(schema.collections)
+        .where(and(
+          eq(schema.collections.assignmentId, oldCollection.assignmentId),
+          eq(schema.collections.canId, oldCollection.canId)
+        ));
 
-      if (latest?.id !== oldCollection.id) {
+      if (oldCollection.submitSequence !== Number(latestRecord?.maxSeq || 0)) {
         return sendError(reply, 400, 'NOT_LATEST', 'Hanya record terbaru yang bisa di-resubmit');
       }
 

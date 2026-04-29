@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { eq, and, asc, gte, lte, inArray, notInArray, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { config } from '../config/env';
 
 const generateTasksSchema = z.object({
@@ -23,6 +24,17 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
       });
     }
   });
+
+  const c2 = alias(schema.collections, 'c2');
+  const latestCollectionCondition = eq(
+    schema.collections.submitSequence,
+    db.select({ maxSeq: sql<number>`max(${c2.submitSequence})` })
+      .from(c2)
+      .where(and(
+        eq(c2.assignmentId, schema.collections.assignmentId),
+        eq(c2.canId, schema.collections.canId)
+      ))
+  );
 
   // POST /scheduler/generate-tasks
   // Generates monthly assignments for all active cans
@@ -123,7 +135,12 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
       const endDate = new Date(year, month, 0, 23, 59, 59);
 
       const collections = await db.query.collections.findMany({
-        where: and(gte(schema.collections.collectedAt, startDate), lte(schema.collections.collectedAt, endDate), eq(schema.collections.syncStatus, 'COMPLETED')),
+        where: and(
+          gte(schema.collections.collectedAt, startDate), 
+          lte(schema.collections.collectedAt, endDate), 
+          eq(schema.collections.syncStatus, 'COMPLETED'),
+          latestCollectionCondition
+        ),
         with: {
           can: { with: { branch: true } },
           officer: true,
@@ -234,7 +251,11 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
         db.$count(schema.officers, eq(schema.officers.isActive, true)),
         db.select({ count: sql<number>`count(*)`, total_nominal: sql<string>`sum(${schema.collections.nominal})` })
           .from(schema.collections)
-          .where(and(gte(schema.collections.collectedAt, monthStart), eq(schema.collections.syncStatus, 'COMPLETED'))),
+          .where(and(
+            gte(schema.collections.collectedAt, monthStart), 
+            eq(schema.collections.syncStatus, 'COMPLETED'),
+            latestCollectionCondition
+          )),
         db.$count(schema.collections, inArray(schema.collections.syncStatus, ['PENDING', 'FAILED'])),
       ]);
       const monthCollections = sumResultRows[0];

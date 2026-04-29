@@ -1,7 +1,8 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { eq, and, gte, desc } from 'drizzle-orm';
+import { eq, and, gte, desc, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { authorize } from '../../middleware/auth';
 import { sendSuccess, sendInternalError } from '../../utils/response';
 
@@ -30,26 +31,28 @@ export async function districtRoutes(fastify: FastifyInstance) {
         return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Bukan admin kecamatan' } });
       }
 
+      const c2 = alias(schema.collections, 'c2');
+      const latestCollectionCondition = eq(
+        schema.collections.submitSequence,
+        db.select({ maxSeq: sql<number>`max(${c2.submitSequence})` })
+          .from(c2)
+          .where(and(
+            eq(c2.assignmentId, schema.collections.assignmentId),
+            eq(c2.canId, schema.collections.canId)
+          ))
+      );
+
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      const monthCollectionsRows = await db.query.collections.findMany({
-        where: and(gte(schema.collections.collectedAt, monthStart), eq(schema.collections.syncStatus, 'COMPLETED')),
+      const monthCollections = await db.query.collections.findMany({
+        where: and(
+          gte(schema.collections.collectedAt, monthStart), 
+          eq(schema.collections.syncStatus, 'COMPLETED'),
+          latestCollectionCondition
+        ),
         with: { can: { with: { branch: true } }, officer: true }
-      });
-      
-      const deduplicate = (cols: any[]) => {
-        const map = new Map<string, any>();
-        cols.forEach(c => {
-          const existing = map.get(c.assignmentId);
-          if (!existing || c.submitSequence > existing.submitSequence) {
-            map.set(c.assignmentId, c);
-          }
-        });
-        return Array.from(map.values());
-      };
-
-      const monthCollections = deduplicate(monthCollectionsRows.filter(c => c.can.branch?.districtId === districtId));
+      }).then(rows => rows.filter(c => c.can.branch?.districtId === districtId));
 
       const [branchesList, totalCans, totalOfficers] = await Promise.all([
         db.query.branches.findMany({
@@ -72,8 +75,11 @@ export async function districtRoutes(fastify: FastifyInstance) {
       }, {});
 
       // Fetch recent collections for the whole district
-      const recentCollectionsRows = await db.query.collections.findMany({
-        where: eq(schema.collections.syncStatus, 'COMPLETED'),
+      const recentCollections = await db.query.collections.findMany({
+        where: and(
+          eq(schema.collections.syncStatus, 'COMPLETED'),
+          latestCollectionCondition
+        ),
         with: {
           can: { 
             columns: { qrCode: true, ownerName: true, branchId: true },
@@ -81,10 +87,8 @@ export async function districtRoutes(fastify: FastifyInstance) {
           },
           officer: { columns: { fullName: true } },
         },
-        orderBy: [desc(schema.collections.collectedAt), desc(schema.collections.submitSequence)],
-      });
-
-      const recentCollections = deduplicate(recentCollectionsRows.filter(c => c.can.branch?.districtId === districtId)).slice(0, 10);
+        orderBy: [desc(schema.collections.collectedAt)],
+      }).then(rows => rows.filter(c => c.can.branch?.districtId === districtId).slice(0, 10));
 
       return sendSuccess(reply, {
         summary: {

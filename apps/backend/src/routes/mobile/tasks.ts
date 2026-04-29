@@ -1,7 +1,8 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { eq, and, desc, asc, gte } from 'drizzle-orm';
+import { eq, and, desc, asc, gte, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { verifyQRCode } from '../../utils/qr';
 import { sendInternalError } from '../../utils/response';
 
@@ -19,17 +20,38 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         });
       }
 
+      const c2 = alias(schema.collections, 'c2');
+      const latestCollectionCondition = eq(
+        schema.collections.submitSequence,
+        db.select({ maxSeq: sql<number>`max(${c2.submitSequence})` })
+          .from(c2)
+          .where(and(
+            eq(c2.assignmentId, schema.collections.assignmentId),
+            eq(c2.canId, schema.collections.canId)
+          ))
+      );
+
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const weekStart = new Date(today);
       weekStart.setDate(weekStart.getDate() - weekStart.getDay());
 
-      const [todayCollections, weekCollections, pendingAssignments, recentCollections] = await Promise.all([
+      const [latestToday, latestWeek, pendingAssignments, latestRecent] = await Promise.all([
         db.query.collections.findMany({
-          where: and(eq(schema.collections.officerId, officerId), gte(schema.collections.collectedAt, today), eq(schema.collections.syncStatus, 'COMPLETED')),
+          where: and(
+            eq(schema.collections.officerId, officerId), 
+            gte(schema.collections.collectedAt, today), 
+            eq(schema.collections.syncStatus, 'COMPLETED'),
+            latestCollectionCondition
+          ),
         }),
         db.query.collections.findMany({
-          where: and(eq(schema.collections.officerId, officerId), gte(schema.collections.collectedAt, weekStart), eq(schema.collections.syncStatus, 'COMPLETED')),
+          where: and(
+            eq(schema.collections.officerId, officerId), 
+            gte(schema.collections.collectedAt, weekStart), 
+            eq(schema.collections.syncStatus, 'COMPLETED'),
+            latestCollectionCondition
+          ),
         }),
         db.query.assignments.findMany({
           where: and(eq(schema.assignments.officerId, officerId), eq(schema.assignments.status, 'ACTIVE')),
@@ -42,28 +64,16 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           orderBy: [asc(schema.assignments.assignedAt)],
         }),
         db.query.collections.findMany({
-          where: and(eq(schema.collections.officerId, officerId), eq(schema.collections.syncStatus, 'COMPLETED')),
+          where: and(
+            eq(schema.collections.officerId, officerId), 
+            eq(schema.collections.syncStatus, 'COMPLETED'),
+            latestCollectionCondition
+          ),
           with: { can: { columns: { qrCode: true, ownerName: true } } },
           orderBy: [desc(schema.collections.collectedAt)],
           limit: 5,
         }),
       ]);
-
-      // Deduplicate collections: only take the one with the highest submitSequence for each assignment
-      const getLatestOnly = (cols: any[]) => {
-        const map = new Map<string, any>();
-        cols.forEach(c => {
-          const existing = map.get(c.assignmentId);
-          if (!existing || c.submitSequence > existing.submitSequence) {
-            map.set(c.assignmentId, c);
-          }
-        });
-        return Array.from(map.values());
-      };
-
-      const latestToday = getLatestOnly(todayCollections);
-      const latestWeek = getLatestOnly(weekCollections);
-      const latestRecent = getLatestOnly(recentCollections);
 
       return reply.send({
         success: true,

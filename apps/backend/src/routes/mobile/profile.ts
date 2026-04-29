@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
 import { eq, and, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 
 export async function profileRoutes(fastify: FastifyInstance) {
@@ -13,6 +14,17 @@ export async function profileRoutes(fastify: FastifyInstance) {
 
       if (!officerId) return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
 
+      const c2 = alias(schema.collections, 'c2');
+      const latestCollectionCondition = eq(
+        schema.collections.submitSequence,
+        db.select({ maxSeq: sql<number>`max(${c2.submitSequence})` })
+          .from(c2)
+          .where(and(
+            eq(c2.assignmentId, schema.collections.assignmentId),
+            eq(c2.canId, schema.collections.canId)
+          ))
+      );
+
       const [officer, totalCollections, sumResult] = await Promise.all([
         db.query.officers.findFirst({
           where: eq(schema.officers.id, officerId),
@@ -21,9 +33,9 @@ export async function profileRoutes(fastify: FastifyInstance) {
             district: { columns: { id: true, name: true } },
           },
         }),
-        db.$count(schema.collections, and(eq(schema.collections.officerId, officerId), eq(schema.collections.syncStatus, 'COMPLETED'))),
+        db.$count(schema.collections, and(eq(schema.collections.officerId, officerId), eq(schema.collections.syncStatus, 'COMPLETED'), latestCollectionCondition)),
         db.select({ total: sql<string>`sum(${schema.collections.nominal})` }).from(schema.collections)
-          .where(and(eq(schema.collections.officerId, officerId), eq(schema.collections.syncStatus, 'COMPLETED')))
+          .where(and(eq(schema.collections.officerId, officerId), eq(schema.collections.syncStatus, 'COMPLETED'), latestCollectionCondition))
       ]);
       const totalAmount = Number(sumResult[0]?.total || 0);
 
