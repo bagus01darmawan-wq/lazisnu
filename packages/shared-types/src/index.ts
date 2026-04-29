@@ -135,13 +135,13 @@ export interface Task {
 // Dashboard Stats
 export interface TodayStats {
   collected: number;
-  total_amount: number;
+  total_nominal: number;
   remaining: number;
 }
 
 export interface WeekStats {
   collected: number;
-  total_amount: number;
+  total_nominal: number;
 }
 
 // API Response Types

@@ -35,13 +35,13 @@ const mockData = [
 ];
 
 const mockTrends = [
-  { day: 'Sen', amount: 1200000 },
-  { day: 'Sel', amount: 1500000 },
-  { day: 'Rab', amount: 1100000 },
-  { day: 'Kam', amount: 2100000 },
-  { day: 'Jum', amount: 1800000 },
-  { day: 'Sab', amount: 2500000 },
-  { day: 'Min', amount: 2200000 },
+  { day: 'Sen', nominal: 1200000 },
+  { day: 'Sel', nominal: 1500000 },
+  { day: 'Rab', nominal: 1100000 },
+  { day: 'Kam', nominal: 2100000 },
+  { day: 'Jum', nominal: 1800000 },
+  { day: 'Sab', nominal: 2500000 },
+  { day: 'Min', nominal: 2200000 },
 ];
 
 export default function OverviewPage() {
@@ -206,9 +206,9 @@ export default function OverviewPage() {
         <Card title="Tren Infaq Harian (Minggu Ini)" className="h-[450px] flex flex-col">
           <div className="flex-1 w-full mt-4">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={mockTrends}>
+            <AreaChart data={mockTrends}>
                 <defs>
-                  <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="colorNominal" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#16a34a" stopOpacity={0.1}/>
                     <stop offset="95%" stopColor="#16a34a" stopOpacity={0}/>
                   </linearGradient>
@@ -236,11 +236,11 @@ export default function OverviewPage() {
                 />
                 <Area 
                   type="monotone" 
-                  dataKey="amount" 
+                  dataKey="nominal" 
                   stroke="#16a34a" 
                   strokeWidth={4}
                   fillOpacity={1} 
-                  fill="url(#colorAmount)" 
+                  fill="url(#colorNominal)" 
                 />
               </AreaChart>
             </ResponsiveContainer>

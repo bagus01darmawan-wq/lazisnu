@@ -59,15 +59,28 @@ export const officers = pgTable('officers', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+// Dukuhs (Wilayah di bawah Ranting)
+export const dukuhs = pgTable('dukuhs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  branchId: uuid('branch_id').references(() => branches.id, { onDelete: 'cascade' }).notNull(),
+  name: varchar('name', { length: 100 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 // Cans
 export const cans = pgTable('cans', {
   id: uuid('id').primaryKey().defaultRandom(),
-  qrCode: varchar('qr_code', { length: 50 }).unique().notNull(),
+  qrCode: varchar('qr_code', { length: 50 }).unique(), // Made nullable as requested
   branchId: uuid('branch_id').references(() => branches.id).notNull(),
+  dukuhId: uuid('dukuh_id').references(() => dukuhs.id),
   ownerName: varchar('owner_name', { length: 100 }).notNull(),
-  ownerPhone: varchar('owner_phone', { length: 20 }).notNull(),
-  ownerAddress: text('owner_address').notNull(),
-  ownerWhatsapp: varchar('owner_whatsapp', { length: 20 }),
+  ownerPhone: varchar('owner_phone', { length: 20 }),
+  ownerAddress: text('owner_address'),
+  dukuh: varchar('dukuh', { length: 100 }),
+  rt: varchar('rt', { length: 10 }),
+  rw: varchar('rw', { length: 10 }),
+  ownerWhatsapp: varchar('owner_whatsapp', { length: 20 }).notNull(),
   latitude: decimal('latitude', { precision: 10, scale: 8 }),
   longitude: decimal('longitude', { precision: 11, scale: 8 }),
   locationNotes: text('location_notes'),
@@ -219,8 +232,14 @@ export const officersRelations = relations(officers, ({ one, many }) => ({
 
 export const cansRelations = relations(cans, ({ one, many }) => ({
   branch: one(branches, { fields: [cans.branchId], references: [branches.id] }),
+  dukuhDetails: one(dukuhs, { fields: [cans.dukuhId], references: [dukuhs.id] }),
   assignments: many(assignments),
   collections: many(collections),
+}));
+
+export const dukuhsRelations = relations(dukuhs, ({ one, many }) => ({
+  branch: one(branches, { fields: [dukuhs.branchId], references: [branches.id] }),
+  cans: many(cans),
 }));
 
 export const assignmentsRelations = relations(assignments, ({ one, many }) => ({

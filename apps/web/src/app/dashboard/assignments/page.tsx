@@ -1,4 +1,5 @@
 'use client';
+// Force rebuild - updating auth store import
 
 import React, { useState, useEffect } from 'react';
 import { Table } from '@/components/ui/Table';
@@ -16,32 +17,41 @@ import {
   Box, 
   ChevronRight,
   MoreVertical,
+  Search,
+  Filter,
   CheckCircle2,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  Repeat,
+  Trash2
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useAuthStore } from '@/store/useAuthStore';
 import * as z from 'zod';
 
 const assignmentSchema = z.object({
-  can_id: z.string().uuid('Pilih kaleng'),
+  branch_id: z.string().uuid('Pilih ranting'),
   officer_id: z.string().uuid('Pilih petugas'),
-  backup_officer_id: z.string().uuid().optional().or(z.literal('')),
-  period_year: z.number().min(2020),
-  period_month: z.number().min(1).max(12),
+  dukuh_ids: z.array(z.string().uuid()).min(1, 'Pilih minimal satu dukuh'),
 });
 
 type AssignmentFormValues = z.infer<typeof assignmentSchema>;
 
 export default function AssignmentsPage() {
+  const { user } = useAuthStore();
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [transferringAssignment, setTransferringAssignment] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
   
   const [cans, setCans] = useState([]);
   const [officers, setOfficers] = useState([]);
+  const [branches, setBranches] = useState([]);
+  const [modalDukuhs, setModalDukuhs] = useState<any[]>([]);
+  const [fetchingDukuhs, setFetchingDukuhs] = useState(false);
 
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
@@ -50,21 +60,36 @@ export default function AssignmentsPage() {
     year: currentYear,
     month: currentMonth
   });
+  const [search, setSearch] = useState('');
+  const [branchFilter, setBranchFilter] = useState('');
+  const [totalItems, setTotalItems] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<AssignmentFormValues>({
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<AssignmentFormValues>({
     resolver: zodResolver(assignmentSchema as any),
     defaultValues: {
-      period_year: currentYear,
-      period_month: currentMonth
+      dukuh_ids: []
     }
   });
+
+  const selectedBranchId = watch('branch_id');
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const response: any = await api.get('/admin/assignments', { params: filter });
+      const response: any = await api.get('/admin/assignments', { 
+        params: { 
+          ...filter,
+          search,
+          branch_id: branchFilter,
+          page: currentPage,
+          limit: pageSize
+        } 
+      });
       if (response.success) {
         setData(response.data.items || []);
+        setTotalItems(response.data.pagination?.total || 0);
       }
     } catch (error) {
       console.error('Failed to fetch assignments:', error);
@@ -75,43 +100,120 @@ export default function AssignmentsPage() {
 
   const fetchDropdowns = async () => {
     try {
-      const [cansRes, officersRes]: any = await Promise.all([
-        api.get('/admin/cans', { params: { status: 'ACTIVE', limit: 300 } }),
+      const [branchesRes, officersRes]: any = await Promise.all([
+        api.get('/admin/branches'),
         api.get('/admin/officers', { params: { limit: 300, is_active: true } })
       ]);
-      // The API now returns { success: true, data: { items, pagination } }
-      if (cansRes.success) setCans(cansRes.data.items || []);
+      if (branchesRes.success) setBranches(branchesRes.data || []);
       if (officersRes.success) setOfficers(officersRes.data.items || []);
     } catch (error: any) {
       console.error('Failed to fetch dropdown data:', error.response?.data || error.message || error);
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, [filter]);
+  const fetchDukuhsModal = async (branchId: string) => {
+    if (!branchId) {
+      setModalDukuhs([]);
+      return;
+    }
+    setFetchingDukuhs(true);
+    try {
+      const response: any = await api.get('/admin/dukuhs', { 
+        params: { 
+          branch_id: branchId,
+          filter_assigned: true 
+        } 
+      });
+      if (response.success) {
+        setModalDukuhs(response.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch dukuhs for modal:', error);
+    } finally {
+      setFetchingDukuhs(false);
+    }
+  };
 
   useEffect(() => {
-    if (isModalOpen) fetchDropdowns();
-  }, [isModalOpen]);
+    fetchData();
+  }, [filter, search, branchFilter, currentPage, pageSize]);
+
+  useEffect(() => {
+    fetchDropdowns();
+  }, []);
+
+  useEffect(() => {
+    if (isModalOpen) {
+      fetchDukuhsModal(selectedBranchId);
+    }
+  }, [selectedBranchId, isModalOpen]);
+
+  const selectedOfficerId = watch('officer_id');
+
+  useEffect(() => {
+    if (selectedOfficerId) {
+      const officer: any = officers.find((o: any) => o.id === selectedOfficerId);
+      if (officer && officer.branchId) {
+        setValue('branch_id', officer.branchId);
+      }
+    } else {
+      setValue('branch_id', '');
+    }
+  }, [selectedOfficerId, officers]);
+
+  useEffect(() => {
+    setValue('dukuh_ids', []);
+  }, [selectedBranchId]);
 
   const onSubmit = async (values: AssignmentFormValues) => {
     setSubmitting(true);
     try {
-      const submitData = { ...values };
-      if (!submitData.backup_officer_id) delete submitData.backup_officer_id;
-      
-      const response: any = await api.post('/admin/assignments', submitData);
+      const response: any = await api.post('/admin/assignments/bulk-branch', values);
       if (response.success) {
         reset();
         setIsModalOpen(false);
         fetchData();
+        alert(`Berhasil! ${response.data.assigned_count} kaleng telah ditugaskan untuk periode ${response.data.period}`);
       }
     } catch (error: any) {
-      console.error('Failed to create assignment:', error.response?.data || error.message || error);
-      alert(error.response?.data?.error?.message || 'Gagal menyimpan penugasan');
+      console.error('Failed to create bulk assignment:', error.response?.data || error.message || error);
+      alert(error.response?.data?.error?.message || 'Gagal menyimpan penugasan massal');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleTransfer = async (values: { officer_id: string }) => {
+    if (!transferringAssignment) return;
+    setSubmitting(true);
+    try {
+      const response: any = await api.put(`/admin/assignments/${transferringAssignment.id}`, {
+        officer_id: values.officer_id,
+        status: 'REASSIGNED'
+      });
+      if (response.success) {
+        setIsTransferModalOpen(false);
+        setTransferringAssignment(null);
+        fetchData();
+        alert('Penugasan berhasil ditransfer!');
+      }
+    } catch (error: any) {
+      console.error('Failed to transfer assignment:', error);
+      alert('Gagal mentransfer penugasan');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteAssignment = async (id: string) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus penugasan ini? Tindakan ini akan membatalkan jadwal penjemputan untuk kaleng tersebut di bulan ini.')) return;
+    try {
+      const response: any = await api.delete(`/admin/assignments/${id}`);
+      if (response.success) {
+        fetchData();
+      }
+    } catch (error: any) {
+      alert(error.response?.data?.error?.message || 'Gagal menghapus penugasan');
     }
   };
 
@@ -182,9 +284,30 @@ export default function AssignmentsPage() {
       header: '',
       cell: ({ row }) => (
         <div className="flex items-center justify-end">
-          <Button variant="outline" size="sm" className="h-8 w-8 p-0 rounded-lg">
-            <MoreVertical size={14} />
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="h-8 w-8 p-0 rounded-lg hover:bg-green-50 hover:text-green-600 transition-colors border-slate-200"
+            title="Transfer Penugasan"
+            onClick={() => {
+              setTransferringAssignment(row.original);
+              setIsTransferModalOpen(true);
+            }}
+          >
+            <Repeat size={14} />
           </Button>
+
+          {user?.role === 'ADMIN_KECAMATAN' && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="h-8 w-8 p-0 rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all border-slate-200 group ml-2"
+              title="Hapus Penugasan"
+              onClick={() => handleDeleteAssignment(row.original.id)}
+            >
+              <Trash2 size={14} className="text-slate-400 group-hover:text-red-600" />
+            </Button>
+          )}
         </div>
       ),
     },
@@ -199,7 +322,14 @@ export default function AssignmentsPage() {
           <p className="text-slate-500 text-sm">Atur jadwal pengambilan infaq bulanan petugas</p>
         </div>
         <Button 
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            reset({
+              branch_id: '',
+              officer_id: '',
+              dukuh_ids: []
+            });
+            setIsModalOpen(true);
+          }}
           className="bg-green-600 hover:bg-green-700 shadow-lg shadow-green-600/20"
         >
           <Plus size={18} className="mr-2" />
@@ -208,59 +338,164 @@ export default function AssignmentsPage() {
       </div>
 
       {/* Filter Toolbar */}
-      <div className="flex flex-col md:flex-row gap-4 items-center bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <Calendar className="text-slate-400" size={18} />
-          <select 
-            value={filter.month}
-            onChange={(e) => setFilter({...filter, month: parseInt(e.target.value)})}
-            className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-green-500/20 outline-none"
-          >
-            {months.map((m, i) => (
-              <option key={m} value={i + 1}>{m}</option>
-            ))}
-          </select>
-          <select 
-            value={filter.year}
-            onChange={(e) => setFilter({...filter, year: parseInt(e.target.value)})}
-            className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-green-500/20 outline-none"
-          >
-            {[currentYear, currentYear - 1].map(y => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
+      <div className="flex flex-col lg:flex-row gap-4 items-center justify-between bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+        <div className="relative w-full lg:w-96 group">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="text-slate-400 group-focus-within:text-green-500 transition-colors" size={18} />
+          </div>
+          <input
+            type="text"
+            placeholder="Cari QR, pemilik, atau petugas..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 focus:bg-white transition-all shadow-sm group-hover:border-slate-300"
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+          <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100 shadow-sm">
+            <Calendar className="text-slate-400 ml-2" size={16} />
+            <select 
+              value={filter.month}
+              onChange={(e) => {
+                setFilter({...filter, month: parseInt(e.target.value)});
+                setCurrentPage(1);
+              }}
+              className="bg-transparent text-xs font-bold text-slate-900 px-2 py-1.5 focus:outline-none cursor-pointer"
+            >
+              {months.map((m, i) => {
+                const isFuture = filter.year > currentYear || (filter.year === currentYear && i + 1 > currentMonth);
+                return (
+                  <option key={m} value={i + 1} disabled={isFuture} className={isFuture ? 'text-slate-300' : 'text-slate-900'}>
+                    {m.toUpperCase()}
+                  </option>
+                );
+              })}
+            </select>
+            <div className="w-px h-4 bg-slate-200 mx-1" />
+            <select 
+              value={filter.year}
+              onChange={(e) => {
+                setFilter({...filter, year: parseInt(e.target.value)});
+                setCurrentPage(1);
+              }}
+              className="bg-transparent text-xs font-bold text-slate-900 px-2 py-1.5 focus:outline-none cursor-pointer"
+            >
+              {[currentYear, currentYear - 1].map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+
+          {user?.role === 'ADMIN_KECAMATAN' && (
+            <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100 shadow-sm">
+              <Filter className="text-slate-400 ml-2" size={16} />
+              <select 
+                value={branchFilter}
+                onChange={(e) => {
+                  setBranchFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="bg-transparent text-xs font-bold text-slate-900 px-3 py-1.5 focus:outline-none cursor-pointer max-w-[150px]"
+              >
+                <option value="">SEMUA RANTING</option>
+                {branches.map((b: any) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name.replace(/ranting/gi, '').trim().toUpperCase()}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Selector Baris removed from here for consistency with Cans page */}
         </div>
       </div>
 
-      {/* Main Table */}
-      <Table columns={columns} data={data} loading={loading} />
+      {/* Main Table Container */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <Table columns={columns} data={data} loading={loading} />
+        
+        {/* Pagination Controls */}
+        {!loading && totalItems > 0 && (
+          <div className="px-6 py-6 bg-slate-50/50 border-t border-slate-100 flex flex-col items-end gap-3">
+            <p className="text-xs font-medium text-slate-500">
+              Menampilkan <span className="font-bold text-slate-900">{data.length}</span> dari <span className="font-bold text-slate-900">{totalItems}</span> tugas
+            </p>
+            
+            <div className="flex items-center gap-4">
+              {/* Selector Baris moved here */}
+              <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Baris:</span>
+                <select 
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-transparent text-xs font-bold text-slate-700 focus:outline-none cursor-pointer"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                  Halaman <span className="text-green-600">{currentPage}</span> dari {Math.ceil(totalItems / pageSize)}
+                </span>
+                
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(prev => prev - 1)}
+                    className="rounded-xl h-9 px-4 text-xs font-bold disabled:opacity-30 border-slate-200"
+                  >
+                    Sebelumnya
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage >= Math.ceil(totalItems / pageSize)}
+                    onClick={() => setCurrentPage(prev => prev + 1)}
+                    className="rounded-xl h-9 px-4 text-xs font-bold disabled:opacity-30 border-slate-200"
+                  >
+                    Selanjutnya
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Modal Penugasan */}
       <Modal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)}
-        title="Buat Penugasan Baru"
+        title="Penugasan"
       >
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-gray-700">Pilih Kaleng / Donatur</label>
-            <select 
-              {...register('can_id')}
-              className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none shadow-sm"
-            >
-              <option value="">-- Pilih Kaleng --</option>
-              {cans.map((c: any) => (
-                <option key={c.id} value={c.id}>{c.qrCode} - {c.ownerName}</option>
-              ))}
-            </select>
-            {errors.can_id && <p className="text-xs font-medium text-red-500">{errors.can_id.message}</p>}
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+          <div className="bg-green-50 p-4 rounded-2xl border border-green-100 flex gap-3 text-green-800 mb-2">
+             <Clock size={20} className="shrink-0" />
+             <div className="text-xs">
+               <p className="font-bold mb-0.5 uppercase tracking-wider">Periode Berjalan</p>
+               Penugasan akan otomatis dibuat untuk bulan <span className="font-bold">{months[currentMonth-1]} {currentYear}</span>.
+             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-gray-700">Pilih Petugas Utama</label>
+            <label className="text-sm font-semibold text-gray-700">Pilih Petugas Lapangan</label>
             <select 
               {...register('officer_id')}
-              className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none shadow-sm"
+              className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer"
             >
               <option value="">-- Pilih Petugas --</option>
               {officers.map((o: any) => (
@@ -270,36 +505,68 @@ export default function AssignmentsPage() {
             {errors.officer_id && <p className="text-xs font-medium text-red-500">{errors.officer_id.message}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-gray-700">Bulan</label>
-              <select 
-                {...register('period_month', { valueAsNumber: true })}
-                className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none shadow-sm"
-              >
-                {months.map((m, i) => (
-                  <option key={m} value={i + 1}>{m}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-gray-700">Tahun</label>
-              <select 
-                {...register('period_year', { valueAsNumber: true })}
-                className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none shadow-sm"
-              >
-                <option value={currentYear}>{currentYear}</option>
-                <option value={currentYear + 1}>{currentYear + 1}</option>
-              </select>
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-gray-700">Pilih Ranting (Desa)</label>
+            <select 
+              {...register('branch_id')}
+              className="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-400 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer pointer-events-none"
+              tabIndex={-1}
+            >
+              <option value="">-- Deteksi Ranting Otomatis --</option>
+              {branches.map((b: any) => (
+                <option key={b.id} value={b.id}>
+                  {b.name.replace(/ranting/gi, '').trim().toUpperCase()}
+                </option>
+              ))}
+            </select>
+            {errors.branch_id && <p className="text-xs font-medium text-red-500">{errors.branch_id.message}</p>}
           </div>
 
-          <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100 flex gap-3 text-yellow-800">
-             <AlertTriangle size={20} className="shrink-0" />
-             <div className="text-xs">
-               <p className="font-bold mb-0.5">Peringatan Duplikasi</p>
-               Satu kaleng hanya bisa ditugaskan ke satu petugas dalam satu bulan yang sama.
-             </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-gray-700">Pilih Dukuh (Bisa lebih dari satu)</label>
+            <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/50 space-y-2">
+              {selectedBranchId ? (
+                <>
+                  <div className="flex items-center gap-2 pb-2 border-b border-slate-200 mb-2">
+                    <input 
+                      type="checkbox"
+                      id="selectAllDukuh"
+                      className="w-4 h-4 rounded border-slate-300 text-green-600 focus:ring-green-500"
+                      checked={modalDukuhs.length > 0 && watch('dukuh_ids').length === modalDukuhs.length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setValue('dukuh_ids', modalDukuhs.map(d => d.id));
+                        } else {
+                          setValue('dukuh_ids', []);
+                        }
+                      }}
+                    />
+                    <label htmlFor="selectAllDukuh" className="text-xs font-bold text-slate-700 cursor-pointer">PILIH SEMUA DUKUH</label>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
+                    {modalDukuhs.map((d: any) => (
+                      <div key={d.id} className="flex items-center gap-2">
+                        <input 
+                          type="checkbox"
+                          id={`dukuh-${d.id}`}
+                          value={d.id}
+                          className="w-4 h-4 rounded border-slate-300 text-green-600 focus:ring-green-500"
+                          {...register('dukuh_ids')}
+                        />
+                        <label htmlFor={`dukuh-${d.id}`} className="text-sm text-slate-700 cursor-pointer">{d.name}</label>
+                      </div>
+                    ))}
+                    {modalDukuhs.length === 0 && !fetchingDukuhs && (
+                      <p className="text-xs text-slate-500 italic">Tidak ada data dukuh di ranting ini</p>
+                    )}
+                    {fetchingDukuhs && <p className="text-xs text-slate-500">Memuat data...</p>}
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-slate-500 italic">Pilih petugas terlebih dahulu untuk deteksi ranting & dukuh</p>
+              )}
+            </div>
+            {errors.dukuh_ids && <p className="text-xs font-medium text-red-500">{errors.dukuh_ids.message}</p>}
           </div>
 
           <div className="flex gap-3 pt-4">
@@ -320,6 +587,63 @@ export default function AssignmentsPage() {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal Transfer Penugasan */}
+      <Modal
+        isOpen={isTransferModalOpen}
+        onClose={() => setIsTransferModalOpen(false)}
+        title="Transfer Penugasan"
+      >
+        {transferringAssignment && (
+          <div className="space-y-6">
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Kaleng / Pemilik</span>
+                <span className="text-xs font-bold text-slate-900">{transferringAssignment.can.qrCode}</span>
+              </div>
+              <div className="flex justify-between items-center border-t border-slate-200 pt-3">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Petugas Saat Ini</span>
+                <span className="text-xs font-bold text-red-600">{transferringAssignment.officer.fullName}</span>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700">Pilih Petugas Pengganti</label>
+                <select 
+                  className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer"
+                  onChange={(e) => setTransferringAssignment({...transferringAssignment, newOfficerId: e.target.value})}
+                >
+                  <option value="">-- Pilih Petugas Baru --</option>
+                  {officers
+                    .filter((o: any) => o.id !== transferringAssignment.officerId && o.branchId === transferringAssignment.can.branchId)
+                    .map((o: any) => (
+                      <option key={o.id} value={o.id}>{o.fullName} ({o.employeeCode})</option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <Button 
+                  variant="secondary" 
+                  className="flex-1" 
+                  onClick={() => setIsTransferModalOpen(false)}
+                >
+                  Batal
+                </Button>
+                <Button 
+                  className="flex-1" 
+                  isLoading={submitting}
+                  disabled={!transferringAssignment.newOfficerId}
+                  onClick={() => handleTransfer({ officer_id: transferringAssignment.newOfficerId })}
+                >
+                  Konfirmasi Transfer
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

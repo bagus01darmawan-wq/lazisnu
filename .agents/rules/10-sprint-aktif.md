@@ -93,10 +93,12 @@ Update Terakhir:
   - Security pilar diperkuat dengan HMAC-SHA256 QR dan Redis Refresh Token Blacklist.
   - Performa query ditingkatkan dengan DB-level filtering dan proper pagination.
   - Sinkronisasi antara mobile (MMKV) dan backend (nominal field) telah diverifikasi.
-Update 25 April 2026:
-  - Mobile Connectivity: Berhasil login menggunakan Cloudflare Tunnel (Port 8081 & 3001).
-  - Mobile UX: Menghilangkan PropType warning ikon dan sinkronisasi rute 'Collection'.
-  - Mobile Features: Menambahkan fitur 'Salin Kode QR' di Tugas dan optimasi 'Input Manual' cerdas dengan feedback haptik.
+Update 29 April 2026:
+  - Dukuh Management: Implementasi fitur Dukuh (sub-village) dinamis, CRUD, dan relasi database cans-dukuhs.
+  - Assignment UX: Optimasi alur penugasan massal dengan deteksi ranting otomatis dan multi-select dukuh cerdas.
+  - UI Standardization: Sinkronisasi layout paginasi, navigasi, dan standarisasi ikon aksi (Edit/Trash) di dashboard.
+  - Routing Fix: Perbaikan bug 404 saat navigasi kembali ke Overview dari halaman lain.
+  - Super Admin: Implementasi fitur reset (delete) penugasan khusus ADMIN_KECAMATAN.
 ```
 
 ---

@@ -6,6 +6,7 @@ import { cansRoutes } from './cans';
 import { officersRoutes } from './officers';
 import { assignmentsRoutes } from './assignments';
 import { collectionsRoutes } from './collections';
+import { dukuhsRoutes } from './dukuhs';
 import { districtRoutes } from './district';
 import { waRoutes } from './wa';
 
@@ -14,6 +15,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', authenticate);
 
   // Register all sub-routes
+  await fastify.register(dukuhsRoutes);
   await fastify.register(dashboardRoutes);
   await fastify.register(cansRoutes);
   await fastify.register(officersRoutes);

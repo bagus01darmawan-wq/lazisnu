@@ -21,7 +21,7 @@ export interface MenuItem {
 export const MENU_ITEMS: MenuItem[] = [
   {
     title: 'Overview',
-    path: '/dashboard',
+    path: '/dashboard/overview',
     icon: BarChart3,
     roles: ['ADMIN_KECAMATAN', 'ADMIN_RANTING', 'BENDAHARA'],
   },

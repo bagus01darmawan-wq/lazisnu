@@ -13,7 +13,7 @@ export function middleware(request: NextRequest) {
 
   // 2. Redirect to dashboard if already logged in and trying to access login page
   if (token && isAuthPage) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+    return NextResponse.redirect(new URL('/dashboard/overview', request.url));
   }
 
   // 3. Proper Role Check using JWT decoding
@@ -27,12 +27,12 @@ export function middleware(request: NextRequest) {
       // Restricted routes for Admin Kecamatan
       if ((path.includes('/users') || path.includes('/audit-log') || path.includes('/wa-monitor')) && 
           userRole !== 'ADMIN_KECAMATAN') {
-        return NextResponse.redirect(new URL('/dashboard', request.url));
+        return NextResponse.redirect(new URL('/dashboard/overview', request.url));
       }
       
       // Restricted routes for Reports (all except petugas)
       if (path.includes('/reports') && userRole === 'PETUGAS') {
-        return NextResponse.redirect(new URL('/dashboard', request.url));
+        return NextResponse.redirect(new URL('/dashboard/overview', request.url));
       }
     } catch (e) {
       // Invalid token format
