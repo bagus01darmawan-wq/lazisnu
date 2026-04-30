@@ -1,5 +1,6 @@
 import { FastifyReply } from 'fastify';
 import { ApiResponse } from '@lazisnu/shared-types';
+import { serializeOutput } from './serializer';
 
 /**
  * Recursively convert BigInt to Number for JSON serialization
@@ -27,7 +28,9 @@ export function sendSuccess<T>(reply: FastifyReply, data?: T, statusCode = 200) 
   };
   
   if (data !== undefined) {
-    response.data = handleBigInt(data);
+    // 1. Handle BigInt
+    // 2. Auto-transform camelCase to snake_case for all API outputs
+    response.data = serializeOutput(handleBigInt(data));
   }
 
   return reply.status(statusCode).send(response);

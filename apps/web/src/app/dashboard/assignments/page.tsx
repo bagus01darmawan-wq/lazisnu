@@ -43,6 +43,7 @@ export default function AssignmentsPage() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferringAssignment, setTransferringAssignment] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -112,7 +113,7 @@ export default function AssignmentsPage() {
   };
 
   const fetchDukuhsModal = async (branchId: string) => {
-    if (!branchId) {
+    if (!branchId || branchId === '') {
       setModalDukuhs([]);
       return;
     }
@@ -140,6 +141,7 @@ export default function AssignmentsPage() {
 
   useEffect(() => {
     fetchDropdowns();
+    setMounted(true);
   }, []);
 
   useEffect(() => {
@@ -153,11 +155,11 @@ export default function AssignmentsPage() {
   useEffect(() => {
     if (selectedOfficerId) {
       const officer: any = officers.find((o: any) => o.id === selectedOfficerId);
-      if (officer && officer.branchId) {
-        setValue('branch_id', officer.branchId);
+      if (officer && officer.branch_id) {
+        setValue('branch_id', officer.branch_id, { shouldValidate: true });
       }
     } else {
-      setValue('branch_id', '');
+      setValue('branch_id', '', { shouldValidate: true });
     }
   }, [selectedOfficerId, officers]);
 
@@ -232,8 +234,8 @@ export default function AssignmentsPage() {
             <Box size={16} />
           </div>
           <div>
-            <p className="font-bold text-slate-900">{row.original.can.qrCode}</p>
-            <p className="text-xs text-slate-500">{row.original.can.ownerName}</p>
+            <p className="font-bold text-slate-900">{row.original.can.qr_code}</p>
+            <p className="text-xs text-slate-500">{row.original.can.owner_name}</p>
           </div>
         </div>
       ),
@@ -244,7 +246,7 @@ export default function AssignmentsPage() {
       cell: ({ row }) => (
         <div className="flex items-center gap-2 text-slate-700">
           <User size={14} className="text-slate-400" />
-          <span className="font-medium">{row.original.officer.fullName}</span>
+          <span className="font-medium">{row.original.officer.full_name}</span>
         </div>
       ),
     },
@@ -255,7 +257,7 @@ export default function AssignmentsPage() {
         <div className="flex items-center gap-2 text-slate-600">
           <Calendar size={14} className="text-slate-400" />
           <span className="text-sm font-semibold">
-            {months[row.original.periodMonth - 1]} {row.original.periodYear}
+            {months[row.original.period_month - 1]} {row.original.period_year}
           </span>
         </div>
       ),
@@ -367,7 +369,7 @@ export default function AssignmentsPage() {
               className="bg-transparent text-xs font-bold text-slate-900 px-2 py-1.5 focus:outline-none cursor-pointer"
             >
               {months.map((m, i) => {
-                const isFuture = filter.year > currentYear || (filter.year === currentYear && i + 1 > currentMonth);
+                const isFuture = mounted && (filter.year > currentYear || (filter.year === currentYear && i + 1 > currentMonth));
                 return (
                   <option key={m} value={i + 1} disabled={isFuture} className={isFuture ? 'text-slate-300' : 'text-slate-900'}>
                     {m.toUpperCase()}
@@ -499,7 +501,7 @@ export default function AssignmentsPage() {
             >
               <option value="">-- Pilih Petugas --</option>
               {officers.map((o: any) => (
-                <option key={o.id} value={o.id}>{o.fullName} ({o.employeeCode})</option>
+                <option key={o.id} value={o.id}>{o.full_name} ({o.employee_code})</option>
               ))}
             </select>
             {errors.officer_id && <p className="text-xs font-medium text-red-500">{errors.officer_id.message}</p>}
@@ -509,7 +511,7 @@ export default function AssignmentsPage() {
             <label className="text-sm font-semibold text-gray-700">Pilih Ranting (Desa)</label>
             <select 
               {...register('branch_id')}
-              className="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-400 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer pointer-events-none"
+              className={`w-full h-11 px-3 border border-slate-200 rounded-xl text-sm font-medium outline-none shadow-sm pointer-events-none ${selectedBranchId ? 'bg-slate-100 text-slate-900' : 'bg-slate-50 text-slate-400'}`}
               tabIndex={-1}
             >
               <option value="">-- Deteksi Ranting Otomatis --</option>
@@ -600,11 +602,11 @@ export default function AssignmentsPage() {
             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-[10px] font-bold text-slate-400 uppercase">Kaleng / Pemilik</span>
-                <span className="text-xs font-bold text-slate-900">{transferringAssignment.can.qrCode}</span>
+                <span className="text-xs font-bold text-slate-900">{transferringAssignment.can.qr_code}</span>
               </div>
               <div className="flex justify-between items-center border-t border-slate-200 pt-3">
                 <span className="text-[10px] font-bold text-slate-400 uppercase">Petugas Saat Ini</span>
-                <span className="text-xs font-bold text-red-600">{transferringAssignment.officer.fullName}</span>
+                <span className="text-xs font-bold text-red-600">{transferringAssignment.officer.full_name}</span>
               </div>
             </div>
 
@@ -617,9 +619,9 @@ export default function AssignmentsPage() {
                 >
                   <option value="">-- Pilih Petugas Baru --</option>
                   {officers
-                    .filter((o: any) => o.id !== transferringAssignment.officerId && o.branchId === transferringAssignment.can.branchId)
+                    .filter((o: any) => o.id !== transferringAssignment.officer_id && o.branch_id === transferringAssignment.can.branch_id)
                     .map((o: any) => (
-                      <option key={o.id} value={o.id}>{o.fullName} ({o.employeeCode})</option>
+                      <option key={o.id} value={o.id}>{o.full_name} ({o.employee_code})</option>
                     ))}
                 </select>
               </div>

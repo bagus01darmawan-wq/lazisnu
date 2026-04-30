@@ -112,18 +112,17 @@ export default function UsersPage() {
 
   const columns: ColumnDef<any>[] = [
     {
-      accessorKey: 'fullName',
+      accessorKey: 'full_name',
       header: 'Nama Lengkap',
       cell: ({ row }) => (
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold border-2 border-white shadow-sm">
-            {row.original.fullName.charAt(0)}
+            {row.original.full_name?.charAt(0) || 'U'}
           </div>
           <div className="space-y-0.5">
-            <p className="font-bold text-slate-900">{row.original.fullName}</p>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{row.original.employeeCode}</p>
+            <p className="font-bold text-slate-900">{row.original.full_name}</p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{row.original.employee_code}</p>
           </div>
-        </div>
       ),
     },
     {
@@ -139,21 +138,21 @@ export default function UsersPage() {
       ),
     },
     {
-      accessorKey: 'assignedZone',
+      accessorKey: 'assigned_zone',
       header: 'Zona Tugas',
       cell: ({ row }) => (
         <div className="flex items-center gap-1.5 text-slate-600 italic">
           <Map size={14} className="text-slate-400" />
-          <span className="text-sm">{row.original.assignedZone || 'Belum diatur'}</span>
+          <span className="text-sm">{row.original.assigned_zone || 'Belum diatur'}</span>
         </div>
       ),
     },
     {
-      accessorKey: 'isActive',
+      accessorKey: 'is_active',
       header: 'Status',
       cell: ({ row }) => (
-        <Badge variant={row.original.isActive ? 'success' : 'secondary'}>
-          {row.original.isActive ? 'Aktif' : 'Non-aktif'}
+        <Badge variant={row.original.is_active ? 'success' : 'secondary'}>
+          {row.original.is_active ? 'Aktif' : 'Non-aktif'}
         </Badge>
       ),
     },
@@ -166,10 +165,10 @@ export default function UsersPage() {
             variant="outline" 
             size="sm" 
             className="h-8 w-8 p-0 rounded-lg hover:border-slate-300"
-            onClick={() => toggleOfficerStatus(row.original.id, row.original.isActive)}
-            title={row.original.isActive ? 'Non-aktifkan' : 'Aktifkan'}
+            onClick={() => toggleOfficerStatus(row.original.id, row.original.is_active)}
+            title={row.original.is_active ? 'Non-aktifkan' : 'Aktifkan'}
           >
-            {row.original.isActive ? <UserMinus size={14} className="text-red-500" /> : <UserCheck size={14} className="text-green-500" />}
+            {row.original.is_active ? <UserMinus size={14} className="text-red-500" /> : <UserCheck size={14} className="text-green-500" />}
           </Button>
           <Button variant="outline" size="sm" className="h-8 w-8 p-0 rounded-lg">
             <Edit size={14} />

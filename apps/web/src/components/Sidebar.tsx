@@ -36,9 +36,6 @@ const Sidebar = ({ role: initialRole, userName: initialUserName }: SidebarProps)
       {/* Brand Header */}
       <div className="h-20 flex items-center px-6 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-green-600 rounded-xl flex items-center justify-center shadow-lg shadow-green-900/20">
-            <span className="text-white font-bold text-xl">L</span>
-          </div>
           <div>
             <h1 className="text-white font-bold tracking-tight">LAZISNU</h1>
             <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Collector Dashboard</p>

@@ -26,10 +26,16 @@ export async function dukuhsRoutes(fastify: FastifyInstance) {
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { branch_id, filter_assigned } = request.query as { branch_id?: string, filter_assigned?: boolean };
-      const conditions = branch_id ? [eq(schema.dukuhs.branchId, branch_id)] : [];
+      
+      // Jika branch_id tidak ada, kembalikan array kosong untuk keamanan
+      if (!branch_id) {
+        return sendSuccess(reply, []);
+      }
+
+      const conditions = [eq(schema.dukuhs.branchId, branch_id)];
       
       let data = await db.query.dukuhs.findMany({
-        where: conditions.length > 0 ? and(...conditions) : undefined,
+        where: and(...conditions),
         orderBy: (dukuhs, { asc }) => [asc(dukuhs.name)]
       });
 
@@ -86,9 +92,9 @@ export async function dukuhsRoutes(fastify: FastifyInstance) {
       summary: 'Tambah dukuh baru',
       body: {
         type: 'object',
-        required: ['branchId', 'name'],
+        required: ['branch_id', 'name'],
         properties: {
-          branchId: { type: 'string', format: 'uuid' },
+          branch_id: { type: 'string', format: 'uuid' },
           name: { type: 'string', minLength: 1 }
         }
       }
@@ -96,12 +102,12 @@ export async function dukuhsRoutes(fastify: FastifyInstance) {
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = z.object({
-        branchId: z.string().uuid(),
+        branch_id: z.string().uuid(),
         name: z.string().min(1),
       }).parse(request.body);
 
       const inserted = await db.insert(schema.dukuhs).values({
-        branchId: body.branchId,
+        branchId: body.branch_id,
         name: body.name.toUpperCase(),
       }).returning();
 

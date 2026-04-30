@@ -12,7 +12,7 @@ import { authHelper } from '@/lib/auth';
 import { useAuthStore } from '@/store/useAuthStore';
 import api from '@/lib/api';
 import Cookies from 'js-cookie';
-import { LogIn, Phone, Lock, AlertCircle } from 'lucide-react';
+import { LogIn, Phone, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 const loginSchema = z.object({
   identifier: z.string().min(3, 'Email atau Nomor HP minimal 3 karakter'),
@@ -35,19 +35,21 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   });
 
+  const [showPassword, setShowPassword] = useState(false);
+ 
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
     setError(null);
     try {
       const response: any = await api.post('/auth/login', data);
-
+ 
       if (response.success) {
         authHelper.setToken(response.data.access_token);
         if (response.data.refresh_token) {
           authHelper.setRefreshToken(response.data.refresh_token);
         }
         setUser(response.data.user);
-
+ 
         // Redirect to dashboard
         router.push('/dashboard/overview');
       } else {
@@ -59,67 +61,75 @@ export default function LoginPage() {
       setIsLoading(false);
     }
   };
-
+ 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-slate-50 relative overflow-hidden">
-      {/* Dynamic Background Elements */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-green-200/50 rounded-full blur-[120px] animate-pulse" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-green-300/30 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1s' }} />
-
-      <Card className="w-full max-w-md relative z-10 p-8 shadow-2xl border-white/40 bg-white/70 backdrop-blur-xl rounded-3xl">
+    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-slate-950 relative overflow-hidden">
+      {/* Deep Emerald Glows */}
+      <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-emerald-900/20 rounded-full blur-[120px] animate-pulse" />
+      <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-green-900/20 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '2s' }} />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03] pointer-events-none" />
+ 
+      <Card className="w-full max-w-md relative z-10 p-8 shadow-2xl border-white/10 bg-white/5 backdrop-blur-2xl rounded-3xl">
         <div className="flex flex-col items-center text-center mb-10">
-          <div className="w-16 h-16 bg-green-600 rounded-2xl flex items-center justify-center shadow-lg shadow-green-600/20 mb-6 group transition-transform hover:scale-105 duration-300">
-            <LogIn className="text-white" size={32} />
+          <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-700 rounded-2xl flex items-center justify-center shadow-2xl shadow-green-900/40 mb-6 group transition-transform hover:rotate-3 duration-500">
+            <LogIn className="text-white" size={40} />
           </div>
-          <h1 className="text-3xl font-bold bg-gradient-to-br from-slate-900 to-slate-600 bg-clip-text text-transparent">
-            Selamat Datang
+          <h1 className="text-4xl font-bold tracking-tight text-white mb-2 uppercase" style={{ fontFamily: 'Cambria, Georgia, serif' }}>
+            LAZISNU
           </h1>
-          <p className="text-slate-500 mt-2 font-medium">Dashboard Lazisnu MWC Paninggaran</p>
+          <p className="text-emerald-500/80 font-bold tracking-[0.2em] text-xs uppercase">MWC Paninggaran</p>
         </div>
-
+ 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+            <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl flex items-start gap-3 animate-in fade-in zoom-in-95 duration-300">
               <AlertCircle size={20} className="shrink-0 mt-0.5" />
               <p className="text-sm font-medium">{error}</p>
             </div>
           )}
-
+ 
           <div className="space-y-4">
             <div className="relative group">
-              <LogIn className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-green-600 transition-colors z-10" size={18} />
+              <LogIn className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-green-400 transition-colors z-10 pointer-events-none" size={18} />
               <Input
                 {...register('identifier')}
                 placeholder="Email atau Nomor HP"
-                className="pl-10 h-12 bg-white/80 border-slate-200 focus:border-green-500 rounded-xl transition-all text-slate-900"
+                className="pl-12 h-14 !bg-slate-900/50 border-white/10 focus:border-green-500/50 focus:ring-green-500/20 rounded-2xl transition-all !text-white placeholder:text-slate-500 caret-green-400 text-base autofill:shadow-[0_0_0_30px_#0f172a_inset] autofill:[-webkit-text-fill-color:white]"
                 error={errors.identifier?.message}
               />
             </div>
-
+ 
             <div className="relative group">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-green-600 transition-colors z-10" size={18} />
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-green-400 transition-colors z-10 pointer-events-none" size={18} />
               <Input
                 {...register('password')}
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 placeholder="Password"
-                className="pl-10 h-12 bg-white/80 border-slate-200 focus:border-green-500 rounded-xl transition-all text-slate-900"
+                className="pl-12 pr-12 h-14 !bg-slate-900/50 border-white/10 focus:border-green-500/50 focus:ring-green-500/20 rounded-2xl transition-all !text-white placeholder:text-slate-500 caret-green-400 text-base autofill:shadow-[0_0_0_30px_#0f172a_inset] autofill:[-webkit-text-fill-color:white]"
                 error={errors.password?.message}
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-green-400 transition-colors z-20"
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
             </div>
           </div>
 
           <Button
             type="submit"
-            className="w-full h-12 text-base font-bold bg-green-600 hover:bg-green-700 transition-all rounded-xl shadow-lg shadow-green-600/20"
+            className="w-full h-14 text-lg font-black bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 transition-all rounded-2xl shadow-xl shadow-green-900/20 active:scale-[0.98] duration-200"
             isLoading={isLoading}
           >
-            Masuk Sekarang
+            MASUK SEKARANG
           </Button>
         </form>
 
-        <div className="mt-8 pt-6 border-t border-slate-200 text-center">
-          <p className="text-sm text-slate-400 uppercase tracking-widest font-bold">
-            Lazisnu Infaq System
+        <div className="mt-10 pt-6 border-t border-white/5 text-center">
+          <p className="text-[10px] text-slate-500 uppercase tracking-[0.3em] font-black">
+            Infaq Management System
           </p>
         </div>
       </Card>
