@@ -282,16 +282,23 @@ export default function CansPage() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === data.length) {
+    const selectableData = data.filter(item => !(item.assignments && item.assignments.length > 0));
+    
+    if (selectableData.length === 0) return;
+
+    if (selectedIds.length === selectableData.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(data.map(item => item.id));
+      setSelectedIds(selectableData.map(item => item.id));
     }
   };
 
-  const toggleSelectId = (id: string) => {
+  const toggleSelectId = (item: any) => {
+    const isAssigned = item.assignments && item.assignments.length > 0;
+    if (isAssigned) return;
+
     setSelectedIds(prev => 
-      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+      prev.includes(item.id) ? prev.filter(i => i !== item.id) : [...prev, item.id]
     );
   };
 
@@ -408,30 +415,41 @@ export default function CansPage() {
   const columns: ColumnDef<any>[] = [
     {
       id: 'selection',
-      header: () => (
-        <button 
-          onClick={toggleSelectAll}
-          className="p-1 hover:bg-slate-200 rounded transition-colors"
-        >
-          {selectedIds.length === data.length && data.length > 0 ? (
-            <CheckSquare size={18} className="text-green-600" />
-          ) : (
-            <Square size={18} className="text-slate-400" />
-          )}
-        </button>
-      ),
-      cell: ({ row }) => (
-        <button 
-          onClick={() => toggleSelectId(row.original.id)}
-          className="p-1 hover:bg-slate-100 rounded transition-colors"
-        >
-          {selectedIds.includes(row.original.id) ? (
-            <CheckSquare size={18} className="text-green-600" />
-          ) : (
-            <Square size={18} className="text-slate-300" />
-          )}
-        </button>
-      ),
+      header: () => {
+        const selectableData = data.filter(item => !(item.assignments && item.assignments.length > 0));
+        const isAllSelected = selectableData.length > 0 && selectedIds.length === selectableData.length;
+        
+        return (
+          <button 
+            onClick={toggleSelectAll}
+            disabled={selectableData.length === 0}
+            className="p-1 hover:bg-slate-200 rounded transition-colors disabled:opacity-30"
+          >
+            {isAllSelected ? (
+              <CheckSquare size={18} className="text-green-600" />
+            ) : (
+              <Square size={18} className="text-slate-400" />
+            )}
+          </button>
+        );
+      },
+      cell: ({ row }) => {
+        const isAssigned = row.original.assignments && row.original.assignments.length > 0;
+        return (
+          <button 
+            onClick={() => toggleSelectId(row.original)}
+            disabled={isAssigned}
+            className={`p-1 rounded transition-colors ${isAssigned ? 'opacity-20 cursor-not-allowed' : 'hover:bg-slate-100'}`}
+            title={isAssigned ? "Kaleng sedang dalam penugasan" : "Pilih Kaleng"}
+          >
+            {selectedIds.includes(row.original.id) ? (
+              <CheckSquare size={18} className="text-green-600" />
+            ) : (
+              <Square size={18} className="text-slate-300" />
+            )}
+          </button>
+        );
+      },
     },
     {
       accessorKey: 'qr_code',
@@ -513,6 +531,8 @@ export default function CansPage() {
       header: '',
       cell: ({ row }) => {
         const isNonActiveRow = !row.original.is_active;
+        const isAssigned = row.original.assignments && row.original.assignments.length > 0;
+        
         return (
           <div className="flex items-center justify-end gap-2">
             {isNonActiveRow ? (
@@ -536,19 +556,22 @@ export default function CansPage() {
                 <Edit size={14} className="text-slate-500 group-hover:text-green-600" />
               </Button>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              className={`h-8 w-8 p-0 rounded-lg transition-all border-slate-200 group ${isNonActiveRow ? 'hover:bg-red-600 hover:text-white hover:border-red-600' : 'hover:bg-red-50 hover:text-red-600 hover:border-red-200'}`}
-              onClick={() => handleDelete(row.original.id, isNonActiveRow)}
-              title={isNonActiveRow ? 'Hapus Permanen' : 'Non-aktifkan'}
-            >
-              {isNonActiveRow ? (
-                <AlertTriangle size={14} className="text-red-500 group-hover:text-white" />
-              ) : (
-                <Trash2 size={14} className="text-slate-500 group-hover:text-red-600" />
-              )}
-            </Button>
+            
+            {!isAssigned && (
+              <Button
+                variant="outline"
+                size="sm"
+                className={`h-8 w-8 p-0 rounded-lg transition-all border-slate-200 group ${isNonActiveRow ? 'hover:bg-red-600 hover:text-white hover:border-red-600' : 'hover:bg-red-50 hover:text-red-600 hover:border-red-200'}`}
+                onClick={() => handleDelete(row.original.id, isNonActiveRow)}
+                title={isNonActiveRow ? 'Hapus Permanen' : 'Non-aktifkan'}
+              >
+                {isNonActiveRow ? (
+                  <AlertTriangle size={14} className="text-red-500 group-hover:text-white" />
+                ) : (
+                  <Trash2 size={14} className="text-slate-500 group-hover:text-red-600" />
+                )}
+              </Button>
+            )}
           </div>
         );
       },
