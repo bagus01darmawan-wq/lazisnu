@@ -28,6 +28,8 @@ export function verifyQRCode(token: string): string | null {
     .digest('hex')
     .substring(0, 32);
 
+  if (signature.length !== expectedSignature.length) return null;
+
   if (crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
     return qrCode;
   }

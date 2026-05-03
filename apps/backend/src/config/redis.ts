@@ -7,7 +7,12 @@ const useMock = !config.REDIS_URL;
 let redisConnection: any;
 
 if (useMock) {
-  console.log('⚠️ REDIS_URL not found. Using ioredis-mock for development.');
+  if (config.NODE_ENV === 'production') {
+    console.error('❌ REDIS_URL wajib diset di environment production.');
+    console.error('   Server dihentikan untuk mencegah data loss (blacklist token, OTP, BullMQ).');
+    process.exit(1);
+  }
+  console.log('⚠️ REDIS_URL not found. Using ioredis-mock for development/staging.');
   // Dynamic import to avoid bundling ioredis-mock in production if not needed
   const RedisMock = require('ioredis-mock');
   redisConnection = new RedisMock();

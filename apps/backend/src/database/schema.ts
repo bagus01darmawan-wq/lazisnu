@@ -127,7 +127,7 @@ export const collections = pgTable('collections', {
   deviceInfo: json('device_info'),
   latitude: decimal('latitude', { precision: 10, scale: 8 }),
   longitude: decimal('longitude', { precision: 11, scale: 8 }),
-  offlineId: varchar('offline_id', { length: 100 }),
+  offlineId: varchar('offline_id', { length: 100 }).unique(),
   // specific logic from GEMINI.md
   isLatest: boolean('is_latest').default(true).notNull(),
   submitSequence: integer('submit_sequence').default(1).notNull(),

@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
 import { eq, and, desc, inArray, or, ilike, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { authorize } from '../../middleware/auth';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { getPaginationParams, formatPaginatedResponse } from '../../utils/pagination';
@@ -54,6 +55,8 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
 
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
+      const officerBranch = alias(schema.branches, 'officerBranch');
+
       const [assignments, total] = await Promise.all([
         db.select({
           id: schema.assignments.id,
@@ -67,16 +70,25 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
             qrCode: schema.cans.qrCode,
             ownerName: schema.cans.ownerName,
             branchId: schema.cans.branchId,
+            branchName: schema.branches.name,
+            rt: schema.cans.rt,
+            rw: schema.cans.rw,
+            dukuh: schema.cans.dukuh,
+            dukuhName: schema.dukuhs.name,
           },
           officer: {
             fullName: schema.users.fullName,
             employeeCode: schema.officers.employeeCode,
+            branchName: officerBranch.name,
           }
         })
         .from(schema.assignments)
         .innerJoin(schema.cans, eq(schema.assignments.canId, schema.cans.id))
+        .innerJoin(schema.branches, eq(schema.cans.branchId, schema.branches.id))
+        .leftJoin(schema.dukuhs, eq(schema.cans.dukuhId, schema.dukuhs.id))
         .innerJoin(schema.officers, eq(schema.assignments.officerId, schema.officers.id))
         .innerJoin(schema.users, eq(schema.officers.userId, schema.users.id))
+        .innerJoin(officerBranch, eq(schema.officers.branchId, officerBranch.id))
         .where(whereClause)
         .limit(limit)
         .offset(offset)
@@ -99,7 +111,20 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
 
   fastify.post('/assignments', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
+      const user = request.currentUser!;
       const body = createAssignmentSchema.parse(request.body);
+
+      if (user.role === 'ADMIN_RANTING') {
+        const can = await db.query.cans.findFirst({ where: eq(schema.cans.id, body.can_id) });
+        if (!can || can.branchId !== user.branchId) {
+          return sendError(reply, 403, 'FORBIDDEN', 'Kaleng bukan milik ranting Anda');
+        }
+        const officer = await db.query.officers.findFirst({ where: eq(schema.officers.id, body.officer_id) });
+        if (!officer || officer.branchId !== user.branchId) {
+          return sendError(reply, 403, 'FORBIDDEN', 'Petugas bukan anggota ranting Anda');
+        }
+      }
+
       const existing = await db.query.assignments.findFirst({
         where: and(eq(schema.assignments.canId, body.can_id), eq(schema.assignments.periodYear, body.period_year), eq(schema.assignments.periodMonth, body.period_month)),
       });
@@ -131,6 +156,11 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
         dukuh_ids: z.array(z.string().uuid()).optional().nullable(),
       }).parse(request.body);
 
+      const user = request.currentUser!;
+      if (user.role === 'ADMIN_RANTING' && body.branch_id !== user.branchId) {
+        return sendError(reply, 403, 'FORBIDDEN', 'Anda hanya dapat membuat penugasan massal untuk ranting sendiri');
+      }
+
       const now = new Date();
       const currentYear = now.getFullYear();
       const currentMonth = now.getMonth() + 1;
@@ -142,6 +172,18 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       ];
 
       if (body.dukuh_ids && body.dukuh_ids.length > 0) {
+        // Validation: Ensure all selected dukuhs belong to the branch
+        const dukuhsInBranch = await db.query.dukuhs.findMany({
+          where: and(
+            inArray(schema.dukuhs.id, body.dukuh_ids),
+            eq(schema.dukuhs.branchId, body.branch_id)
+          )
+        });
+
+        if (dukuhsInBranch.length !== body.dukuh_ids.length) {
+          return sendError(reply, 400, 'INVALID_DUKUH', 'Satu atau lebih dukuh yang dipilih tidak terdaftar di ranting ini');
+        }
+
         conditions.push(inArray(schema.cans.dukuhId, body.dukuh_ids));
       }
 
@@ -202,6 +244,16 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
         notes: z.string().optional(),
       }).parse(request.body);
 
+      const user = request.currentUser!;
+      const existing = await db.query.assignments.findFirst({
+        where: eq(schema.assignments.id, id),
+        with: { can: { columns: { branchId: true } } },
+      });
+      if (!existing) return sendError(reply, 404, 'NOT_FOUND', 'Penugasan tidak ditemukan');
+      if (user.role === 'ADMIN_RANTING' && existing.can.branchId !== user.branchId) {
+        return sendError(reply, 403, 'FORBIDDEN', 'Penugasan ini bukan milik ranting Anda');
+      }
+
       let updateData: any = {};
       if (body.officer_id !== undefined) updateData.officerId = body.officer_id;
       if (body.backup_officer_id !== undefined) updateData.backupOfficerId = body.backup_officer_id;
@@ -218,6 +270,17 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
   fastify.delete('/assignments/:id', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
+      const user = request.currentUser!;
+      const existing = await db.query.assignments.findFirst({
+        where: eq(schema.assignments.id, id),
+        with: { can: { columns: { branchId: true } } },
+      });
+      
+      if (!existing) return sendError(reply, 404, 'NOT_FOUND', 'Penugasan tidak ditemukan');
+      if (user.role === 'ADMIN_RANTING' && existing.can.branchId !== user.branchId) {
+        return sendError(reply, 403, 'FORBIDDEN', 'Penugasan ini bukan milik ranting Anda');
+      }
+
       await db.delete(schema.assignments).where(eq(schema.assignments.id, id));
       return sendSuccess(reply, { message: 'Penugasan berhasil dihapus' });
     } catch (error) {

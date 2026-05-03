@@ -183,6 +183,20 @@ const csvContent = BOM + rows.join('\n')
 
 /* is_latest = false (data lama) → bg-yellow-50, opacity-75 */
 /* is_latest = true (data terbaru) → normal */
+
+/* --- Standar Header & Toolbar (Gold Standard) --- */
+
+/* 1. Header Halaman: */
+/* Container: flex flex-col md:flex-row md:items-center justify-between gap-4 */
+/* Left: Icon (size 28, text-green-600) + Stacked Title (text-2xl, font-bold) + Description (text-sm, text-slate-500) */
+/* Right: Primary Button (bg-green-600, hover:bg-green-700, shadow-green-600/20, h-11, px-6, rounded-xl) */
+
+/* 2. Toolbar & Filters: */
+/* Container: bg-white p-4 rounded-2xl border border-slate-100 shadow-sm justify-between */
+/* Left: Search Input (w-full md:w-80, py-2.5, focus:ring-4 focus:ring-green-500/10, rounded-xl) */
+/* Right: Filter Group (flex items-center gap-3 justify-end) */
+/* Urutan Filter: Status (Aktif/Non-aktif) -> Ranting (Semua Ranting) -> Tombol Reset */
+/* Terminologi Wilayah: Wajib menggunakan "SEMUA RANTING" untuk filter tingkat kecamatan */
 ```
 
 ---

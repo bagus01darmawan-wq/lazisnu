@@ -5,6 +5,7 @@ import { eq, and, asc, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { batchCollectionSchema } from './schemas';
+import { validateAssignmentForSubmit, submitCollection } from '../../services/collectionSubmission';
 
 export async function syncRoutes(fastify: FastifyInstance) {
   // POST /mobile/collections/batch (offline sync)
@@ -32,30 +33,21 @@ export async function syncRoutes(fastify: FastifyInstance) {
             continue;
           }
 
-          const insertedColls = await db.insert(schema.collections).values({
-            assignmentId: item.assignment_id,
-            canId: item.can_id,
-            officerId,
-            nominal: BigInt(item.nominal),
-            paymentMethod: item.payment_method,
-            collectedAt: new Date(item.collected_at),
-            submittedAt: new Date(),
-            syncedAt: new Date(),
-            syncStatus: 'COMPLETED',
-            serverTimestamp: new Date(),
-            latitude: item.latitude?.toString(),
-            longitude: item.longitude?.toString(),
-            offlineId: item.offline_id,
-          }).returning();
-          const collection = insertedColls[0];
+          const collection = await db.transaction(async (tx) => {
+            await validateAssignmentForSubmit(tx, item.assignment_id, item.can_id, officerId);
 
-          await db.update(schema.assignments).set({ status: 'COMPLETED', completedAt: new Date() }).where(eq(schema.assignments.id, item.assignment_id)).catch(() => { });
-
-          await db.update(schema.cans).set({
-            lastCollectedAt: new Date(item.collected_at),
-            totalCollected: sql`${schema.cans.totalCollected} + ${BigInt(item.nominal)}`,
-            collectionCount: sql`${schema.cans.collectionCount} + 1`
-          }).where(eq(schema.cans.id, item.can_id));
+            return await submitCollection(tx, {
+              assignmentId: item.assignment_id,
+              canId: item.can_id,
+              officerId,
+              nominal: item.nominal,
+              paymentMethod: item.payment_method as any,
+              collectedAt: new Date(item.collected_at),
+              latitude: item.latitude?.toString(),
+              longitude: item.longitude?.toString(),
+              offlineId: item.offline_id,
+            });
+          });
 
           results.push({ offline_id: item.offline_id, server_id: collection.id, status: 'COMPLETED' });
           succeeded++;

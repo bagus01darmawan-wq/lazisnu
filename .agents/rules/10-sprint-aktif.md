@@ -99,6 +99,11 @@ Update 29 April 2026:
   - UI Standardization: Sinkronisasi layout paginasi, navigasi, dan standarisasi ikon aksi (Edit/Trash) di dashboard.
   - Routing Fix: Perbaikan bug 404 saat navigasi kembali ke Overview dari halaman lain.
   - Super Admin: Implementasi fitur reset (delete) penugasan khusus ADMIN_KECAMATAN.
+Update 02 Mei 2026:
+  - Adaptive Admin Actions: Implementasi tombol aksi dinamis (Re-activate/Edit & Permanent Delete/Soft Delete) berbasis status baris di Kelola Kaleng dan Manajemen User.
+  - Premium UI Interaction: Migrasi konfirmasi browser standar ke Custom Interactive Toasts (react-hot-toast) dengan ikon visual dan tombol aksi bergaya modern.
+  - Backend Data Restoration: Penambahan dukungan 'isActive' pada endpoint PUT /admin/cans dan /admin/officers serta perbaikan logika partial update (fallback to existing data).
+  - Technical Debt: BUG FIXED. Re-aktivasi sekarang otomatis mensinkronisasi tabel users dan officers. Filter SEMUA STATUS diperbaiki untuk merender data secara akurat.
 ```
 
 ---

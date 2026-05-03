@@ -177,6 +177,18 @@ export async function authRoutes(fastify: FastifyInstance) {
         });
       }
 
+      // Check rate limit before generating
+      const allowed = await otpService.checkRateLimit(body.phone);
+      if (!allowed) {
+        return reply.status(429).send({
+          success: false,
+          error: {
+            code: 'RATE_LIMITED',
+            message: 'Terlalu banyak permintaan OTP. Coba lagi nanti.',
+          },
+        });
+      }
+
       // Generate and store OTP
       const result = await otpService.generateAndStore(body.phone);
 
@@ -191,8 +203,9 @@ export async function authRoutes(fastify: FastifyInstance) {
       }
 
       // In production, send via WhatsApp Business API
-      // For now, just log the OTP (remove in production)
-      fastify.log.info(`OTP for ${body.phone}: ${result.otp}`);
+      // For now, mask the phone number in log
+      const maskedPhone = body.phone.slice(0, 4) + '****' + body.phone.slice(-3);
+      fastify.log.info({ phone: maskedPhone }, 'OTP generated and sent to WhatsApp');
 
       return reply.send({
         success: true,
@@ -344,6 +357,13 @@ export async function authRoutes(fastify: FastifyInstance) {
 
       // 2. Verify refresh token
       const decoded = await request.server.jwt.verify<any>(refresh_token);
+
+      if (decoded.tokenType !== 'refresh') {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'INVALID_TOKEN', message: 'Token yang diberikan bukan refresh token' },
+        });
+      }
 
       // 3. Generate new tokens
       const tokens = generateTokens(decoded, request.server);

@@ -16,8 +16,116 @@ export async function districtRoutes(fastify: FastifyInstance) {
       const districtId = user.districtId;
       if (!districtId) return sendSuccess(reply, []);
 
-      const branches = await db.select().from(schema.branches).where(eq(schema.branches.districtId, districtId));
+      const branches = await db.select().from(schema.branches)
+        .where(eq(schema.branches.districtId, districtId))
+        .orderBy(schema.branches.name);
       return sendSuccess(reply, branches);
+    } catch (error) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  fastify.post('/branches', kecamatan, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = request.currentUser!;
+      const { name, code } = request.body as { name: string; code: string };
+      
+      if (!name || !code) return reply.status(400).send({ success: false, message: 'Nama dan kode ranting wajib diisi' });
+
+      if (!user.districtId) {
+        return reply.status(403).send({ 
+          success: false, 
+          error: { code: 'FORBIDDEN', message: 'Admin tidak memiliki ID Kecamatan di profilnya' } 
+        });
+      }
+
+      const [newBranch] = await db.insert(schema.branches).values({
+        name: name.toUpperCase(),
+        code: code.toUpperCase(),
+        districtId: user.districtId
+      }).returning();
+
+      return sendSuccess(reply, newBranch);
+    } catch (error: any) {
+      if (error.code === '23505') {
+        return reply.status(400).send({ 
+          success: false, 
+          error: { code: 'DUPLICATE_CODE', message: 'Kode ranting sudah digunakan' } 
+        });
+      }
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  fastify.patch('/branches/:id', kecamatan, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = request.currentUser!;
+      const { id } = request.params as { id: string };
+      const { name, code } = request.body as { name: string; code: string };
+
+      const [updatedBranch] = await db.update(schema.branches)
+        .set({ 
+          name: name?.toUpperCase(), 
+          code: code?.toUpperCase(),
+          updatedAt: new Date() 
+        })
+        .where(and(
+          eq(schema.branches.id, id),
+          eq(schema.branches.districtId, user.districtId!)
+        ))
+        .returning();
+
+      if (!updatedBranch) return reply.status(404).send({ success: false, message: 'Ranting tidak ditemukan' });
+
+      return sendSuccess(reply, updatedBranch);
+    } catch (error) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  fastify.get('/branches/:branchId/dukuhs', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { branchId } = request.params as { branchId: string };
+      const dukuhs = await db.select().from(schema.dukuhs)
+        .where(eq(schema.dukuhs.branchId, branchId))
+        .orderBy(schema.dukuhs.name);
+      return sendSuccess(reply, dukuhs);
+    } catch (error) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  fastify.post('/branches/:branchId/dukuhs', kecamatan, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { branchId } = request.params as { branchId: string };
+      const { name } = request.body as { name: string };
+
+      if (!name) return reply.status(400).send({ success: false, message: 'Nama dukuh wajib diisi' });
+
+      const [newDukuh] = await db.insert(schema.dukuhs).values({
+        name: name.toUpperCase(),
+        branchId
+      }).returning();
+
+      return sendSuccess(reply, newDukuh);
+    } catch (error) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  fastify.patch('/dukuhs/:id', kecamatan, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const { name } = request.body as { name: string };
+
+      const [updatedDukuh] = await db.update(schema.dukuhs)
+        .set({ name: name?.toUpperCase(), updatedAt: new Date() })
+        .where(eq(schema.dukuhs.id, id))
+        .returning();
+
+      if (!updatedDukuh) return reply.status(404).send({ success: false, message: 'Dukuh tidak ditemukan' });
+
+      return sendSuccess(reply, updatedDukuh);
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
     }
@@ -115,6 +223,49 @@ export async function districtRoutes(fastify: FastifyInstance) {
           count: byBranch[b.id]?.count || 0,
         })),
       });
+    } catch (error) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  fastify.delete('/branches/:id', kecamatan, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { id } = request.params as { id: string };
+
+      // Check if branch has any dukuhs
+      const dukuhsCount = await db.$count(schema.dukuhs, eq(schema.dukuhs.branchId, id));
+      if (Number(dukuhsCount) > 0) {
+        return reply.status(400).send({ 
+          success: false, 
+          message: 'Ranting tidak bisa dihapus karena masih memiliki data dukuh terkait' 
+        });
+      }
+
+      // Check if branch has any cans
+      const cansCount = await db.$count(schema.cans, eq(schema.cans.branchId, id));
+      if (Number(cansCount) > 0) {
+        return reply.status(400).send({ 
+          success: false, 
+          message: 'Ranting tidak bisa dihapus karena masih memiliki data kaleng terkait' 
+        });
+      }
+
+      // Check if branch has any officers
+      const officersCount = await db.$count(schema.officers, eq(schema.officers.branchId, id));
+      if (Number(officersCount) > 0) {
+        return reply.status(400).send({ 
+          success: false, 
+          message: 'Ranting tidak bisa dihapus karena masih memiliki data petugas terkait' 
+        });
+      }
+
+      const deleted = await db.delete(schema.branches)
+        .where(eq(schema.branches.id, id))
+        .returning();
+
+      if (deleted.length === 0) return reply.status(404).send({ success: false, message: 'Ranting tidak ditemukan' });
+
+      return sendSuccess(reply, { message: 'Ranting berhasil dihapus' });
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
     }

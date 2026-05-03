@@ -48,7 +48,15 @@ const envSchema = z.object({
   INTERNAL_API_KEY: z.string().optional(),
 
   // APP Secret for QR Signing
-  APP_SECRET: z.string().default('development-secret-for-qr-signing'),
+  APP_SECRET: z.string()
+    .min(32, 'APP_SECRET minimal 32 karakter')
+    .refine(
+      (val) => {
+        if (process.env.NODE_ENV === 'development') return true;
+        return val !== 'development-secret-for-qr-signing';
+      },
+      { message: 'APP_SECRET wajib diganti dari nilai default di production/staging' }
+    ),
 });
 
 const parseResult = envSchema.safeParse(process.env);

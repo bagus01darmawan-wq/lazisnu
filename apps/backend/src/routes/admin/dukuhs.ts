@@ -134,21 +134,30 @@ export async function dukuhsRoutes(fastify: FastifyInstance) {
     try {
       const { id } = request.params as { id: string };
 
-      // Check if dukuh is used in cans
-      const usedInCans = await db.query.cans.findFirst({
-        where: eq(schema.cans.dukuhId, id)
+      // Check if dukuh is used in ACTIVE cans
+      const activeCans = await db.query.cans.findFirst({
+        where: and(
+          eq(schema.cans.dukuhId, id),
+          eq(schema.cans.isActive, true)
+        )
       });
-
-      if (usedInCans) {
+ 
+      if (activeCans) {
         return reply.status(400).send({
           success: false,
           error: {
             code: 'DUKUH_IN_USE',
-            message: 'Dukuh tidak bisa dihapus karena masih digunakan oleh data kaleng'
+            message: 'Dukuh tidak bisa dihapus karena masih digunakan oleh kaleng yang sedang AKTIF'
           }
         });
       }
 
+      // If there are only inactive cans, we allow deletion but must set their dukuhId to NULL
+      // to avoid foreign key constraint violation
+      await db.update(schema.cans)
+        .set({ dukuhId: null })
+        .where(eq(schema.cans.dukuhId, id));
+ 
       await db.delete(schema.dukuhs).where(eq(schema.dukuhs.id, id));
       return sendSuccess(reply, { message: 'Dukuh berhasil dihapus' });
     } catch (error) {

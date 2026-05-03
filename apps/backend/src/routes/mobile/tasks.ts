@@ -36,23 +36,27 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       const weekStart = new Date(today);
       weekStart.setDate(weekStart.getDate() - weekStart.getDay());
 
-      const [latestToday, latestWeek, pendingAssignments, latestRecent] = await Promise.all([
-        db.query.collections.findMany({
-          where: and(
-            eq(schema.collections.officerId, officerId), 
-            gte(schema.collections.collectedAt, today), 
+      const [todayStats, weekStats, pendingAssignments, latestRecent] = await Promise.all([
+        db.select({
+          collected: sql<number>`count(*)::int`,
+          total_nominal: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
+        }).from(schema.collections)
+          .where(and(
+            eq(schema.collections.officerId, officerId),
+            gte(schema.collections.collectedAt, today),
             eq(schema.collections.syncStatus, 'COMPLETED'),
             latestCollectionCondition
-          ),
-        }),
-        db.query.collections.findMany({
-          where: and(
-            eq(schema.collections.officerId, officerId), 
-            gte(schema.collections.collectedAt, weekStart), 
+          )).then(r => r[0]),
+        db.select({
+          collected: sql<number>`count(*)::int`,
+          total_nominal: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
+        }).from(schema.collections)
+          .where(and(
+            eq(schema.collections.officerId, officerId),
+            gte(schema.collections.collectedAt, weekStart),
             eq(schema.collections.syncStatus, 'COMPLETED'),
             latestCollectionCondition
-          ),
-        }),
+          )).then(r => r[0]),
         db.query.assignments.findMany({
           where: and(eq(schema.assignments.officerId, officerId), eq(schema.assignments.status, 'ACTIVE')),
           with: {
@@ -79,13 +83,13 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         success: true,
         data: {
           today_stats: {
-            collected: latestToday.length,
-            total_nominal: latestToday.reduce((sum, c) => sum + Number(c.nominal), 0),
+            collected: todayStats.collected,
+            total_nominal: Number(todayStats.total_nominal),
             remaining: pendingAssignments.length,
           },
           week_stats: {
-            collected: latestWeek.length,
-            total_nominal: latestWeek.reduce((sum, c) => sum + Number(c.nominal), 0),
+            collected: weekStats.collected,
+            total_nominal: Number(weekStats.total_nominal),
           },
           pending_tasks: pendingAssignments.map((a) => ({
             id: a.id,
