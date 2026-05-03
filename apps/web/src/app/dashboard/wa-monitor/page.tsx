@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
+import { toast } from 'react-hot-toast';
 
 export default function WAMonitorPage() {
   const [data, setData] = useState([]);
@@ -39,10 +40,10 @@ export default function WAMonitorPage() {
         const items = response.data.items || response.data.logs || [];
         setData(items.map((log: any) => ({
           id: log.id,
-          recipient: log.user?.fullName || 'Donatur',
-          message: `Notifikasi ${log.actionType} pada ${log.entityType}`,
+          recipient: log.user?.full_name || 'Donatur',
+          message: `Notifikasi ${log.action_type} pada ${log.entity_type}`,
           status: 'SENT',
-          time: log.createdAt
+          time: log.created_at
         })));
         setStats({ sent: 142, pending: 3, failed: 1 });
       }
@@ -97,11 +98,18 @@ export default function WAMonitorPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">WhatsApp Monitor</h1>
-          <p className="text-slate-500 text-sm">Status pengiriman notifikasi otomatis kepada donatur</p>
+        <div className="flex items-center gap-3">
+          <MessageSquare className="text-green-600" size={28} />
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">WhatsApp Monitor</h1>
+            <p className="text-slate-500 text-sm font-medium">Status pengiriman notifikasi otomatis kepada donatur</p>
+          </div>
         </div>
-        <Button variant="outline" onClick={fetchWAStatus} className="rounded-xl gap-2">
+        <Button 
+          variant="outline" 
+          onClick={fetchWAStatus} 
+          className="rounded-xl h-11 px-5 text-sm font-bold border-slate-200 hover:bg-slate-50 transition-all active:scale-95 flex items-center gap-2"
+        >
           <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
           Refresh Status
         </Button>
@@ -176,11 +184,11 @@ export default function WAMonitorPage() {
               try {
                 const response: any = await api.post('/admin/wa/flush-failed');
                 if (response.success) {
-                  alert('Antrean berhasil dibersihkan');
+                  toast.success('Antrean berhasil dibersihkan');
                   fetchWAStatus();
                 }
               } catch (e) {
-                alert('Gagal membersihkan antrean');
+                toast.error('Gagal membersihkan antrean');
               }
             }}>
               Clear All Failed

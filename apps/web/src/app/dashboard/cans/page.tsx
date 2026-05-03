@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Table } from '@/components/ui/Table';
 import { Button } from '@/components/ui/Button';
@@ -9,46 +10,50 @@ import { Modal } from '@/components/ui/Modal';
 import { Badge } from '@/components/ui/Badge';
 import { ColumnDef } from '@tanstack/react-table';
 import api from '@/lib/api';
-import { 
-  Box, 
-  Plus, 
-  Search, 
-  QrCode, 
-  Edit, 
+import { toast } from 'react-hot-toast';
+import {
+  Box,
+  Plus,
+  Search,
+  QrCode,
+  Edit,
   Trash2,
   MapPin,
   Phone,
   Filter,
   RefreshCcw,
-  User,
-  PlusCircle,
-  RotateCcw
+  RotateCcw,
+  CheckSquare,
+  Square,
+  AlertTriangle
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
 const canSchema = z.object({
-  ownerName: z.string().min(1, 'Nama pemilik wajib diisi'),
-  branchId: z.string().uuid('Pilih ranting'),
-  dukuhId: z.string().uuid('Pilih dukuh'),
+  owner_name: z.string().min(1, 'Nama pemilik wajib diisi'),
+  branch_id: z.string().uuid('Pilih ranting'),
+  dukuh_id: z.string().uuid('Pilih dukuh'),
   rt: z.string().min(1, 'Pilih RT'),
   rw: z.string().min(1, 'Pilih RW'),
-  ownerWhatsapp: z.string().min(10, 'Nomor WhatsApp minimal 10 digit'),
+  owner_whatsapp: z.string().min(10, 'Nomor WhatsApp minimal 10 digit'),
 });
 
 type CanFormValues = z.infer<typeof canSchema>;
 
 export default function CansPage() {
+  const router = useRouter();
   const { user } = useAuthStore();
-  const [data, setData] = useState([]);
+  const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isDukuhModalOpen, setIsDukuhModalOpen] = useState(false);
   const [editingCan, setEditingCan] = useState<any>(null);
   const [branches, setBranches] = useState([]);
   const [dukuhs, setDukuhs] = useState([]);
-  const [newDukuhName, setNewDukuhName] = useState('');
+  
+  // Selection state
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   
   // Pagination & Filter states
   const [search, setSearch] = useState('');
@@ -58,11 +63,17 @@ export default function CansPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  // Import states
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importBranchId, setImportBranchId] = useState('');
+  const [importFile, setImportFile] = useState<File | null>(null);
+
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<CanFormValues>({
     resolver: zodResolver(canSchema as any),
   });
 
-  const selectedBranchId = watch('branchId');
+  const selectedBranchId = watch('branch_id');
 
   const fetchData = async () => {
     setLoading(true);
@@ -79,6 +90,7 @@ export default function CansPage() {
       if (response.success) {
         setData(response.data.items || []);
         setTotalItems(response.data.pagination?.total || 0);
+        setSelectedIds([]); // Reset selection on data fetch
       }
     } catch (error) {
       console.error('Failed to fetch cans:', error);
@@ -125,51 +137,16 @@ export default function CansPage() {
     fetchDukuhs(selectedBranchId);
   }, [selectedBranchId]);
 
-  const handleAddDukuh = async () => {
-    if (!selectedBranchId) {
-      alert('Pilih ranting terlebih dahulu');
-      return;
-    }
-    if (!newDukuhName) return;
-    
-    try {
-      const response: any = await api.post('/admin/dukuhs', {
-        branchId: selectedBranchId,
-        name: newDukuhName
-      });
-      if (response.success) {
-        setNewDukuhName('');
-        setIsDukuhModalOpen(false);
-        await fetchDukuhs(selectedBranchId);
-        setValue('dukuhId', response.data.id);
-      }
-    } catch (error) {
-      alert('Gagal menambah dukuh');
-    }
-  };
-
-  const handleDeleteDukuh = async (id: string, name: string) => {
-    if (!confirm(`Hapus dukuh ${name}? Dukuh hanya bisa dihapus jika tidak digunakan oleh data kaleng manapun.`)) return;
-    try {
-      const response: any = await api.delete(`/admin/dukuhs/${id}`);
-      if (response.success) {
-        await fetchDukuhs(selectedBranchId);
-      }
-    } catch (error: any) {
-      alert(error.response?.data?.error?.message || 'Gagal menghapus dukuh');
-    }
-  };
-
   const onSubmit = async (values: any) => {
     try {
       const payload = {
-        owner_name: values.ownerName,
-        owner_whatsapp: values.ownerWhatsapp,
-        branch_id: values.branchId,
-        dukuh_id: values.dukuhId,
+        owner_name: values.owner_name,
+        owner_whatsapp: values.owner_whatsapp,
+        branch_id: values.branch_id,
+        dukuh_id: values.dukuh_id,
         rt: values.rt,
         rw: values.rw,
-        owner_address: values.ownerAddress || '',
+        owner_address: values.owner_address || '',
       };
 
       if (editingCan) {
@@ -178,7 +155,7 @@ export default function CansPage() {
           setIsModalOpen(false);
           setEditingCan(null);
           await fetchData();
-          alert('Data kaleng berhasil diperbarui');
+          toast.success('Data kaleng berhasil diperbarui');
         }
       } else {
         const response: any = await api.post('/admin/cans', payload);
@@ -186,56 +163,294 @@ export default function CansPage() {
           setIsModalOpen(false);
           reset();
           await fetchData();
-          alert('Kaleng baru berhasil ditambahkan');
+          toast.success('Kaleng baru berhasil ditambahkan');
         }
       }
     } catch (error: any) {
-      alert(error.response?.data?.error?.message || 'Gagal menyimpan data');
+      toast.error(error.error?.message || error.message || 'Gagal menyimpan data');
     }
   };
 
   const handleEdit = (can: any) => {
     setEditingCan(can);
-    setValue('ownerName', can.ownerName);
-    setValue('branchId', can.branchId);
-    setValue('dukuhId', can.dukuhId);
+    setValue('owner_name', can.owner_name);
+    setValue('branch_id', can.branch_id);
+    setValue('dukuh_id', can.dukuh_id);
     setValue('rt', can.rt || '');
     setValue('rw', can.rw || '');
-    setValue('ownerWhatsapp', can.ownerWhatsapp || '');
+    setValue('owner_whatsapp', can.owner_whatsapp || '');
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menonaktifkan kaleng ini?')) return;
-    try {
-      const response: any = await api.delete(`/admin/cans/${id}`);
-      if (response.success) {
-        fetchData();
-      }
-    } catch (error: any) {
-      alert(error.response?.data?.error?.message || 'Gagal menghapus data');
+  const handleDelete = async (id: string, isPermanentRow?: boolean) => {
+    const isPermanent = isPermanentRow || statusFilter === 'NON_ACTIVE';
+    const message = isPermanent 
+      ? 'Hapus PERMANEN kaleng ini? Data akan hilang selamanya.'
+      : 'Nonaktifkan kaleng ini?';
+      
+    toast((t) => (
+      <div className="flex flex-col gap-3 min-w-[250px]">
+        <div className="flex items-center gap-2">
+          {isPermanent ? <AlertTriangle size={18} className="text-red-600" /> : <Trash2 size={18} className="text-slate-400" />}
+          <p className="text-sm font-bold text-slate-800">{message}</p>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="h-8 text-xs font-bold rounded-lg"
+            onClick={() => toast.dismiss(t.id)}
+          >
+            Batal
+          </Button>
+          <Button 
+            size="sm" 
+            className={`h-8 text-xs font-bold rounded-lg text-white shadow-sm transition-all active:scale-95 ${isPermanent ? 'bg-red-600 hover:bg-red-700 shadow-red-100' : 'bg-slate-800 hover:bg-slate-900 shadow-slate-200'}`}
+            onClick={async () => {
+              toast.dismiss(t.id);
+              try {
+                const response: any = await api.delete(`/admin/cans/${id}${isPermanent ? '?permanent=true' : ''}`);
+                if (response.success) {
+                  fetchData();
+                  toast.success(isPermanent ? 'Data kaleng berhasil dihapus permanen' : 'Data kaleng berhasil dinonaktifkan');
+                }
+              } catch (error: any) {
+                toast.error(error.error?.message || error.message || 'Gagal memproses penghapusan');
+              }
+            }}
+          >
+            {isPermanent ? 'Hapus Permanen' : 'Ya, Nonaktifkan'}
+          </Button>
+        </div>
+      </div>
+    ), { duration: 6000, position: 'top-center' });
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    
+    const isNonActiveView = statusFilter === 'NON_ACTIVE';
+    const message = isNonActiveView
+      ? `Hapus PERMANEN ${selectedIds.length} kaleng?`
+      : `Nonaktifkan ${selectedIds.length} kaleng?`;
+      
+    toast((t) => (
+      <div className="flex flex-col gap-3 min-w-[280px]">
+        <div className="flex items-center gap-2 text-red-600">
+          <AlertTriangle size={20} />
+          <p className="text-sm font-bold">{message}</p>
+        </div>
+        <p className="text-[11px] text-slate-500 font-medium px-1">
+          {isNonActiveView ? 'Data yang sudah dihapus tidak dapat dikembalikan.' : 'Data akan dipindahkan ke kategori non-aktif.'}
+        </p>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="h-8 text-xs font-bold rounded-lg"
+            onClick={() => toast.dismiss(t.id)}
+          >
+            Batal
+          </Button>
+          <Button 
+            size="sm" 
+            className={`h-8 text-xs font-bold rounded-lg text-white shadow-sm transition-all active:scale-95 ${isNonActiveView ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-slate-800 hover:bg-slate-900 shadow-slate-200'}`}
+            onClick={async () => {
+              toast.dismiss(t.id);
+              try {
+                const response: any = await api.post('/admin/cans/bulk-delete', { 
+                  ids: selectedIds,
+                  permanent: isNonActiveView
+                });
+                if (response.success) {
+                  toast.success(isNonActiveView 
+                    ? `Berhasil menghapus permanen ${selectedIds.length} kaleng` 
+                    : `Berhasil menonaktifkan ${selectedIds.length} kaleng`
+                  );
+                  fetchData();
+                }
+              } catch (error: any) {
+                toast.error(error.message || 'Gagal menghapus data masal');
+              }
+            }}
+          >
+            {isNonActiveView ? 'Ya, Hapus Permanen' : 'Ya, Nonaktifkan'}
+          </Button>
+        </div>
+      </div>
+    ), { duration: 6000, position: 'top-center' });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === data.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(data.map(item => item.id));
     }
+  };
+
+  const toggleSelectId = (id: string) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleImport = async () => {
+    if (!importBranchId) return toast.error('Pilih ranting terlebih dahulu');
+    if (!importFile) return toast.error('Pilih file CSV terlebih dahulu');
+
+    setImporting(true);
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const text = e.target?.result as string;
+        const lines = text.split('\n').filter(line => line.trim() !== '');
+        
+        if (lines.length === 0) throw new Error('File kosong');
+
+        // Skip header if it exists
+        const hasHeader = lines[0].toLowerCase().includes('nama');
+        const dataLines = hasHeader ? lines.slice(1) : lines;
+
+        // Fetch dukuhs for mapping
+        const dukuhsRes: any = await api.get('/admin/dukuhs', { params: { branch_id: importBranchId } });
+        const branchDukuhs = dukuhsRes.data || [];
+
+        const items = dataLines.map(line => {
+          // Detect separator automatically (comma or semicolon)
+          const separator = line.includes(';') ? ';' : ',';
+          const columns = line.split(separator).map(c => c.trim().replace(/^"|"$/g, ''));
+          
+          const ownerName = columns[0];
+          const ownerWhatsapp = columns[1];
+          const dukuhName = columns[2];
+          const rt = columns[3] || '';
+          const rw = columns[4] || '';
+
+          // Find dukuh ID by name
+          const dukuh = branchDukuhs.find((d: any) => d.name.toUpperCase() === dukuhName?.toUpperCase());
+
+          return {
+            owner_name: ownerName,
+            owner_whatsapp: ownerWhatsapp,
+            dukuh_id: dukuh?.id,
+            dukuh: dukuhName,
+            rt: rt,
+            rw: rw
+          };
+        }).filter(item => item.owner_name && item.owner_name !== '' && item.owner_whatsapp && item.owner_whatsapp !== '');
+
+        if (items.length === 0) {
+          console.warn('Parsed lines:', dataLines);
+          throw new Error('Format file tidak sesuai atau data valid tidak ditemukan. Pastikan kolom Nama dan WhatsApp terisi.');
+        }
+
+        const response: any = await api.post('/admin/cans/bulk', {
+          branch_id: importBranchId,
+          items
+        });
+
+        if (response.success) {
+          toast.success(`Berhasil mengimpor ${response.data.count} data kaleng`);
+          setIsImportModalOpen(false);
+          setImportFile(null);
+          fetchData();
+        }
+      } catch (error: any) {
+        console.error('Import error:', error);
+        toast.error(error.message || 'Gagal memproses file impor');
+      } finally {
+        setImporting(false);
+      }
+    };
+    reader.readAsText(importFile);
+  };
+
+  const handleReactivate = async (id: string) => {
+    toast((t) => (
+      <div className="flex flex-col gap-3 min-w-[250px]">
+        <div className="flex items-center gap-2">
+          <RotateCcw size={18} className="text-blue-600" />
+          <p className="text-sm font-bold text-slate-800">Aktifkan kembali kaleng ini?</p>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="h-8 text-xs font-bold rounded-lg"
+            onClick={() => toast.dismiss(t.id)}
+          >
+            Batal
+          </Button>
+          <Button 
+            size="sm" 
+            className="bg-blue-600 hover:bg-blue-700 h-8 text-xs font-bold rounded-lg text-white shadow-sm transition-all active:scale-95"
+            onClick={async () => {
+              toast.dismiss(t.id);
+              try {
+                const response: any = await api.put(`/admin/cans/${id}`, { is_active: true });
+                if (response.success) {
+                  fetchData();
+                  toast.success('Data kaleng berhasil diaktifkan kembali');
+                }
+              } catch (error: any) {
+                toast.error(error.error?.message || error.message || 'Gagal mengaktifkan data');
+              }
+            }}
+          >
+            Ya, Aktifkan
+          </Button>
+        </div>
+      </div>
+    ), { duration: 5000, position: 'top-center' });
   };
 
   const columns: ColumnDef<any>[] = [
     {
-      accessorKey: 'qrCode',
+      id: 'selection',
+      header: () => (
+        <button 
+          onClick={toggleSelectAll}
+          className="p-1 hover:bg-slate-200 rounded transition-colors"
+        >
+          {selectedIds.length === data.length && data.length > 0 ? (
+            <CheckSquare size={18} className="text-green-600" />
+          ) : (
+            <Square size={18} className="text-slate-400" />
+          )}
+        </button>
+      ),
+      cell: ({ row }) => (
+        <button 
+          onClick={() => toggleSelectId(row.original.id)}
+          className="p-1 hover:bg-slate-100 rounded transition-colors"
+        >
+          {selectedIds.includes(row.original.id) ? (
+            <CheckSquare size={18} className="text-green-600" />
+          ) : (
+            <Square size={18} className="text-slate-300" />
+          )}
+        </button>
+      ),
+    },
+    {
+      accessorKey: 'qr_code',
       header: 'QR CODE',
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center">
             <QrCode size={14} className="text-green-600" />
           </div>
-          <span className="font-bold text-slate-700">{row.original.qrCode}</span>
+          <span className="font-bold text-slate-700">{row.original.qr_code}</span>
         </div>
       ),
     },
     {
-      accessorKey: 'ownerName',
+      accessorKey: 'owner_name',
       header: 'PEMILIK',
       cell: ({ row }) => (
         <div className="flex flex-col">
-          <span className="font-semibold text-slate-900">{row.original.ownerName}</span>
+          <span className="font-semibold text-slate-900">{row.original.owner_name}</span>
           <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
             {row.original.branch?.name.replace(/ranting/gi, '').trim() || 'No Branch'}
           </span>
@@ -249,79 +464,137 @@ export default function CansPage() {
         <div className="flex flex-col text-xs text-slate-600">
           <div className="flex items-center gap-1">
             <MapPin size={10} />
-            <span>{row.original.dukuhDetails?.name || row.original.dukuh || '-'}</span>
+            <span>{row.original.dukuh_details?.name || row.original.dukuh || '-'}</span>
           </div>
           <span className="ml-3.5 opacity-70">RT {row.original.rt || '-'} / RW {row.original.rw || '-'}</span>
         </div>
       ),
     },
     {
-      accessorKey: 'ownerWhatsapp',
+      accessorKey: 'owner_whatsapp',
       header: 'WHATSAPP',
       cell: ({ row }) => (
         <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium bg-slate-50 px-2 py-1 rounded-lg border border-slate-100 w-fit">
           <Phone size={12} className="text-green-500" />
-          {row.original.ownerWhatsapp}
+          {row.original.owner_whatsapp}
         </div>
       ),
     },
     {
-      accessorKey: 'isActive',
+      accessorKey: 'is_active',
       header: 'STATUS',
-      cell: ({ row }) => (
-        <Badge variant={row.original.isActive ? 'success' : 'failed'}>
-          {row.original.isActive ? 'AKTIF' : 'NON-AKTIF'}
-        </Badge>
-      ),
+      cell: ({ row }) => {
+        const can = row.original;
+        const isAssigned = can.assignments && can.assignments.length > 0;
+
+        if (!can.is_active) {
+          return <Badge variant="failed">NON-AKTIF</Badge>;
+        }
+
+        if (isAssigned) {
+          return (
+            <Badge
+              variant="default"
+              className="bg-indigo-100 text-indigo-700 border-indigo-200 cursor-pointer hover:bg-indigo-200 transition-all flex items-center gap-1.5 group px-3"
+              onClick={() => router.push('/dashboard/assignments')}
+              title="Klik untuk lihat penugasan"
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse" />
+              ASSIGNED
+            </Badge>
+          );
+        }
+
+        return <Badge variant="success">AKTIF</Badge>;
+      },
     },
     {
       id: 'actions',
       header: '',
-      cell: ({ row }) => (
-        <div className="flex items-center justify-end gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="h-8 w-8 p-0 rounded-lg hover:bg-green-50 hover:text-green-600 hover:border-green-200 transition-all border-slate-200 group"
-            onClick={() => handleEdit(row.original)}
-          >
-            <Edit size={14} className="text-slate-500 group-hover:text-green-600" />
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="h-8 w-8 p-0 rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all border-slate-200 group"
-            onClick={() => handleDelete(row.original.id)}
-          >
-            <Trash2 size={14} className="text-slate-500 group-hover:text-red-600" />
-          </Button>
-        </div>
-      ),
+      cell: ({ row }) => {
+        const isNonActiveRow = !row.original.is_active;
+        return (
+          <div className="flex items-center justify-end gap-2">
+            {isNonActiveRow ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all border-slate-200 group"
+                onClick={() => handleReactivate(row.original.id)}
+                title="Aktifkan Kembali"
+              >
+                <RotateCcw size={14} className="text-slate-500 group-hover:text-blue-600" />
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0 rounded-lg hover:bg-green-50 hover:text-green-600 hover:border-green-200 transition-all border-slate-200 group"
+                onClick={() => handleEdit(row.original)}
+                title="Edit Data"
+              >
+                <Edit size={14} className="text-slate-500 group-hover:text-green-600" />
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className={`h-8 w-8 p-0 rounded-lg transition-all border-slate-200 group ${isNonActiveRow ? 'hover:bg-red-600 hover:text-white hover:border-red-600' : 'hover:bg-red-50 hover:text-red-600 hover:border-red-200'}`}
+              onClick={() => handleDelete(row.original.id, isNonActiveRow)}
+              title={isNonActiveRow ? 'Hapus Permanen' : 'Non-aktifkan'}
+            >
+              {isNonActiveRow ? (
+                <AlertTriangle size={14} className="text-red-500 group-hover:text-white" />
+              ) : (
+                <Trash2 size={14} className="text-slate-500 group-hover:text-red-600" />
+              )}
+            </Button>
+          </div>
+        );
+      },
     },
   ];
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+    <div className="space-y-6">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
-            <Box className="text-green-600" size={28} />
-            Kelola Kaleng Infaq
-          </h1>
-          <p className="text-slate-500 text-sm mt-1 font-medium">Manajemen data donatur dan distribusi kaleng Lazisnu</p>
+        <div className="flex items-center gap-3">
+          <Box className="text-green-600" size={28} />
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Kelola Kaleng Infaq</h1>
+            <p className="text-slate-500 text-sm font-medium">Manajemen data donatur dan distribusi kaleng Lazisnu</p>
+          </div>
         </div>
-        <Button 
-          onClick={() => {
-            setEditingCan(null);
-            reset();
-            setIsModalOpen(true);
-          }}
-          className="bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-600/20 px-6 h-11 rounded-xl font-bold transition-all active:scale-95 flex items-center gap-2"
-        >
-          <Plus size={20} />
-          Tambah Kaleng Baru
-        </Button>
+        <div className="flex items-center gap-3">
+          {selectedIds.length > 0 && (
+            <Button
+              onClick={handleBulkDelete}
+              className={`${statusFilter === 'NON_ACTIVE' ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-200' : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'} h-11 rounded-xl font-bold px-5 flex items-center gap-2 shadow-lg transition-all active:scale-95`}
+            >
+              {statusFilter === 'NON_ACTIVE' ? <AlertTriangle size={18} /> : <Trash2 size={18} />}
+              {statusFilter === 'NON_ACTIVE' ? 'Hapus Permanen' : 'Hapus Terpilih'} ({selectedIds.length})
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            onClick={() => setIsImportModalOpen(true)}
+            className="border-green-600 text-green-600 hover:bg-green-50 h-11 rounded-xl font-bold px-5"
+          >
+            Impor Data
+          </Button>
+          <Button
+            onClick={() => {
+              setEditingCan(null);
+              reset();
+              setIsModalOpen(true);
+            }}
+            className="bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-600/20 px-6 h-11 rounded-xl font-bold transition-all active:scale-95 flex items-center gap-2"
+          >
+            <Plus size={20} />
+            Tambah Kaleng Baru
+          </Button>
+        </div>
       </div>
 
       {/* Toolbar Section */}
@@ -343,10 +616,26 @@ export default function CansPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+          <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100 shadow-sm hover:border-slate-200 transition-colors">
+            <Filter className="text-slate-400 ml-2" size={16} />
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="bg-transparent text-xs font-bold text-slate-900 px-3 py-1.5 focus:outline-none cursor-pointer"
+            >
+              <option value="ACTIVE">AKTIF</option>
+              <option value="NON_ACTIVE">NON-AKTIF</option>
+              <option value="ALL">SEMUA STATUS</option>
+            </select>
+          </div>
+
           {user?.role === 'ADMIN_KECAMATAN' && (
             <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100 shadow-sm hover:border-slate-200 transition-colors">
               <Filter className="text-slate-400 ml-2" size={16} />
-              <select 
+              <select
                 value={branchFilter}
                 onChange={(e) => {
                   setBranchFilter(e.target.value);
@@ -364,25 +653,9 @@ export default function CansPage() {
             </div>
           )}
 
-          <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100 shadow-sm hover:border-slate-200 transition-colors">
-            <RotateCcw className="text-slate-400 ml-2" size={16} />
-            <select 
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="bg-transparent text-xs font-bold text-slate-900 px-3 py-1.5 focus:outline-none cursor-pointer"
-            >
-              <option value="ACTIVE">AKTIF</option>
-              <option value="INACTIVE">NON-AKTIF</option>
-              <option value="ALL">SEMUA STATUS</option>
-            </select>
-          </div>
-
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             className="h-10 rounded-xl px-4 text-xs font-bold text-slate-500 border-slate-200 hover:bg-slate-50 flex items-center gap-2"
             onClick={() => {
               setSearch('');
@@ -394,33 +667,30 @@ export default function CansPage() {
             <RotateCcw size={14} />
             RESET
           </Button>
-
-          {/* Selector Baris removed from here */}
         </div>
       </div>
 
       {/* Main Table Container */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         <Table columns={columns} data={data} loading={loading} />
-        
+
         {/* Pagination Controls */}
         {!loading && totalItems > 0 && (
           <div className="px-6 py-6 bg-slate-50/50 border-t border-slate-100 flex flex-col items-end gap-3">
             <p className="text-xs font-medium text-slate-500">
               Menampilkan <span className="font-bold text-slate-900">{data.length}</span> dari <span className="font-bold text-slate-900">{totalItems}</span> kaleng
             </p>
-            
+
             <div className="flex items-center gap-4">
-              {/* Selector Baris moved here */}
               <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Baris:</span>
-                <select 
+                <select
                   value={pageSize}
                   onChange={(e) => {
                     setPageSize(Number(e.target.value));
                     setCurrentPage(1);
                   }}
-                  className="bg-transparent text-xs font-bold text-slate-700 focus:outline-none cursor-pointer"
+                  className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
                 >
                   <option value={10}>10</option>
                   <option value={20}>20</option>
@@ -433,7 +703,7 @@ export default function CansPage() {
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-widest bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
                   Halaman <span className="text-green-600">{currentPage}</span> dari {Math.ceil(totalItems / pageSize)}
                 </span>
-                
+
                 <div className="flex items-center gap-1.5">
                   <Button
                     variant="outline"
@@ -460,26 +730,30 @@ export default function CansPage() {
         )}
       </div>
 
-      {/* Modal Tambah/Edit Kaleng */}
-      <Modal 
-        isOpen={isModalOpen} 
-        onClose={() => {
-          setIsModalOpen(false);
-          setEditingCan(null);
-        }}
-        title={editingCan ? "Edit Data Kaleng" : "Tambah Kaleng Baru"}
+      {/* Modal Impor */}
+      <Modal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        title="Impor Data Kaleng (Massal)"
       >
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-gray-700">Nama Lengkap Pemilik</label>
-            <Input {...register('ownerName')} placeholder="Contoh: Bpk. Slamet" />
-            {errors.ownerName && <p className="text-xs font-medium text-red-500">{errors.ownerName.message}</p>}
+        <div className="space-y-5">
+          <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 space-y-2">
+            <h4 className="text-sm font-bold text-blue-900 flex items-center gap-2">
+              <Filter size={16} /> Panduan Format CSV
+            </h4>
+            <div className="text-[11px] text-blue-800 space-y-1">
+              <p>1. Gunakan file CSV (Comma Separated Values)</p>
+              <p>2. Urutan Kolom: <strong>Nama Pemilik, WhatsApp, Nama Dukuh, RT, RW</strong></p>
+              <p>3. Contoh Baris: <code className="bg-white px-1 rounded">Budi, 62812345678, Dukuh A, 001, 002</code></p>
+              <p>4. Nama Dukuh harus persis dengan yang terdaftar di sistem.</p>
+            </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-gray-700">Pilih Ranting (Desa)</label>
-            <select 
-              {...register('branchId')}
+            <label className="text-sm font-semibold text-gray-700">Pilih Ranting Tujuan</label>
+            <select
+              value={importBranchId}
+              onChange={(e) => setImportBranchId(e.target.value)}
               className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer"
             >
               <option value="">-- Pilih Ranting --</option>
@@ -489,39 +763,100 @@ export default function CansPage() {
                 </option>
               ))}
             </select>
-            {errors.branchId && <p className="text-xs font-medium text-red-500">{errors.branchId.message}</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-gray-700">Pilih File CSV</label>
+            <div className="flex items-center justify-center w-full">
+              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-300 border-dashed rounded-2xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-all">
+                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                  <RefreshCcw className="w-8 h-8 mb-3 text-slate-400" />
+                  <p className="mb-2 text-sm text-slate-500">
+                    <span className="font-bold">{importFile ? importFile.name : 'Klik untuk unggah'}</span>
+                  </p>
+                  <p className="text-xs text-slate-400">File CSV saja (Maks 2MB)</p>
+                </div>
+                <input
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <Button
+              variant="secondary"
+              className="flex-1 rounded-xl h-12 font-bold"
+              onClick={() => setIsImportModalOpen(false)}
+            >
+              Batal
+            </Button>
+            <Button
+              className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl h-12 font-bold"
+              onClick={handleImport}
+              isLoading={importing}
+              disabled={!importBranchId || !importFile}
+            >
+              Mulai Impor
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal Tambah/Edit Kaleng */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingCan(null);
+        }}
+        title={editingCan ? "Edit Data Kaleng" : "Tambah Kaleng Baru"}
+      >
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-gray-700">Nama Lengkap Pemilik</label>
+            <Input {...register('owner_name')} placeholder="Contoh: Bpk. Slamet" />
+            {errors.owner_name && <p className="text-xs font-medium text-red-500">{errors.owner_name.message}</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-gray-700">Pilih Ranting (Desa)</label>
+            <select
+              {...register('branch_id')}
+              className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer"
+            >
+              <option value="">-- Pilih Ranting --</option>
+              {branches.map((b: any) => (
+                <option key={b.id} value={b.id}>
+                  {b.name.replace(/ranting/gi, '').trim().toUpperCase()}
+                </option>
+              ))}
+            </select>
+            {errors.branch_id && <p className="text-xs font-medium text-red-500">{errors.branch_id.message}</p>}
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-semibold text-gray-700">Pilih Dukuh</label>
-            <div className="flex gap-2">
-              <select 
-                {...register('dukuhId')}
-                disabled={!selectedBranchId}
-                className="flex-1 h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer disabled:bg-slate-50 disabled:text-slate-400"
-              >
-                <option value="">-- Pilih Dukuh --</option>
-                {dukuhs.map((d: any) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
-              <Button 
-                type="button"
-                variant="outline"
-                className="h-11 w-11 p-0 rounded-xl border-slate-200 hover:border-green-500 hover:text-green-600 transition-colors"
-                onClick={() => setIsDukuhModalOpen(true)}
-                disabled={!selectedBranchId}
-              >
-                <PlusCircle size={20} />
-              </Button>
-            </div>
-            {errors.dukuhId && <p className="text-xs font-medium text-red-500">{errors.dukuhId.message}</p>}
+            <select
+              {...register('dukuh_id')}
+              disabled={!selectedBranchId}
+              className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer disabled:bg-slate-50 disabled:text-slate-400"
+            >
+              <option value="">-- Pilih Dukuh --</option>
+              {dukuhs.map((d: any) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+            {errors.dukuh_id && <p className="text-xs font-medium text-red-500">{errors.dukuh_id.message}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-sm font-semibold text-gray-700">RT</label>
-              <select 
+              <select
                 {...register('rt')}
                 className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer"
               >
@@ -536,7 +871,7 @@ export default function CansPage() {
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-semibold text-gray-700">RW</label>
-              <select 
+              <select
                 {...register('rw')}
                 className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer"
               >
@@ -554,21 +889,21 @@ export default function CansPage() {
           <div className="space-y-1.5">
             <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider text-[10px] text-green-600 font-bold">Nomor WhatsApp (Wajib)</label>
             <div className="relative group">
-               <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-green-500 transition-colors" size={16} />
-               <input 
-                 {...register('ownerWhatsapp')} 
-                 placeholder="Contoh: 628123456789"
-                 className="w-full h-11 pl-10 pr-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm transition-all"
-               />
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-green-500 transition-colors" size={16} />
+              <input
+                {...register('owner_whatsapp')}
+                placeholder="Contoh: 628123456789"
+                className="w-full h-11 pl-10 pr-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm transition-all"
+              />
             </div>
-            {errors.ownerWhatsapp && <p className="text-xs font-medium text-red-500">{errors.ownerWhatsapp.message}</p>}
+            {errors.owner_whatsapp && <p className="text-xs font-medium text-red-500">{errors.owner_whatsapp.message}</p>}
           </div>
 
           <div className="flex gap-3 pt-4">
-            <Button 
-              type="button" 
-              variant="secondary" 
-              className="flex-1 rounded-xl h-12 font-bold" 
+            <Button
+              type="button"
+              variant="secondary"
+              className="flex-1 rounded-xl h-12 font-bold"
               onClick={() => {
                 setIsModalOpen(false);
                 setEditingCan(null);
@@ -576,63 +911,14 @@ export default function CansPage() {
             >
               Batal
             </Button>
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl h-12 font-bold shadow-lg shadow-green-600/20"
             >
               {editingCan ? 'Simpan Perubahan' : 'Simpan Kaleng'}
             </Button>
           </div>
         </form>
-      </Modal>
-
-      {/* Modal Tambah Dukuh */}
-      <Modal 
-        isOpen={isDukuhModalOpen} 
-        onClose={() => setIsDukuhModalOpen(false)}
-        title="Kelola Dukuh"
-      >
-        <div className="space-y-6">
-          <div className="space-y-1.5 p-4 bg-slate-50 rounded-xl border border-slate-100">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tambah Dukuh Baru</label>
-            <div className="flex gap-2">
-              <Input 
-                value={newDukuhName}
-                onChange={(e) => setNewDukuhName(e.target.value)}
-                placeholder="Nama Dukuh..." 
-                className="bg-white"
-              />
-              <Button className="bg-green-600 text-white rounded-xl px-6" onClick={handleAddDukuh}>Tambah</Button>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Daftar Dukuh Terdaftar</label>
-            <div className="max-h-[300px] overflow-y-auto pr-1 space-y-2 custom-scrollbar">
-              {dukuhs.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-sm italic bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
-                  Belum ada data dukuh
-                </div>
-              ) : (
-                dukuhs.map((d: any) => (
-                  <div key={d.id} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl hover:border-slate-200 transition-colors group">
-                    <span className="text-sm font-medium text-slate-700">{d.name}</span>
-                    <button 
-                      onClick={() => handleDeleteDukuh(d.id, d.name)}
-                      className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100 group-hover:bg-red-50"
-                    >
-                      <Trash2 size={16} className="transition-colors" />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="pt-2">
-            <Button variant="secondary" className="w-full rounded-xl h-11" onClick={() => setIsDukuhModalOpen(false)}>Selesai</Button>
-          </div>
-        </div>
       </Modal>
     </div>
   );

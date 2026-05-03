@@ -31,9 +31,9 @@ const Table = <TData,>({ columns, data, className, loading }: TableProps<TData>)
       sorting,
     },
     onSortingChange: setSorting,
+    manualPagination: true,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
   });
 
   return (

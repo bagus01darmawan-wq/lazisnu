@@ -6,7 +6,8 @@ import {
   FileText, 
   History, 
   ShieldAlert, 
-  MessageSquare
+  MessageSquare,
+  Database
 } from 'lucide-react';
 
 export type UserRole = 'ADMIN_KECAMATAN' | 'ADMIN_RANTING' | 'BENDAHARA' | 'PETUGAS';
@@ -66,6 +67,12 @@ export const MENU_ITEMS: MenuItem[] = [
     path: '/dashboard/wa-monitor',
     icon: MessageSquare,
     roles: ['ADMIN_KECAMATAN', 'BENDAHARA'],
+  },
+  {
+    title: 'Data Master',
+    path: '/dashboard/master',
+    icon: Database,
+    roles: ['ADMIN_KECAMATAN'],
   },
 ];
 

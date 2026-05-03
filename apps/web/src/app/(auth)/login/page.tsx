@@ -36,20 +36,20 @@ export default function LoginPage() {
   });
 
   const [showPassword, setShowPassword] = useState(false);
- 
+
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
     setError(null);
     try {
       const response: any = await api.post('/auth/login', data);
- 
+
       if (response.success) {
         authHelper.setToken(response.data.access_token);
         if (response.data.refresh_token) {
           authHelper.setRefreshToken(response.data.refresh_token);
         }
         setUser(response.data.user);
- 
+
         // Redirect to dashboard
         router.push('/dashboard/overview');
       } else {
@@ -61,14 +61,14 @@ export default function LoginPage() {
       setIsLoading(false);
     }
   };
- 
+
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 bg-slate-950 relative overflow-hidden">
       {/* Deep Emerald Glows */}
       <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-emerald-900/20 rounded-full blur-[120px] animate-pulse" />
       <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-green-900/20 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '2s' }} />
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03] pointer-events-none" />
- 
+
       <Card className="w-full max-w-md relative z-10 p-8 shadow-2xl border-white/10 bg-white/5 backdrop-blur-2xl rounded-3xl">
         <div className="flex flex-col items-center text-center mb-10">
           <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-700 rounded-2xl flex items-center justify-center shadow-2xl shadow-green-900/40 mb-6 group transition-transform hover:rotate-3 duration-500">
@@ -79,7 +79,7 @@ export default function LoginPage() {
           </h1>
           <p className="text-emerald-500/80 font-bold tracking-[0.2em] text-xs uppercase">MWC Paninggaran</p>
         </div>
- 
+
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           {error && (
             <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl flex items-start gap-3 animate-in fade-in zoom-in-95 duration-300">
@@ -87,7 +87,7 @@ export default function LoginPage() {
               <p className="text-sm font-medium">{error}</p>
             </div>
           )}
- 
+
           <div className="space-y-4">
             <div className="relative group">
               <LogIn className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-green-400 transition-colors z-10 pointer-events-none" size={18} />
@@ -98,7 +98,7 @@ export default function LoginPage() {
                 error={errors.identifier?.message}
               />
             </div>
- 
+
             <div className="relative group">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-green-400 transition-colors z-10 pointer-events-none" size={18} />
               <Input

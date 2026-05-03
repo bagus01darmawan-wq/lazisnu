@@ -15,13 +15,13 @@ import api from '@/lib/api';
 
 interface AuditLog {
   id: string;
-  actionType: string;
-  entityType: string;
-  createdAt: string;
-  user?: { fullName: string; role: string };
-  officer?: { fullName: string };
-  oldData: any;
-  newData: any;
+  action_type: string;
+  entity_type: string;
+  created_at: string;
+  user?: { full_name: string; role: string };
+  officer?: { full_name: string };
+  old_data: any;
+  new_data: any;
 }
 
 export default function AuditLogPage() {
@@ -49,19 +49,19 @@ export default function AuditLogPage() {
 
   const columns: ColumnDef<AuditLog>[] = [
     {
-      accessorKey: 'createdAt',
+      accessorKey: 'created_at',
       header: 'Waktu',
       cell: ({ row }) => (
         <span className="text-xs font-medium text-gray-500">
-          {format(new Date(row.original.createdAt), 'PPP HH:mm', { locale: id })}
+          {format(new Date(row.original.created_at), 'PPP HH:mm', { locale: id })}
         </span>
       ),
     },
     {
-      accessorKey: 'actionType',
+      accessorKey: 'action_type',
       header: 'Aksi',
       cell: ({ row }) => {
-        const type = row.original.actionType;
+        const type = row.original.action_type;
         let variant: 'sent' | 'pending' | 'failed' | 'default' = 'default';
         if (type.includes('POST')) variant = 'sent';
         if (type.includes('PUT') || type.includes('PATCH')) variant = 'pending';
@@ -74,15 +74,15 @@ export default function AuditLogPage() {
       header: 'Pelaku',
       cell: ({ row }) => (
         <div>
-          <p className="font-bold text-gray-900">{row.original.user?.fullName || row.original.officer?.fullName || 'System'}</p>
+          <p className="font-bold text-gray-900">{row.original.user?.full_name || row.original.officer?.full_name || 'System'}</p>
           <p className="text-[10px] text-gray-400 uppercase font-black">{row.original.user?.role || 'System'}</p>
         </div>
       ),
     },
     {
-      accessorKey: 'entityType',
+      accessorKey: 'entity_type',
       header: 'Entitas',
-      cell: ({ row }) => <span className="font-mono text-xs">{row.original.entityType}</span>,
+      cell: ({ row }) => <span className="font-mono text-xs">{row.original.entity_type}</span>,
     },
     {
       id: 'actions',
@@ -103,16 +103,20 @@ export default function AuditLogPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-            <ShieldAlert className="text-green-600" />
-            Audit Log Aktivitas
-          </h2>
-          <p className="text-sm text-gray-500">Transparansi penuh atas setiap perubahan data di sistem Lazisnu.</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <ShieldAlert className="text-green-600" size={28} />
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Audit Log Aktivitas</h1>
+            <p className="text-slate-500 text-sm font-medium">Transparansi penuh atas setiap perubahan data di sistem Lazisnu.</p>
+          </div>
         </div>
-        <Button onClick={fetchLogs} variant="outline" className="gap-2">
-          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+        <Button 
+          onClick={fetchLogs} 
+          variant="outline" 
+          className="rounded-xl h-11 px-5 text-sm font-bold border-slate-200 hover:bg-slate-50 transition-all active:scale-95 flex items-center gap-2"
+        >
+          <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
           Refresh
         </Button>
       </div>
@@ -132,7 +136,7 @@ export default function AuditLogPage() {
             <Badge variant="resubmit">Data Sebelum (Old)</Badge>
             <div className="bg-slate-900 rounded-xl p-4 overflow-auto max-h-[400px]">
               <pre className="text-[10px] text-red-400 font-mono">
-                {selectedLog?.oldData ? JSON.stringify(selectedLog.oldData, null, 2) : '// No previous data'}
+                {selectedLog?.old_data ? JSON.stringify(selectedLog.old_data, null, 2) : '// No previous data'}
               </pre>
             </div>
           </div>
@@ -140,7 +144,7 @@ export default function AuditLogPage() {
             <Badge variant="sent">Data Sesudah (New)</Badge>
             <div className="bg-slate-900 rounded-xl p-4 overflow-auto max-h-[400px]">
               <pre className="text-[10px] text-green-400 font-mono">
-                {selectedLog?.newData ? JSON.stringify(selectedLog.newData, null, 2) : '// No new data'}
+                {selectedLog?.new_data ? JSON.stringify(selectedLog.new_data, null, 2) : '// No new data'}
               </pre>
             </div>
           </div>

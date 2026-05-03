@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/Badge';
 import { ColumnDef } from '@tanstack/react-table';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
+import { toast } from 'react-hot-toast';
 import { 
   History, 
   RotateCcw, 
@@ -72,9 +73,10 @@ export default function ResubmitPage() {
         reset();
         setIsModalOpen(false);
         fetchCollections();
+        toast.success('Data berhasil di-koreksi dan di-submit ulang');
       }
     } catch (error: any) {
-      alert(error.error?.message || 'Gagal melakukan re-submit');
+      toast.error(error.error?.message || 'Gagal melakukan re-submit');
     } finally {
       setSubmitting(false);
     }
@@ -135,9 +137,12 @@ export default function ResubmitPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Pelacakan & Koreksi</h1>
-          <p className="text-slate-500 text-sm">Review data koleksi dan lakukan re-submit jika terjadi kesalahan input</p>
+        <div className="flex items-center gap-3">
+          <History className="text-green-600" size={28} />
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Pelacakan & Koreksi</h1>
+            <p className="text-slate-500 text-sm font-medium">Review data koleksi dan lakukan re-submit jika terjadi kesalahan input</p>
+          </div>
         </div>
       </div>
 

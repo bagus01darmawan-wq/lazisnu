@@ -1,7 +1,7 @@
 import React, { Suspense } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Download, Filter, FileSpreadsheet, TrendingUp, Wallet, Calendar } from 'lucide-react';
+import { Download, Filter, FileSpreadsheet, TrendingUp, Wallet, Calendar, FileText } from 'lucide-react';
 import { cookies } from 'next/headers';
 import { decodeJwt } from 'jose';
 import ReportsClient from './ReportsClient';
@@ -74,17 +74,20 @@ export default async function ReportsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Laporan Keuangan</h1>
-          <p className="text-slate-500 text-sm">Rekapitulasi pengumpulan infaq harian dan bulanan</p>
+        <div className="flex items-center gap-3">
+          <FileText className="text-green-600" size={28} />
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Laporan Keuangan</h1>
+            <p className="text-slate-500 text-sm font-medium">Rekapitulasi pengumpulan infaq harian dan bulanan</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" className="rounded-xl">
-            <Filter size={18} className="mr-2" />
+          <Button variant="outline" className="rounded-xl h-11 px-5 text-sm font-bold border-slate-200 hover:bg-slate-50 transition-all active:scale-95 flex items-center gap-2">
+            <Filter size={18} />
             Filter
           </Button>
-          <Button className="bg-green-600 hover:bg-green-700 shadow-lg shadow-green-600/20 rounded-xl">
-            <Download size={18} className="mr-2" />
+          <Button className="bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-600/20 px-6 h-11 rounded-xl font-bold transition-all active:scale-95 flex items-center gap-2">
+            <Download size={20} />
             Export CSV
           </Button>
         </div>

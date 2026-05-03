@@ -9,6 +9,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Badge } from '@/components/ui/Badge';
 import { ColumnDef } from '@tanstack/react-table';
 import api from '@/lib/api';
+import { toast } from 'react-hot-toast';
 import { 
   ClipboardList, 
   Plus, 
@@ -23,7 +24,9 @@ import {
   Clock,
   AlertTriangle,
   Repeat,
-  Trash2
+  Trash2,
+  MapPin,
+  RotateCcw
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -117,7 +120,11 @@ export default function AssignmentsPage() {
       setModalDukuhs([]);
       return;
     }
+    
+    // Clear previous dukuhs immediately to avoid "sneaking" stale data
+    setModalDukuhs([]);
     setFetchingDukuhs(true);
+    
     try {
       const response: any = await api.get('/admin/dukuhs', { 
         params: { 
@@ -125,6 +132,8 @@ export default function AssignmentsPage() {
           filter_assigned: true 
         } 
       });
+      
+      // Safety check: only update if the branch hasn't changed in the meantime
       if (response.success) {
         setModalDukuhs(response.data || []);
       }
@@ -175,11 +184,12 @@ export default function AssignmentsPage() {
         reset();
         setIsModalOpen(false);
         fetchData();
-        alert(`Berhasil! ${response.data.assigned_count} kaleng telah ditugaskan untuk periode ${response.data.period}`);
+        toast.success(`Berhasil! ${response.data.assigned_count} kaleng telah ditugaskan untuk periode ${response.data.period}`);
       }
     } catch (error: any) {
-      console.error('Failed to create bulk assignment:', error.response?.data || error.message || error);
-      alert(error.response?.data?.error?.message || 'Gagal menyimpan penugasan massal');
+      const errorData = error.response?.data || error;
+      console.error('Failed to create bulk assignment:', JSON.stringify(errorData, null, 2));
+      toast.error(errorData.error?.message || error.message || 'Gagal menyimpan penugasan massal');
     } finally {
       setSubmitting(false);
     }
@@ -197,11 +207,11 @@ export default function AssignmentsPage() {
         setIsTransferModalOpen(false);
         setTransferringAssignment(null);
         fetchData();
-        alert('Penugasan berhasil ditransfer!');
+        toast.success('Penugasan berhasil ditransfer!');
       }
     } catch (error: any) {
       console.error('Failed to transfer assignment:', error);
-      alert('Gagal mentransfer penugasan');
+      toast.error('Gagal mentransfer penugasan');
     } finally {
       setSubmitting(false);
     }
@@ -212,10 +222,11 @@ export default function AssignmentsPage() {
     try {
       const response: any = await api.delete(`/admin/assignments/${id}`);
       if (response.success) {
+        toast.success('Penugasan berhasil dihapus');
         fetchData();
       }
     } catch (error: any) {
-      alert(error.response?.data?.error?.message || 'Gagal menghapus penugasan');
+      toast.error(error.response?.data?.error?.message || 'Gagal menghapus penugasan');
     }
   };
 
@@ -236,7 +247,21 @@ export default function AssignmentsPage() {
           <div>
             <p className="font-bold text-slate-900">{row.original.can.qr_code}</p>
             <p className="text-xs text-slate-500">{row.original.can.owner_name}</p>
+            <p className="text-xs text-slate-500">{row.original.can.branch_name?.replace(/ranting/gi, '').trim()}</p>
           </div>
+        </div>
+      ),
+    },
+    {
+      accessorKey: 'address',
+      header: 'ALAMAT',
+      cell: ({ row }) => (
+        <div className="flex flex-col text-xs text-slate-600">
+          <div className="flex items-center gap-1">
+            <MapPin size={10} />
+            <span>{row.original.can.dukuh_name || row.original.can.dukuh || '-'}</span>
+          </div>
+          <span className="ml-3.5 opacity-70">RT {row.original.can.rt || '-'} / RW {row.original.can.rw || '-'}</span>
         </div>
       ),
     },
@@ -244,9 +269,14 @@ export default function AssignmentsPage() {
       accessorKey: 'officer',
       header: 'Petugas Lapangan',
       cell: ({ row }) => (
-        <div className="flex items-center gap-2 text-slate-700">
-          <User size={14} className="text-slate-400" />
-          <span className="font-medium">{row.original.officer.full_name}</span>
+        <div className="flex flex-col">
+          <div className="flex items-center gap-2">
+            <User size={14} className="text-slate-400" />
+            <span className="font-bold text-slate-900">{row.original.officer.full_name}</span>
+          </div>
+          <span className="text-[10px] text-slate-600 ml-5 font-medium">
+            {row.original.officer.branch_name?.replace(/ranting/gi, '').trim()}
+          </span>
         </div>
       ),
     },
@@ -319,9 +349,12 @@ export default function AssignmentsPage() {
     <div className="space-y-6">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Penugasan Rutin</h1>
-          <p className="text-slate-500 text-sm">Atur jadwal pengambilan infaq bulanan petugas</p>
+        <div className="flex items-center gap-3">
+          <ClipboardList className="text-green-600" size={28} />
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Penugasan Rutin</h1>
+            <p className="text-slate-500 text-sm font-medium">Atur jadwal pengambilan infaq bulanan petugas</p>
+          </div>
         </div>
         <Button 
           onClick={() => {
@@ -332,9 +365,9 @@ export default function AssignmentsPage() {
             });
             setIsModalOpen(true);
           }}
-          className="bg-green-600 hover:bg-green-700 shadow-lg shadow-green-600/20"
+          className="bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-600/20 px-6 h-11 rounded-xl font-bold transition-all active:scale-95 flex items-center gap-2"
         >
-          <Plus size={18} className="mr-2" />
+          <Plus size={20} />
           Tugaskan Petugas
         </Button>
       </div>
@@ -393,7 +426,7 @@ export default function AssignmentsPage() {
           </div>
 
           {user?.role === 'ADMIN_KECAMATAN' && (
-            <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100 shadow-sm">
+            <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100 shadow-sm hover:border-slate-200 transition-colors">
               <Filter className="text-slate-400 ml-2" size={16} />
               <select 
                 value={branchFilter}
@@ -413,7 +446,20 @@ export default function AssignmentsPage() {
             </div>
           )}
 
-          {/* Selector Baris removed from here for consistency with Cans page */}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="h-10 rounded-xl px-4 text-xs font-bold text-slate-500 border-slate-200 hover:bg-slate-50 flex items-center gap-2"
+            onClick={() => {
+              setSearch('');
+              setBranchFilter('');
+              setFilter({ year: currentYear, month: currentMonth });
+              setCurrentPage(1);
+            }}
+          >
+            <RotateCcw size={14} />
+            RESET
+          </Button>
         </div>
       </div>
 
@@ -438,7 +484,7 @@ export default function AssignmentsPage() {
                     setPageSize(Number(e.target.value));
                     setCurrentPage(1);
                   }}
-                  className="bg-transparent text-xs font-bold text-slate-700 focus:outline-none cursor-pointer"
+                  className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
                 >
                   <option value={10}>10</option>
                   <option value={20}>20</option>

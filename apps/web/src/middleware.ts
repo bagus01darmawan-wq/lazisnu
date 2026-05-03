@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { decodeJwt } from 'jose';
+import { jwtVerify } from 'jose';
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const token = request.cookies.get('lazisnu_token')?.value;
   const isAuthPage = request.nextUrl.pathname.startsWith('/login');
 
@@ -19,7 +19,8 @@ export function middleware(request: NextRequest) {
   // 3. Proper Role Check using JWT decoding
   if (token && !isAuthPage) {
     try {
-      const payload = decodeJwt(token);
+      const secret = new TextEncoder().encode(process.env.NEXT_PUBLIC_JWT_SECRET || process.env.JWT_SECRET);
+      const { payload } = await jwtVerify(token, secret);
       const userRole = payload.role as string;
 
       const path = request.nextUrl.pathname;

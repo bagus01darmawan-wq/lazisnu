@@ -21,7 +21,8 @@ import {
   Wallet,
   ArrowUpRight,
   ArrowDownRight,
-  Loader2
+  Loader2,
+  BarChart3
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -81,10 +82,14 @@ export default function OverviewPage() {
   const recentCollections = data.recent_collections || [];
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
-      {/* Welcome Section */}
-      <div>
-        <h2 className="text-3xl font-bold text-gray-900 tracking-tight">Selamat Datang 👋</h2>
-        <p className="text-gray-500 text-sm mt-1">Berikut adalah ringkasan pengumpulan infaq Lazisnu periode April 2026.</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <BarChart3 className="text-green-600" size={28} />
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Selamat Datang 👋</h1>
+            <p className="text-slate-500 text-sm font-medium">Berikut adalah ringkasan pengumpulan infaq Lazisnu periode April 2026.</p>
+          </div>
+        </div>
       </div>
 
       {/* Stats Grid */}
