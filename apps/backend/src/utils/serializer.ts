@@ -28,25 +28,28 @@ function toSnakeCase(str: string): string {
 }
 
 /**
- * Recursively convert object keys to snake_case
+ * Recursively transform an object/array:
+ * 1. Convert keys from camelCase to snake_case
+ * 2. Convert BigInt values to Number (for JSON safety)
  */
 export function serializeOutput(data: any): any {
-  if (data === null || data === undefined) {
-    return data;
-  }
+  if (data === null || data === undefined) return data;
 
+  // Handle BigInt
+  if (typeof data === 'bigint') return Number(data);
+
+  // Handle Array
   if (Array.isArray(data)) {
     return data.map(serializeOutput);
   }
 
+  // Handle Object
   if (isPlainObject(data)) {
     const newObj: any = {};
     for (const key in data) {
       if (Object.prototype.hasOwnProperty.call(data, key)) {
         const snakeKey = toSnakeCase(key);
-        if (key !== snakeKey) {
-          console.log(`[Serializer] Converting key: ${key} -> ${snakeKey}`);
-        }
+        // Recursively serialize values
         newObj[snakeKey] = serializeOutput(data[key]);
       }
     }

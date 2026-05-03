@@ -8,17 +8,10 @@ import { sendWhatsAppNotification } from '../../services/whatsapp';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { collectionSchema, resubmitSchema } from './schemas';
 
+import { validateAssignmentForSubmit, submitCollection, getLatestCollectionCondition } from '../../services/collectionSubmission';
+
 export async function collectionsRoutes(fastify: FastifyInstance) {
-  const c2 = alias(schema.collections, 'c2');
-  const latestCollectionCondition = eq(
-    schema.collections.submitSequence,
-    db.select({ maxSeq: sql<number>`max(${c2.submitSequence})` })
-      .from(c2)
-      .where(and(
-        eq(c2.assignmentId, schema.collections.assignmentId),
-        eq(c2.canId, schema.collections.canId)
-      ))
-  );
+  const latestCollectionCondition = getLatestCollectionCondition();
 
   // POST /mobile/collections
   fastify.post('/collections', async (request: FastifyRequest, reply: FastifyReply) => {
@@ -37,34 +30,28 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
       }
 
       const result = await db.transaction(async (tx) => {
-        const insertedColls = await tx.insert(schema.collections).values({
+        try {
+          await validateAssignmentForSubmit(tx, body.assignment_id, body.can_id, officerId);
+        } catch (err: any) {
+          if (err.message.includes('can_id')) {
+            throw { status: 400, code: 'MISMATCH', message: err.message };
+          }
+          throw { status: 403, code: 'FORBIDDEN', message: err.message };
+        }
+
+        return await submitCollection(tx, {
           assignmentId: body.assignment_id,
           canId: body.can_id,
           officerId,
-          nominal: BigInt(body.nominal),
-          paymentMethod: body.payment_method,
+          nominal: body.nominal,
+          paymentMethod: body.payment_method as any,
           transferReceiptUrl: body.transfer_receipt_url,
           collectedAt: new Date(body.collected_at),
-          submittedAt: new Date(),
-          syncedAt: new Date(),
-          syncStatus: 'COMPLETED',
-          serverTimestamp: new Date(),
-          deviceInfo: body.device_info as any,
           latitude: body.latitude?.toString(),
           longitude: body.longitude?.toString(),
           offlineId: body.offline_id,
-        }).returning();
-        const collection = insertedColls[0];
-
-        await tx.update(schema.assignments).set({ status: 'COMPLETED', completedAt: new Date() }).where(eq(schema.assignments.id, body.assignment_id));
-
-        await tx.update(schema.cans).set({
-          lastCollectedAt: new Date(body.collected_at),
-          totalCollected: sql`${schema.cans.totalCollected} + ${BigInt(body.nominal)}`,
-          collectionCount: sql`${schema.cans.collectionCount} + 1`
-        }).where(eq(schema.cans.id, body.can_id));
-
-        return collection;
+          deviceInfo: body.device_info as any,
+        });
       });
 
       const insertedCan = await db.query.cans.findFirst({ where: eq(schema.cans.id, body.can_id) });
@@ -94,6 +81,7 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
         message: 'Penjemputan berhasil disimpan',
       }, 201);
     } catch (error: any) {
+      if (error.status) return sendError(reply, error.status, error.code, error.message);
       if (error instanceof z.ZodError) return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
       return sendInternalError(reply, error, fastify.log);
     }

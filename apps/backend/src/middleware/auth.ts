@@ -100,8 +100,8 @@ export function authorize(...allowedRoles: Array<JWTPayload['role']>) {
 
 // Generate access + refresh tokens
 export function generateTokens(payload: JWTPayload, fastify: any) {
-  const accessToken = fastify.jwt.sign(payload, { expiresIn: '15m' });
-  const refreshToken = fastify.jwt.sign(payload, { expiresIn: '30d' }); // 30 hari + Redis blacklist di implementasi nanti
+  const accessToken = fastify.jwt.sign({ ...payload, tokenType: 'access' }, { expiresIn: '15m' });
+  const refreshToken = fastify.jwt.sign({ ...payload, tokenType: 'refresh' }, { expiresIn: '30d' }); // 30 hari + Redis blacklist di implementasi nanti
   return { accessToken, refreshToken };
 }
 

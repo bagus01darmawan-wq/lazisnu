@@ -15,7 +15,9 @@ export const createCanSchema = z.object({
   location_notes: z.string().optional().nullable(),
 });
 
-export const updateCanSchema = createCanSchema.partial();
+export const updateCanSchema = createCanSchema.partial().extend({
+  is_active: z.boolean().optional(),
+});
 
 export const createOfficerSchema = z.object({
   full_name: z.string().min(1).max(100),

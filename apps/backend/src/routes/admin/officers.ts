@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { eq, and, desc, ilike, or, sql } from 'drizzle-orm';
+import { eq, and, desc, ilike, or, sql, inArray } from 'drizzle-orm';
 import { authorize } from '../../middleware/auth';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { getPaginationParams, formatPaginatedResponse } from '../../utils/pagination';
@@ -20,22 +20,41 @@ export async function officersRoutes(fastify: FastifyInstance) {
 
       const roleScope = await getRoleScope(user, schema.officers);
 
-      let whereClause = and(
-        roleScope,
-        query.branch_id ? eq(schema.officers.branchId, query.branch_id) : undefined
-      );
+      const conditions = [roleScope];
+      
+      if (query.branch_id) {
+        conditions.push(eq(schema.officers.branchId, query.branch_id));
+      }
+
+      if (query.status === 'NON_ACTIVE' || query.status === 'INACTIVE') {
+        conditions.push(eq(schema.officers.isActive, false));
+      } else if (query.status === 'ALL') {
+        // No isActive filter
+      } else {
+        // Default: ACTIVE
+        conditions.push(eq(schema.officers.isActive, true));
+      }
 
       if (query.search) {
-        whereClause = and(whereClause, or(
+        conditions.push(or(
           ilike(schema.officers.fullName, `%${query.search}%`),
           ilike(schema.officers.employeeCode, `%${query.search}%`)
         ));
       }
 
+      const whereClause = and(...conditions.filter(Boolean));
+
       const [officers, total] = await Promise.all([
         db.query.officers.findMany({
-          where: whereClause, offset, limit, orderBy: [desc(schema.officers.createdAt)],
-          columns: { id: true, employeeCode: true, fullName: true, phone: true, photoUrl: true, assignedZone: true, isActive: true, branchId: true },
+          where: whereClause, 
+          offset, 
+          limit, 
+          orderBy: [desc(schema.officers.createdAt)],
+          with: {
+            branch: {
+              columns: { name: true }
+            }
+          },
         }),
         db.$count(schema.officers, whereClause),
       ]);
@@ -82,10 +101,8 @@ export async function officersRoutes(fastify: FastifyInstance) {
           employeeCode,
           fullName: body.full_name,
           phone: body.phone,
-          photoUrl: body.photo_url,
           districtId: user.districtId!,
           branchId: targetBranchId,
-          assignedZone: body.assigned_zone,
         }).returning();
 
         return { insertedOfficer: newOfficer };
@@ -132,10 +149,21 @@ export async function officersRoutes(fastify: FastifyInstance) {
       if (user.role === 'ADMIN_KECAMATAN' && existing.districtId !== user.districtId) {
         return sendError(reply, 403, 'FORBIDDEN', 'Akses ditolak');
       }
-      const updated = await db.update(schema.officers).set({ fullName: body.full_name, phone: body.phone, photoUrl: body.photo_url, assignedZone: body.assigned_zone, isActive: body.is_active })
-        .where(eq(schema.officers.id, id)).returning();
+      const [updated] = await db.transaction(async (tx) => {
+        const updatedOfficers = await tx.update(schema.officers).set({ 
+          fullName: body.full_name ?? existing.fullName, 
+          phone: body.phone ?? existing.phone, 
+          isActive: body.is_active !== undefined ? body.is_active : existing.isActive
+        }).where(eq(schema.officers.id, id)).returning();
+
+        if (body.is_active !== undefined) {
+          await tx.update(schema.users).set({ isActive: body.is_active }).where(eq(schema.users.id, existing.userId));
+        }
+
+        return updatedOfficers;
+      });
       
-      return sendSuccess(reply, updated[0]);
+      return sendSuccess(reply, updated);
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
     }
@@ -144,6 +172,7 @@ export async function officersRoutes(fastify: FastifyInstance) {
   fastify.delete('/officers/:id', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
+      const { permanent } = request.query as { permanent?: string };
       const user = request.currentUser!;
       const existing = await db.query.officers.findFirst({ where: eq(schema.officers.id, id) });
 
@@ -156,8 +185,64 @@ export async function officersRoutes(fastify: FastifyInstance) {
         return sendError(reply, 403, 'FORBIDDEN', 'Akses ditolak');
       }
 
-      await db.update(schema.officers).set({ isActive: false }).where(eq(schema.officers.id, id));
+      if (permanent === 'true') {
+        // Deleting the user will cascade delete the officer
+        await db.delete(schema.users).where(eq(schema.users.id, existing.userId));
+      } else {
+        await db.transaction(async (tx) => {
+          await tx.update(schema.officers).set({ isActive: false }).where(eq(schema.officers.id, id));
+          await tx.update(schema.users).set({ isActive: false }).where(eq(schema.users.id, existing.userId));
+        });
+      }
+      
       return reply.status(204).send();
+    } catch (error) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  fastify.post('/officers/bulk-delete', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = request.currentUser!;
+      const { ids, permanent } = request.body as { ids: string[], permanent?: boolean };
+
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return sendError(reply, 400, 'INVALID_IDS', 'Daftar ID tidak boleh kosong');
+      }
+
+      const officersToDelete = await db.query.officers.findMany({
+        where: inArray(schema.officers.id, ids)
+      });
+
+      if (officersToDelete.length === 0) return sendSuccess(reply, { success: true });
+
+      // Permission check & Filtering
+      const validOfficerIds = officersToDelete.filter(o => {
+        if (user.role === 'ADMIN_RANTING') return o.branchId === user.branchId;
+        if (user.role === 'ADMIN_KECAMATAN') return o.districtId === user.districtId;
+        return true;
+      }).map(o => o.id);
+
+      const validUserIds = officersToDelete.filter(o => {
+        if (user.role === 'ADMIN_RANTING') return o.branchId === user.branchId;
+        if (user.role === 'ADMIN_KECAMATAN') return o.districtId === user.districtId;
+        return true;
+      }).map(o => o.userId);
+
+      if (validOfficerIds.length === 0) {
+        return sendError(reply, 403, 'FORBIDDEN', 'Tidak memiliki akses untuk menghapus data ini');
+      }
+
+      if (permanent) {
+        await db.delete(schema.users).where(inArray(schema.users.id, validUserIds));
+      } else {
+        await db.transaction(async (tx) => {
+          await tx.update(schema.officers).set({ isActive: false }).where(inArray(schema.officers.id, validOfficerIds));
+          await tx.update(schema.users).set({ isActive: false }).where(inArray(schema.users.id, validUserIds));
+        });
+      }
+
+      return sendSuccess(reply, { success: true });
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
     }
