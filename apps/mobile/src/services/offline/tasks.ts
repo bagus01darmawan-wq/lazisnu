@@ -14,5 +14,5 @@ export const taskCache = {
 
   clearTasks: (): void => {
     storage.delete(TASKS_KEY);
-  }
+  },
 };

@@ -100,7 +100,7 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
           qr_code: 'PNG-01-003',
           owner_name: 'Warung Bu Siti',
           owner_address: 'Pasar Paninggaran Blok A',
-        }
+        },
       },
       {
         id: 'hist-2',
@@ -116,7 +116,7 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
           qr_code: 'PNG-01-010',
           owner_name: 'H. Mansur',
           owner_address: 'Depan Masjid Jami',
-        }
+        },
       },
       {
         id: 'hist-3',
@@ -133,8 +133,8 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
           qr_code: 'PNG-02-005',
           owner_name: 'Ibu Ratna',
           owner_address: 'Perumahan Indah Gg. 4',
-        }
-      }
+        },
+      },
     ];
 
     try {
@@ -150,22 +150,22 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
           isLoading: false,
         });
       } else {
-        set({ 
+        set({
           collections: mockCollections,
-          isLoading: false 
+          isLoading: false,
         });
       }
     } catch (error) {
-      set({ 
+      set({
         collections: mockCollections,
-        isLoading: false 
+        isLoading: false,
       });
     }
   },
 
   loadMore: async () => {
     const { page, totalPages, collections } = get();
-    if (page >= totalPages) return;
+    if (page >= totalPages) {return;}
 
     set({ isLoading: true });
     try {

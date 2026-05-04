@@ -42,7 +42,7 @@ export default function ResubmitPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<ResubmitFormValues>({
-    resolver: zodResolver(resubmitSchema),
+    resolver: zodResolver(resubmitSchema as any),
   });
 
   const fetchCollections = async () => {
@@ -61,7 +61,7 @@ export default function ResubmitPage() {
   };
 
   useEffect(() => {
-    fetchCollections();
+    void fetchCollections();
   }, []);
 
   const onSubmit = async (values: ResubmitFormValues) => {
@@ -72,7 +72,7 @@ export default function ResubmitPage() {
       if (response.success) {
         reset();
         setIsModalOpen(false);
-        fetchCollections();
+        void fetchCollections();
         toast.success('Data berhasil di-koreksi dan di-submit ulang');
       }
     } catch (error: any) {

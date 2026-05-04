@@ -217,17 +217,46 @@ export default function AssignmentsPage() {
     }
   };
 
-  const handleDeleteAssignment = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus penugasan ini? Tindakan ini akan membatalkan jadwal penjemputan untuk kaleng tersebut di bulan ini.')) return;
-    try {
-      const response: any = await api.delete(`/admin/assignments/${id}`);
-      if (response.success) {
-        toast.success('Penugasan berhasil dihapus');
-        fetchData();
-      }
-    } catch (error: any) {
-      toast.error(error.response?.data?.error?.message || 'Gagal menghapus penugasan');
-    }
+  const handleDeleteAssignment = (id: string) => {
+    toast((t) => (
+      <div className="flex flex-col gap-3 min-w-[280px]">
+        <div className="flex items-center gap-2 text-red-600">
+          <AlertTriangle size={20} />
+          <p className="text-sm font-bold">Hapus penugasan ini?</p>
+        </div>
+        <p className="text-[11px] text-slate-500 font-medium px-1">
+          Tindakan ini akan membatalkan jadwal penjemputan untuk kaleng tersebut di bulan berjalan.
+        </p>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs font-bold rounded-lg"
+            onClick={() => toast.dismiss(t.id)}
+          >
+            Batal
+          </Button>
+          <Button
+            size="sm"
+            className="bg-red-600 hover:bg-red-700 text-white h-8 text-xs font-bold rounded-lg shadow-sm shadow-red-200 transition-all active:scale-95"
+            onClick={async () => {
+              toast.dismiss(t.id);
+              try {
+                const response: any = await api.delete(`/admin/assignments/${id}`);
+                if (response.success) {
+                  toast.success('Penugasan berhasil dihapus');
+                  fetchData();
+                }
+              } catch (error: any) {
+                toast.error(error.response?.data?.error?.message || 'Gagal menghapus penugasan');
+              }
+            }}
+          >
+            Ya, Hapus
+          </Button>
+        </div>
+      </div>
+    ), { duration: 6000, position: 'top-center' });
   };
 
   const months = [

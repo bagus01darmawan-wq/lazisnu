@@ -48,7 +48,7 @@ const ScanScreen: React.FC = () => {
   }, [isScanning, isManualInput]);
 
   const handleQRCodeScanned = async (qrCode: string) => {
-    if (isLoading || !isScanning) return;
+    if (isLoading || !isScanning) {return;}
 
     setIsLoading(true);
     // Don't set isScanning(false) yet, we only stop if success
@@ -58,13 +58,13 @@ const ScanScreen: React.FC = () => {
 
       if (result.success && result.data) {
         // SUCCESS: Vibrate + Navigate
-        Vibration.vibrate(70); 
+        Vibration.vibrate(70);
         setIsScanning(false);
         setScannedData(result.data as Task);
         // We go to result view first, then user clicks continue
       } else {
         // FAILURE: Warning Vibrate + Stay on Scan
-        Vibration.vibrate([0, 100, 50, 100]); 
+        Vibration.vibrate([0, 100, 50, 100]);
         Alert.alert(
           'QR Tidak Ditemukan',
           'Kode QR tidak valid atau tanda tangan digital salah.',
@@ -74,7 +74,7 @@ const ScanScreen: React.FC = () => {
     } catch (error: any) {
       Vibration.vibrate([0, 100, 50, 100]);
       Alert.alert('Error', 'Gagal memproses QR code. Coba lagi.', [
-        { text: 'SCAN ULANG', onPress: () => setIsLoading(false) }
+        { text: 'SCAN ULANG', onPress: () => setIsLoading(false) },
       ]);
     } finally {
       setIsLoading(false);
@@ -82,11 +82,11 @@ const ScanScreen: React.FC = () => {
   };
 
   const handleManualSubmit = () => {
-    if (!manualCode.trim()) return;
-    
+    if (!manualCode.trim()) {return;}
+
     const normalizedCode = manualCode.trim().toUpperCase();
     const task = tasks.find(t => t.qr_code.toUpperCase() === normalizedCode);
-    
+
     if (task) {
       setIsManualInput(false);
       setManualCode('');
@@ -151,8 +151,8 @@ const ScanScreen: React.FC = () => {
               Arahkan kamera ke QR code{'\n'}yang ada di kaleng kotak infaq
             </Text>
 
-            <TouchableOpacity 
-              style={styles.manualButton} 
+            <TouchableOpacity
+              style={styles.manualButton}
               onPress={() => setIsManualInput(true)}
             >
               <Icon name="keyboard-outline" size={20} color="#fff" />
@@ -178,14 +178,14 @@ const ScanScreen: React.FC = () => {
                 autoFocus
               />
               <View style={styles.modalButtons}>
-                <TouchableOpacity 
-                  style={styles.modalCancel} 
+                <TouchableOpacity
+                  style={styles.modalCancel}
                   onPress={() => setIsManualInput(false)}
                 >
                   <Text style={styles.modalCancelText}>Batal</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.modalSubmit} 
+                <TouchableOpacity
+                  style={styles.modalSubmit}
                   onPress={handleManualSubmit}
                 >
                   <Text style={styles.modalSubmitText}>Proses</Text>

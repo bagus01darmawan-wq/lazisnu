@@ -33,7 +33,7 @@ const CollectionScreen: React.FC = () => {
 
   const formatCurrency = (value: string) => {
     const num = parseInt(value.replace(/\D/g, ''), 10);
-    if (isNaN(num)) return '';
+    if (isNaN(num)) {return '';}
     return new Intl.NumberFormat('id-ID').format(num);
   };
 

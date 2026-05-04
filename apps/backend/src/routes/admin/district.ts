@@ -219,7 +219,7 @@ export async function districtRoutes(fastify: FastifyInstance) {
           branch_name: b.name,
           cans: b._count.cans,
           officers: b._count.officers,
-          collection: byBranch[b.id]?.nominal || 0,
+          nominal: byBranch[b.id]?.nominal || 0,
           count: byBranch[b.id]?.count || 0,
         })),
       });

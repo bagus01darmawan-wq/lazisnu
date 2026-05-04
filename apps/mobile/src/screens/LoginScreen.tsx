@@ -14,7 +14,7 @@ import {
   Animated,
   Dimensions,
   ImageBackground,
-  StatusBar
+  StatusBar,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../stores';
@@ -49,7 +49,7 @@ const LoginScreen: React.FC = () => {
         tension: 20,
         friction: 7,
         useNativeDriver: true,
-      })
+      }),
     ]).start();
   }, []);
 
@@ -89,7 +89,7 @@ const LoginScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
-      
+
       {/* Background Gradient */}
       <LinearGradient
         colors={['#044F35', '#0A8A5E', '#10B981']}
@@ -97,7 +97,7 @@ const LoginScreen: React.FC = () => {
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFillObject}
       />
-      
+
       {/* Decorative Blur Orbs */}
       <View style={[styles.orb, styles.orb1]} />
       <View style={[styles.orb, styles.orb2]} />
@@ -106,10 +106,10 @@ const LoginScreen: React.FC = () => {
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <Animated.View 
+        <Animated.View
           style={[
-            styles.content, 
-            { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
+            styles.content,
+            { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
           ]}
         >
           {/* Header/Logo Section */}
@@ -130,7 +130,7 @@ const LoginScreen: React.FC = () => {
               reducedTransparencyFallbackColor="white"
             />
             <View style={styles.glassCardContent}>
-              
+
               {/* Login Method Toggle */}
               <View style={styles.tabContainer}>
                 <TouchableOpacity
@@ -425,7 +425,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#065F46',
-  }
+  },
 });
 
 export default LoginScreen;

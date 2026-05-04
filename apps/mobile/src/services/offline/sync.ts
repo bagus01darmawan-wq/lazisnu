@@ -5,15 +5,15 @@ import { collectionService } from '../api';
 export const syncService = {
   autoSync: async (): Promise<void> => {
     const netInfo = await NetInfo.fetch();
-    if (!netInfo.isConnected) return;
+    if (!netInfo.isConnected) {return;}
 
     const queue = offlineQueue.getQueue();
-    if (queue.length === 0) return;
+    if (queue.length === 0) {return;}
 
     try {
       // Panggil API batch-sync
       const response = await collectionService.batchSubmit(queue);
-      
+
       if (response.success) {
         // Jika berhasil, hapus item dari queue lokal
         const syncedIds = queue.map(q => q.offline_id);
@@ -33,6 +33,6 @@ export const syncService = {
         syncService.autoSync();
       }
     });
-  }
+  },
 };
 

@@ -91,7 +91,7 @@ const OTPScreen: React.FC = () => {
   };
 
   const handleResend = async () => {
-    if (countdown > 0) return;
+    if (countdown > 0) {return;}
 
     // Navigate back to login to request new OTP
     navigation.goBack();

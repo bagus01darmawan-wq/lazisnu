@@ -32,7 +32,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       if (result.success && result.data) {
         const data = result.data as any;
         await setToken(data.access_token);
-        if (data.refresh_token) setRefreshToken(data.refresh_token);
+        if (data.refresh_token) {setRefreshToken(data.refresh_token);}
         set({
           user: data.user,
           token: data.access_token,
@@ -76,7 +76,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       if (result.success && result.data) {
         const data = result.data as any;
         await setToken(data.access_token);
-        if (data.refresh_token) setRefreshToken(data.refresh_token);
+        if (data.refresh_token) {setRefreshToken(data.refresh_token);}
         set({
           user: data.user,
           token: data.access_token,

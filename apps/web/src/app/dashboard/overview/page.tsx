@@ -22,7 +22,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Loader2,
-  BarChart3
+  BarChart3,
+  AlertTriangle,
+  LogIn
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -49,31 +51,70 @@ export default function OverviewPage() {
   const { user } = useAuthStore();
   const [data, setData] = React.useState<any>(null);
   const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
 
   const fetchStats = async () => {
     try {
       setLoading(true);
+      setError(null);
       const endpoint = user?.role === 'ADMIN_KECAMATAN' ? '/admin/district/dashboard' : '/admin/branch/dashboard';
       const response: any = await api.get(endpoint);
       if (response.success) {
         setData(response.data);
+      } else {
+        setError(response.message || 'Gagal memuat data statistik');
       }
-    } catch (error) {
-      console.error('Fetch stats error:', error);
+    } catch (err: any) {
+      console.error('Fetch stats error:', err);
+      setError(err.response?.data?.message || err.message || 'Terjadi kesalahan koneksi ke server');
     } finally {
       setLoading(false);
     }
   };
 
   React.useEffect(() => {
-    if (user) fetchStats();
+    if (user) {
+      void fetchStats();
+    } else {
+      setLoading(false);
+    }
   }, [user]);
 
-  if (loading || !data) {
+  if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <Loader2 className="animate-spin text-green-600" size={40} />
         <p className="text-slate-500 font-medium tracking-tight">Menyiapkan statistik Anda...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center">
+        <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mb-2">
+          <LogIn size={32} />
+        </div>
+        <h3 className="text-lg font-bold text-slate-900">Sesi Berakhir</h3>
+        <p className="text-slate-500 text-sm">Silakan login kembali untuk melihat statistik.</p>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center px-4">
+        <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-2">
+          <AlertTriangle size={32} />
+        </div>
+        <h3 className="text-lg font-bold text-slate-900">Gagal Memuat Statistik</h3>
+        <p className="text-slate-500 text-sm max-w-xs">{error || 'Data tidak tersedia saat ini.'}</p>
+        <button
+          onClick={fetchStats}
+          className="mt-4 px-6 py-2 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition-all active:scale-95 shadow-lg shadow-green-100"
+        >
+          Coba Lagi
+        </button>
       </div>
     );
   }

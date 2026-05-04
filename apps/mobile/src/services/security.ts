@@ -15,19 +15,19 @@ export const playIntegrityService = {
     try {
       // STUB: Native call should go here
       // const token = await NativePlayIntegrity.requestToken(nonce);
-      
+
       console.warn('[Security] Play Integrity request is stubbed.');
-      
+
       // Simulate success for development
-      return { 
-        success: true, 
-        token: `stub_integrity_token_${nonce}_${Date.now()}` 
+      return {
+        success: true,
+        token: `stub_integrity_token_${nonce}_${Date.now()}`,
       };
     } catch (error: any) {
       console.error('[Security] Gagal meminta token integrity:', error);
-      return { 
-        success: false, 
-        error: error.message || 'Unknown error during integrity check' 
+      return {
+        success: false,
+        error: error.message || 'Unknown error during integrity check',
       };
     }
   },
@@ -41,10 +41,10 @@ export const playIntegrityService = {
     // 2. Dapatkan token menggunakan nonce
     // 3. Kirim token ke backend untuk diverifikasi
     // 4. Return true jika aman, false jika bahaya
-    
+
     // STUB return true for now
     return true;
-  }
+  },
 };
 
 export default {

@@ -41,5 +41,5 @@ export const offlineQueue = {
 
   getQueueCount: (): number => {
     return offlineQueue.getQueue().length;
-  }
+  },
 };

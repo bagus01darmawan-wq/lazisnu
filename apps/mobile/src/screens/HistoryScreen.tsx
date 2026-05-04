@@ -37,14 +37,14 @@ const formatDate = (dateStr: string) => {
   });
 };
 
-const CollectionItem = memo(({ 
-  item, 
-  index, 
-  onResubmit 
-}: { 
-  item: Collection; 
+const CollectionItem = memo(({
+  item,
+  index,
+  onResubmit,
+}: {
+  item: Collection;
   index: number;
-  onResubmit: (id: string, currentNominal: number, method: 'CASH' | 'TRANSFER') => void 
+  onResubmit: (id: string, currentNominal: number, method: 'CASH' | 'TRANSFER') => void
 }) => {
   const getPaymentMethodIcon = (method: string) => {
     return method === 'CASH' ? 'cash' : 'bank-transfer';
@@ -54,7 +54,7 @@ const CollectionItem = memo(({
   const isLatest = (item as any).isLatest !== false;
 
   return (
-    <Animated.View 
+    <Animated.View
       entering={FadeInUp.delay(index * 50).duration(400)}
       layout={Layout.springify()}
     >
@@ -117,7 +117,7 @@ const CollectionItem = memo(({
         )}
 
         {isLatest && (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.resubmitButton}
             onPress={() => onResubmit(item.id, Number(item.nominal), item.payment_method)}
           >
@@ -140,7 +140,7 @@ const HistoryScreen: React.FC = () => {
     loadMore,
   } = useCollectionsStore();
   const [filter, setFilter] = useState<'ALL' | 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH'>('ALL');
-  
+
   // Resubmit Modal State
   const [resubmitModalVisible, setResubmitModalVisible] = useState(false);
   const [selectedCol, setSelectedCol] = useState<{id: string, nominal: string, method: 'CASH' | 'TRANSFER'} | null>(null);
@@ -158,7 +158,7 @@ const HistoryScreen: React.FC = () => {
   }, []);
 
   const submitResubmit = async () => {
-    if (!selectedCol) return;
+    if (!selectedCol) {return;}
     if (alasanResubmit.trim().length < 5) {
       Alert.alert('Error', 'Alasan koreksi minimal 5 karakter');
       return;
@@ -181,8 +181,8 @@ const HistoryScreen: React.FC = () => {
           { text: 'OK', onPress: () => {
               setResubmitModalVisible(false);
               fetchCollections(filter); // Refresh data
-            }
-          }
+            },
+          },
         ]);
       } else {
         Alert.alert('Gagal', response.error?.message || 'Terjadi kesalahan');
@@ -293,7 +293,7 @@ const HistoryScreen: React.FC = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Koreksi Penjemputan</Text>
-            
+
             <Text style={styles.inputLabel}>Nominal Baru</Text>
             <TextInput
               style={styles.textInput}
@@ -314,14 +314,14 @@ const HistoryScreen: React.FC = () => {
             />
 
             <View style={styles.modalActions}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.modalButton, styles.cancelButton]}
                 onPress={() => setResubmitModalVisible(false)}
                 disabled={isSubmitting}
               >
                 <Text style={styles.cancelButtonText}>Batal</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.modalButton, styles.submitButton]}
                 onPress={submitResubmit}
                 disabled={isSubmitting}
