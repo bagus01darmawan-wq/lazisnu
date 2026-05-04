@@ -26,7 +26,7 @@ const formatCurrency = (amount: number) => {
 };
 
 const TaskItem = memo(({ item, index, onScan, onCopy }: { item: Task; index: number; onScan: (task: Task) => void; onCopy: (text: string) => void }) => (
-  <Animated.View 
+  <Animated.View
     entering={FadeInUp.delay(index * 50).duration(400)}
     layout={Layout.springify()}
   >
@@ -150,8 +150,8 @@ const TasksScreen: React.FC = () => {
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={renderEmpty}
         refreshControl={
-          <RefreshControl 
-            refreshing={isLoading && page === 1} 
+          <RefreshControl
+            refreshing={isLoading && page === 1}
             onRefresh={() => fetchTasks(filter)}
             colors={[Colors.primary.main]}
           />

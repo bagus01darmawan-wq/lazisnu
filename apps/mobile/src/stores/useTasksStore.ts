@@ -26,7 +26,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
 
   fetchTasks: async (status = 'ACTIVE') => {
     set({ isLoading: true, error: null });
-    
+
     // DATA SIMULASI UNTUK DEVELOPMENT
     const mockTasks: Task[] = [
       {
@@ -73,8 +73,8 @@ export const useTasksStore = create<TasksState>((set, get) => ({
 
     try {
       // Filter mock data based on requested status (if not 'ALL')
-      const filteredMock = status === 'ALL' 
-        ? mockTasks 
+      const filteredMock = status === 'ALL'
+        ? mockTasks
         : mockTasks.filter(t => t.status === status);
 
       const result = await tasksService.getTasks({ status, page: 1, limit: 20 });
@@ -89,22 +89,22 @@ export const useTasksStore = create<TasksState>((set, get) => ({
           isLoading: false,
         });
       } else {
-        set({ 
+        set({
           tasks: filteredMock,
-          isLoading: false 
+          isLoading: false,
         });
       }
     } catch (error: any) {
-      set({ 
-        tasks: status === 'ALL' ? mockTasks : mockTasks.filter(t => t.status === status), 
-        isLoading: false 
+      set({
+        tasks: status === 'ALL' ? mockTasks : mockTasks.filter(t => t.status === status),
+        isLoading: false,
       });
     }
   },
 
   loadMore: async () => {
     const { page, totalPages, tasks } = get();
-    if (page >= totalPages) return;
+    if (page >= totalPages) {return;}
 
     set({ isLoading: true });
     try {

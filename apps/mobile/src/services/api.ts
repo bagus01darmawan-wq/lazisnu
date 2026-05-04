@@ -42,7 +42,7 @@ function onRefreshed(newToken: string) {
 
 async function refreshAccessToken(): Promise<string | null> {
   const refreshToken = getRefreshToken();
-  if (!refreshToken) return null;
+  if (!refreshToken) {return null;}
 
   try {
     const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
@@ -228,9 +228,9 @@ export const dashboardService = {
 export const tasksService = {
   getTasks: async (params?: { status?: string; page?: number; limit?: number }) => {
     const queryParams = new URLSearchParams();
-    if (params?.status) queryParams.append('status', params.status);
-    if (params?.page) queryParams.append('page', params.page.toString());
-    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.status) {queryParams.append('status', params.status);}
+    if (params?.page) {queryParams.append('page', params.page.toString());}
+    if (params?.limit) {queryParams.append('limit', params.limit.toString());}
 
     const query = queryParams.toString();
     return apiRequest(`/mobile/tasks${query ? `?${query}` : ''}`);
@@ -288,8 +288,8 @@ export const collectionService = {
 
   getHistory: async (params?: { page?: number; limit?: number }) => {
     const queryParams = new URLSearchParams();
-    if (params?.page) queryParams.append('page', params.page.toString());
-    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.page) {queryParams.append('page', params.page.toString());}
+    if (params?.limit) {queryParams.append('limit', params.limit.toString());}
     const query = queryParams.toString();
     return apiRequest(`/mobile/history${query ? `?${query}` : ''}`);
   },

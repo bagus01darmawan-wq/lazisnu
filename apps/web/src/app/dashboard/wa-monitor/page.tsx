@@ -55,7 +55,7 @@ export default function WAMonitorPage() {
   };
 
   useEffect(() => {
-    fetchWAStatus();
+    void fetchWAStatus();
   }, []);
 
   const columns: ColumnDef<any>[] = [
@@ -185,7 +185,7 @@ export default function WAMonitorPage() {
                 const response: any = await api.post('/admin/wa/flush-failed');
                 if (response.success) {
                   toast.success('Antrean berhasil dibersihkan');
-                  fetchWAStatus();
+                  void fetchWAStatus();
                 }
               } catch (e) {
                 toast.error('Gagal membersihkan antrean');
