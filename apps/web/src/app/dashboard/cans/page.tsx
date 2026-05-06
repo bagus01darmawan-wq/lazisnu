@@ -223,7 +223,7 @@ export default function CansPage() {
           </Button>
         </div>
       </div>
-    ), { duration: 6000, position: 'top-center' });
+    ), { duration: 5000 });
   };
 
   const handleBulkDelete = async () => {
@@ -278,7 +278,7 @@ export default function CansPage() {
           </Button>
         </div>
       </div>
-    ), { duration: 6000, position: 'top-center' });
+    ), { duration: 5000 });
   };
 
   const toggleSelectAll = () => {
@@ -409,7 +409,7 @@ export default function CansPage() {
           </Button>
         </div>
       </div>
-    ), { duration: 5000, position: 'top-center' });
+    ), { duration: 3000 });
   };
 
   const columns: ColumnDef<any>[] = [

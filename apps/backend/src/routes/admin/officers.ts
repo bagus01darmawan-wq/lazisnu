@@ -195,7 +195,7 @@ export async function officersRoutes(fastify: FastifyInstance) {
         });
       }
       
-      return reply.status(204).send();
+      return sendSuccess(reply, null);
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
     }

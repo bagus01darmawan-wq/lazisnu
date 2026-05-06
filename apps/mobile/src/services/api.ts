@@ -5,7 +5,15 @@ import { ApiResponse, Collection, Task } from '@lazisnu/shared-types';
 
 export const storage = new MMKV();
 
-const API_BASE_URL = 'https://fleet-lower-terminals-medicare.trycloudflare.com/v1';
+const getApiBaseUrl = (): string => {
+  if (__DEV__) {
+    // Android emulator accessing host machine via 10.0.2.2
+    return 'http://10.0.2.2:3001/v1';
+  }
+  return 'https://api.lazisnu.app/v1'; // Production
+};
+
+export const API_BASE_URL = getApiBaseUrl();
 
 // ── Token Management (MMKV is synchronous) ──────────────────────────────────
 

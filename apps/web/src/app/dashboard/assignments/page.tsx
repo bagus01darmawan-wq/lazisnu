@@ -256,7 +256,7 @@ export default function AssignmentsPage() {
           </Button>
         </div>
       </div>
-    ), { duration: 6000, position: 'top-center' });
+    ), { duration: 5000 });
   };
 
   const months = [

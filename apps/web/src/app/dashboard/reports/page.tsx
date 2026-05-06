@@ -14,12 +14,8 @@ async function getStatsData() {
   if (!token) return null;
 
   try {
-    const payload = decodeJwt(token);
-    const role = payload.role as string;
-    const endpoint = role === 'ADMIN_KECAMATAN' ? '/admin/district/dashboard' : '/admin/branch/dashboard';
-    
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-    const res = await fetch(`${API_URL}/v1${endpoint}`, {
+    const res = await fetch(`${API_URL}/v1/bendahara/reports/summary`, {
       headers: { Authorization: `Bearer ${token}` },
       next: { revalidate: 60, tags: ['reports', 'stats'] }, // Cache for 60s
     });
@@ -40,19 +36,15 @@ async function TransactionList() {
   if (!token) return <ReportsClient data={[]} />;
 
   try {
-    const payload = decodeJwt(token);
-    const role = payload.role as string;
-    const endpoint = role === 'ADMIN_KECAMATAN' ? '/admin/district/dashboard' : '/admin/branch/dashboard';
-    
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-    const res = await fetch(`${API_URL}/v1${endpoint}`, {
+    const res = await fetch(`${API_URL}/v1/bendahara/collections`, {
       headers: { Authorization: `Bearer ${token}` },
       next: { revalidate: 30, tags: ['reports', 'transactions'] },
     });
 
     if (!res.ok) return <ReportsClient data={[]} />;
     const json = await res.json();
-    return <ReportsClient data={json.data?.recent_collections || []} />;
+    return <ReportsClient data={json.data?.collections || []} />;
   } catch (error) {
     return <ReportsClient data={[]} />;
   }
@@ -67,6 +59,8 @@ function TableSkeleton() {
     </div>
   );
 }
+
+import ExportButton from './ExportButton';
 
 export default async function ReportsPage() {
   const stats = await getStatsData();
@@ -86,10 +80,7 @@ export default async function ReportsPage() {
             <Filter size={18} />
             Filter
           </Button>
-          <Button className="bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-600/20 px-6 h-11 rounded-xl font-bold transition-all active:scale-95 flex items-center gap-2">
-            <Download size={20} />
-            Export CSV
-          </Button>
+          <ExportButton />
         </div>
       </div>
 
@@ -100,7 +91,7 @@ export default async function ReportsPage() {
             <div>
               <p className="text-xs font-bold text-green-100 uppercase tracking-wider">Perolehan Bulan Ini</p>
               <h3 className="text-2xl font-black mt-1">
-                Rp {stats ? Number(stats.month_collection).toLocaleString('id-ID') : '0'}
+                Rp {stats ? Number(stats.total_amount || stats.month_collection).toLocaleString('id-ID') : '0'}
               </h3>
             </div>
             <div className="p-2 bg-white/20 rounded-lg">
@@ -114,7 +105,7 @@ export default async function ReportsPage() {
             <div>
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Koleksi</p>
               <h3 className="text-2xl font-black text-slate-900 mt-1">
-                {stats ? stats.month_count : '0'} Kali
+                {stats ? (stats.total_count || stats.month_count) : '0'} Kali
               </h3>
             </div>
             <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
@@ -126,10 +117,11 @@ export default async function ReportsPage() {
         <Card>
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Target Kaleng</p>
-              <h3 className="text-2xl font-black text-slate-900 mt-1">
-                {stats ? stats.total_cans : '0'}
-              </h3>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Metode Pembayaran</p>
+              <div className="mt-1 flex gap-4 text-sm font-bold text-slate-900">
+                <span className="flex items-center gap-1 text-green-600">Tunai: {stats?.cash_count || 0}</span>
+                <span className="flex items-center gap-1 text-blue-600">Transfer: {stats?.transfer_count || 0}</span>
+              </div>
             </div>
             <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
               <TrendingUp size={20} />

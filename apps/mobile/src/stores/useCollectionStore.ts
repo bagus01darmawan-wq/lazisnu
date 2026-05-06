@@ -48,7 +48,16 @@ export const useCollectionStore = create<CollectionState>((set) => ({
       const isOnline = !!(netInfo.isConnected && netInfo.isInternetReachable);
 
       if (isOnline) {
-        await syncService.autoSync();
+        const syncResult = await syncService.autoSync();
+        if (!syncResult.success) {
+          // Inform the user that it failed to sync but is saved offline
+          set({ 
+            isSubmitting: false, 
+            lastSubmitted: data as unknown as Collection,
+            error: 'Gagal sinkronisasi. Data tersimpan offline.' 
+          });
+          return true;
+        }
       }
 
       set({ isSubmitting: false, lastSubmitted: data as unknown as Collection });

@@ -99,15 +99,16 @@ Update 29 April 2026:
   - UI Standardization: Sinkronisasi layout paginasi, navigasi, dan standarisasi ikon aksi (Edit/Trash) di dashboard.
   - Routing Fix: Perbaikan bug 404 saat navigasi kembali ke Overview dari halaman lain.
   - Super Admin: Implementasi fitur reset (delete) penugasan khusus ADMIN_KECAMATAN.
-Update 02 Mei 2026:
-  - Adaptive Admin Actions: Implementasi tombol aksi dinamis (Re-activate/Edit & Permanent Delete/Soft Delete) berbasis status baris di Kelola Kaleng dan Manajemen User.
-  - Premium UI Interaction: Migrasi konfirmasi browser standar ke Custom Interactive Toasts (react-hot-toast) dengan ikon visual dan tombol aksi bergaya modern.
-  - Backend Data Restoration: Penambahan dukungan 'isActive' pada endpoint PUT /admin/cans dan /admin/officers serta perbaikan logika partial update (fallback to existing data).
-  - Technical Debt: BUG FIXED. Re-aktivasi sekarang otomatis mensinkronisasi tabel users dan officers. Filter SEMUA STATUS diperbaiki untuk merender data secara akurat.
+Update 05 Mei 2026:
+  - UI/UX Standardization: Sinkronisasi total halaman Manajemen User dengan "Gold Standard" Kelola Kaleng.
+  - Adaptive Admin Actions: Implementasi tombol aksi dinamis dan Premium Toast Confirmation (react-hot-toast).
+  - UX Optimization: Pengaturan durasi Toast yang nyaman (5s Hapus, 3s Aktifkan) & pembersihan redundansi kode.
+  - Backend API: Migrasi status DELETE dari 204 ke 200 {success:true} untuk konsistensi feedback frontend.
+  - Technical Debt: BUG FIXED. Re-aktivasi otomatis mensinkronisasi tabel users dan officers.
 ```
 
 ---
 
 *Lazisnu Infaq Collection System — rules/10-sprint-aktif.md*
 *⚠️ Update file ini setiap berganti sprint/fase*
-*Last updated: 2026-04-25*
+*Last updated: 2026-05-05*

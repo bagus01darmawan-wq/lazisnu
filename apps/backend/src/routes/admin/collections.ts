@@ -6,10 +6,10 @@ import { authorize } from '../../middleware/auth';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { resubmitCollectionSchema } from './schemas';
 
-const rantingOrKec = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
+const canResubmit = { preHandler: [authorize('BENDAHARA', 'ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
 
 export async function collectionsRoutes(fastify: FastifyInstance) {
-  fastify.post('/collections/:id/resubmit', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/collections/:id/resubmit', canResubmit, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
       const body = resubmitCollectionSchema.parse(request.body);

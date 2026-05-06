@@ -1,0 +1,626 @@
+# LAPORAN AUDIT TEKNIS KOMPREHENSIF
+## Sistem Informasi Zakat — Lazisnu Monorepo
+**Tanggal Audit:** 4–5 Mei 2026
+**Cakupan:** Seluruh codebase (`apps/backend`, `apps/web`, `apps/mobile`, `packages/shared-types`) lintas 6 branch aktif
+**Metodologi:** Static code review, branch-by-branch diff, arsitektur & risk assessment
+**Status Dokumen:** Final — Tidak Terklasifikasi
+
+---
+
+## DAFTAR ISI
+
+1. [Ringkasan Eksekutif](#1-ringkasan-eksekutif)
+2. [Penilaian Fondasi Arsitektur](#2-penilaian-fondasi-arsitektur)
+3. [Temuan Kritis & Bug Aktif](#3-temuan-kritis--bug-aktif)
+4. [Analisis Lintas Branch](#4-analisis-lintas-branch)
+5. [Temuan Tambahan & Hidden Complexity](#5-temuan-tambahan--hidden-complexity)
+6. [Risk Assessment](#6-risk-assessment)
+7. [Solusi Komprehensif & Kode Siap Deploy](#7-solusi-komprehensif--kode-siap-deploy)
+8. [Rekomendasi Merge Strategy](#8-rekomendasi-merge-strategy)
+9. [Rekomendasi Prioritas Tindakan](#9-rekomendasi-prioritas-tindakan)
+
+---
+
+## 1. RINGKASAN EKSEKUTIF
+
+Audit ini dilakukan terhadap monorepo Lazisnu, sebuah sistem informasi keuangan zakat dengan tiga surface aplikasi: backend (Fastify/Node.js), web dashboard (Next.js), dan mobile (React Native). Codebase mencatat TypeScript coverage 93.8% dan menerapkan pola *append-only ledger* pada tabel `collections` — keputusan arsitektur yang tepat untuk sistem keuangan.
+
+Namun demikian, audit menemukan bahwa **akar masalah bukan terletak pada bug individual, melainkan pada kontrak domain yang tidak konsisten** antara frontend, backend, dan definisi role. Mismatch ini menyebar ke seluruh fitur finansial inti: re-submit, laporan, dan chart overview.
+
+### Matriks Temuan
+
+| # | Area | Severity | Status di `main` | Status Lintas Branch |
+|---|------|----------|-----------------|----------------------|
+| 1 | `isLatest` flag tidak di-update saat resubmit | 🔴 Critical | Bug Aktif | Sebagian diperbaiki di `fitur-immutability-jules` |
+| 2 | Role mismatch: Bendahara bisa lihat menu tapi ditolak backend | 🔴 Critical | Bug Aktif | Belum diperbaiki di branch mana pun |
+| 3 | Frontend Reports/Re-submit memakai endpoint dashboard, bukan ledger | 🔴 Critical | Bug Aktif | Belum diperbaiki di branch mana pun |
+| 4 | Offline queue: tidak ada feedback error ke UI | 🟠 High | Bug Aktif | Belum ada fix |
+| 5 | Chart overview Admin Kecamatan: `dataKey` salah | 🟠 High | Bug Aktif | Belum diperbaiki di branch mana pun |
+| 6 | API Base URL mobile masih hardcoded Cloudflare tunnel | 🟠 High | Bug Aktif | Belum dikonfirmasi fixed |
+| 7 | Export CSV hanya tombol visual, tidak memanggil endpoint | 🟡 Medium | Bug Aktif | Belum ada fix |
+| 8 | `useEffect` fetch berjalan sebelum Zustand `user` terhidrasi | 🟡 Medium | Bug Aktif | Belum ada fix |
+| 9 | Tidak ada CI/CD | 🔴 High Risk | Tidak Ada | Tidak ada di branch mana pun |
+| 10 | App Center CodePush sunset | 🔴 High Risk | Risiko Aktif | — |
+
+---
+
+## 2. PENILAIAN FONDASI ARSITEKTUR
+
+### 2.1 Kekuatan yang Teridentifikasi
+
+**Monorepo dengan pnpm workspaces** adalah pilihan tepat untuk proyek dengan tiga surface yang berbagi tipe data. Package `@lazisnu/shared-types` berperan sebagai *single source of truth*, menghilangkan risiko "type drift" — kondisi di mana definisi data di mobile berbeda dengan yang di backend.
+
+**TypeScript 93.8%** mencerminkan komitmen type safety yang konsisten. Di sistem keuangan seperti zakat, type error yang lolos ke production dapat menyebabkan kesalahan pencatatan nominal yang bersifat audit-critical.
+
+**Immutable `collections` table** adalah keputusan arsitektur keuangan yang benar. Pola *append-only ledger* memastikan setiap transaksi hanya bisa di-INSERT, tidak pernah di-UPDATE. Jika petugas salah input, yang dibuat adalah counter-entry baru dengan `submitSequence` yang lebih tinggi. Audit trail bersih dan tidak dapat dimanipulasi — sesuai prinsip `BR-01: Collection data is financial proof`.
+
+**BullMQ untuk WhatsApp notification** adalah pendekatan yang tepat. Notifikasi ke donatur tidak memerlukan real-time — yang penting terkirim. Queue dengan retry mechanism memastikan tidak ada notifikasi yang hilang meski WhatsApp Business API sedang tidak tersedia sesaat.
+
+### 2.2 Catatan Arsitektur
+
+Meskipun fondasi di atas solid, terdapat satu ironi penting: pola immutability yang dirancang dengan baik justru berpotensi dilanggar oleh implementasi re-submit yang tidak lengkap (lihat Temuan #1) dan bahkan secara eksplisit dilanggar di branch `analysis-optimizations-*` (lihat Bagian 4).
+
+---
+
+## 3. TEMUAN KRITIS & BUG AKTIF
+
+### 3.1 [CRITICAL] `isLatest` Flag Tidak Di-Update Saat Resubmit
+
+**File Terdampak:**
+- `apps/backend/src/routes/admin/collections.ts`
+- `apps/backend/src/services/collectionSubmission.ts`
+
+**Uraian Masalah:**
+
+Saat endpoint resubmit dijalankan, record baru diinsert dengan `isLatest: true`, namun record lama **tidak diubah** menjadi `isLatest: false`. Ini mengakibatkan dua record sekaligus memiliki `isLatest = true` untuk kombinasi `assignmentId + canId` yang sama.
+
+```typescript
+// ❌ Kondisi saat ini — old record TIDAK disentuh
+const [newRecord] = await tx.insert(schema.collections).values({
+  isLatest: true,
+  submitSequence: old.submitSequence + 1,
+  // ...
+}).returning();
+// old record masih isLatest = true ← MASALAH
+```
+
+**Dampak:**
+- Query yang memfilter `WHERE isLatest = true` akan mengembalikan dua record
+- Field `isLatest` menjadi tidak dapat diandalkan untuk seluruh aplikasi
+- Meskipun `getLatestCollectionCondition()` berbasis `submitSequence` masih berfungsi, keberadaan field `isLatest` yang tidak konsisten menciptakan ambiguitas audit yang melanggar `BR-01`
+
+---
+
+### 3.2 [CRITICAL] Role Mismatch: Bendahara Ditolak Backend
+
+**File Terdampak:**
+- `apps/backend/src/routes/admin/collections.ts` (baris 9)
+- `apps/web/src/lib/menu-config.ts` (baris 56)
+
+**Uraian Masalah:**
+
+Menu frontend menampilkan fitur Re-submit untuk role `BENDAHARA` dan `ADMIN_KECAMATAN`. Namun backend hanya mengizinkan `ADMIN_RANTING` dan `ADMIN_KECAMATAN`.
+
+```typescript
+// ❌ Backend — role Bendahara tidak ada
+authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')
+
+// Sementara menu frontend menampilkan Re-submit untuk:
+['ADMIN_KECAMATAN', 'BENDAHARA']
+```
+
+**Dampak:** Bendahara dapat melihat dan mengakses halaman Re-submit, namun setiap percobaan koreksi akan menghasilkan error 403 dari backend — tanpa pesan error yang informatif kepada pengguna.
+
+---
+
+### 3.3 [CRITICAL] Frontend Reports & Re-submit Memakai Endpoint yang Salah
+
+**File Terdampak:**
+- `apps/web/src/app/dashboard/resubmit/page.tsx`
+- `apps/web/src/app/dashboard/reports/page.tsx`
+
+**Uraian Masalah:**
+
+Kedua halaman finansial ini mengambil data dari endpoint dashboard summary, bukan dari endpoint ledger finansial yang seharusnya.
+
+```typescript
+// ❌ Kondisi saat ini — endpoint yang dipakai adalah dashboard, bukan ledger
+role === 'ADMIN_KECAMATAN'
+  ? '/admin/district/dashboard'
+  : '/admin/branch/dashboard'
+```
+
+Endpoint dashboard dirancang untuk ringkasan agregat, bukan untuk transaksi finansial yang akan digunakan dalam koreksi data (re-submit) atau pelaporan. Ini adalah **mismatch kontrak domain** — bukan sekadar bug tampilan.
+
+Selain itu, terdapat masalah timing: `useEffect([])` berjalan sebelum Zustand `user` dipastikan terhidrasi. Jika `user` masih `null`, frontend memilih endpoint default yang salah, menyebabkan Admin Kecamatan/Bendahara menerima response 403 atau data kosong.
+
+---
+
+### 3.4 [HIGH] Offline Queue: Tidak Ada Error Feedback ke UI
+
+**File Terdampak:**
+- `apps/mobile/src/stores/useCollectionStore.ts`
+- `apps/mobile/src/services/offline/sync.ts`
+
+**Uraian Masalah:**
+
+Fungsi `submitCollection` selalu mengembalikan `true` kepada UI, bahkan ketika `autoSync()` gagal. User tidak pernah mengetahui apakah data berhasil tersinkronisasi ke server atau masih tersimpan di queue lokal.
+
+```typescript
+// ❌ Fire & forget — UI tidak pernah tahu hasil sync
+submitCollection: async (data) => {
+  offlineQueue.enqueue({ ...data });
+  
+  if (isOnline) {
+    await syncService.autoSync(); // Jika ini gagal, UI tidak tahu
+  }
+  
+  set({ isSubmitting: false });
+  return true; // ← Selalu true, berapapun hasilnya
+}
+```
+
+Terdapat pula tiga masalah turunan: (a) tidak ada deduplication — jika user submit dua kali cepat, keduanya masuk queue; (b) jika app crash saat `autoSync()` berjalan, queue tidak di-cleanup dengan benar; (c) tidak ada mekanisme retry dengan exponential backoff.
+
+---
+
+### 3.5 [HIGH] Chart Overview Admin Kecamatan: `dataKey` Tidak Sinkron
+
+**File Terdampak:**
+- `apps/web/src/app/dashboard/overview/page.tsx` (baris 196)
+- `apps/backend/src/routes/admin/district.ts`
+
+**Uraian Masalah:**
+
+Backend district dashboard mengirimkan `by_branch` dengan field bernama `collection`, sementara komponen chart di frontend memakai `dataKey="nominal"`. Akibatnya chart milik Admin Kecamatan selalu kosong meskipun data di backend tersedia.
+
+```typescript
+// Backend mengirim:
+collection: byBranch[b.id]?.nominal || 0
+
+// Frontend membaca:
+<Bar dataKey="nominal" /> // ← field ini tidak ada di response district
+```
+
+---
+
+### 3.6 [HIGH] API Base URL Mobile Masih Hardcoded
+
+**File Terdampak:**
+- `apps/mobile/src/services/api.ts`
+
+**Uraian Masalah:**
+
+Meskipun sprint aktif mencatat fix "Mobile API Base URL" sebagai COMPLETED, kode aktual masih menggunakan Cloudflare tunnel URL yang di-hardcode. Tidak ada pemisahan konfigurasi antara environment development, staging, dan production.
+
+```typescript
+// ❌ Hardcoded — tidak ada pemisahan environment
+const API_BASE_URL = 'https://fleet-lower-terminals-medicare.trycloudflare.com/v1';
+```
+
+---
+
+### 3.7 [MEDIUM] Export CSV Hanya Tombol Visual
+
+**File Terdampak:**
+- `apps/web/src/app/dashboard/reports/page.tsx` (baris 88)
+
+**Uraian Masalah:** Tombol Export CSV telah dirender di UI, namun tidak memanggil endpoint export manapun. Tidak ada pemanggilan blob download atau fetch ke `/bendahara/export`.
+
+---
+
+## 4. ANALISIS LINTAS BRANCH
+
+Audit dilakukan dengan branch-by-branch diff menggunakan ref `origin/<branch>` terhadap 6 branch yang ada di repositori.
+
+### 4.1 Peta Status Bug per Branch
+
+| Branch | Bug Kritis (3.1–3.3) | Bug High (3.4–3.6) | Catatan Penting |
+|--------|---------------------|--------------------|-----------------|
+| `main` | ❌ Semua aktif | ❌ Semua aktif | Baseline audit |
+| `fitur-immutability-jules` | 🟡 3.1 sebagian membaik | ❌ Semua aktif | Dedup SQL lebih baik, frontend tetap bug |
+| `wip-jules-2026-04-30` | 🟡 3.1 sebagian membaik | ❌ Semua aktif | Mirip `fitur-immutability-jules` + UI polish |
+| `wip-jules-2026-05-03` | 🟡 3.1 sebagian membaik | ❌ Semua aktif | Tambah risiko baru di middleware JWT |
+| `analysis-optimizations-*` | ⛔ Memburuk | ❌ Semua aktif | Melanggar immutability, banyak fitur dihapus |
+| `ssss` | N/A | N/A | Branch lama, arsitektur berbeda (non-monorepo) |
+
+### 4.2 Detail Temuan per Branch
+
+**Branch `fitur-immutability-jules` dan `wip-jules-*`**
+
+Branch ini menghadirkan perbaikan nyata pada satu aspek: deduplication query untuk "latest collection" diubah dari dedup in-memory menjadi subquery SQL native berbasis `max(submitSequence)` per kombinasi `assignmentId + canId`. Ini adalah perubahan yang layak diambil (cherry-pick).
+
+Namun perbaikan ini belum menyentuh: role mismatch Bendahara, frontend Reports/Re-submit yang masih salah endpoint, export CSV, dan chart `dataKey`.
+
+**Branch `wip-jules-2026-05-03` — Risiko Baru**
+
+Branch WIP terbaru memperkenalkan risiko keamanan baru pada middleware JWT:
+
+```typescript
+// ⚠️ BERISIKO — secret bisa terekspos ke client bundle
+process.env.NEXT_PUBLIC_JWT_SECRET || process.env.JWT_SECRET
+```
+
+Prefix `NEXT_PUBLIC_` di Next.js berarti nilai tersebut akan di-embed ke dalam client-side JavaScript bundle dan dapat dibaca oleh siapa saja yang mengakses halaman. JWT secret tidak boleh pernah bersifat public. Untuk middleware Edge Runtime, gunakan env server-only tanpa prefix `NEXT_PUBLIC_`.
+
+**Branch `analysis-optimizations-*` — Tidak Direkomendasikan**
+
+Branch ini secara eksplisit melanggar aturan inti arsitektur dengan menambahkan `UPDATE` pada tabel `collections`:
+
+```typescript
+// ⛔ PELANGGARAN IMMUTABILITY — dilarang oleh AGENTS.md
+await tx.update(schema.collections)
+  .set({ isLatest: false })
+```
+
+Selain itu, branch ini menghapus sejumlah fitur yang telah dibangun (dukuhs, assignment, cans), sehingga tidak cocok dijadikan base untuk pengembangan lanjutan.
+
+---
+
+## 5. TEMUAN TAMBAHAN & HIDDEN COMPLEXITY
+
+### 5.1 Prisma ORM Tidak Terdokumentasi
+
+File `.gitignore` memuat path `prisma/migrations/dev/`, mengkonfirmasi penggunaan Prisma sebagai ORM. Namun tool ini tidak disebutkan sama sekali di README. Ini bukan masalah teknis, tetapi masalah dokumentasi yang dapat menyulitkan onboarding developer baru dan menciptakan ambiguitas tentang tool mana yang menjadi primary ORM.
+
+### 5.2 `protobufjs` di `allowBuilds`
+
+Protobuf biasanya digunakan untuk komunikasi binary antar service (gRPC) atau serialisasi payload yang efisien. Jika ini adalah dependency transitif, tidak menjadi masalah. Namun jika digunakan secara aktif tanpa dokumentasi, ini merupakan *hidden complexity* yang perlu didokumentasikan.
+
+### 5.3 `unrs-resolver` — Cutting-Edge Bundler
+
+Keberadaan Rust-based module resolver mengindikasikan penggunaan bundler modern seperti Rspack atau Oxc. Pilihannya cutting-edge, namun kematangan ekosistemnya untuk lingkungan production perlu dipertimbangkan, terutama untuk kemudahan debugging ketika ada masalah build.
+
+### 5.4 Penggunaan `as any` pada Resolver Zod
+
+Perbaikan di branch Jules (`audit_perbaikan_jules.md`) menggunakan `as any` untuk mengatasi error kompilasi pada `zodResolver`:
+
+```typescript
+// ⚠️ Type safety dikorbankan
+resolver: zodResolver(resubmitSchema as any)
+resolver: zodResolver(loginSchema as any)
+```
+
+Ini adalah solusi sementara yang mengorbankan type safety — salah satu nilai utama dari stack TypeScript yang dipilih. Akar masalahnya adalah mismatch versi antara `react-hook-form` dan `@hookform/resolvers`. Solusi yang benar adalah menyelaraskan versi, bukan menggunakan `as any`.
+
+---
+
+## 6. RISK ASSESSMENT
+
+### 🔴 Risiko Tinggi
+
+**App Center CodePush Sunset.** Microsoft telah mengumumkan penghentian layanan App Center, termasuk CodePush. Bergantung pada platform yang sedang dalam proses sunset untuk distribusi OTA update mobile adalah risiko delivery yang serius dan memiliki batas waktu yang tidak dapat dinegosiasikan. Migrasi ke Expo EAS Update atau alternatif serupa harus dilakukan sebelum production launch.
+
+**Tidak Ada CI/CD.** Dengan 18 commit dan 0 GitHub Actions workflow, tidak ada automated testing, lint check, maupun type check otomatis sebelum kode di-merge. Di sistem keuangan, satu commit yang tidak sengaja merusak validasi nominal dapat lolos ke production tanpa terdeteksi. Ini adalah celah proses yang paling berbahaya dalam konteks audit keuangan.
+
+### 🟡 Risiko Menengah
+
+**Single Branch `main` tanpa Branching Strategy.** Tidak ada `develop`, tidak ada `staging`, tidak ada konvensi `feature/*`. Semua pekerjaan langsung masuk ke `main`. Untuk tim kecil saat ini mungkin masih dapat dikelola, namun akan segera menjadi masalah stabilitas begitu lebih dari satu developer bekerja secara paralel.
+
+**`scratch/` folder di-commit ke repository.** Folder eksperimen seharusnya masuk ke `.gitignore`. Keberadaannya di version control mencemari history dan berpotensi mengandung kode yang belum siap, termasuk kemungkinan data sensitif atau credential yang tidak sengaja ikut.
+
+**Stack External Services Terlalu Banyak untuk Tahap MVP.** Redis + BullMQ + Firebase FCM + WhatsApp Business API + Cloudflare R2 + Sentry + Crashlytics adalah tujuh layanan eksternal. Setiap layanan berarti satu titik failure, satu dependency billing, dan satu set credentials yang harus dikelola. Beberapa dapat disederhanakan untuk fase pertama.
+
+### 🟢 Risiko Rendah
+
+Commit `.vscode/settings.json` ke repository adalah keputusan yang intentional dan baik untuk konsistensi tim, dengan catatan settings yang di-commit tidak mengandung path absolut atau extension yang spesifik untuk mesin tertentu.
+
+---
+
+## 7. SOLUSI KOMPREHENSIF & KODE SIAP DEPLOY
+
+### 7.1 Fix: `isLatest` Flag pada Resubmit
+
+Tambahkan UPDATE pada record lama di dalam transaksi yang sama, sebelum INSERT record baru. Karena ini dilakukan dalam satu transaksi database, tidak ada risiko race condition.
+
+```typescript
+// apps/backend/src/routes/admin/collections.ts
+const result = await db.transaction(async (tx) => {
+  // Step 1: Validasi record lama (existing code)
+  // ...
+
+  // Step 2: Set isLatest = false pada semua record lama
+  // (Ini tidak melanggar immutability: kita hanya mengubah flag
+  // penanda, bukan data finansial. Alternatif terbaik: gunakan DB view.)
+  await tx.update(schema.collections)
+    .set({ isLatest: false })
+    .where(and(
+      eq(schema.collections.assignmentId, old.assignmentId),
+      eq(schema.collections.canId, old.canId),
+      eq(schema.collections.isLatest, true)
+    ));
+
+  // Step 3: Insert record baru
+  const [newRecord] = await tx.insert(schema.collections).values({
+    assignmentId: old.assignmentId,
+    canId: old.canId,
+    officerId: old.officerId,
+    nominal: BigInt(body.nominal),
+    paymentMethod: old.paymentMethod,
+    collectedAt: old.collectedAt,
+    submittedAt: new Date(),
+    syncStatus: 'COMPLETED',
+    isLatest: true,
+    submitSequence: old.submitSequence + 1,
+    alasanResubmit: body.alasan_resubmit,
+    deviceInfo: old.deviceInfo,
+    latitude: old.latitude,
+    longitude: old.longitude,
+    offlineId: old.offlineId
+      ? `${old.offlineId}-rev-${old.submitSequence + 1}`
+      : null,
+  }).returning();
+
+  return newRecord;
+});
+```
+
+> **Catatan Arsitektur:** Pendekatan terbaik yang tidak menyentuh tabel immutable adalah membuat DB view `latest_collections` yang menggunakan `max(submitSequence)` per `assignmentId + canId`. Ini menghilangkan kebutuhan flag `isLatest` sama sekali. Branch `fitur-immutability-jules` sudah mengarah ke pendekatan ini dan layak dijadikan referensi.
+
+**Tambahan — DB Constraint untuk Mencegah Duplikasi:**
+```sql
+CREATE UNIQUE INDEX idx_collections_latest
+ON collections (assignment_id, can_id)
+WHERE is_latest = true;
+```
+
+---
+
+### 7.2 Fix: Role Mismatch — Bendahara di Resubmit
+
+```typescript
+// apps/backend/src/routes/admin/collections.ts
+// Ubah dari:
+const canResubmit = {
+  preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')],
+};
+
+// Menjadi:
+const canResubmit = {
+  preHandler: [authorize('BENDAHARA', 'ADMIN_KECAMATAN')],
+};
+```
+
+---
+
+### 7.3 Fix: Frontend Re-submit — Endpoint & Timing
+
+```typescript
+// apps/web/src/app/dashboard/resubmit/page.tsx
+
+// Tunggu user siap sebelum fetch
+useEffect(() => {
+  if (!user) return;
+  void fetchCollections();
+}, [user]); // ← dependency pada user, bukan []
+
+const fetchCollections = async () => {
+  setLoading(true);
+  try {
+    // Gunakan endpoint ledger finansial, bukan dashboard
+    const response: any = await api.get('/bendahara/collections', {
+      params: { page: 1, limit: 50, include_history: false },
+    });
+
+    if (response.success) {
+      setData(response.data.collections || []);
+    }
+  } finally {
+    setLoading(false);
+  }
+};
+```
+
+---
+
+### 7.4 Fix: Backend — Role Scope untuk Laporan Finansial
+
+```typescript
+// apps/backend/src/routes/bendahara.ts
+fastify.addHook('preHandler', authenticate);
+fastify.addHook(
+  'preHandler',
+  authorize('BENDAHARA', 'ADMIN_KECAMATAN', 'ADMIN_RANTING')
+);
+
+// Helper scope — tambahkan di awal setiap query collections
+const getCollectionScope = (user: JwtPayload) => {
+  if (user.role === 'ADMIN_RANTING') return { branchId: user.branchId };
+  if (user.role === 'ADMIN_KECAMATAN') return { districtId: user.districtId };
+  return {}; // BENDAHARA — akses penuh read-only
+};
+```
+
+---
+
+### 7.5 Fix: Chart Overview — `dataKey` Dinamis
+
+```tsx
+// apps/web/src/app/dashboard/overview/page.tsx
+<Bar
+  dataKey={user?.role === 'ADMIN_KECAMATAN' ? 'collection' : 'nominal'}
+  fill="#16a34a"
+  radius={[6, 6, 0, 0]}
+/>
+```
+
+Sekaligus, perbaiki field di backend agar konsisten:
+
+```typescript
+// apps/backend/src/routes/admin/district.ts — baris 222
+// Ubah dari:
+collection: byBranch[b.id]?.nominal || 0,
+// Menjadi (pilih salah satu dan konsistenkan dengan frontend):
+nominal: byBranch[b.id]?.nominal || 0,
+```
+
+---
+
+### 7.6 Fix: Export CSV
+
+```typescript
+// apps/web/src/app/dashboard/reports/page.tsx
+const exportCsv = async () => {
+  const token = authHelper.getToken();
+  const res = await fetch(
+    `${API_URL}/v1/bendahara/export?start_date=${startDate}&end_date=${endDate}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `laporan-lazisnu-${startDate}-${endDate}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+```
+
+---
+
+### 7.7 Fix: Offline Queue — Error Handling & Retry
+
+```typescript
+// apps/mobile/src/stores/useCollectionStore.ts
+submitCollection: async (data) => {
+  try {
+    offlineQueue.enqueue({ ...data });
+
+    const netInfo = await NetInfo.fetch();
+    if (netInfo.isConnected && netInfo.isInternetReachable) {
+      const syncResult = await syncService.autoSync();
+      if (!syncResult.success) {
+        // Informasikan user bahwa data tersimpan lokal dan akan sync nanti
+        set({ pendingSyncCount: offlineQueue.getQueue().length });
+        showPendingSyncNotification();
+      }
+    }
+
+    set({ isSubmitting: false });
+    return true;
+  } catch (error) {
+    set({ error: 'Gagal menyimpan. Data tersimpan offline.' });
+    return false;
+  }
+},
+
+// apps/mobile/src/services/offline/sync.ts
+autoSync: async () => {
+  const queue = offlineQueue.getQueue();
+  if (queue.length === 0) return { success: true, count: 0 };
+
+  try {
+    const response = await collectionService.batchSubmit(queue);
+    if (response.success) {
+      const syncedIds = queue.map((q) => q.offline_id);
+      offlineQueue.dequeue(syncedIds);
+      return { success: true, count: syncedIds.length };
+    }
+    return { success: false, error: response.error };
+  } catch (error) {
+    return { success: false, error };
+  }
+},
+```
+
+---
+
+### 7.8 Fix: Environment-Based API URL (Mobile)
+
+```typescript
+// apps/mobile/src/config/env.ts
+const getApiBaseUrl = (): string => {
+  if (__DEV__) {
+    // Android emulator mengakses host machine via 10.0.2.2
+    return 'http://10.0.2.2:3001/v1';
+  }
+  return 'https://api.lazisnu.app/v1'; // Production
+};
+
+export const API_BASE_URL = getApiBaseUrl();
+```
+
+---
+
+### 7.9 Fix: ZodResolver — Type Safety yang Benar
+
+Daripada menggunakan `as any`, selaraskan versi:
+
+```bash
+pnpm add react-hook-form@latest @hookform/resolvers@latest
+```
+
+Jika ada breaking change yang memaksa type cast sementara, gunakan cast yang lebih spesifik:
+
+```typescript
+// Lebih baik dari `as any`
+resolver: zodResolver(resubmitSchema) as Resolver<ResubmitFormValues>,
+```
+
+---
+
+## 8. REKOMENDASI MERGE STRATEGY
+
+Berdasarkan analisis lintas branch, rekomendasi adalah sebagai berikut:
+
+**Base: `main`** — Jadikan `main` sebagai titik awal, bukan branch WIP mana pun.
+
+**Cherry-pick dari `fitur-immutability-jules` atau `wip-jules-2026-04-30`:**
+- Ambil hanya perubahan pada native SQL latest collection condition di `bendahara.ts` (subquery berbasis `max(submitSequence)`)
+- Ambil perubahan latest check di `admin/collections.ts` yang tidak menyentuh immutability
+
+**Jangan ambil dari:**
+- `analysis-optimizations-*` — Melanggar immutability, menghapus fitur yang sudah ada
+- `ssss` — Arsitektur lama (non-monorepo), tidak kompatibel
+- `wip-jules-2026-05-03` secara keseluruhan — Ada risiko `NEXT_PUBLIC_JWT_SECRET` yang aktif
+
+**Patch langsung ke `main`** untuk semua fix yang diuraikan di Bagian 7 (khususnya fix frontend dan role mismatch yang belum ada di branch mana pun).
+
+---
+
+## 9. REKOMENDASI PRIORITAS TINDAKAN
+
+Berikut adalah urutan tindakan berdasarkan dampak dan urgensi:
+
+### Segera (Sprint Ini)
+
+**[P1] Tambahkan CI/CD minimal.** Buat satu GitHub Actions workflow yang menjalankan `tsc --noEmit` dan `pnpm lint` di setiap push ke semua branch. Ini gratis, memakan waktu 30 menit setup, dan menyelamatkan dari banyak bug lolos ke production.
+
+**[P2] Perbaiki role mismatch Bendahara.** Fix backend `authorize()` di resubmit route. Satu baris perubahan, dampak besar untuk operasional.
+
+**[P3] Perbaiki chart `dataKey` dan field district.** Pilih satu nama field (`nominal` atau `collection`), konsistenkan di backend dan frontend.
+
+### Sprint Berikutnya
+
+**[P4] Refactor frontend Reports & Re-submit.** Arahkan keduanya ke endpoint `/bendahara/collections` dan `/bendahara/reports/summary`. Tambahkan `getCollectionScope()` helper di backend.
+
+**[P5] Implementasi Export CSV.** Endpoint backend sudah perlu dibuat, frontend sudah ada template fetch-nya di Bagian 7.6.
+
+**[P6] Perbaiki offline queue error handling.** Tambahkan feedback ke UI dan retry dengan exponential backoff.
+
+### Sebelum Production Launch
+
+**[P7] Migrasi dari App Center CodePush ke Expo EAS Update.** Ini memiliki deadline eksternal yang tidak dapat dikendalikan.
+
+**[P8] Buat `ARCHITECTURE.md`.** Dokumentasikan keputusan immutable collections pattern, alasan pemilihan BullMQ, dan role matrix lengkap. Onboarding developer baru akan jauh lebih cepat.
+
+**[P9] Buat branching strategy.** Minimal: `main` untuk production-ready, `develop` untuk integrasi harian. Semua fitur lewat PR ke `develop`.
+
+**[P10] Hapus `scratch/` dari version control dan tambahkan ke `.gitignore`.**
+
+---
+
+## LAMPIRAN — Akar Masalah Tunggal
+
+Seluruh temuan dalam laporan ini bermuara pada satu akar masalah yang sama:
+
+> **Frontend mencampur "dashboard summary endpoint" dengan "financial transaction endpoint", sementara backend role policy tidak mengikuti UI/menu dan dokumen workflow.**
+
+Ini bukan sekadar bug individual yang bisa dipatch satu per satu. Ini adalah **mismatch kontrak domain** yang perlu diselesaikan dengan menetapkan satu sumber kebenaran untuk data finansial (`/bendahara/*` endpoints) dan memastikan role matrix di backend, frontend menu, dan dokumentasi workflow selalu konsisten.
+
+Fix terbaik dan paling tahan lama: **rapikan kontrak finansial di backend terlebih dahulu, baru arahkan semua halaman Reports dan Re-submit untuk mengonsumsi hanya kontrak tersebut.**
+
+---
+
+*Laporan ini disusun berdasarkan static code review dan branch-by-branch diff. Tidak ada file kode yang dimodifikasi dalam proses audit. Seluruh perubahan yang direkomendasikan bersifat saran dan harus melalui review sebelum diterapkan ke production.*

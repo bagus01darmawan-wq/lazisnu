@@ -42,16 +42,17 @@ export default function ResubmitPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<ResubmitFormValues>({
-    resolver: zodResolver(resubmitSchema as any),
+    resolver: zodResolver(resubmitSchema),
   });
 
   const fetchCollections = async () => {
     setLoading(true);
     try {
-      const endpoint = user?.role === 'ADMIN_KECAMATAN' ? '/admin/district/dashboard' : '/admin/branch/dashboard';
-      const response: any = await api.get(endpoint);
+      const response: any = await api.get('/bendahara/collections', {
+        params: { page: 1, limit: 50 },
+      });
       if (response.success) {
-        setData(response.data.recent_collections || []);
+        setData(response.data.collections || []);
       }
     } catch (error) {
       console.error('Failed to fetch collections:', error);
@@ -61,8 +62,9 @@ export default function ResubmitPage() {
   };
 
   useEffect(() => {
+    if (!user) return;
     void fetchCollections();
-  }, []);
+  }, [user]);
 
   const onSubmit = async (values: ResubmitFormValues) => {
     if (!selectedCol) return;

@@ -197,6 +197,67 @@ const csvContent = BOM + rows.join('\n')
 /* Right: Filter Group (flex items-center gap-3 justify-end) */
 /* Urutan Filter: Status (Aktif/Non-aktif) -> Ranting (Semua Ranting) -> Tombol Reset */
 /* Terminologi Wilayah: Wajib menggunakan "SEMUA RANTING" untuk filter tingkat kecamatan */
+
+/* 3. Standar Toast Notification (Acuan: Halaman Kelola Kaleng): */
+
+/* FORMAT KONFIRMASI: toast((t) => JSX, { duration, position })                  */
+/* - duration: 5000ms untuk aksi Hapus/Non-aktifkan                              */
+/* - duration: 3000ms untuk aksi Aktifkan Kembali                                */
+/* - position: TIDAK perlu diset per-toast (sudah global di <Toaster>)           */
+/* - Ikon aksi permanen (Hapus): AlertTriangle size={18} className="text-red-600" */
+/* - Ikon aksi non-permanen (Non-aktifkan): Trash2/UserMinus size={18} className="text-slate-400" */
+/* - Ikon aksi reaktivasi: RotateCcw size={18} className="text-blue-600"         */
+
+/* FORMAT TOMBOL KONFIRMASI:                                                      */
+/* - Batal: variant="outline" h-8 text-xs font-bold rounded-lg                  */
+/* - Hapus Permanen: bg-red-600 hover:bg-red-700 shadow-red-100                 */
+/* - Non-aktifkan: bg-slate-800 hover:bg-slate-900 shadow-slate-200             */
+/* - Aktifkan: bg-blue-600 hover:bg-blue-700                                    */
+/* - Semua tombol aksi: h-8 text-xs font-bold rounded-lg text-white shadow-sm transition-all active:scale-95 */
+
+/* FORMAT RESULT TOAST (DILARANG menggunakan toast.promise):                     */
+/* WAJIB menggunakan try-catch + if (response.success):                          */
+/*   try {                                                                        */
+/*     const response: any = await api.delete/post/put(...);                     */
+/*     if (response.success) {                                                    */
+/*       fetchData();   ← Refresh data via re-fetch, bukan reload halaman        */
+/*       toast.success('...');                                                    */
+/*     }                                                                          */
+/*   } catch (error: any) {                                                       */
+/*     toast.error(error.error?.message || error.message || 'Pesan fallback');   */
+/*   }                                                                            */
+
+/* URUTAN DALAM BLOK if (response.success):                                      */
+/* - Aksi Non-aktifkan / Hapus Permanen: fetchData() LALU toast.success()        */
+/* - Aksi Reaktivasi & Bulk: toast.success() LALU fetchData()                   */
+
+/* 4. Standar Pesan Toast per Aksi (warna otomatis dari react-hot-toast):        */
+/*                                                                                */
+/* NON-AKTIFKAN (Kaleng/Petugas):                                                 */
+/*   toast.success('Data kaleng berhasil dinonaktifkan')                         */
+/*   toast.success('Petugas berhasil dinonaktifkan')                             */
+/*                                                                                */
+/* HAPUS PERMANEN (Kaleng/Petugas):                                              */
+/*   toast.success('Data kaleng berhasil dihapus permanen')                      */
+/*   toast.success('Petugas berhasil dihapus permanen')                          */
+/*                                                                                */
+/* REAKTIVASI (Kaleng/Petugas):                                                  */
+/*   toast.success('Data kaleng berhasil diaktifkan kembali')                    */
+/*   toast.success('Petugas berhasil diaktifkan kembali')                        */
+/*                                                                                */
+/* ERROR (Semua aksi): toast.error(error.error?.message || error.message || ...) */
+
+/* BADGE STATUS: Aktif = variant="success" (hijau), Non-aktif = variant="failed" (merah) */
+
+/* 5. Standar Tombol Aksi di Baris Tabel (Icon Button):                          */
+/* - Edit (row aktif): hover:bg-green-50 hover:text-green-600 hover:border-green-200 */
+/* - Non-aktifkan (row aktif): hover:bg-red-50 hover:text-red-600 hover:border-red-200 */
+/* - Hapus Permanen (row non-aktif): hover:bg-red-600 hover:text-white hover:border-red-600 */
+/* - Reaktivasi (row non-aktif): hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 */
+/* - Semua icon button: h-8 w-8 p-0 rounded-lg transition-all border-slate-200 group */
+
+/* BACKEND: Endpoint DELETE wajib mengembalikan sendSuccess(reply, null) (HTTP 200) */
+/* bukan reply.status(204).send(), agar if (response.success) di frontend berfungsi. */
 ```
 
 ---

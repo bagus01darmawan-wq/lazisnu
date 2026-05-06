@@ -242,7 +242,7 @@ export async function cansRoutes(fastify: FastifyInstance) {
         await db.update(schema.cans).set({ isActive: false }).where(eq(schema.cans.id, id));
       }
       
-      return reply.status(204).send();
+      return sendSuccess(reply, null);
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
     }

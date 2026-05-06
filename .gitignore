@@ -17,10 +17,11 @@ out/
 # Prisma
 prisma/migrations/dev/
 
-# Logs
+# Logs & Temp
 logs/
 *.log
 npm-debug.log*
+scratch/
 
 # OS files
 .DS_Store

@@ -5,12 +5,18 @@ import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { eq, and, desc, asc, gte, lte, inArray, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, JWTPayload } from '../middleware/auth';
 
 export async function bendaharaRoutes(fastify: FastifyInstance) {
   // Apply auth middleware
   fastify.addHook('preHandler', authenticate);
-  fastify.addHook('preHandler', authorize('BENDAHARA'));
+  fastify.addHook('preHandler', authorize('BENDAHARA', 'ADMIN_KECAMATAN', 'ADMIN_RANTING'));
+
+  const getCollectionScope = (user: JWTPayload) => {
+    if (user.role === 'ADMIN_RANTING') return { branchId: user.branchId };
+    if (user.role === 'ADMIN_KECAMATAN') return { districtId: user.districtId };
+    return {}; // BENDAHARA — full access
+  };
 
   const c2 = alias(schema.collections, 'c2');
   const latestCollectionCondition = eq(
@@ -160,6 +166,23 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
         conditions.push(inArray(schema.collections.canId, canIds));
       }
 
+      const userScope = getCollectionScope(request.currentUser!);
+      if (userScope.branchId) {
+        // Must join to filter by branch
+        const branchCans = await db.select({ id: schema.cans.id }).from(schema.cans).where(eq(schema.cans.branchId, userScope.branchId));
+        const branchCanIds = branchCans.map(c => c.id);
+        if (branchCanIds.length === 0) return reply.send({ success: true, data: { collections: [], pagination: { page, limit, total: 0, total_pages: 0 } } });
+        conditions.push(inArray(schema.collections.canId, branchCanIds));
+      } else if (userScope.districtId) {
+        const districtBranches = await db.select({ id: schema.branches.id }).from(schema.branches).where(eq(schema.branches.districtId, userScope.districtId));
+        const districtBranchIds = districtBranches.map(b => b.id);
+        if (districtBranchIds.length === 0) return reply.send({ success: true, data: { collections: [], pagination: { page, limit, total: 0, total_pages: 0 } } });
+        const districtCans = await db.select({ id: schema.cans.id }).from(schema.cans).where(inArray(schema.cans.branchId, districtBranchIds));
+        const districtCanIds = districtCans.map(c => c.id);
+        if (districtCanIds.length === 0) return reply.send({ success: true, data: { collections: [], pagination: { page, limit, total: 0, total_pages: 0 } } });
+        conditions.push(inArray(schema.collections.canId, districtCanIds));
+      }
+
       const whereClause = and(...conditions, latestCollectionCondition);
 
       const [collections, total] = await Promise.all([
@@ -283,13 +306,31 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
       const startDate = new Date(year, month - 1, 1);
       const endDate = new Date(year, month, 0, 23, 59, 59);
 
+      const conditions = [
+        gte(schema.collections.collectedAt, startDate), 
+        lte(schema.collections.collectedAt, endDate), 
+        eq(schema.collections.syncStatus, 'COMPLETED'),
+        latestCollectionCondition
+      ];
+
+      const userScope = getCollectionScope(request.currentUser!);
+      if (userScope.branchId) {
+        const branchCans = await db.select({ id: schema.cans.id }).from(schema.cans).where(eq(schema.cans.branchId, userScope.branchId));
+        const branchCanIds = branchCans.map(c => c.id);
+        if (branchCanIds.length === 0) return reply.send({ success: true, data: { period: { year, month }, summary: { total_amount: 0, total_count: 0, cash_amount: 0, cash_count: 0, transfer_amount: 0, transfer_count: 0 }, by_district: [], by_branch: [], by_officer: [] } });
+        conditions.push(inArray(schema.collections.canId, branchCanIds));
+      } else if (userScope.districtId) {
+        const districtBranches = await db.select({ id: schema.branches.id }).from(schema.branches).where(eq(schema.branches.districtId, userScope.districtId));
+        const districtBranchIds = districtBranches.map(b => b.id);
+        if (districtBranchIds.length === 0) return reply.send({ success: true, data: { period: { year, month }, summary: { total_amount: 0, total_count: 0, cash_amount: 0, cash_count: 0, transfer_amount: 0, transfer_count: 0 }, by_district: [], by_branch: [], by_officer: [] } });
+        const districtCans = await db.select({ id: schema.cans.id }).from(schema.cans).where(inArray(schema.cans.branchId, districtBranchIds));
+        const districtCanIds = districtCans.map(c => c.id);
+        if (districtCanIds.length === 0) return reply.send({ success: true, data: { period: { year, month }, summary: { total_amount: 0, total_count: 0, cash_amount: 0, cash_count: 0, transfer_amount: 0, transfer_count: 0 }, by_district: [], by_branch: [], by_officer: [] } });
+        conditions.push(inArray(schema.collections.canId, districtCanIds));
+      }
+
       const collections = await db.query.collections.findMany({
-        where: and(
-          gte(schema.collections.collectedAt, startDate), 
-          lte(schema.collections.collectedAt, endDate), 
-          eq(schema.collections.syncStatus, 'COMPLETED'),
-          latestCollectionCondition
-        ),
+        where: and(...conditions),
         with: {
           can: { with: { branch: { with: { district: true } } } },
           officer: { columns: { id: true, fullName: true } },
@@ -385,13 +426,33 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
         });
       }
 
+      const conditions = [
+        gte(schema.collections.collectedAt, new Date(query.start_date)), 
+        lte(schema.collections.collectedAt, new Date(query.end_date)), 
+        eq(schema.collections.syncStatus, 'COMPLETED'),
+        latestCollectionCondition
+      ];
+
+      const userScope = getCollectionScope(request.currentUser!);
+      if (userScope.branchId) {
+        const branchCans = await db.select({ id: schema.cans.id }).from(schema.cans).where(eq(schema.cans.branchId, userScope.branchId));
+        const branchCanIds = branchCans.map(c => c.id);
+        if (branchCanIds.length > 0) conditions.push(inArray(schema.collections.canId, branchCanIds));
+        else conditions.push(eq(schema.collections.canId, 'NO_MATCH'));
+      } else if (userScope.districtId) {
+        const districtBranches = await db.select({ id: schema.branches.id }).from(schema.branches).where(eq(schema.branches.districtId, userScope.districtId));
+        const districtBranchIds = districtBranches.map(b => b.id);
+        let districtCanIds: string[] = [];
+        if (districtBranchIds.length > 0) {
+          const districtCans = await db.select({ id: schema.cans.id }).from(schema.cans).where(inArray(schema.cans.branchId, districtBranchIds));
+          districtCanIds = districtCans.map(c => c.id);
+        }
+        if (districtCanIds.length > 0) conditions.push(inArray(schema.collections.canId, districtCanIds));
+        else conditions.push(eq(schema.collections.canId, 'NO_MATCH'));
+      }
+
       const collections = await db.query.collections.findMany({
-        where: and(
-          gte(schema.collections.collectedAt, new Date(query.start_date)), 
-          lte(schema.collections.collectedAt, new Date(query.end_date)), 
-          eq(schema.collections.syncStatus, 'COMPLETED'),
-          latestCollectionCondition
-        ),
+        where: and(...conditions),
         with: {
           can: { with: { branch: { with: { district: true } } } },
           officer: { columns: { fullName: true, employeeCode: true } },

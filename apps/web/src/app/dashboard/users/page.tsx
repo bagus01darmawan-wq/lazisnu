@@ -163,25 +163,24 @@ export default function UsersPage() {
           <Button 
             size="sm" 
             className={`h-8 text-xs font-bold rounded-lg text-white shadow-sm transition-all active:scale-95 ${isPermanent ? 'bg-red-600 hover:bg-red-700 shadow-red-100' : 'bg-slate-800 hover:bg-slate-900 shadow-slate-200'}`}
-            onClick={() => {
+            onClick={async () => {
               toast.dismiss(t.id);
-              const deletePromise = api.delete(`/admin/officers/${id}${isPermanent ? '?permanent=true' : ''}`);
-
-              toast.promise(deletePromise, {
-                loading: isPermanent ? 'Menghapus permanen...' : 'Menonaktifkan petugas...',
-                success: () => {
+              try {
+                const response: any = await api.delete(`/admin/officers/${id}${isPermanent ? '?permanent=true' : ''}`);
+                if (response.success) {
                   void fetchOfficers();
-                  return isPermanent ? 'Petugas berhasil dihapus permanen' : 'Petugas berhasil dinonaktifkan';
-                },
-                error: (err) => err.response?.data?.message || 'Gagal memproses permintaan'
-              }, { duration: 3000 });
+                  toast.success(isPermanent ? 'Petugas berhasil dihapus permanen' : 'Petugas berhasil dinonaktifkan');
+                }
+              } catch (error: any) {
+                toast.error(error.error?.message || error.message || 'Gagal memproses permintaan');
+              }
             }}
           >
             {isPermanent ? 'Hapus Permanen' : 'Ya, Nonaktifkan'}
           </Button>
         </div>
       </div>
-    ), { duration: 4000, position: 'top-center' });
+    ), { duration: 5000 });
   };
 
   const handleBulkDelete = async () => {
@@ -213,30 +212,29 @@ export default function UsersPage() {
           <Button 
             size="sm" 
             className={`h-8 text-xs font-bold rounded-lg text-white shadow-sm transition-all active:scale-95 ${isNonActiveView ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-slate-800 hover:bg-slate-900 shadow-slate-200'}`}
-            onClick={() => {
+            onClick={async () => {
               toast.dismiss(t.id);
-              const bulkPromise = api.post('/admin/officers/bulk-delete', {
-                ids: selectedIds,
-                permanent: isNonActiveView
-              });
-
-              toast.promise(bulkPromise, {
-                loading: 'Memproses penghapusan masal...',
-                success: () => {
+              try {
+                const response: any = await api.post('/admin/officers/bulk-delete', {
+                  ids: selectedIds,
+                  permanent: isNonActiveView
+                });
+                if (response.success) {
+                  toast.success(isNonActiveView
+                    ? `Berhasil menghapus permanen ${selectedIds.length} petugas`
+                    : `Berhasil menonaktifkan ${selectedIds.length} petugas`);
                   void fetchOfficers();
-                  return isNonActiveView
-                    ? `Berhasil menghapus permanen ${selectedIds.length} petugas` 
-                    : `Berhasil menonaktifkan ${selectedIds.length} petugas`;
-                },
-                error: (err) => err.response?.data?.message || 'Gagal menghapus data masal'
-              }, { duration: 3000 });
+                }
+              } catch (error: any) {
+                toast.error(error.message || 'Gagal menghapus data masal');
+              }
             }}
           >
             {isNonActiveView ? 'Ya, Hapus Permanen' : 'Ya, Nonaktifkan'}
           </Button>
         </div>
       </div>
-    ), { duration: 4000, position: 'top-center' });
+    ), { duration: 5000 });
   };
 
   const toggleSelectAll = () => {
@@ -272,25 +270,24 @@ export default function UsersPage() {
           <Button 
             size="sm" 
             className="bg-blue-600 hover:bg-blue-700 h-8 text-xs font-bold rounded-lg text-white shadow-sm transition-all active:scale-95"
-            onClick={() => {
+            onClick={async () => {
               toast.dismiss(t.id);
-              const reactivatePromise = api.put(`/admin/officers/${id}`, { is_active: true });
-
-              toast.promise(reactivatePromise, {
-                loading: 'Mengaktifkan kembali...',
-                success: () => {
+              try {
+                const response: any = await api.put(`/admin/officers/${id}`, { is_active: true });
+                if (response.success) {
                   void fetchOfficers();
-                  return 'Petugas berhasil diaktifkan kembali';
-                },
-                error: (err) => err.response?.data?.message || 'Gagal mengaktifkan petugas'
-              }, { duration: 3000 });
+                  toast.success('Petugas berhasil diaktifkan kembali');
+                }
+              } catch (error: any) {
+                toast.error(error.error?.message || error.message || 'Gagal mengaktifkan petugas');
+              }
             }}
           >
             Ya, Aktifkan
           </Button>
         </div>
       </div>
-    ), { duration: 4000, position: 'top-center' });
+    ), { duration: 3000 });
   };
 
   const columns: ColumnDef<any>[] = [
@@ -365,7 +362,7 @@ export default function UsersPage() {
       accessorKey: 'is_active',
       header: 'Status',
       cell: ({ row }) => (
-        <Badge variant={row.original.is_active ? 'success' : 'secondary'}>
+        <Badge variant={row.original.is_active ? 'success' : 'failed'}>
           {row.original.is_active ? 'Aktif' : 'Non-aktif'}
         </Badge>
       ),
