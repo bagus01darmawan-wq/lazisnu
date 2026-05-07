@@ -14,5 +14,12 @@
     "build:web": "pnpm --filter web build",
     "build:shared": "pnpm --filter @lazisnu/shared-types build",
     "build:all": "pnpm build:shared && pnpm build:backend && pnpm build:web"
+  },
+  "pnpm": {
+    "overrides": {
+      "zod": "3.23.8",
+      "react-hook-form": "7.74.0",
+      "@hookform/resolvers": "3.9.0"
+    }
   }
 }
