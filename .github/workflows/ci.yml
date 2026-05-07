@@ -11,22 +11,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
-    
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: Install pnpm
+      uses: pnpm/action-setup@v3
+      with:
+        version: 10
+        
     - name: Setup Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: '20'
-
-    - name: Install pnpm
-      run: npm install -g pnpm
+        cache: 'pnpm'
 
     - name: Install dependencies
-      run: pnpm install
+      run: pnpm install --frozen-lockfile
+
+    - name: Build Shared Types (Wajib untuk Monorepo)
+      run: pnpm build:shared
 
     - name: Run lint
-      run: pnpm lint --no-bail
+      run: pnpm -r run lint --no-bail
 
     - name: Run type check
-      run: |
-        pnpm tsc --noEmit
+      run: pnpm -r exec tsc --noEmit
