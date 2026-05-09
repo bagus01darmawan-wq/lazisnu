@@ -1,3 +1,7 @@
+---
+trigger: manual
+---
+
 # Workflow Adherence Protocol
 
 ## MANDATORY PROCEDURE

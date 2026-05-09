@@ -1,5 +1,5 @@
 ---
-trigger: model_decision
+trigger: manual
 ---
 
 # Rule: Pedoman Web Dashboard
