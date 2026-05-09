@@ -1,14 +1,73 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { db } from '../../config/database';
+import * as schema from '../../database/schema';
+import { eq, desc, ilike, or, and, sql } from 'drizzle-orm';
 import { authorize } from '../../middleware/auth';
 import { UserRole } from '@lazisnu/shared-types';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { getWhatsAppQueue } from '../../services/whatsapp';
+import { getPaginationParams, formatPaginatedResponse } from '../../utils/pagination';
 
 export async function waRoutes(fastify: FastifyInstance) {
-  const adminOnly = authorize('ADMIN_KECAMATAN');
+  const adminOnly = authorize('ADMIN_KECAMATAN', 'ADMIN_RANTING', 'BENDAHARA');
+
+  // GET /admin/wa/logs - Real Notification Logs from DB
+  fastify.get('/wa/logs', { preHandler: [adminOnly] }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const query = request.query as any;
+      const { page, limit, offset } = getPaginationParams(query);
+
+      const conditions: any[] = [];
+      if (query.search) {
+        conditions.push(or(
+          ilike(schema.notifications.recipientName, `%${query.search}%`),
+          ilike(schema.notifications.recipientPhone, `%${query.search}%`),
+          ilike(schema.notifications.messageContent, `%${query.search}%`)
+        ));
+      }
+
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+      const [logs, total] = await Promise.all([
+        db.query.notifications.findMany({
+          where: whereClause,
+          limit,
+          offset,
+          orderBy: [desc(schema.notifications.createdAt)],
+        }),
+        db.select({ count: sql<number>`count(*)` })
+          .from(schema.notifications)
+          .where(whereClause)
+          .then(res => Number(res[0].count))
+      ]);
+
+      // Get real BullMQ stats for the dashboard header
+      const queue = getWhatsAppQueue();
+      const [waiting, active, completed, failed, delayed] = await Promise.all([
+        queue.getWaitingCount(),
+        queue.getActiveCount(),
+        queue.getCompletedCount(),
+        queue.getFailedCount(),
+        queue.getDelayedCount(),
+      ]);
+
+      const stats = {
+        sent: completed,
+        pending: waiting + active + delayed,
+        failed: failed
+      };
+
+      return sendSuccess(reply, {
+        ...formatPaginatedResponse(logs, total, page, limit),
+        stats
+      });
+    } catch (error) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
 
   // GET /admin/wa/failed
-  fastify.get('/wa/failed', { preHandler: [adminOnly] }, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/wa/failed', { preHandler: [authorize('ADMIN_KECAMATAN')] }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const queue = getWhatsAppQueue();
       const failedJobs = await queue.getFailed();

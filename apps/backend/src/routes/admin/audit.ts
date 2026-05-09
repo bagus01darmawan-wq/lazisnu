@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { eq, desc, and, ilike, or } from 'drizzle-orm';
+import { eq, desc, and, ilike, or, gte, lte } from 'drizzle-orm';
 import { authenticate, authorize } from '../../middleware/auth';
 
 export async function auditRoutes(fastify: FastifyInstance) {
@@ -20,6 +20,8 @@ export async function auditRoutes(fastify: FastifyInstance) {
         limit?: string; 
         search?: string; 
         action_type?: string; 
+        start_date?: string;
+        end_date?: string;
       };
       
       const page = parseInt(query.page || '1');
@@ -37,6 +39,13 @@ export async function auditRoutes(fastify: FastifyInstance) {
 
       if (query.action_type) {
         conditions.push(eq(schema.activityLogs.actionType, query.action_type));
+      }
+
+      if (query.start_date && query.end_date) {
+        conditions.push(and(
+          gte(schema.activityLogs.createdAt, new Date(query.start_date)),
+          lte(schema.activityLogs.createdAt, new Date(query.end_date))
+        ));
       }
 
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

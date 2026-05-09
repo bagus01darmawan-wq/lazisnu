@@ -19,7 +19,7 @@ export async function middleware(request: NextRequest) {
   // 3. Proper Role Check using JWT decoding
   if (token && !isAuthPage) {
     try {
-      const secret = new TextEncoder().encode(process.env.NEXT_PUBLIC_JWT_SECRET || process.env.JWT_SECRET);
+      const secret = new TextEncoder().encode(process.env.JWT_SECRET);
       const { payload } = await jwtVerify(token, secret);
       const userRole = payload.role as string;
 

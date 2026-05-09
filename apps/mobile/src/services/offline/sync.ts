@@ -3,37 +3,58 @@ import { offlineQueue } from './queue';
 import { collectionService } from '../api';
 
 export const syncService = {
-  autoSync: async (): Promise<{ success: boolean; count?: number; error?: any }> => {
+  autoSync: async (retryCount = 0): Promise<{ success: boolean; count?: number; error?: any }> => {
+    const MAX_RETRIES = 3;
     const netInfo = await NetInfo.fetch();
-    if (!netInfo.isConnected) {return { success: false, error: 'NO_NETWORK' };}
+    
+    if (!netInfo.isConnected || !netInfo.isInternetReachable) {
+      return { success: false, error: 'NO_NETWORK' };
+    }
 
     const queue = offlineQueue.getQueue();
-    if (queue.length === 0) {return { success: true, count: 0 };}
+    if (queue.length === 0) {
+      return { success: true, count: 0 };
+    }
 
     try {
       // Panggil API batch-sync
       const response = await collectionService.batchSubmit(queue);
 
       if (response.success) {
-        // Jika berhasil, hapus item dari queue lokal
         const syncedIds = queue.map(q => q.offline_id);
         offlineQueue.dequeue(syncedIds);
-        console.log(`Batch sync sukses: ${syncedIds.length} data. Queue dibersihkan.`);
+        console.log(`[Sync] Sukses: ${syncedIds.length} data disinkronkan.`);
         return { success: true, count: syncedIds.length };
       } else {
-        console.error('Batch sync gagal dari server:', response.error);
+        // Jika gagal karena server (bukan validasi), coba lagi dengan backoff
+        if (retryCount < MAX_RETRIES) {
+          const delay = Math.pow(2, retryCount) * 1000;
+          console.log(`[Sync] Gagal, mencoba ulang dalam ${delay}ms... (Percobaan ${retryCount + 1})`);
+          await new Promise(res => setTimeout(res, delay));
+          return syncService.autoSync(retryCount + 1);
+        }
         return { success: false, error: response.error };
       }
     } catch (error) {
-      console.error('Batch sync gagal karena network/sistem:', error);
+      if (retryCount < MAX_RETRIES) {
+        const delay = Math.pow(2, retryCount) * 1000;
+        await new Promise(res => setTimeout(res, delay));
+        return syncService.autoSync(retryCount + 1);
+      }
       return { success: false, error };
     }
   },
 
   startNetworkListener: () => {
-    return NetInfo.addEventListener(state => {
-      if (state.isConnected && state.isInternetReachable) {
-        syncService.autoSync();
+    let syncInProgress = false;
+    return NetInfo.addEventListener(async (state) => {
+      if (state.isConnected && state.isInternetReachable && !syncInProgress) {
+        syncInProgress = true;
+        try {
+          await syncService.autoSync();
+        } finally {
+          syncInProgress = false;
+        }
       }
     });
   },

@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { eq, and, gte, desc, sql } from 'drizzle-orm';
+import { eq, and, gte, lt, desc, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { authorize } from '../../middleware/auth';
 import { sendSuccess, sendInternalError } from '../../utils/response';
@@ -29,13 +29,13 @@ export async function districtRoutes(fastify: FastifyInstance) {
     try {
       const user = request.currentUser!;
       const { name, code } = request.body as { name: string; code: string };
-      
+
       if (!name || !code) return reply.status(400).send({ success: false, message: 'Nama dan kode ranting wajib diisi' });
 
       if (!user.districtId) {
-        return reply.status(403).send({ 
-          success: false, 
-          error: { code: 'FORBIDDEN', message: 'Admin tidak memiliki ID Kecamatan di profilnya' } 
+        return reply.status(403).send({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'Admin tidak memiliki ID Kecamatan di profilnya' }
         });
       }
 
@@ -48,9 +48,9 @@ export async function districtRoutes(fastify: FastifyInstance) {
       return sendSuccess(reply, newBranch);
     } catch (error: any) {
       if (error.code === '23505') {
-        return reply.status(400).send({ 
-          success: false, 
-          error: { code: 'DUPLICATE_CODE', message: 'Kode ranting sudah digunakan' } 
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'DUPLICATE_CODE', message: 'Kode ranting sudah digunakan' }
         });
       }
       return sendInternalError(reply, error, fastify.log);
@@ -64,10 +64,10 @@ export async function districtRoutes(fastify: FastifyInstance) {
       const { name, code } = request.body as { name: string; code: string };
 
       const [updatedBranch] = await db.update(schema.branches)
-        .set({ 
-          name: name?.toUpperCase(), 
+        .set({
+          name: name?.toUpperCase(),
           code: code?.toUpperCase(),
-          updatedAt: new Date() 
+          updatedAt: new Date()
         })
         .where(and(
           eq(schema.branches.id, id),
@@ -76,6 +76,13 @@ export async function districtRoutes(fastify: FastifyInstance) {
         .returning();
 
       if (!updatedBranch) return reply.status(404).send({ success: false, message: 'Ranting tidak ditemukan' });
+      
+      // Set audit context
+      const existing = { name: updatedBranch.name, code: updatedBranch.code, districtId: updatedBranch.districtId }; // simplified since we don't fetch before update here to save query
+      request.auditContext = {
+        oldData: null, // Since we didn't fetch before, we can fetch it first if we want full detail
+        newData: updatedBranch
+      };
 
       return sendSuccess(reply, updatedBranch);
     } catch (error) {
@@ -152,23 +159,46 @@ export async function districtRoutes(fastify: FastifyInstance) {
 
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
-      const monthCollections = await db.query.collections.findMany({
-        where: and(
-          gte(schema.collections.collectedAt, monthStart), 
-          eq(schema.collections.syncStatus, 'COMPLETED'),
-          latestCollectionCondition
-        ),
-        with: { can: { with: { branch: true } }, officer: true }
-      }).then(rows => rows.filter(c => c.can.branch?.districtId === districtId));
+      const dayOfWeek = now.getDay() || 7;
+      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek + 1);
+      weekStart.setHours(0, 0, 0, 0);
 
-      const [branchesList, totalCans, totalOfficers] = await Promise.all([
+      const [monthCollections, lastMonthCollections, weekCollections, branchesList, totalCans, activeCans, totalOfficers] = await Promise.all([
+        db.query.collections.findMany({
+          where: and(
+            gte(schema.collections.collectedAt, monthStart),
+            eq(schema.collections.syncStatus, 'COMPLETED'),
+            latestCollectionCondition
+          ),
+          with: { can: { with: { branch: true } }, officer: true }
+        }).then(rows => rows.filter(c => c.can.branch?.districtId === districtId)),
+        db.query.collections.findMany({
+          where: and(
+            gte(schema.collections.collectedAt, lastMonthStart),
+            lt(schema.collections.collectedAt, monthStart),
+            eq(schema.collections.syncStatus, 'COMPLETED'),
+            latestCollectionCondition
+          ),
+          with: { can: { with: { branch: true } } }
+        }).then(rows => rows.filter(c => c.can.branch?.districtId === districtId)),
+        db.query.collections.findMany({
+          where: and(
+            gte(schema.collections.collectedAt, weekStart),
+            eq(schema.collections.syncStatus, 'COMPLETED'),
+            latestCollectionCondition
+          ),
+          with: { can: { with: { branch: true } } }
+        }).then(rows => rows.filter(c => c.can.branch?.districtId === districtId)),
         db.query.branches.findMany({
           where: eq(schema.branches.districtId, districtId),
           with: { cans: { columns: { id: true } }, officers: { columns: { id: true } } },
         }),
         db.select().from(schema.cans).innerJoin(schema.branches, eq(schema.cans.branchId, schema.branches.id))
           .where(eq(schema.branches.districtId, districtId)).then(r => r.length),
+        db.select().from(schema.cans).innerJoin(schema.branches, eq(schema.cans.branchId, schema.branches.id))
+          .where(and(eq(schema.branches.districtId, districtId), eq(schema.cans.isActive, true))).then(r => r.length),
         db.$count(schema.officers, and(eq(schema.officers.districtId, districtId), eq(schema.officers.isActive, true))).then(c => Number(c)),
       ]);
 
@@ -189,7 +219,7 @@ export async function districtRoutes(fastify: FastifyInstance) {
           latestCollectionCondition
         ),
         with: {
-          can: { 
+          can: {
             columns: { qrCode: true, ownerName: true, branchId: true },
             with: { branch: true }
           },
@@ -198,14 +228,28 @@ export async function districtRoutes(fastify: FastifyInstance) {
         orderBy: [desc(schema.collections.collectedAt)],
       }).then(rows => rows.filter(c => c.can.branch?.districtId === districtId).slice(0, 10));
 
+      const daysStr = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+      const dailyTrends = daysStr.map(day => ({ day, nominal: 0 }));
+
+      weekCollections.forEach(c => {
+        const d = new Date(c.collectedAt);
+        let dayIdx = d.getDay() - 1;
+        if (dayIdx === -1) dayIdx = 6;
+        dailyTrends[dayIdx].nominal += Number(c.nominal);
+      });
+
       return sendSuccess(reply, {
         summary: {
           total_branches: branches.length,
           total_cans: totalCans,
+          active_cans: activeCans,
           total_officers: totalOfficers,
           month_collection: monthCollections.reduce((s, c) => s + Number(c.nominal), 0),
+          last_month_collection: lastMonthCollections.reduce((s, c) => s + Number(c.nominal), 0),
           month_count: monthCollections.length,
+          last_month_count: lastMonthCollections.length,
         },
+        daily_trends: dailyTrends,
         recent_collections: recentCollections.map((c) => ({
           id: c.id,
           qr_code: c.can.qrCode,
@@ -235,35 +279,41 @@ export async function districtRoutes(fastify: FastifyInstance) {
       // Check if branch has any dukuhs
       const dukuhsCount = await db.$count(schema.dukuhs, eq(schema.dukuhs.branchId, id));
       if (Number(dukuhsCount) > 0) {
-        return reply.status(400).send({ 
-          success: false, 
-          message: 'Ranting tidak bisa dihapus karena masih memiliki data dukuh terkait' 
+        return reply.status(400).send({
+          success: false,
+          message: 'Ranting tidak bisa dihapus karena masih memiliki data dukuh terkait'
         });
       }
 
       // Check if branch has any cans
       const cansCount = await db.$count(schema.cans, eq(schema.cans.branchId, id));
       if (Number(cansCount) > 0) {
-        return reply.status(400).send({ 
-          success: false, 
-          message: 'Ranting tidak bisa dihapus karena masih memiliki data kaleng terkait' 
+        return reply.status(400).send({
+          success: false,
+          message: 'Ranting tidak bisa dihapus karena masih memiliki data kaleng terkait'
         });
       }
 
       // Check if branch has any officers
       const officersCount = await db.$count(schema.officers, eq(schema.officers.branchId, id));
       if (Number(officersCount) > 0) {
-        return reply.status(400).send({ 
-          success: false, 
-          message: 'Ranting tidak bisa dihapus karena masih memiliki data petugas terkait' 
+        return reply.status(400).send({
+          success: false,
+          message: 'Ranting tidak bisa dihapus karena masih memiliki data petugas terkait'
         });
       }
 
+      const [branchToDelete] = await db.select().from(schema.branches).where(eq(schema.branches.id, id));
       const deleted = await db.delete(schema.branches)
         .where(eq(schema.branches.id, id))
         .returning();
 
       if (deleted.length === 0) return reply.status(404).send({ success: false, message: 'Ranting tidak ditemukan' });
+
+      request.auditContext = {
+        oldData: branchToDelete,
+        newData: null
+      };
 
       return sendSuccess(reply, { message: 'Ranting berhasil dihapus' });
     } catch (error) {

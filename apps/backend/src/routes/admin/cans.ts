@@ -3,9 +3,10 @@ import { db } from '../../config/database';
 import * as schema from '../../database/schema';
 import { eq, and, desc, ilike, or, sql, inArray } from 'drizzle-orm';
 import { authorize } from '../../middleware/auth';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import QRCode from 'qrcode';
 import { signQRCode } from '../../utils/qr';
-import { uploadQRCodePDF } from '../../services/r2';
+import { uploadQRCodePDF, uploadToR2, getSignedDownloadUrl } from '../../services/r2';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { getPaginationParams, formatPaginatedResponse } from '../../utils/pagination';
 import { getRoleScope } from '../../utils/role-scope';
@@ -207,6 +208,11 @@ export async function cansRoutes(fastify: FastifyInstance) {
         isActive: body.is_active !== undefined ? body.is_active : existing.isActive,
       }).where(eq(schema.cans.id, id)).returning();
       const can = updated[0];
+      // Set audit context for middleware
+      request.auditContext = {
+        oldData: existing,
+        newData: can
+      };
       return sendSuccess(reply, can);
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
@@ -242,6 +248,12 @@ export async function cansRoutes(fastify: FastifyInstance) {
         await db.update(schema.cans).set({ isActive: false }).where(eq(schema.cans.id, id));
       }
       
+      // Set audit context for middleware
+      request.auditContext = {
+        oldData: existing,
+        newData: permanent === 'true' ? null : { ...existing, isActive: false }
+      };
+      
       return sendSuccess(reply, null);
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
@@ -253,7 +265,7 @@ export async function cansRoutes(fastify: FastifyInstance) {
       const { id } = request.params as { id: string };
       const can = await db.query.cans.findFirst({
         where: eq(schema.cans.id, id),
-        with: { branch: { columns: { code: true } } },
+        with: { branch: { columns: { code: true } }, dukuhDetails: { columns: { name: true } } },
       });
       if (!can) {
         return sendError(reply, 404, 'NOT_FOUND', 'Kaleng tidak ditemukan');
@@ -268,25 +280,89 @@ export async function cansRoutes(fastify: FastifyInstance) {
         width: 300, margin: 2, color: { dark: '#000000', light: '#ffffff' },
       });
 
+      // Buat dokumen PDF A4 single label
+      const pdfDoc = await PDFDocument.create();
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      
+      const A4_WIDTH = 595.28;
+      const A4_HEIGHT = 841.89;
+      
+      const MARGIN_X = 40;
+      const MARGIN_Y = 40;
+      const COLUMNS = 2;
+      const ROWS = 5;
+      
+      const cellWidth = (A4_WIDTH - (MARGIN_X * 2)) / COLUMNS;
+      const cellHeight = (A4_HEIGHT - (MARGIN_Y * 2)) / ROWS;
+
+      const page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
+      
+      const x = MARGIN_X;
+      const y = A4_HEIGHT - MARGIN_Y - cellHeight;
+      
+      const qrPngBuffer = await QRCode.toBuffer(signedToken, { type: 'png', margin: 1, width: 100 });
+      const qrImage = await pdfDoc.embedPng(qrPngBuffer);
+      
+      const qrSize = 80;
+      const qrX = x + 10;
+      const qrY = y + cellHeight - qrSize - 15;
+
+      page.drawRectangle({
+        x: x + 5,
+        y: y + 5,
+        width: cellWidth - 10,
+        height: cellHeight - 10,
+        borderColor: rgb(0.8, 0.8, 0.8),
+        borderWidth: 1,
+      });
+
+      page.drawImage(qrImage, {
+        x: qrX,
+        y: qrY,
+        width: qrSize,
+        height: qrSize,
+      });
+
+      const textX = qrX + qrSize + 10;
+      let textY = qrY + qrSize - 10;
+
+      page.drawText('KOTAK INFAQ LAZISNU', { x: textX, y: textY, size: 10, font: fontBold, color: rgb(0, 0.5, 0) });
+      textY -= 15;
+      page.drawText(can.ownerName.substring(0, 25), { x: textX, y: textY, size: 11, font: fontBold });
+      textY -= 15;
+      page.drawText(`ID: ${can.qrCode}`, { x: textX, y: textY, size: 8, font: font });
+      textY -= 12;
+      const dukuhName = (can as any).dukuhDetails?.name || can.dukuh || '';
+      const addressText = `${dukuhName} RT ${can.rt || '-'} / RW ${can.rw || '-'}`;
+      page.drawText(addressText.substring(0, 35), { x: textX, y: textY, size: 8, font: font });
+      
+      const pdfBytes = await pdfDoc.save();
+      const pdfBuffer = Buffer.from(pdfBytes);
+
       let r2SignedUrl: string | undefined;
       try {
-        const pngBuffer = await QRCode.toBuffer(signedToken, { type: 'png', width: 300, margin: 2 });
         const branchCode = (can as any).branch?.code || 'XX';
         const r2Result = await uploadQRCodePDF({
           qrCode: can.qrCode,
           branchCode,
-          pdfBuffer: pngBuffer,
+          pdfBuffer: pdfBuffer,
         });
         r2SignedUrl = r2Result.signedUrl;
       } catch (r2Err) {
         fastify.log.warn({ r2Err }, 'R2 upload gagal, menggunakan base64 fallback');
       }
 
+      let printUrl = r2SignedUrl || '';
+      if (!printUrl) {
+        printUrl = `data:application/pdf;base64,${pdfBuffer.toString('base64')}`;
+      }
+
       return sendSuccess(reply, {
         qr_code: can.qrCode,
         signed_token: signedToken,
-        qr_image_url: qrDataUrl,
-        print_url: r2SignedUrl || qrDataUrl,
+        qr_image_url: qrDataUrl, // Masih PNG untuk preview di UI
+        print_url: printUrl, // PDF untuk diunduh
         r2_url: r2SignedUrl || null,
       });
     } catch (error) {
@@ -417,6 +493,146 @@ export async function cansRoutes(fastify: FastifyInstance) {
       }
 
       return sendSuccess(reply, { success: true });
+    } catch (error) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  fastify.post('/cans/bulk-generate-qr', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = request.currentUser!;
+      const { ids } = request.body as { ids: string[] };
+
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return sendError(reply, 400, 'INVALID_IDS', 'Daftar ID kaleng tidak boleh kosong');
+      }
+
+      // 1. Ambil data kaleng
+      const cans = await db.query.cans.findMany({
+        where: inArray(schema.cans.id, ids),
+        with: { branch: { columns: { code: true } }, dukuhDetails: { columns: { name: true } } },
+      });
+
+      if (cans.length === 0) {
+        return sendError(reply, 404, 'NOT_FOUND', 'Kaleng tidak ditemukan');
+      }
+
+      // Check role access
+      if (user.role === 'ADMIN_RANTING') {
+        const unauthorized = cans.some(c => c.branchId !== user.branchId);
+        if (unauthorized) return sendError(reply, 403, 'FORBIDDEN', 'Beberapa kaleng bukan milik ranting Anda');
+      }
+
+      // 2. Buat dokumen PDF A4
+      const pdfDoc = await PDFDocument.create();
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      
+      const A4_WIDTH = 595.28;
+      const A4_HEIGHT = 841.89;
+      
+      const MARGIN_X = 40;
+      const MARGIN_Y = 40;
+      const COLUMNS = 2;
+      const ROWS = 5;
+      
+      const cellWidth = (A4_WIDTH - (MARGIN_X * 2)) / COLUMNS;
+      const cellHeight = (A4_HEIGHT - (MARGIN_Y * 2)) / ROWS;
+
+      let page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
+      let itemIndexOnPage = 0;
+
+      for (let i = 0; i < cans.length; i++) {
+        const can = cans[i];
+        if (!can.qrCode) continue;
+
+        if (itemIndexOnPage === COLUMNS * ROWS) {
+          page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
+          itemIndexOnPage = 0;
+        }
+
+        const col = itemIndexOnPage % COLUMNS;
+        const row = Math.floor(itemIndexOnPage / COLUMNS);
+
+        const x = MARGIN_X + (col * cellWidth);
+        const y = A4_HEIGHT - MARGIN_Y - ((row + 1) * cellHeight);
+
+        // Render QR
+        const signedToken = signQRCode(can.qrCode);
+        const qrPngBuffer = await QRCode.toBuffer(signedToken, { type: 'png', margin: 1, width: 100 });
+        const qrImage = await pdfDoc.embedPng(qrPngBuffer);
+        
+        const qrSize = 80;
+        const qrX = x + 10;
+        const qrY = y + cellHeight - qrSize - 15;
+
+        // Gambar kotak pembatas sel (opsional, untuk panduan potong)
+        page.drawRectangle({
+          x: x + 5,
+          y: y + 5,
+          width: cellWidth - 10,
+          height: cellHeight - 10,
+          borderColor: rgb(0.8, 0.8, 0.8),
+          borderWidth: 1,
+        });
+
+        page.drawImage(qrImage, {
+          x: qrX,
+          y: qrY,
+          width: qrSize,
+          height: qrSize,
+        });
+
+        const textX = qrX + qrSize + 10;
+        let textY = qrY + qrSize - 10;
+
+        // Header LAZISNU
+        page.drawText('KOTAK INFAQ LAZISNU', { x: textX, y: textY, size: 10, font: fontBold, color: rgb(0, 0.5, 0) });
+        textY -= 15;
+
+        // Nama Pemilik
+        page.drawText(can.ownerName.substring(0, 25), { x: textX, y: textY, size: 11, font: fontBold });
+        textY -= 15;
+
+        // Kode QR
+        page.drawText(`ID: ${can.qrCode}`, { x: textX, y: textY, size: 8, font: font });
+        textY -= 12;
+
+        // Alamat (Dukuh / RT RW)
+        const dukuhName = can.dukuhDetails?.name || can.dukuh || '';
+        const addressText = `${dukuhName} RT ${can.rt || '-'} / RW ${can.rw || '-'}`;
+        page.drawText(addressText.substring(0, 35), { x: textX, y: textY, size: 8, font: font });
+        
+        itemIndexOnPage++;
+      }
+
+      const pdfBytes = await pdfDoc.save();
+      const pdfBuffer = Buffer.from(pdfBytes);
+
+      // 3. Upload ke R2
+      const branchCode = (cans[0] as any).branch?.code || 'XX';
+      const timestamp = new Date().getTime();
+      const r2Result = await uploadToR2({
+        key: `qr-pdfs/batch/${branchCode}/batch-${timestamp}.pdf`,
+        body: pdfBuffer,
+        contentType: 'application/pdf',
+      });
+
+      let printUrl = '';
+      if (r2Result.success) {
+        printUrl = await getSignedDownloadUrl(r2Result.key!) || '';
+      }
+
+      // Jika R2 gagal, kita kirimkan data URL base64 sebagai fallback
+      if (!printUrl) {
+        printUrl = `data:application/pdf;base64,${pdfBuffer.toString('base64')}`;
+      }
+
+      return sendSuccess(reply, {
+        success: true,
+        count: cans.length,
+        print_url: printUrl
+      });
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
     }

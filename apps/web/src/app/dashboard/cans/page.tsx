@@ -25,7 +25,8 @@ import {
   RotateCcw,
   CheckSquare,
   Square,
-  AlertTriangle
+  AlertTriangle,
+  Printer
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -68,6 +69,12 @@ export default function CansPage() {
   const [importing, setImporting] = useState(false);
   const [importBranchId, setImportBranchId] = useState('');
   const [importFile, setImportFile] = useState<File | null>(null);
+
+  // QR Print States
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [qrData, setQrData] = useState<any>(null);
+  const [isGeneratingQr, setIsGeneratingQr] = useState(false);
+  const [isBulkPrint, setIsBulkPrint] = useState(false);
 
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<CanFormValues>({
     resolver: zodResolver(canSchema as any),
@@ -281,6 +288,43 @@ export default function CansPage() {
     ), { duration: 5000 });
   };
 
+  const handleGenerateQr = async (id: string) => {
+    setIsGeneratingQr(true);
+    setIsQrModalOpen(true);
+    setIsBulkPrint(false);
+    setQrData(null);
+    try {
+      const response: any = await api.post(`/admin/cans/${id}/generate-qr`);
+      if (response.success) {
+        setQrData(response.data);
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Gagal membuat QR Code');
+      setIsQrModalOpen(false);
+    } finally {
+      setIsGeneratingQr(false);
+    }
+  };
+
+  const handleBulkGenerateQr = async () => {
+    if (selectedIds.length === 0) return;
+    setIsGeneratingQr(true);
+    setIsQrModalOpen(true);
+    setIsBulkPrint(true);
+    setQrData(null);
+    try {
+      const response: any = await api.post(`/admin/cans/bulk-generate-qr`, { ids: selectedIds });
+      if (response.success) {
+        setQrData(response.data);
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Gagal membuat QR Code masal');
+      setIsQrModalOpen(false);
+    } finally {
+      setIsGeneratingQr(false);
+    }
+  };
+
   const toggleSelectAll = () => {
     const selectableData = data.filter(item => !(item.assignments && item.assignments.length > 0));
 
@@ -455,10 +499,14 @@ export default function CansPage() {
       accessorKey: 'qr_code',
       header: 'QR CODE',
       cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center">
-            <QrCode size={14} className="text-green-600" />
-          </div>
+        <div className="flex items-center gap-2 group">
+          <button 
+            onClick={() => handleGenerateQr(row.original.id)}
+            className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center cursor-pointer hover:bg-green-100 transition-all active:scale-95 border border-transparent hover:border-green-200"
+            title="Klik untuk cetak label QR"
+          >
+            <QrCode size={14} className="text-green-600 group-hover:scale-110 transition-transform" />
+          </button>
           <span className="font-bold text-slate-700">{row.original.qr_code}</span>
         </div>
       ),
@@ -583,26 +631,35 @@ export default function CansPage() {
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Box className="text-green-600" size={28} />
+          <Box className="text-[#EAD19B]" size={28} />
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Kelola Kaleng Infaq</h1>
-            <p className="text-slate-500 text-sm font-medium">Manajemen data donatur dan distribusi kaleng Lazisnu</p>
+            <h1 className="text-2xl font-bold text-[#F4F1EA] tracking-tight">Kelola Kaleng Infaq</h1>
+            <p className="text-[#F4F1EA]/60 text-sm font-medium">Manajemen data donatur dan distribusi kaleng Lazisnu</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
           {selectedIds.length > 0 && (
-            <Button
-              onClick={handleBulkDelete}
-              className={`${statusFilter === 'NON_ACTIVE' ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-200' : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'} h-11 rounded-xl font-bold px-5 flex items-center gap-2 shadow-lg transition-all active:scale-95`}
-            >
-              {statusFilter === 'NON_ACTIVE' ? <AlertTriangle size={18} /> : <Trash2 size={18} />}
-              {statusFilter === 'NON_ACTIVE' ? 'Hapus Permanen' : 'Hapus Terpilih'} ({selectedIds.length})
-            </Button>
+            <>
+              <Button
+                onClick={handleBulkGenerateQr}
+                className="bg-green-50 text-green-600 border border-green-200 hover:bg-green-100 h-11 rounded-xl font-bold px-5 flex items-center gap-2 shadow-sm transition-all active:scale-95"
+              >
+                <Printer size={18} />
+                Cetak Terpilih ({selectedIds.length})
+              </Button>
+              <Button
+                onClick={handleBulkDelete}
+                className={`${statusFilter === 'NON_ACTIVE' ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-200' : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'} h-11 rounded-xl font-bold px-5 flex items-center gap-2 shadow-sm transition-all active:scale-95`}
+              >
+                {statusFilter === 'NON_ACTIVE' ? <AlertTriangle size={18} /> : <Trash2 size={18} />}
+                {statusFilter === 'NON_ACTIVE' ? 'Hapus Permanen' : 'Hapus Terpilih'} ({selectedIds.length})
+              </Button>
+            </>
           )}
           <Button
             variant="outline"
             onClick={() => setIsImportModalOpen(true)}
-            className="border-green-600 text-green-600 hover:bg-green-50 h-11 rounded-xl font-bold px-5"
+            className="border-[#EAD19B] text-[#EAD19B] hover:bg-[#EAD19B]/10 h-11 rounded-xl font-bold px-5"
           >
             Impor Data
           </Button>
@@ -612,7 +669,7 @@ export default function CansPage() {
               reset();
               setIsModalOpen(true);
             }}
-            className="bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-600/20 px-6 h-11 rounded-xl font-bold transition-all active:scale-95 flex items-center gap-2"
+            className="bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 px-6 h-11 rounded-xl font-bold transition-all active:scale-95 flex items-center gap-2"
           >
             <Plus size={20} />
             Tambah Kaleng Baru
@@ -942,6 +999,61 @@ export default function CansPage() {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal Cetak QR */}
+      <Modal
+        isOpen={isQrModalOpen}
+        onClose={() => !isGeneratingQr && setIsQrModalOpen(false)}
+        title={isBulkPrint ? "Cetak Label QR (Massal)" : "Cetak Label QR"}
+      >
+        <div className="flex flex-col items-center justify-center p-4 space-y-6">
+          {isGeneratingQr ? (
+            <div className="flex flex-col items-center space-y-4 py-8">
+              <div className="w-12 h-12 border-4 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
+              <p className="text-sm font-medium text-slate-600">
+                {isBulkPrint ? "Sedang merangkai PDF A4..." : "Sedang memproses QR Code..."}
+              </p>
+            </div>
+          ) : qrData ? (
+            <>
+              {!isBulkPrint && qrData.qr_image_url && (
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center gap-2">
+                  <img src={qrData.qr_image_url} alt="QR Code" className="w-40 h-40 object-contain" />
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{qrData.qr_code}</p>
+                </div>
+              )}
+              {isBulkPrint && (
+                <div className="bg-green-50 p-6 rounded-2xl border border-green-100 flex flex-col items-center text-center">
+                  <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
+                    <Printer size={28} className="text-green-600" />
+                  </div>
+                  <h4 className="text-lg font-bold text-green-900 mb-1">Berhasil Dirangkai!</h4>
+                  <p className="text-sm text-green-700">PDF berisi {qrData.count} label QR Code siap diunduh.</p>
+                </div>
+              )}
+              <div className="w-full flex gap-3 pt-2">
+                <Button variant="secondary" className="flex-1 rounded-xl h-12 font-bold" onClick={() => setIsQrModalOpen(false)}>Tutup</Button>
+                <Button 
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl h-12 font-bold shadow-lg shadow-green-600/20 flex items-center gap-2 justify-center"
+                  onClick={() => {
+                    const a = document.createElement('a');
+                    a.href = qrData.print_url;
+                    a.download = isBulkPrint ? 'lazisnu-qr-batch.pdf' : `lazisnu-qr-${qrData.qr_code}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                  }}
+                >
+                  <Printer size={18} />
+                  Unduh {isBulkPrint ? 'PDF Label' : 'Label QR'}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <p className="text-red-500">Gagal memuat data QR</p>
+          )}
+        </div>
       </Modal>
     </div>
   );

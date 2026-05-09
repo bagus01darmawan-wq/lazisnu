@@ -20,7 +20,7 @@ interface CollectionState {
     latitude?: number;
     longitude?: number;
     offline_id: string;
-  }) => Promise<boolean>;
+  }) => Promise<{ success: boolean; synced: boolean }>;
 
   reset: () => void;
 }
@@ -50,22 +50,23 @@ export const useCollectionStore = create<CollectionState>((set) => ({
       if (isOnline) {
         const syncResult = await syncService.autoSync();
         if (!syncResult.success) {
-          // Inform the user that it failed to sync but is saved offline
           set({ 
             isSubmitting: false, 
             lastSubmitted: data as unknown as Collection,
             error: 'Gagal sinkronisasi. Data tersimpan offline.' 
           });
-          return true;
+          return { success: true, synced: false };
         }
+        set({ isSubmitting: false, lastSubmitted: data as unknown as Collection });
+        return { success: true, synced: true };
       }
 
       set({ isSubmitting: false, lastSubmitted: data as unknown as Collection });
-      return true;
+      return { success: true, synced: false };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Gagal menyimpan data';
       set({ error: message, isSubmitting: false });
-      return false;
+      return { success: false, synced: false };
     }
   },
 

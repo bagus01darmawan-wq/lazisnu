@@ -163,6 +163,12 @@ export async function officersRoutes(fastify: FastifyInstance) {
         return updatedOfficers;
       });
       
+      // Set audit context for middleware
+      request.auditContext = {
+        oldData: existing,
+        newData: updated
+      };
+      
       return sendSuccess(reply, updated);
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
@@ -195,6 +201,12 @@ export async function officersRoutes(fastify: FastifyInstance) {
         });
       }
       
+      // Set audit context for middleware
+      request.auditContext = {
+        oldData: existing,
+        newData: permanent === 'true' ? null : { ...existing, isActive: false }
+      };
+
       return sendSuccess(reply, null);
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);

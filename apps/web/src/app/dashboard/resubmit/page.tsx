@@ -40,19 +40,25 @@ export default function ResubmitPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedCol, setSelectedCol] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<ResubmitFormValues>({
     resolver: zodResolver(resubmitSchema),
   });
 
-  const fetchCollections = async () => {
+  const fetchCollections = async (searchQuery = search, currentPage = page, limit = pageSize) => {
     setLoading(true);
     try {
       const response: any = await api.get('/bendahara/collections', {
-        params: { page: 1, limit: 50 },
+        params: { page: currentPage, limit: limit, search: searchQuery },
       });
       if (response.success) {
         setData(response.data.collections || []);
+        setTotalItems(response.data.pagination?.total || 0);
+        setTotalPages(response.data.pagination?.total_pages || 1);
       }
     } catch (error) {
       console.error('Failed to fetch collections:', error);
@@ -62,9 +68,24 @@ export default function ResubmitPage() {
   };
 
   useEffect(() => {
-    if (!user) return;
-    void fetchCollections();
-  }, [user]);
+    const timer = setTimeout(() => {
+      setPage(1);
+      void fetchCollections(search, 1, pageSize);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [search, pageSize]);
+
+  const handleReset = () => {
+    setSearch('');
+    setPage(1);
+    void fetchCollections('', 1, pageSize);
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages) return;
+    setPage(newPage);
+    void fetchCollections(search, newPage, pageSize);
+  };
 
   const onSubmit = async (values: ResubmitFormValues) => {
     if (!selectedCol) return;
@@ -140,10 +161,10 @@ export default function ResubmitPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <History className="text-green-600" size={28} />
+          <History className="text-[#EAD19B]" size={28} />
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Pelacakan & Koreksi</h1>
-            <p className="text-slate-500 text-sm font-medium">Review data koleksi dan lakukan re-submit jika terjadi kesalahan input</p>
+            <h1 className="text-2xl font-bold text-[#F4F1EA] tracking-tight">Pelacakan & Koreksi</h1>
+            <p className="text-[#F4F1EA]/60 text-sm font-medium">Review data koleksi dan lakukan re-submit jika terjadi kesalahan input</p>
           </div>
         </div>
       </div>
@@ -158,21 +179,88 @@ export default function ResubmitPage() {
          </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-        <div className="relative w-full max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+      {/* Toolbar Section (Search & Reset) */}
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-between w-full bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+        <div className="relative w-full md:w-80 group">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-green-500 transition-colors" size={18} />
           <input
             type="text"
-            placeholder="Cari transaksi (ID, Kaleng, Penyerah)..."
+            placeholder="Cari transaksi..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-green-500/20"
+            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 focus:bg-white transition-all shadow-sm group-hover:border-slate-300"
           />
         </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-10 rounded-xl px-4 text-xs font-bold text-slate-500 border-slate-200 hover:bg-slate-50 flex items-center gap-2 transition-all active:scale-95"
+          onClick={handleReset}
+        >
+          <RotateCcw size={14} />
+          RESET
+        </Button>
       </div>
 
-      <Table columns={columns} data={data} loading={loading} />
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <Table columns={columns} data={data} loading={loading} />
+
+        {/* Pagination Controls (Cans-style) */}
+        {!loading && totalItems > 0 && (
+          <div className="px-6 py-6 bg-slate-50/50 border-t border-slate-100 flex flex-col items-end gap-3">
+            <p className="text-xs font-medium text-slate-500">
+              Menampilkan <span className="font-bold text-slate-900">{data.length}</span> dari <span className="font-bold text-slate-900">{totalItems}</span> transaksi
+            </p>
+
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Baris:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                  Halaman <span className="text-green-600">{page}</span> dari {totalPages}
+                </span>
+
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page === 1}
+                    onClick={() => handlePageChange(page - 1)}
+                    className="rounded-xl h-9 px-4 text-xs font-bold disabled:opacity-30 border-slate-200"
+                  >
+                    Sebelumnya
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page >= totalPages}
+                    onClick={() => handlePageChange(page + 1)}
+                    className="rounded-xl h-9 px-4 text-xs font-bold disabled:opacity-30 border-slate-200"
+                  >
+                    Selanjutnya
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       <Modal
         isOpen={isModalOpen}
@@ -219,7 +307,11 @@ export default function ResubmitPage() {
               <Button type="button" variant="secondary" className="flex-1" onClick={() => setIsModalOpen(false)}>
                 Batal
               </Button>
-              <Button type="submit" className="flex-1" isLoading={submitting}>
+              <Button 
+                type="submit" 
+                className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] font-bold rounded-xl h-11 shadow-lg shadow-[#EAD19B]/20" 
+                isLoading={submitting}
+              >
                 Konfirmasi Koreksi
               </Button>
             </div>

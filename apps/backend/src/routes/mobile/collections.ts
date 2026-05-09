@@ -135,11 +135,11 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
             collected_at: c.collectedAt,
             sync_status: c.syncStatus,
           })),
-          pagination: { 
-            page, 
-            limit, 
-            total, 
-            total_pages: Math.ceil(total / limit) 
+          pagination: {
+            page,
+            limit,
+            total,
+            total_pages: Math.ceil(total / limit)
           },
         },
       });
@@ -163,7 +163,7 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
         with: { can: true }
       });
 
-      if (!oldCollection) return sendError(reply, 404, 'NOT_FOUND', 'Data koleksi tidak ditemukan');
+      if (!oldCollection) return sendError(reply, 404, 'NOT_FOUND', 'Data perolehan tidak ditemukan');
 
       // Check if this ID is indeed the latest version for this assignment
       const [latestRecord] = await db.select({ maxSeq: sql<number>`max(${schema.collections.submitSequence})` })
@@ -179,7 +179,6 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
 
       const newCollection = await db.transaction(async (tx) => {
         // NOTE: Table collections is STRICTLY IMMUTABLE. No UPDATE or DELETE allowed.
-        // We do NOT update the old record's isLatest flag.
 
         const inserted = await tx.insert(schema.collections).values({
           assignmentId: oldCollection.assignmentId,
@@ -193,7 +192,6 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
           syncStatus: 'COMPLETED',
           serverTimestamp: new Date(),
           submitSequence: oldCollection.submitSequence + 1,
-          isLatest: true,
           alasanResubmit: body.alasan_resubmit,
           deviceInfo: oldCollection.deviceInfo,
           latitude: oldCollection.latitude,

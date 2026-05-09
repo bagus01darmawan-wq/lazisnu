@@ -419,10 +419,10 @@ export default function UsersPage() {
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Users className="text-green-600" size={28} />
+          <Users className="text-[#EAD19B]" size={28} />
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Manajemen User</h1>
-            <p className="text-slate-500 text-sm font-medium">Kelola data petugas lapangan dan admin</p>
+            <h1 className="text-2xl font-bold text-[#F4F1EA] tracking-tight">Manajemen User</h1>
+            <p className="text-[#F4F1EA]/60 text-sm font-medium">Kelola data petugas lapangan dan admin</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -441,7 +441,7 @@ export default function UsersPage() {
               reset();
               setIsModalOpen(true);
             }}
-            className="bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-600/20 px-6 h-11 rounded-xl font-bold transition-all active:scale-95 flex items-center gap-2"
+            className="bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 px-6 h-11 rounded-xl font-bold transition-all active:scale-95 flex items-center gap-2"
           >
             <UserPlus size={20} />
             Tambah Petugas

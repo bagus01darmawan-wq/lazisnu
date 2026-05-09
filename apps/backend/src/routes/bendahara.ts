@@ -3,7 +3,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { eq, and, desc, asc, gte, lte, inArray, sql } from 'drizzle-orm';
+import { eq, and, desc, asc, gte, lte, inArray, sql, ilike, or } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { authenticate, authorize, JWTPayload } from '../middleware/auth';
 
@@ -55,7 +55,6 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
       // Aggregate
       const byDistrict: Record<string, { name: string; total: number; count: number }> = {};
       const byOfficer: Record<string, { name: string; total: number; count: number }> = {};
-      let cashTotal = 0, cashCount = 0, transferTotal = 0, transferCount = 0;
 
       for (const col of monthCollections) {
         const districtId = col.can.branch.districtId;
@@ -73,9 +72,6 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
         }
         byOfficer[col.officerId].total += nominal;
         byOfficer[col.officerId].count++;
-
-        if (col.paymentMethod === 'CASH') { cashTotal += nominal; cashCount++; }
-        else { transferTotal += nominal; transferCount++; }
       }
 
       return reply.send({
@@ -84,10 +80,6 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
           current_month: {
             total: monthCollections.reduce((s, c) => s + Number(c.nominal), 0),
             count: monthCollections.length,
-            cash: cashTotal,
-            transfer: transferTotal,
-            cash_count: cashCount,
-            transfer_count: transferCount,
           },
           by_district: Object.entries(byDistrict).map(([id, d]) => ({
             district_id: id,
@@ -101,7 +93,6 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
             total: o.total,
             count: o.count,
           })),
-          by_payment_method: { cash: cashTotal, transfer: transferTotal },
           recent_transactions: monthCollections.slice(-10).map((c) => ({
             id: c.id,
             nominal: Number(c.nominal),
@@ -129,6 +120,8 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
         end_date?: string;
         officer_id?: string;
         district_id?: string;
+        branch_id?: string;
+        search?: string;
         page?: string;
         limit?: string;
       };
@@ -142,6 +135,56 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
         conditions.push(and(gte(schema.collections.collectedAt, new Date(query.start_date)), lte(schema.collections.collectedAt, new Date(query.end_date)))!);
       }
       if (query.officer_id) conditions.push(eq(schema.collections.officerId, query.officer_id));
+
+      // Keyword Search
+      if (query.search) {
+        const keyword = `%${query.search}%`;
+        
+        // Find matching officers
+        const matchingOfficers = await db.select({ id: schema.officers.id })
+          .from(schema.officers)
+          .where(or(
+            ilike(schema.officers.fullName, keyword),
+            ilike(schema.officers.phone, keyword),
+            ilike(schema.officers.employeeCode, keyword)
+          )!);
+        const officerIds = matchingOfficers.map(o => o.id);
+
+        // Find matching cans
+        const matchingCans = await db.select({ id: schema.cans.id })
+          .from(schema.cans)
+          .where(or(
+            ilike(schema.cans.qrCode, keyword),
+            ilike(schema.cans.ownerName, keyword),
+            ilike(schema.cans.ownerPhone, keyword)
+          )!);
+        const canIds = matchingCans.map(c => c.id);
+
+        if (officerIds.length > 0 && canIds.length > 0) {
+          conditions.push(or(inArray(schema.collections.officerId, officerIds), inArray(schema.collections.canId, canIds))!);
+        } else if (officerIds.length > 0) {
+          conditions.push(inArray(schema.collections.officerId, officerIds));
+        } else if (canIds.length > 0) {
+          conditions.push(inArray(schema.collections.canId, canIds));
+        } else {
+          // If search matches neither officer nor can, return empty
+          return reply.send({ success: true, data: { collections: [], pagination: { page, limit, total: 0, total_pages: 0 } } });
+        }
+      }
+
+      // DB-level branch filter
+      if (query.branch_id) {
+        const branchCans = await db.select({ id: schema.cans.id })
+          .from(schema.cans)
+          .where(eq(schema.cans.branchId, query.branch_id));
+        const canIds = branchCans.map(c => c.id);
+
+        if (canIds.length === 0) {
+          return reply.send({ success: true, data: { collections: [], pagination: { page, limit, total: 0, total_pages: 0 } } });
+        }
+
+        conditions.push(inArray(schema.collections.canId, canIds));
+      }
 
       // DB-level district filter: get can IDs in that district first
       if (query.district_id) {
@@ -298,7 +341,7 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
   // GET /bendahara/reports/summary
   fastify.get('/reports/summary', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const query = request.query as { year?: string; month?: string };
+      const query = request.query as { year?: string; month?: string; branch_id?: string; officer_id?: string };
 
       const year = parseInt(query.year || new Date().getFullYear().toString());
       const month = parseInt(query.month || (new Date().getMonth() + 1).toString());
@@ -314,6 +357,16 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
       ];
 
       const userScope = getCollectionScope(request.currentUser!);
+
+      if (query.officer_id) conditions.push(eq(schema.collections.officerId, query.officer_id));
+
+      if (query.branch_id) {
+        const branchCans = await db.select({ id: schema.cans.id }).from(schema.cans).where(eq(schema.cans.branchId, query.branch_id));
+        const branchCanIds = branchCans.map(c => c.id);
+        if (branchCanIds.length === 0) return reply.send({ success: true, data: { period: { year, month }, summary: { total_amount: 0, total_count: 0, cash_amount: 0, cash_count: 0, transfer_amount: 0, transfer_count: 0 }, by_district: [], by_branch: [], by_officer: [] } });
+        conditions.push(inArray(schema.collections.canId, branchCanIds));
+      }
+
       if (userScope.branchId) {
         const branchCans = await db.select({ id: schema.cans.id }).from(schema.cans).where(eq(schema.cans.branchId, userScope.branchId));
         const branchCanIds = branchCans.map(c => c.id);
@@ -338,7 +391,7 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
         orderBy: [desc(schema.collections.collectedAt)],
       });
 
-      let totalAmount = 0, cashAmount = 0, transferAmount = 0;
+      let totalAmount = 0;
       const byDistrict: Record<string, { name: string; amount: number }> = {};
       const byBranch: Record<string, { name: string; amount: number }> = {};
       const byOfficer: Record<string, { name: string; amount: number; count: number }> = {};
@@ -346,9 +399,6 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
       for (const col of collections) {
         const nominal = Number(col.nominal);
         totalAmount += nominal;
-
-        if (col.paymentMethod === 'CASH') cashAmount += nominal;
-        else transferAmount += nominal;
 
         const districtId = col.can.branch.districtId;
         const branchId = col.can.branchId;
@@ -378,10 +428,6 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
           summary: {
             total_amount: totalAmount,
             total_count: collections.length,
-            cash_amount: cashAmount,
-            cash_count: collections.filter((c) => c.paymentMethod === 'CASH').length,
-            transfer_amount: transferAmount,
-            transfer_count: collections.filter((c) => c.paymentMethod === 'TRANSFER').length,
           },
           by_district: Object.entries(byDistrict).map(([id, d]) => ({
             district_id: id,

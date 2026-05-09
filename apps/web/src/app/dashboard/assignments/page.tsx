@@ -379,10 +379,10 @@ export default function AssignmentsPage() {
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <ClipboardList className="text-green-600" size={28} />
+          <ClipboardList className="text-[#EAD19B]" size={28} />
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Penugasan Rutin</h1>
-            <p className="text-slate-500 text-sm font-medium">Atur jadwal pengambilan infaq bulanan petugas</p>
+            <h1 className="text-2xl font-bold text-[#F4F1EA] tracking-tight">Penugasan Rutin</h1>
+            <p className="text-[#F4F1EA]/60 text-sm font-medium">Atur jadwal pengambilan infaq bulanan petugas</p>
           </div>
         </div>
         <Button 
@@ -394,7 +394,7 @@ export default function AssignmentsPage() {
             });
             setIsModalOpen(true);
           }}
-          className="bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-600/20 px-6 h-11 rounded-xl font-bold transition-all active:scale-95 flex items-center gap-2"
+          className="bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 px-6 h-11 rounded-xl font-bold transition-all active:scale-95 flex items-center gap-2"
         >
           <Plus size={20} />
           Tugaskan Petugas

@@ -158,7 +158,15 @@ export async function dukuhsRoutes(fastify: FastifyInstance) {
         .set({ dukuhId: null })
         .where(eq(schema.cans.dukuhId, id));
  
+      const [dukuhToDelete] = await db.select().from(schema.dukuhs).where(eq(schema.dukuhs.id, id));
       await db.delete(schema.dukuhs).where(eq(schema.dukuhs.id, id));
+
+      // Set audit context
+      request.auditContext = {
+        oldData: dukuhToDelete,
+        newData: null
+      };
+
       return sendSuccess(reply, { message: 'Dukuh berhasil dihapus' });
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);

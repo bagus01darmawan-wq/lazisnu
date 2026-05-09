@@ -280,13 +280,13 @@ export default function MasterDataPage() {
               <ArrowLeft size={20} />
             </button>
           ) : (
-            <Database className="text-green-600" size={28} />
+            <Database className="text-[#EAD19B]" size={28} />
           )}
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            <h1 className="text-2xl font-bold text-[#F4F1EA] tracking-tight">
               {selectedBranch ? `Kelola Dukuh: ${selectedBranch.name}` : 'Data Master'}
             </h1>
-            <p className="text-slate-500 text-sm font-medium">
+            <p className="text-[#F4F1EA]/60 text-sm font-medium">
               {selectedBranch 
                 ? `Manajemen daftar dukuh/dusun di wilayah ${selectedBranch.name}`
                 : 'Kelola informasi wilayah Ranting dan Dukuh.'}
@@ -301,7 +301,7 @@ export default function MasterDataPage() {
             if (selectedBranch) setIsDukuhModalOpen(true);
             else setIsBranchModalOpen(true);
           }}
-          className="bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-600/20 px-6 h-11 rounded-xl font-bold transition-all active:scale-95 flex items-center gap-2"
+          className="bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 px-6 h-11 rounded-xl font-bold transition-all active:scale-95 flex items-center gap-2"
         >
           <Plus size={20} />
           {selectedBranch ? 'Tambah Dukuh' : 'Tambah Ranting'}
@@ -444,7 +444,7 @@ export default function MasterDataPage() {
                 </Button>
                 <Button 
                   type="submit" 
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl h-12 font-bold shadow-lg shadow-green-600/20"
+                  className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] rounded-xl h-12 font-bold shadow-lg shadow-[#EAD19B]/20"
                 >
                   Simpan
                 </Button>

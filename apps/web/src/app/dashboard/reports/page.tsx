@@ -6,8 +6,10 @@ import { cookies } from 'next/headers';
 import { decodeJwt } from 'jose';
 import ReportsClient from './ReportsClient';
 import { Skeleton } from '@/components/ui/Skeleton';
+import FilterDropdown from './FilterDropdown';
+import ExportButton from './ExportButton';
 
-async function getStatsData() {
+async function getStatsData(month: string, year: string, branch: string, officer: string) {
   const cookieStore = await cookies();
   const token = cookieStore.get('lazisnu_token')?.value;
 
@@ -15,9 +17,15 @@ async function getStatsData() {
 
   try {
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-    const res = await fetch(`${API_URL}/v1/bendahara/reports/summary`, {
+    const url = new URL(`${API_URL}/v1/bendahara/reports/summary`);
+    url.searchParams.append('month', month);
+    url.searchParams.append('year', year);
+    if (branch) url.searchParams.append('branch_id', branch);
+    if (officer) url.searchParams.append('officer_id', officer);
+
+    const res = await fetch(url.toString(), {
       headers: { Authorization: `Bearer ${token}` },
-      next: { revalidate: 60, tags: ['reports', 'stats'] }, // Cache for 60s
+      cache: 'no-store',
     });
 
     if (!res.ok) return null;
@@ -29,7 +37,7 @@ async function getStatsData() {
   }
 }
 
-async function TransactionList() {
+async function TransactionList({ month, year, branch, officer, search, page, limit }: { month: string, year: string, branch: string, officer: string, search: string, page: string, limit: string }) {
   const cookieStore = await cookies();
   const token = cookieStore.get('lazisnu_token')?.value;
 
@@ -37,14 +45,26 @@ async function TransactionList() {
 
   try {
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-    const res = await fetch(`${API_URL}/v1/bendahara/collections`, {
+    const startDate = new Date(Number(year), Number(month) - 1, 1).toISOString();
+    const endDate = new Date(Number(year), Number(month), 0, 23, 59, 59, 999).toISOString();
+
+    const url = new URL(`${API_URL}/v1/bendahara/collections`);
+    url.searchParams.append('start_date', startDate);
+    url.searchParams.append('end_date', endDate);
+    url.searchParams.append('limit', limit);
+    url.searchParams.append('page', page);
+    if (branch) url.searchParams.append('branch_id', branch);
+    if (officer) url.searchParams.append('officer_id', officer);
+    if (search) url.searchParams.append('search', search);
+
+    const res = await fetch(url.toString(), {
       headers: { Authorization: `Bearer ${token}` },
-      next: { revalidate: 30, tags: ['reports', 'transactions'] },
+      cache: 'no-store',
     });
 
-    if (!res.ok) return <ReportsClient data={[]} />;
+    if (!res.ok) return <ReportsClient data={[]} pagination={{ page: 1, limit: parseInt(limit), total: 0, total_pages: 0 }} />;
     const json = await res.json();
-    return <ReportsClient data={json.data?.collections || []} />;
+    return <ReportsClient data={json.data?.collections || []} pagination={json.data?.pagination} />;
   } catch (error) {
     return <ReportsClient data={[]} />;
   }
@@ -60,86 +80,96 @@ function TableSkeleton() {
   );
 }
 
-import ExportButton from './ExportButton';
+export default async function ReportsPage(props: { searchParams: Promise<{ month?: string; year?: string; branch?: string; officer?: string; search?: string; page?: string; limit?: string }> }) {
+  const searchParams = await props.searchParams;
+  const month = searchParams.month || (new Date().getMonth() + 1).toString();
+  const year = searchParams.year || new Date().getFullYear().toString();
+  const branch = searchParams.branch || '';
+  const officer = searchParams.officer || '';
+  const search = searchParams.search || '';
+  const page = searchParams.page || '1';
+  const limit = searchParams.limit || '10';
 
-export default async function ReportsPage() {
-  const stats = await getStatsData();
+  const stats = await getStatsData(month, year, branch, officer);
+
+  // Calculate Average Per Can
+  const totalAmount = Number(stats?.total_amount || 0);
+  const totalCount = Number(stats?.total_count || 0);
+  const averagePerCan = totalCount > 0 ? totalAmount / totalCount : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-in fade-in duration-700">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <FileText className="text-green-600" size={28} />
+          <FileText className="text-[#EAD19B]" size={28} />
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Laporan Keuangan</h1>
-            <p className="text-slate-500 text-sm font-medium">Rekapitulasi pengumpulan infaq harian dan bulanan</p>
+            <h1 className="text-2xl font-bold text-[#F4F1EA] tracking-tight">Laporan Keuangan</h1>
+            <p className="text-[#F4F1EA]/60 text-sm font-medium">Rekapitulasi perolehan infaq dan mutasi dana</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" className="rounded-xl h-11 px-5 text-sm font-bold border-slate-200 hover:bg-slate-50 transition-all active:scale-95 flex items-center gap-2">
-            <Filter size={18} />
-            Filter
-          </Button>
+        <div className="flex items-center gap-3">
           <ExportButton />
         </div>
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="bg-gradient-to-br from-green-600 to-green-700 text-white border-none">
+        <Card className="relative overflow-hidden group">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-bold text-green-100 uppercase tracking-wider">Perolehan Bulan Ini</p>
-              <h3 className="text-2xl font-black mt-1">
-                Rp {stats ? Number(stats.total_amount || stats.month_collection).toLocaleString('id-ID') : '0'}
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Perolehan Total</p>
+              <h3 className="text-2xl font-black text-gray-900 mt-1">
+                Rp {totalAmount.toLocaleString('id-ID')}
               </h3>
             </div>
-            <div className="p-2 bg-white/20 rounded-lg">
+            <div className="p-3 bg-green-50 text-green-600 rounded-xl group-hover:bg-green-600 group-hover:text-white transition-all duration-300">
               <Wallet size={20} />
             </div>
           </div>
-        </Card>
-        
-        <Card>
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Koleksi</p>
-              <h3 className="text-2xl font-black text-slate-900 mt-1">
-                {stats ? (stats.total_count || stats.month_count) : '0'} Kali
-              </h3>
-            </div>
-            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-              <FileSpreadsheet size={20} />
-            </div>
+          <div className="mt-4 flex items-center gap-2">
+            <span className="flex items-center text-xs font-bold text-gray-400 bg-gray-50 px-2 py-1 rounded-lg">
+              Total Penarikan
+            </span>
+            <span className="text-xs text-green-600 font-bold">{totalCount} Kali</span>
           </div>
         </Card>
 
-        <Card>
+        <Card className="relative overflow-hidden group">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Metode Pembayaran</p>
-              <div className="mt-1 flex gap-4 text-sm font-bold text-slate-900">
-                <span className="flex items-center gap-1 text-green-600">Tunai: {stats?.cash_count || 0}</span>
-                <span className="flex items-center gap-1 text-blue-600">Transfer: {stats?.transfer_count || 0}</span>
-              </div>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Rata-Rata Per Kaleng</p>
+              <h3 className="text-2xl font-black text-gray-900 mt-1">
+                Rp {Math.round(averagePerCan).toLocaleString('id-ID')}
+              </h3>
             </div>
-            <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
-              <TrendingUp size={20} />
+            <div className="p-3 bg-blue-50 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-all duration-300">
+              <FileSpreadsheet size={20} />
             </div>
           </div>
+          <div className="mt-4 flex items-center gap-2">
+            <span className="flex items-center text-xs font-bold text-gray-400 bg-gray-50 px-2 py-1 rounded-lg">
+              Nilai Efisiensi
+            </span>
+            <span className="text-xs text-slate-500 font-medium">Bulan Ini</span>
+          </div>
         </Card>
+      </div>
+
+      {/* Toolbar Section (Search & Filter) */}
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-between w-full bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+        <FilterDropdown />
       </div>
 
       {/* Recent Collections Table as a Report */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="font-bold text-slate-800 flex items-center gap-2">
-            <Calendar size={18} className="text-green-600" />
+          <h3 className="font-bold text-[#F4F1EA] flex items-center gap-2">
+            <Calendar size={18} className="text-[#EAD19B]" />
             Transaksi Terakhir
           </h3>
         </div>
         <Suspense fallback={<TableSkeleton />}>
-          <TransactionList />
+          <TransactionList month={month} year={year} branch={branch} officer={officer} search={search} page={page} limit={limit} />
         </Suspense>
       </div>
     </div>

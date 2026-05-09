@@ -42,7 +42,6 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
         }
 
         // NOTE: Table collections is STRICTLY IMMUTABLE. No UPDATE or DELETE allowed.
-        // We do NOT update the old record's isLatest flag.
 
         const [newRecord] = await tx.insert(schema.collections).values({
           assignmentId: old.assignmentId,
@@ -53,7 +52,6 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
           collectedAt: old.collectedAt,
           submittedAt: new Date(),
           syncStatus: 'COMPLETED',
-          isLatest: true,
           submitSequence: old.submitSequence + 1,
           alasanResubmit: body.alasan_resubmit,
           deviceInfo: old.deviceInfo,
