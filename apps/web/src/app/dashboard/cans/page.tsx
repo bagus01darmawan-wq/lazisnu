@@ -10,7 +10,10 @@ import { Modal } from '@/components/ui/Modal';
 import { Badge } from '@/components/ui/Badge';
 import { ColumnDef } from '@tanstack/react-table';
 import api from '@/lib/api';
-import { toast } from 'react-hot-toast';
+import { toast } from 'sonner';
+import { cleanBranchName } from '@/lib/formatters';
+import { cn } from '@/lib/utils';
+import { ConfirmToast } from '@/components/ui/ConfirmToast';
 import {
   Box,
   Plus,
@@ -26,11 +29,16 @@ import {
   CheckSquare,
   Square,
   AlertTriangle,
-  Printer
+  Printer,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { FilterPills } from '@/components/ui/FilterPills';
+import { DropdownFilter } from '@/components/ui/DropdownFilter';
+import { Card } from '@/components/ui/Card';
 
 const canSchema = z.object({
   owner_name: z.string().min(1, 'Nama pemilik wajib diisi'),
@@ -52,14 +60,14 @@ export default function CansPage() {
   const [editingCan, setEditingCan] = useState<any>(null);
   const [branches, setBranches] = useState([]);
   const [dukuhs, setDukuhs] = useState([]);
-  
+
   // Selection state
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  
+
   // Pagination & Filter states
   const [search, setSearch] = useState('');
   const [branchFilter, setBranchFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ACTIVE');
+  const [statusFilter, setStatusFilter] = useState('ALL');
   const [totalItems, setTotalItems] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -191,100 +199,69 @@ export default function CansPage() {
 
   const handleDelete = async (id: string, isPermanentRow?: boolean) => {
     const isPermanent = isPermanentRow || statusFilter === 'NON_ACTIVE';
-    const message = isPermanent 
+    const message = isPermanent
       ? 'Hapus PERMANEN kaleng ini? Data akan hilang selamanya.'
       : 'Nonaktifkan kaleng ini?';
-      
-    toast((t) => (
-      <div className="flex flex-col gap-3 min-w-[250px]">
-        <div className="flex items-center gap-2">
-          {isPermanent ? <AlertTriangle size={18} className="text-red-600" /> : <Trash2 size={18} className="text-slate-400" />}
-          <p className="text-sm font-bold text-slate-800">{message}</p>
-        </div>
-        <div className="flex justify-end gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="h-8 text-xs font-bold rounded-lg"
-            onClick={() => toast.dismiss(t.id)}
-          >
-            Batal
-          </Button>
-          <Button 
-            size="sm" 
-            className={`h-8 text-xs font-bold rounded-lg text-white shadow-sm transition-all active:scale-95 ${isPermanent ? 'bg-red-600 hover:bg-red-700 shadow-red-100' : 'bg-slate-800 hover:bg-slate-900 shadow-slate-200'}`}
-            onClick={async () => {
-              toast.dismiss(t.id);
-              try {
-                const response: any = await api.delete(`/admin/cans/${id}${isPermanent ? '?permanent=true' : ''}`);
-                if (response.success) {
-                  fetchData();
-                  toast.success(isPermanent ? 'Data kaleng berhasil dihapus permanen' : 'Data kaleng berhasil dinonaktifkan');
-                }
-              } catch (error: any) {
-                toast.error(error.error?.message || error.message || 'Gagal memproses penghapusan');
-              }
-            }}
-          >
-            {isPermanent ? 'Hapus Permanen' : 'Ya, Nonaktifkan'}
-          </Button>
-        </div>
-      </div>
+
+    (toast as any).custom((t: any) => (
+      <ConfirmToast
+        id={t}
+        title={isPermanent ? "Hapus Permanen?" : "Nonaktifkan Kaleng?"}
+        description={isPermanent
+          ? "Data akan hilang selamanya dan tidak dapat dikembalikan."
+          : "Kaleng tidak akan muncul di daftar penjemputan aktif."}
+        confirmLabel={isPermanent ? "Hapus Permanen" : "Ya, Nonaktifkan"}
+        onConfirm={() => {
+          toast.promise(
+            api.delete(`/admin/cans/${id}${isPermanent ? '?permanent=true' : ''}`).then((res) => {
+              fetchData();
+              return res;
+            }),
+            {
+              loading: 'Memproses...',
+              success: isPermanent ? 'Data kaleng berhasil dihapus permanen' : 'Data kaleng berhasil dinonaktifkan',
+              error: (err: any) => err.error?.message || err.message || 'Gagal memproses penghapusan',
+            }
+          )
+        }}
+        variant={isPermanent ? 'danger' : 'warning'}
+      />
     ), { duration: 5000 });
   };
 
   const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return;
-    
     const isNonActiveView = statusFilter === 'NON_ACTIVE';
-    const message = isNonActiveView
-      ? `Hapus PERMANEN ${selectedIds.length} kaleng?`
-      : `Nonaktifkan ${selectedIds.length} kaleng?`;
-      
-    toast((t) => (
-      <div className="flex flex-col gap-3 min-w-[280px]">
-        <div className="flex items-center gap-2 text-red-600">
-          <AlertTriangle size={20} />
-          <p className="text-sm font-bold">{message}</p>
-        </div>
-        <p className="text-[11px] text-slate-500 font-medium px-1">
-          {isNonActiveView ? 'Data yang sudah dihapus tidak dapat dikembalikan.' : 'Data akan dipindahkan ke kategori non-aktif.'}
-        </p>
-        <div className="flex justify-end gap-2 pt-1">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="h-8 text-xs font-bold rounded-lg"
-            onClick={() => toast.dismiss(t.id)}
-          >
-            Batal
-          </Button>
-          <Button 
-            size="sm" 
-            className={`h-8 text-xs font-bold rounded-lg text-white shadow-sm transition-all active:scale-95 ${isNonActiveView ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-slate-800 hover:bg-slate-900 shadow-slate-200'}`}
-            onClick={async () => {
-              toast.dismiss(t.id);
-              try {
-                const response: any = await api.post('/admin/cans/bulk-delete', { 
-                  ids: selectedIds,
-                  permanent: isNonActiveView
-                });
-                if (response.success) {
-                  toast.success(isNonActiveView 
-                    ? `Berhasil menghapus permanen ${selectedIds.length} kaleng` 
-                    : `Berhasil menonaktifkan ${selectedIds.length} kaleng`
-                  );
-                  fetchData();
-                }
-              } catch (error: any) {
-                toast.error(error.message || 'Gagal menghapus data masal');
-              }
-            }}
-          >
-            {isNonActiveView ? 'Ya, Hapus Permanen' : 'Ya, Nonaktifkan'}
-          </Button>
-        </div>
-      </div>
+
+    (toast as any).custom((t: any) => (
+      <ConfirmToast
+        id={t}
+        title={isNonActiveView ? "Hapus Massal?" : "Nonaktifkan Massal?"}
+        description={isNonActiveView
+          ? `Hapus permanen ${selectedIds.length} kaleng terpilih?`
+          : `Nonaktifkan ${selectedIds.length} kaleng terpilih?`}
+        confirmLabel={isNonActiveView ? "Hapus Permanen" : "Ya, Nonaktifkan"}
+        onConfirm={() => {
+          toast.promise(
+            api.post('/admin/cans/bulk-delete', {
+              ids: selectedIds,
+              permanent: isNonActiveView
+            }).then((res) => {
+              fetchData();
+              setSelectedIds([]);
+              return res;
+            }),
+            {
+              loading: 'Memproses...',
+              success: isNonActiveView
+                ? `Berhasil menghapus permanen ${selectedIds.length} kaleng`
+                : `Berhasil menonaktifkan ${selectedIds.length} kaleng`,
+              error: (err: any) => err.message || 'Gagal menghapus data masal',
+            }
+          )
+        }}
+        variant={isNonActiveView ? 'danger' : 'warning'}
+      />
     ), { duration: 5000 });
   };
 
@@ -341,7 +318,7 @@ export default function CansPage() {
     const isAssigned = item.assignments && item.assignments.length > 0;
     if (isAssigned) return;
 
-    setSelectedIds(prev => 
+    setSelectedIds(prev =>
       prev.includes(item.id) ? prev.filter(i => i !== item.id) : [...prev, item.id]
     );
   };
@@ -356,7 +333,7 @@ export default function CansPage() {
       try {
         const text = e.target?.result as string;
         const lines = text.split('\n').filter(line => line.trim() !== '');
-        
+
         if (lines.length === 0) throw new Error('File kosong');
 
         // Skip header if it exists
@@ -371,7 +348,7 @@ export default function CansPage() {
           // Detect separator automatically (comma or semicolon)
           const separator = line.includes(';') ? ';' : ',';
           const columns = line.split(separator).map(c => c.trim().replace(/^"|"$/g, ''));
-          
+
           const ownerName = columns[0];
           const ownerWhatsapp = columns[1];
           const dukuhName = columns[2];
@@ -418,41 +395,27 @@ export default function CansPage() {
   };
 
   const handleReactivate = async (id: string) => {
-    toast((t) => (
-      <div className="flex flex-col gap-3 min-w-[250px]">
-        <div className="flex items-center gap-2">
-          <RotateCcw size={18} className="text-blue-600" />
-          <p className="text-sm font-bold text-slate-800">Aktifkan kembali kaleng ini?</p>
-        </div>
-        <div className="flex justify-end gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="h-8 text-xs font-bold rounded-lg"
-            onClick={() => toast.dismiss(t.id)}
-          >
-            Batal
-          </Button>
-          <Button 
-            size="sm" 
-            className="bg-blue-600 hover:bg-blue-700 h-8 text-xs font-bold rounded-lg text-white shadow-sm transition-all active:scale-95"
-            onClick={async () => {
-              toast.dismiss(t.id);
-              try {
-                const response: any = await api.put(`/admin/cans/${id}`, { is_active: true });
-                if (response.success) {
-                  fetchData();
-                  toast.success('Data kaleng berhasil diaktifkan kembali');
-                }
-              } catch (error: any) {
-                toast.error(error.error?.message || error.message || 'Gagal mengaktifkan data');
-              }
-            }}
-          >
-            Ya, Aktifkan
-          </Button>
-        </div>
-      </div>
+    (toast as any).custom((t: any) => (
+      <ConfirmToast
+        id={t}
+        title="Aktifkan Kembali?"
+        description="Kaleng ini akan kembali muncul dalam daftar penjemputan aktif."
+        confirmLabel="Ya, Aktifkan"
+        onConfirm={() => {
+          toast.promise(
+            api.put(`/admin/cans/${id}`, { is_active: true }).then((res) => {
+              fetchData();
+              return res;
+            }),
+            {
+              loading: 'Mengaktifkan...',
+              success: 'Data kaleng berhasil diaktifkan kembali',
+              error: (err: any) => err.error?.message || err.message || 'Gagal mengaktifkan data',
+            }
+          )
+        }}
+        variant="info"
+      />
     ), { duration: 3000 });
   };
 
@@ -467,12 +430,12 @@ export default function CansPage() {
           <button
             onClick={toggleSelectAll}
             disabled={selectableData.length === 0}
-            className="p-1 hover:bg-slate-200 rounded transition-colors disabled:opacity-30"
+            className="p-1 hover:bg-[#1F8243]/30 rounded transition-colors disabled:opacity-30"
           >
             {isAllSelected ? (
-              <CheckSquare size={18} className="text-green-600" />
+              <CheckSquare size={18} className="text-[#1F8243]" />
             ) : (
-              <Square size={18} className="text-slate-400" />
+              <Square size={18} className="text-[#F4F1EA]/30" />
             )}
           </button>
         );
@@ -483,13 +446,13 @@ export default function CansPage() {
           <button
             onClick={() => toggleSelectId(row.original)}
             disabled={isAssigned}
-            className={`p-1 rounded transition-colors ${isAssigned ? 'opacity-20 cursor-not-allowed' : 'hover:bg-slate-100'}`}
+            className={`p-1 rounded transition-colors ${isAssigned ? 'opacity-20 cursor-not-allowed' : 'hover:bg-[#1F8243]/30'}`}
             title={isAssigned ? "Kaleng sedang dalam penugasan" : "Pilih Kaleng"}
           >
             {selectedIds.includes(row.original.id) ? (
-              <CheckSquare size={18} className="text-green-600" />
+              <CheckSquare size={18} className="text-[#1F8243]" />
             ) : (
-              <Square size={18} className="text-slate-300" />
+              <Square size={18} className="text-[#F4F1EA]/30" />
             )}
           </button>
         );
@@ -499,15 +462,8 @@ export default function CansPage() {
       accessorKey: 'qr_code',
       header: 'QR CODE',
       cell: ({ row }) => (
-        <div className="flex items-center gap-2 group">
-          <button 
-            onClick={() => handleGenerateQr(row.original.id)}
-            className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center cursor-pointer hover:bg-green-100 transition-all active:scale-95 border border-transparent hover:border-green-200"
-            title="Klik untuk cetak label QR"
-          >
-            <QrCode size={14} className="text-green-600 group-hover:scale-110 transition-transform" />
-          </button>
-          <span className="font-bold text-slate-700">{row.original.qr_code}</span>
+        <div className="flex flex-col">
+          <span className="text-[12px] font-bold text-[#F4F1EA]/40 tracking-tight">#{row.original.qr_code}</span>
         </div>
       ),
     },
@@ -516,23 +472,24 @@ export default function CansPage() {
       header: 'PEMILIK',
       cell: ({ row }) => (
         <div className="flex flex-col">
-          <span className="font-semibold text-slate-900">{row.original.owner_name}</span>
-          <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
-            {row.original.branch?.name.replace(/ranting/gi, '').trim() || 'No Branch'}
+          <span className="font-bold text-[#F4F1EA] tracking-tight">{row.original.owner_name}</span>
+          <span className="text-[10px] text-[#EAD19B]/60 font-bold uppercase tracking-widest mt-0.5">
+            {cleanBranchName(row.original.branch?.name) || 'PUSAT'}
           </span>
         </div>
       ),
     },
     {
       accessorKey: 'address',
-      header: 'ALAMAT',
+      header: 'DUSUN',
       cell: ({ row }) => (
-        <div className="flex flex-col text-xs text-slate-600">
-          <div className="flex items-center gap-1">
-            <MapPin size={10} />
-            <span>{row.original.dukuh_details?.name || row.original.dukuh || '-'}</span>
-          </div>
-          <span className="ml-3.5 opacity-70">RT {row.original.rt || '-'} / RW {row.original.rw || '-'}</span>
+        <div className="flex flex-col">
+          <span className="text-xs font-medium uppercase tracking-tight text-[#F4F1EA]/60">
+            {row.original.dukuh_details?.name || row.original.dukuh || '-'}
+          </span>
+          <span className="text-[10px] opacity-50 font-bold uppercase tracking-widest mt-0.5">
+            RT {row.original.rt || '-'} / RW {row.original.rw || '-'}
+          </span>
         </div>
       ),
     },
@@ -540,10 +497,9 @@ export default function CansPage() {
       accessorKey: 'owner_whatsapp',
       header: 'WHATSAPP',
       cell: ({ row }) => (
-        <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium bg-slate-50 px-2 py-1 rounded-lg border border-slate-100 w-fit">
-          <Phone size={12} className="text-green-500" />
+        <span className="text-[12px] font-bold text-[#F4F1EA]/40 tracking-tight">
           {row.original.owner_whatsapp}
-        </div>
+        </span>
       ),
     },
     {
@@ -554,24 +510,21 @@ export default function CansPage() {
         const isAssigned = can.assignments && can.assignments.length > 0;
 
         if (!can.is_active) {
-          return <Badge variant="failed">NON-AKTIF</Badge>;
+          return <span className="text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/40">NON-AKTIF</span>;
         }
 
         if (isAssigned) {
           return (
-            <Badge
-              variant="default"
-              className="bg-indigo-100 text-indigo-700 border-indigo-200 cursor-pointer hover:bg-indigo-200 transition-all flex items-center gap-1.5 group px-3"
+            <span
+              className="text-[10px] font-bold uppercase tracking-widest text-[#DE6F4A] cursor-pointer hover:opacity-80 transition-opacity"
               onClick={() => router.push('/dashboard/assignments')}
-              title="Klik untuk lihat penugasan"
             >
-              <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse" />
               ASSIGNED
-            </Badge>
+            </span>
           );
         }
 
-        return <Badge variant="success">AKTIF</Badge>;
+        return <span className="text-[10px] font-bold uppercase tracking-widest text-[#1F8243]">AKTIF</span>;
       },
     },
     {
@@ -587,21 +540,21 @@ export default function CansPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 w-8 p-0 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all border-slate-200 group"
+                className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-white/10 transition-all duration-300 group"
                 onClick={() => handleReactivate(row.original.id)}
                 title="Aktifkan Kembali"
               >
-                <RotateCcw size={14} className="text-slate-500 group-hover:text-blue-600" />
+                <RotateCcw size={14} className="text-[#EAD19B]" />
               </Button>
             ) : (
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 w-8 p-0 rounded-lg hover:bg-green-50 hover:text-green-600 hover:border-green-200 transition-all border-slate-200 group"
+                className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-white/10 transition-all duration-300 group"
                 onClick={() => handleEdit(row.original)}
                 title="Edit Data"
               >
-                <Edit size={14} className="text-slate-500 group-hover:text-green-600" />
+                <Edit size={14} className="text-[#EAD19B]" />
               </Button>
             )}
 
@@ -609,14 +562,14 @@ export default function CansPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className={`h-8 w-8 p-0 rounded-lg transition-all border-slate-200 group ${isNonActiveRow ? 'hover:bg-red-600 hover:text-white hover:border-red-600' : 'hover:bg-red-50 hover:text-red-600 hover:border-red-200'}`}
+                className={`h-8 w-8 p-0 rounded-xl transition-all duration-300 border-white/10 bg-white/5 group ${isNonActiveRow ? 'hover:bg-red-500/20 hover:text-[#D97A76] hover:border-red-500/30' : 'hover:bg-red-500/10 hover:text-[#D97A76] hover:border-red-500/20'}`}
                 onClick={() => handleDelete(row.original.id, isNonActiveRow)}
                 title={isNonActiveRow ? 'Hapus Permanen' : 'Non-aktifkan'}
               >
                 {isNonActiveRow ? (
-                  <AlertTriangle size={14} className="text-red-500 group-hover:text-white" />
+                  <AlertTriangle size={14} className="text-[#D97A76]" />
                 ) : (
-                  <Trash2 size={14} className="text-slate-500 group-hover:text-red-600" />
+                  <Trash2 size={14} className="text-[#F4F1EA]/60 group-hover:text-[#D97A76]" />
                 )}
               </Button>
             )}
@@ -637,178 +590,216 @@ export default function CansPage() {
             <p className="text-[#F4F1EA]/60 text-sm font-medium">Manajemen data donatur dan distribusi kaleng Lazisnu</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
+          {/* Bulk Action Pill Wrapper */}
           {selectedIds.length > 0 && (
-            <>
-              <Button
-                onClick={handleBulkGenerateQr}
-                className="bg-green-50 text-green-600 border border-green-200 hover:bg-green-100 h-11 rounded-xl font-bold px-5 flex items-center gap-2 shadow-sm transition-all active:scale-95"
-              >
-                <Printer size={18} />
-                Cetak Terpilih ({selectedIds.length})
-              </Button>
-              <Button
+            statusFilter === 'NON_ACTIVE' ? (
+              <button
                 onClick={handleBulkDelete}
-                className={`${statusFilter === 'NON_ACTIVE' ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-200' : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'} h-11 rounded-xl font-bold px-5 flex items-center gap-2 shadow-sm transition-all active:scale-95`}
+                className="h-[35px] px-4 rounded-xl text-[11px] font-bold transition-all active:scale-95 flex items-center gap-2 bg-[#D97A76] text-white shadow-lg shadow-[#D97A76]/20"
               >
-                {statusFilter === 'NON_ACTIVE' ? <AlertTriangle size={18} /> : <Trash2 size={18} />}
-                {statusFilter === 'NON_ACTIVE' ? 'Hapus Permanen' : 'Hapus Terpilih'} ({selectedIds.length})
-              </Button>
-            </>
+                <AlertTriangle size={14} strokeWidth={3} />
+                Hapus Permanen ({selectedIds.length})
+              </button>
+            ) : (
+              <div className="flex bg-[#F4F1EA]/10 backdrop-blur-md p-1 rounded-2xl border border-[#F4F1EA]/20 shadow-sm">
+                <div className="bg-[#1F8243]/5 backdrop-blur-sm rounded-xl border border-[#1F8243]/10">
+                  <button
+                    onClick={handleBulkGenerateQr}
+                    className="h-[33px] px-4 rounded-xl text-[11px] font-bold text-[#F4F1EA] hover:bg-[#1F8243]/10 transition-all active:scale-95 flex items-center gap-2"
+                  >
+                    <Printer size={14} strokeWidth={3} />
+                    Cetak ({selectedIds.length})
+                  </button>
+                </div>
+                <button
+                  onClick={handleBulkDelete}
+                  className="h-[33px] px-4 rounded-xl text-[11px] font-bold transition-all active:scale-95 flex items-center gap-2 text-[#D97A76] hover:bg-[#D97A76]/10"
+                >
+                  <Trash2 size={14} strokeWidth={3} />
+                  Hapus ({selectedIds.length})
+                </button>
+              </div>
+            )
           )}
-          <Button
-            variant="outline"
-            onClick={() => setIsImportModalOpen(true)}
-            className="border-[#EAD19B] text-[#EAD19B] hover:bg-[#EAD19B]/10 h-11 rounded-xl font-bold px-5"
-          >
-            Impor Data
-          </Button>
-          <Button
-            onClick={() => {
-              setEditingCan(null);
-              reset();
-              setIsModalOpen(true);
-            }}
-            className="bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 px-6 h-11 rounded-xl font-bold transition-all active:scale-95 flex items-center gap-2"
-          >
-            <Plus size={20} />
-            Tambah Kaleng Baru
-          </Button>
+
+          {/* Primary Action Pill Wrapper */}
+          <div className="flex bg-[#F4F1EA]/10 backdrop-blur-md p-1 rounded-2xl border border-[#F4F1EA]/20 shadow-sm h-[45px] items-center">
+            <button
+              onClick={() => setIsImportModalOpen(true)}
+              className="h-[35px] px-4 rounded-xl text-[11px] font-bold text-white/90 hover:bg-white/5 transition-all active:scale-95 flex items-center gap-2"
+            >
+              <Box size={14} strokeWidth={3} className="text-[#EAD19B]" />
+              Impor Data
+            </button>
+            <button
+              onClick={() => {
+                setEditingCan(null);
+                reset();
+                setIsModalOpen(true);
+              }}
+              className="h-[35px] px-4 rounded-xl text-[11px] font-bold bg-[#EAD19B] text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 hover:bg-[#EAD19B]/90 transition-all active:scale-95 flex items-center gap-2 ml-1"
+            >
+              <Plus size={14} strokeWidth={3} />
+              Tambah Kaleng Baru
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Toolbar Section */}
-      <div className="flex flex-col lg:flex-row gap-4 items-center justify-between bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-        <div className="relative w-full lg:w-96 group">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className="text-slate-400 group-focus-within:text-green-500 transition-colors" size={18} />
+      {/* Transparent Toolbar Section */}
+      <div className="flex flex-col lg:flex-row gap-4 items-center justify-between bg-transparent p-5 border-none shadow-none">
+        <div className="relative w-[160px] group">
+          {/* Refined Search Pill Design - Standardized Height */}
+          <div className="flex h-[35px] items-center bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1 transition-all duration-500 group-focus-within:ring-2 group-focus-within:ring-[#F4F1EA]/20 group-focus-within:border-[#F4F1EA]/30 shadow-lg shadow-black/5">
+            <div className="pl-2 pr-1 transition-transform group-focus-within:scale-110">
+              <Search size={14} strokeWidth={3} className="text-[#DE6F4A]" />
+            </div>
+            <input
+              type="text"
+              placeholder="Cari..."
+              className="bg-transparent w-full px-4 py-1 text-sm font-bold text-white placeholder-[#F4F1EA]/60 focus:outline-none"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setCurrentPage(1);
+              }}
+            />
           </div>
-          <input
-            type="text"
-            placeholder="Cari nama pemilik atau wilayah..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 focus:bg-white transition-all shadow-sm group-hover:border-slate-300"
-          />
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-          <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100 shadow-sm hover:border-slate-200 transition-colors">
-            <Filter className="text-slate-400 ml-2" size={16} />
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="bg-transparent text-xs font-bold text-slate-900 px-3 py-1.5 focus:outline-none cursor-pointer"
-            >
-              <option value="ACTIVE">AKTIF</option>
-              <option value="NON_ACTIVE">NON-AKTIF</option>
-              <option value="ALL">SEMUA STATUS</option>
-            </select>
-          </div>
+          <FilterPills
+            options={[
+              { label: 'SEMUA', value: 'ALL' },
+              { label: 'AKTIF', value: 'ACTIVE' },
+              { label: 'ASSIGNED', value: 'ASSIGNED' },
+              { label: 'NON-AKTIF', value: 'NON_ACTIVE' }
+            ]}
+            value={statusFilter}
+            onChange={(val) => {
+              setStatusFilter(val);
+              setCurrentPage(1);
+            }}
+            className="h-[36px] p-1"
+          />
 
           {user?.role === 'ADMIN_KECAMATAN' && (
-            <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100 shadow-sm hover:border-slate-200 transition-colors">
-              <Filter className="text-slate-400 ml-2" size={16} />
-              <select
-                value={branchFilter}
-                onChange={(e) => {
-                  setBranchFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="bg-transparent text-xs font-bold text-slate-900 px-3 py-1.5 focus:outline-none cursor-pointer max-w-[150px]"
-              >
-                <option value="">SEMUA RANTING</option>
-                {branches.map((b: any) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name.replace(/ranting/gi, '').trim().toUpperCase()}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <DropdownFilter
+              label="Pilih Ranting"
+              placeholder="Cari ranting..."
+              options={[
+                { label: 'SEMUA RANTING', value: '' },
+                ...branches.map((b: any) => ({
+                  label: cleanBranchName(b.name).toUpperCase(),
+                  value: b.id
+                }))
+              ]}
+              value={branchFilter}
+              onChange={(val) => {
+                setBranchFilter(val);
+                setCurrentPage(1);
+              }}
+              className="h-[36px]"
+            />
           )}
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-10 rounded-xl px-4 text-xs font-bold text-slate-500 border-slate-200 hover:bg-slate-50 flex items-center gap-2"
+          <DropdownFilter
+            options={[
+              { label: '10', value: '10' },
+              { label: '20', value: '20' },
+              { label: '50', value: '50' },
+              { label: '100', value: '100' }
+            ]}
+            value={pageSize.toString()}
+            onChange={(val) => {
+              setPageSize(Number(val));
+              setCurrentPage(1);
+            }}
+            className="min-w-[80px]! h-[36px]"
+            popoverWidth="w-full"
+            showSearch={false}
+          />
+
+          <button
             onClick={() => {
               setSearch('');
               setBranchFilter('');
               setStatusFilter('ACTIVE');
               setCurrentPage(1);
+              setPageSize(10);
             }}
+            className="h-[36px] bg-[#F4F1EA]/10 backdrop-blur-md border border-[#F4F1EA]/20 rounded-2xl px-5 flex items-center gap-2 text-xs font-bold text-white/90 hover:bg-[#F4F1EA]/20 transition-all duration-300 active:scale-95 shadow-lg shadow-black/5"
           >
-            <RotateCcw size={14} />
-            RESET
-          </Button>
+            <RotateCcw size={14} strokeWidth={3} className="text-[#EAD19B]" />
+            Reset
+          </button>
         </div>
       </div>
 
-      {/* Main Table Container */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <Table columns={columns} data={data} loading={loading} />
+      {/* Main Table Container wrapped in Glass Card */}
+      <Card variant="glass" className="p-0 border-white/5 shadow-2xl overflow-hidden w-full max-w-full transition-all duration-700">
+        <div className="overflow-x-auto w-full custom-scrollbar">
+          <div className="min-w-[800px] w-full">
+            <Table columns={columns} data={data} loading={loading} variant="glass" />
+          </div>
+        </div>
 
-        {/* Pagination Controls */}
+        {/* Smart Pagination Control - Standardized with Audit Log */}
         {!loading && totalItems > 0 && (
-          <div className="px-6 py-6 bg-slate-50/50 border-t border-slate-100 flex flex-col items-end gap-3">
-            <p className="text-xs font-medium text-slate-500">
-              Menampilkan <span className="font-bold text-slate-900">{data.length}</span> dari <span className="font-bold text-slate-900">{totalItems}</span> kaleng
-            </p>
+          <div className="px-6 py-5 bg-white/5 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
+            {/* Left: Summary Info Badge */}
+            <div className="flex items-center gap-2 bg-white/5 p-1 rounded-2xl border border-white/10 shadow-sm px-4 h-10">
+              <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">Menampilkan</span>
+              <div className="min-w-[24px] h-6 px-1.5 flex items-center justify-center bg-[#EAD19B]/10 rounded-lg">
+                <span className="text-xs font-black text-[#EAD19B]">{data.length}</span>
+              </div>
+              <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">dari</span>
+              <div className="min-w-[32px] h-6 px-1.5 flex items-center justify-center bg-[#F4F1EA]/5 rounded-lg border border-white/10">
+                <span className="text-xs font-black text-[#F4F1EA]">{totalItems}</span>
+              </div>
+              <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight ml-1">Kaleng</span>
+            </div>
 
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Baris:</span>
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
-                >
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
+            {/* Right: Smart Control Pill */}
+            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-2xl border border-white/10 shadow-sm transition-all hover:shadow-md">
+              {/* Page Info Badge */}
+              <div className="px-4 flex items-center gap-1.5 min-w-[140px] justify-center">
+                <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">Halaman</span>
+                <div className="w-6 h-6 flex items-center justify-center bg-[#EAD19B]/10 rounded-lg">
+                  <span className="text-xs font-black text-[#EAD19B]">{currentPage}</span>
+                </div>
+                <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">dari</span>
+                <div className="min-w-[24px] h-6 px-1.5 flex items-center justify-center bg-[#F4F1EA]/5 rounded-lg border border-white/10">
+                  <span className="text-xs font-black text-[#F4F1EA]">{Math.ceil(totalItems / pageSize)}</span>
+                </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
-                  Halaman <span className="text-green-600">{currentPage}</span> dari {Math.ceil(totalItems / pageSize)}
-                </span>
-
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(prev => prev - 1)}
-                    className="rounded-xl h-9 px-4 text-xs font-bold disabled:opacity-30 border-slate-200"
-                  >
-                    Sebelumnya
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={currentPage >= Math.ceil(totalItems / pageSize)}
-                    onClick={() => setCurrentPage(prev => prev + 1)}
-                    className="rounded-xl h-9 px-4 text-xs font-bold disabled:opacity-30 border-slate-200"
-                  >
-                    Selanjutnya
-                  </Button>
-                </div>
+              {/* Navigation Arrows */}
+              <div className="flex items-center gap-1 pl-2 border-l border-white/5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => prev - 1)}
+                  className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                >
+                  <ChevronLeft size={16} strokeWidth={3} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={currentPage >= Math.ceil(totalItems / pageSize)}
+                  onClick={() => setCurrentPage(prev => prev + 1)}
+                  className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                >
+                  <ChevronRight size={16} strokeWidth={3} />
+                </Button>
               </div>
             </div>
           </div>
         )}
-      </div>
+      </Card>
 
       {/* Modal Impor */}
       <Modal
@@ -839,7 +830,7 @@ export default function CansPage() {
               <option value="">-- Pilih Ranting --</option>
               {branches.map((b: any) => (
                 <option key={b.id} value={b.id}>
-                  {b.name.replace(/ranting/gi, '').trim().toUpperCase()}
+                  {cleanBranchName(b.name).toUpperCase()}
                 </option>
               ))}
             </select>
@@ -911,7 +902,7 @@ export default function CansPage() {
               <option value="">-- Pilih Ranting --</option>
               {branches.map((b: any) => (
                 <option key={b.id} value={b.id}>
-                  {b.name.replace(/ranting/gi, '').trim().toUpperCase()}
+                  {cleanBranchName(b.name).toUpperCase()}
                 </option>
               ))}
             </select>
@@ -936,38 +927,28 @@ export default function CansPage() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-sm font-semibold text-gray-700">RT</label>
-              <select
+              <Input
                 {...register('rt')}
-                className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer"
-              >
-                <option value="">-- RT --</option>
-                {Array.from({ length: 10 }, (_, i) => (
-                  <option key={i + 1} value={(i + 1).toString().padStart(3, '0')}>
-                    {(i + 1).toString().padStart(3, '0')}
-                  </option>
-                ))}
-              </select>
+                placeholder="000"
+                maxLength={3}
+                className="text-center font-mono tracking-widest"
+              />
               {errors.rt && <p className="text-xs font-medium text-red-500">{errors.rt.message}</p>}
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-semibold text-gray-700">RW</label>
-              <select
+              <Input
                 {...register('rw')}
-                className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer"
-              >
-                <option value="">-- RW --</option>
-                {Array.from({ length: 10 }, (_, i) => (
-                  <option key={i + 1} value={(i + 1).toString().padStart(3, '0')}>
-                    {(i + 1).toString().padStart(3, '0')}
-                  </option>
-                ))}
-              </select>
+                placeholder="000"
+                maxLength={3}
+                className="text-center font-mono tracking-widest"
+              />
               {errors.rw && <p className="text-xs font-medium text-red-500">{errors.rw.message}</p>}
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-gray-700 uppercase tracking-wider text-[10px] text-green-600 font-bold">Nomor WhatsApp (Wajib)</label>
+            <label className="text-xs font-bold text-green-600 uppercase tracking-wider">Nomor WhatsApp (Wajib)</label>
             <div className="relative group">
               <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-green-500 transition-colors" size={16} />
               <input
@@ -1034,7 +1015,7 @@ export default function CansPage() {
               )}
               <div className="w-full flex gap-3 pt-2">
                 <Button variant="secondary" className="flex-1 rounded-xl h-12 font-bold" onClick={() => setIsQrModalOpen(false)}>Tutup</Button>
-                <Button 
+                <Button
                   className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl h-12 font-bold shadow-lg shadow-green-600/20 flex items-center gap-2 justify-center"
                   onClick={() => {
                     const a = document.createElement('a');

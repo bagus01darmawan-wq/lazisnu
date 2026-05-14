@@ -36,20 +36,48 @@ export async function cansRoutes(fastify: FastifyInstance) {
         searchCondition,
       ];
 
-      if (query.status === 'NON_ACTIVE' || query.status === 'INACTIVE') {
-        conditions.push(eq(schema.cans.isActive, false));
-      } else if (query.status === 'ALL') {
-        // No isActive filter
-      } else {
-        // Default: ACTIVE
-        conditions.push(eq(schema.cans.isActive, true));
-      }
-
-      const whereClause = and(...conditions.filter(Boolean));
-
       const now = new Date();
       const currentYear = now.getFullYear();
       const currentMonth = now.getMonth() + 1;
+
+      if (query.status === 'NON_ACTIVE' || query.status === 'INACTIVE') {
+        conditions.push(eq(schema.cans.isActive, false));
+      } else if (query.status === 'ASSIGNED') {
+        conditions.push(eq(schema.cans.isActive, true));
+        
+        const assignedSubquery = db
+          .select({ id: schema.assignments.canId })
+          .from(schema.assignments)
+          .where(
+            and(
+              eq(schema.assignments.periodYear, currentYear),
+              eq(schema.assignments.periodMonth, currentMonth)
+            )
+          );
+          
+        conditions.push(inArray(schema.cans.id, assignedSubquery));
+      } else if (query.status === 'ACTIVE') {
+        conditions.push(eq(schema.cans.isActive, true));
+        
+        // Filter agar HANYA menampilkan yang BELUM di-assign
+        const assignedSubquery = db
+          .select({ id: schema.assignments.canId })
+          .from(schema.assignments)
+          .where(
+            and(
+              eq(schema.assignments.periodYear, currentYear),
+              eq(schema.assignments.periodMonth, currentMonth)
+            )
+          );
+          
+        conditions.push(sql`${schema.cans.id} NOT IN (${assignedSubquery})`);
+      } else if (query.status === 'ALL') {
+        // No status filter
+      } else {
+        // Default: No filter (SEMUA) per user request
+      }
+
+      const whereClause = and(...conditions.filter(Boolean));
 
       const [cans, total] = await Promise.all([
         db.query.cans.findMany({

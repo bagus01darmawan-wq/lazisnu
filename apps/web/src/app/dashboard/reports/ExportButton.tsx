@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Download, Calendar } from 'lucide-react';
-import { toast } from 'react-hot-toast';
+import { toast } from 'sonner';
 import { authHelper } from '@/lib/auth';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
@@ -62,13 +62,13 @@ export default function ExportButton() {
 
   return (
     <>
-      <Button 
+      <button 
         onClick={() => setIsOpen(true)}
-        className="bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 px-6 h-11 rounded-xl font-bold transition-all active:scale-95 flex items-center gap-2"
+        className="h-[35px] px-4 rounded-xl text-[11px] font-bold bg-[#EAD19B] text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 hover:bg-[#EAD19B]/90 transition-all active:scale-95 flex items-center gap-2"
       >
-        <Download size={20} />
-        Export CSV
-      </Button>
+        <Download size={14} strokeWidth={3} />
+        Ekspor CSV
+      </button>
 
       <Modal
         isOpen={isOpen}

@@ -2,13 +2,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { Table } from '@/components/ui/Table';
+import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Badge } from '@/components/ui/Badge';
 import { ColumnDef } from '@tanstack/react-table';
 import api from '@/lib/api';
-import { toast } from 'react-hot-toast';
+import { toast } from 'sonner';
+import { ConfirmToast } from '@/components/ui/ConfirmToast';
 import { 
   Users, 
   Plus, 
@@ -33,6 +35,9 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useAuthStore } from '@/store/useAuthStore';
+import { FilterPills } from '@/components/ui/FilterPills';
+import { DropdownFilter } from '@/components/ui/DropdownFilter';
+import { cn } from '@/lib/utils';
 
 const officerSchema = z.object({
   full_name: z.string().min(1, 'Nama lengkap wajib diisi'),
@@ -47,7 +52,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [branchFilter, setBranchFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ACTIVE');
+  const [statusFilter, setStatusFilter] = useState('ALL');
   const [totalItems, setTotalItems] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -145,41 +150,29 @@ export default function UsersPage() {
       ? 'Hapus PERMANEN petugas ini? Data terkait akan hilang.'
       : 'Nonaktifkan petugas ini?';
       
-    toast((t) => (
-      <div className="flex flex-col gap-3 min-w-[250px]">
-        <div className="flex items-center gap-2">
-          {isPermanent ? <AlertTriangle size={18} className="text-red-600" /> : <UserMinus size={18} className="text-slate-400" />}
-          <p className="text-sm font-bold text-slate-800">{message}</p>
-        </div>
-        <div className="flex justify-end gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="h-8 text-xs font-bold rounded-lg"
-            onClick={() => toast.dismiss(t.id)}
-          >
-            Batal
-          </Button>
-          <Button 
-            size="sm" 
-            className={`h-8 text-xs font-bold rounded-lg text-white shadow-sm transition-all active:scale-95 ${isPermanent ? 'bg-red-600 hover:bg-red-700 shadow-red-100' : 'bg-slate-800 hover:bg-slate-900 shadow-slate-200'}`}
-            onClick={async () => {
-              toast.dismiss(t.id);
-              try {
-                const response: any = await api.delete(`/admin/officers/${id}${isPermanent ? '?permanent=true' : ''}`);
-                if (response.success) {
-                  void fetchOfficers();
-                  toast.success(isPermanent ? 'Petugas berhasil dihapus permanen' : 'Petugas berhasil dinonaktifkan');
-                }
-              } catch (error: any) {
-                toast.error(error.error?.message || error.message || 'Gagal memproses permintaan');
-              }
-            }}
-          >
-            {isPermanent ? 'Hapus Permanen' : 'Ya, Nonaktifkan'}
-          </Button>
-        </div>
-      </div>
+    (toast as any).custom((t: any) => (
+      <ConfirmToast
+        id={t}
+        title={isPermanent ? "Hapus Permanen?" : "Nonaktifkan Petugas?"}
+        description={isPermanent 
+          ? "Data petugas akan dihapus selamanya dari sistem." 
+          : "Petugas tidak akan bisa mengakses sistem sementara."}
+        confirmLabel={isPermanent ? "Hapus Permanen" : "Ya, Nonaktifkan"}
+        onConfirm={() => {
+          toast.promise(
+            api.delete(`/admin/officers/${id}${isPermanent ? '?permanent=true' : ''}`).then((res) => {
+              void fetchOfficers();
+              return res;
+            }),
+            {
+              loading: 'Memproses...',
+              success: isPermanent ? 'Petugas berhasil dihapus permanen' : 'Petugas berhasil dinonaktifkan',
+              error: (err: any) => err.error?.message || err.message || 'Gagal memproses penghapusan',
+            }
+          );
+        }}
+        variant={isPermanent ? 'danger' : 'warning'}
+      />
     ), { duration: 5000 });
   };
 
@@ -191,49 +184,34 @@ export default function UsersPage() {
       ? `Hapus PERMANEN ${selectedIds.length} petugas?`
       : `Nonaktifkan ${selectedIds.length} petugas?`;
       
-    toast((t) => (
-      <div className="flex flex-col gap-3 min-w-[280px]">
-        <div className="flex items-center gap-2 text-red-600">
-          <AlertTriangle size={20} />
-          <p className="text-sm font-bold">{message}</p>
-        </div>
-        <p className="text-[11px] text-slate-500 font-medium px-1">
-          {isNonActiveView ? 'Data yang sudah dihapus tidak dapat dikembalikan.' : 'Petugas tidak akan bisa mengakses sistem sementara.'}
-        </p>
-        <div className="flex justify-end gap-2 pt-1">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="h-8 text-xs font-bold rounded-lg"
-            onClick={() => toast.dismiss(t.id)}
-          >
-            Batal
-          </Button>
-          <Button 
-            size="sm" 
-            className={`h-8 text-xs font-bold rounded-lg text-white shadow-sm transition-all active:scale-95 ${isNonActiveView ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-slate-800 hover:bg-slate-900 shadow-slate-200'}`}
-            onClick={async () => {
-              toast.dismiss(t.id);
-              try {
-                const response: any = await api.post('/admin/officers/bulk-delete', {
-                  ids: selectedIds,
-                  permanent: isNonActiveView
-                });
-                if (response.success) {
-                  toast.success(isNonActiveView
-                    ? `Berhasil menghapus permanen ${selectedIds.length} petugas`
-                    : `Berhasil menonaktifkan ${selectedIds.length} petugas`);
-                  void fetchOfficers();
-                }
-              } catch (error: any) {
-                toast.error(error.message || 'Gagal menghapus data masal');
-              }
-            }}
-          >
-            {isNonActiveView ? 'Ya, Hapus Permanen' : 'Ya, Nonaktifkan'}
-          </Button>
-        </div>
-      </div>
+    (toast as any).custom((t: any) => (
+      <ConfirmToast
+        id={t}
+        title={isNonActiveView ? "Hapus Massal?" : "Nonaktifkan Massal?"}
+        description={isNonActiveView 
+          ? `Hapus permanen ${selectedIds.length} petugas terpilih?` 
+          : `Nonaktifkan ${selectedIds.length} petugas terpilih?`}
+        confirmLabel={isNonActiveView ? "Hapus Permanen" : "Ya, Nonaktifkan"}
+        onConfirm={() => {
+          toast.promise(
+            api.post('/admin/officers/bulk-delete', {
+              ids: selectedIds,
+              permanent: isNonActiveView
+            }).then((res) => {
+              void fetchOfficers();
+              return res;
+            }),
+            {
+              loading: 'Memproses...',
+              success: isNonActiveView
+                ? `Berhasil menghapus permanen ${selectedIds.length} petugas`
+                : `Berhasil menonaktifkan ${selectedIds.length} petugas`,
+              error: (err: any) => err.message || 'Gagal menghapus data masal',
+            }
+          );
+        }}
+        variant={isNonActiveView ? 'danger' : 'warning'}
+      />
     ), { duration: 5000 });
   };
 
@@ -252,42 +230,28 @@ export default function UsersPage() {
   };
 
   const handleReactivate = async (id: string) => {
-    toast((t) => (
-      <div className="flex flex-col gap-3 min-w-[250px]">
-        <div className="flex items-center gap-2">
-          <RotateCcw size={18} className="text-blue-600" />
-          <p className="text-sm font-bold text-slate-800">Aktifkan kembali petugas ini?</p>
-        </div>
-        <div className="flex justify-end gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="h-8 text-xs font-bold rounded-lg"
-            onClick={() => toast.dismiss(t.id)}
-          >
-            Batal
-          </Button>
-          <Button 
-            size="sm" 
-            className="bg-blue-600 hover:bg-blue-700 h-8 text-xs font-bold rounded-lg text-white shadow-sm transition-all active:scale-95"
-            onClick={async () => {
-              toast.dismiss(t.id);
-              try {
-                const response: any = await api.put(`/admin/officers/${id}`, { is_active: true });
-                if (response.success) {
-                  void fetchOfficers();
-                  toast.success('Petugas berhasil diaktifkan kembali');
-                }
-              } catch (error: any) {
-                toast.error(error.error?.message || error.message || 'Gagal mengaktifkan petugas');
-              }
-            }}
-          >
-            Ya, Aktifkan
-          </Button>
-        </div>
-      </div>
-    ), { duration: 3000 });
+    (toast as any).custom((t: any) => (
+      <ConfirmToast
+        id={t}
+        title="Aktifkan Kembali?"
+        description="Petugas ini akan kembali mendapatkan akses penuh ke dalam sistem."
+        confirmLabel="Ya, Aktifkan"
+        onConfirm={() => {
+          toast.promise(
+            api.put(`/admin/officers/${id}`, { is_active: true }).then((res) => {
+              void fetchOfficers();
+              return res;
+            }),
+            {
+              loading: 'Mengaktifkan...',
+              success: 'Petugas berhasil diaktifkan kembali',
+              error: (err: any) => err.error?.message || err.message || 'Gagal mengaktifkan petugas',
+            }
+          );
+        }}
+        variant="info"
+      />
+    ), { duration: 5000 });
   };
 
   const columns: ColumnDef<any>[] = [
@@ -296,24 +260,24 @@ export default function UsersPage() {
       header: () => (
         <button 
           onClick={toggleSelectAll}
-          className="p-1 hover:bg-slate-200 rounded transition-colors"
+          className="p-1 hover:bg-[#1F8243]/30 rounded transition-colors disabled:opacity-30"
         >
           {selectedIds.length === data.length && data.length > 0 ? (
-            <CheckSquare size={18} className="text-green-600" />
+            <CheckSquare size={18} className="text-[#1F8243]" />
           ) : (
-            <Square size={18} className="text-slate-400" />
+            <Square size={18} className="text-[#F4F1EA]/30" />
           )}
         </button>
       ),
       cell: ({ row }) => (
         <button 
           onClick={() => toggleSelectId(row.original.id)}
-          className="p-1 hover:bg-slate-100 rounded transition-colors"
+          className="p-1 hover:bg-[#1F8243]/30 rounded transition-colors"
         >
           {selectedIds.includes(row.original.id) ? (
-            <CheckSquare size={18} className="text-green-600" />
+            <CheckSquare size={18} className="text-[#1F8243]" />
           ) : (
-            <Square size={18} className="text-slate-300" />
+            <Square size={18} className="text-[#F4F1EA]/30" />
           )}
         </button>
       ),
@@ -323,12 +287,12 @@ export default function UsersPage() {
       header: 'Nama Lengkap',
       cell: ({ row }) => (
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold border-2 border-white shadow-sm">
+          <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-[#EAD19B] font-bold border border-white/10 shadow-sm">
             {row.original.full_name?.charAt(0) || 'U'}
           </div>
           <div className="space-y-0.5">
-            <p className="font-bold text-slate-900">{row.original.full_name}</p>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{row.original.employee_code}</p>
+            <p className="font-bold text-[#F4F1EA]">{row.original.full_name}</p>
+            <p className="text-[10px] text-[#F4F1EA]/40 font-bold uppercase tracking-widest">{row.original.employee_code}</p>
           </div>
         </div>
       ),
@@ -337,11 +301,8 @@ export default function UsersPage() {
       accessorKey: 'phone',
       header: 'Kontak',
       cell: ({ row }) => (
-        <div className="space-y-1">
-          <div className="flex items-center gap-1.5 text-xs text-slate-600">
-             <Phone size={12} className="text-slate-400" />
-             <span>{row.original.phone}</span>
-          </div>
+        <div className="flex flex-col">
+          <span className="text-[12px] font-bold text-[#F4F1EA]/40 tracking-tight">{row.original.phone}</span>
         </div>
       ),
     },
@@ -351,9 +312,10 @@ export default function UsersPage() {
       cell: ({ row }) => {
         const branchName = row.original.branch?.name || 'Belum diatur';
         return (
-          <div className="flex items-center gap-1.5 text-slate-600 italic">
-            <Map size={14} className="text-slate-400" />
-            <span className="text-sm font-semibold">{branchName.replace(/ranting/gi, '').trim()}</span>
+          <div className="flex flex-col">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[#EAD19B]/60">
+              {branchName.replace(/ranting/gi, '').trim()}
+            </span>
           </div>
         );
       },
@@ -362,9 +324,11 @@ export default function UsersPage() {
       accessorKey: 'is_active',
       header: 'Status',
       cell: ({ row }) => (
-        <Badge variant={row.original.is_active ? 'success' : 'failed'}>
-          {row.original.is_active ? 'Aktif' : 'Non-aktif'}
-        </Badge>
+        row.original.is_active ? (
+          <span className="text-[10px] font-bold uppercase tracking-widest text-[#1F8243]">AKTIF</span>
+        ) : (
+          <span className="text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/40">NON-AKTIF</span>
+        )
       ),
     },
     {
@@ -378,34 +342,34 @@ export default function UsersPage() {
               <Button 
                 variant="outline" 
                 size="sm" 
-                className="h-8 w-8 p-0 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all border-slate-200 group"
+                className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-white/10 transition-all duration-300 group"
                 onClick={() => handleReactivate(row.original.id)}
                 title="Aktifkan Kembali"
               >
-                <RotateCcw size={14} className="text-slate-500 group-hover:text-blue-600" />
+                <RotateCcw size={14} className="text-[#EAD19B]" />
               </Button>
             ) : (
               <Button 
                 variant="outline" 
                 size="sm" 
-                className="h-8 w-8 p-0 rounded-lg hover:bg-green-50 hover:text-green-600 hover:border-green-200 transition-all border-slate-200 group"
+                className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-white/10 transition-all duration-300 group"
                 onClick={() => handleEdit(row.original)}
                 title="Edit Data"
               >
-                <Edit size={14} className="text-slate-500 group-hover:text-green-600" />
+                <Edit size={14} className="text-[#EAD19B]" />
               </Button>
             )}
             <Button 
               variant="outline" 
               size="sm" 
-              className={`h-8 w-8 p-0 rounded-lg transition-all border-slate-200 group ${isNonActiveRow ? 'hover:bg-red-600 hover:text-white hover:border-red-600' : 'hover:bg-red-50 hover:text-red-600 hover:border-red-200'}`}
+              className={`h-8 w-8 p-0 rounded-xl transition-all duration-300 border-white/10 bg-white/5 group ${isNonActiveRow ? 'hover:bg-red-500/20 hover:text-[#D97A76] hover:border-red-500/30' : 'hover:bg-red-500/10 hover:text-[#D97A76] hover:border-red-500/20'}`}
               onClick={() => handleDelete(row.original.id, isNonActiveRow)}
               title={isNonActiveRow ? 'Hapus Permanen' : 'Non-aktifkan'}
             >
               {isNonActiveRow ? (
-                <AlertTriangle size={14} className="text-red-500 group-hover:text-white" />
+                <AlertTriangle size={14} className="text-[#D97A76]" />
               ) : (
-                <UserMinus size={14} className="text-slate-500 group-hover:text-red-600" />
+                <UserMinus size={14} className="text-[#F4F1EA]/60 group-hover:text-[#D97A76]" />
               )}
             </Button>
           </div>
@@ -426,157 +390,197 @@ export default function UsersPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {/* Bulk Action Buttons */}
           {selectedIds.length > 0 && (
-            <Button
-              onClick={handleBulkDelete}
-              className={`${statusFilter === 'NON_ACTIVE' ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-200' : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'} h-11 rounded-xl font-bold px-5 flex items-center gap-2 shadow-lg transition-all active:scale-95`}
-            >
-              {statusFilter === 'NON_ACTIVE' ? <AlertTriangle size={18} /> : <Trash2 size={18} />}
-              {statusFilter === 'NON_ACTIVE' ? 'Hapus Permanen' : 'Hapus Terpilih'} ({selectedIds.length})
-            </Button>
+            statusFilter === 'NON_ACTIVE' ? (
+              <button
+                onClick={handleBulkDelete}
+                className="h-[35px] px-4 rounded-xl text-[11px] font-bold transition-all active:scale-95 flex items-center gap-2 bg-[#D97A76] text-white shadow-lg shadow-[#D97A76]/20"
+              >
+                <AlertTriangle size={14} strokeWidth={3} />
+                Hapus Permanen ({selectedIds.length})
+              </button>
+            ) : (
+              <div className="flex bg-[#F4F1EA]/10 backdrop-blur-md p-1 rounded-2xl border border-[#F4F1EA]/20 shadow-sm">
+                <button
+                  onClick={handleBulkDelete}
+                  className="h-[33px] px-4 rounded-xl text-[11px] font-bold transition-all active:scale-95 flex items-center gap-2 text-[#D97A76] hover:bg-[#D97A76]/10"
+                >
+                  <Trash2 size={14} strokeWidth={3} />
+                  Hapus ({selectedIds.length})
+                </button>
+              </div>
+            )
           )}
+
+          {/* Primary Action Button */}
           <Button 
             onClick={() => {
               setEditingOfficer(null);
               reset();
               setIsModalOpen(true);
             }}
-            className="bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 px-6 h-11 rounded-xl font-bold transition-all active:scale-95 flex items-center gap-2"
+            className="h-[35px] px-4 rounded-xl text-[11px] font-bold bg-[#EAD19B] text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 hover:bg-[#EAD19B]/90 transition-all active:scale-95 flex items-center gap-2"
           >
-            <UserPlus size={20} />
-            Tambah Petugas
+            <UserPlus size={14} strokeWidth={3} />
+            Tambah Petugas Baru
           </Button>
         </div>
       </div>
 
-      {/* Toolbar & Filters */}
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-        <div className="relative w-full md:w-80 group">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-green-500 transition-colors" size={18} />
-          <input
-            type="text"
-            placeholder="Cari nama atau email petugas..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 focus:bg-white transition-all shadow-sm group-hover:border-slate-300"
-          />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-end">
-          <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100 shadow-sm hover:border-slate-200 transition-colors">
-            <Filter className="text-slate-400 ml-2" size={16} />
-            <select 
-              value={statusFilter}
+      {/* Transparent Filter Toolbar */}
+      <div className="flex flex-col lg:flex-row gap-4 items-center justify-between bg-transparent p-5 border-none shadow-none">
+        <div className="relative w-[160px] group">
+          <div className="flex h-[35px] items-center bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1 transition-all duration-500 group-focus-within:ring-2 group-focus-within:ring-[#F4F1EA]/20 group-focus-within:border-[#F4F1EA]/30 shadow-lg shadow-black/5">
+            <div className="pl-2 pr-1 transition-transform group-focus-within:scale-110">
+              <Search size={14} strokeWidth={3} className="text-[#DE6F4A]" />
+            </div>
+            <input
+              type="text"
+              placeholder="Cari..."
+              value={search}
               onChange={(e) => {
-                setStatusFilter(e.target.value);
+                setSearch(e.target.value);
                 setCurrentPage(1);
               }}
-              className="bg-transparent text-xs font-bold text-slate-900 px-3 py-1.5 focus:outline-none cursor-pointer"
-            >
-              <option value="ACTIVE">AKTIF</option>
-              <option value="NON_ACTIVE">NON-AKTIF</option>
-              <option value="ALL">SEMUA STATUS</option>
-            </select>
+              className="bg-transparent w-full px-4 py-1 text-sm font-bold text-white placeholder-[#F4F1EA]/60 focus:outline-none"
+            />
           </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+          <FilterPills 
+            options={[
+              { label: 'SEMUA', value: 'ALL' },
+              { label: 'AKTIF', value: 'ACTIVE' },
+              { label: 'NON-AKTIF', value: 'NON_ACTIVE' }
+            ]}
+            value={statusFilter}
+            onChange={(val) => {
+              setStatusFilter(val);
+              setCurrentPage(1);
+            }}
+            className="h-[36px] p-1"
+          />
 
           {user?.role === 'ADMIN_KECAMATAN' && (
-            <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100 shadow-sm hover:border-slate-200 transition-colors">
-              <Filter className="text-slate-400 ml-2" size={16} />
-              <select 
-                value={branchFilter}
-                onChange={(e) => {
-                  setBranchFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="bg-transparent text-xs font-bold text-slate-900 px-3 py-1.5 focus:outline-none cursor-pointer"
-              >
-                <option value="">SEMUA RANTING</option>
-                {branches.map((b: any) => (
-                  <option key={b.id} value={b.id}>{b.name.replace(/ranting/gi, '').trim().toUpperCase()}</option>
-                ))}
-              </select>
-            </div>
+            <DropdownFilter 
+              label="Pilih Ranting"
+              placeholder="Cari ranting..."
+              options={[
+                { label: 'SEMUA RANTING', value: '' },
+                ...branches.map((b: any) => ({
+                  label: b.name.replace(/ranting/gi, '').trim().toUpperCase(),
+                  value: b.id
+                }))
+              ]}
+              value={branchFilter}
+              onChange={(val) => {
+                setBranchFilter(val);
+                setCurrentPage(1);
+              }}
+              className="h-[36px]"
+            />
           )}
 
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="h-10 rounded-xl px-4 text-xs font-bold text-slate-500 border-slate-200 hover:bg-slate-50 flex items-center gap-2 transition-all active:scale-95"
+          <DropdownFilter 
+            options={[
+              { label: '10', value: '10' },
+              { label: '20', value: '20' },
+              { label: '50', value: '50' },
+              { label: '100', value: '100' }
+            ]}
+            value={pageSize.toString()}
+            onChange={(val) => {
+              setPageSize(Number(val));
+              setCurrentPage(1);
+            }}
+            className="min-w-[80px]! h-[36px]"
+            popoverWidth="w-full"
+            showSearch={false}
+          />
+
+          <button 
             onClick={() => {
               setSearch('');
               setBranchFilter('');
               setStatusFilter('ACTIVE');
               setCurrentPage(1);
+              setPageSize(10);
             }}
+            className="h-[36px] bg-[#F4F1EA]/10 backdrop-blur-md border border-[#F4F1EA]/20 rounded-2xl px-5 flex items-center gap-2 text-xs font-bold text-white/90 hover:bg-[#F4F1EA]/20 transition-all duration-300 active:scale-95 shadow-lg shadow-black/5"
           >
-            <RotateCcw size={14} />
-            RESET
-          </Button>
+            <RotateCcw size={14} strokeWidth={3} className="text-[#EAD19B]" />
+            Reset
+          </button>
         </div>
       </div>
 
-      {/* Table & Pagination Container */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <Table columns={columns} data={data} loading={loading} />
+      {/* Table & Pagination Container wrapped in Glass Card */}
+      <Card variant="glass" className="p-0 border-white/5 shadow-2xl overflow-hidden w-full max-w-full transition-all duration-700">
+        <div className="overflow-x-auto w-full custom-scrollbar">
+          <Table columns={columns} data={data} loading={loading} variant="glass" />
+        </div>
         
-        {/* Pagination Controls */}
+        {/* Smart Pagination Control - Standardized with Audit Log */}
         {!loading && totalItems > 0 && (
-          <div className="px-6 py-6 bg-slate-50/50 border-t border-slate-100 flex flex-col items-end gap-3">
-            <p className="text-xs font-medium text-slate-500">
-              Menampilkan <span className="font-bold text-slate-900">{data.length}</span> dari <span className="font-bold text-slate-900">{totalItems}</span> petugas
-            </p>
-            
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Baris:</span>
-                <select 
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
-                >
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
+          <div className="px-6 py-5 bg-white/5 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
+            {/* Left: Summary Info Badge */}
+            <div className="flex items-center gap-2 bg-white/5 p-1 rounded-2xl border border-white/10 shadow-sm px-4 h-10">
+              <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">Menampilkan</span>
+              <div className="min-w-[24px] h-6 px-1.5 flex items-center justify-center bg-[#EAD19B]/10 rounded-lg">
+                <span className="text-xs font-black text-[#EAD19B]">{data.length}</span>
+              </div>
+              <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">dari</span>
+              <div className="min-w-[32px] h-6 px-1.5 flex items-center justify-center bg-[#F4F1EA]/5 rounded-lg border border-white/10">
+                <span className="text-xs font-black text-[#F4F1EA]">{totalItems}</span>
+              </div>
+              <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight ml-1">Petugas</span>
+            </div>
+
+            {/* Right: Smart Control Pill */}
+            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-2xl border border-white/10 shadow-sm transition-all hover:shadow-md">
+              {/* Page Info Badge */}
+              <div className="px-4 flex items-center gap-1.5 min-w-[140px] justify-center">
+                <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">Halaman</span>
+                <div className="w-6 h-6 flex items-center justify-center bg-[#EAD19B]/10 rounded-lg">
+                  <span className="text-xs font-black text-[#EAD19B]">{currentPage}</span>
+                </div>
+                <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">dari</span>
+                <div className="min-w-[24px] h-6 px-1.5 flex items-center justify-center bg-[#F4F1EA]/5 rounded-lg border border-white/10">
+                  <span className="text-xs font-black text-[#F4F1EA]">{Math.ceil(totalItems / pageSize)}</span>
+                </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
-                  Halaman <span className="text-green-600">{currentPage}</span> dari {Math.ceil(totalItems / pageSize)}
-                </span>
-                
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(prev => prev - 1)}
-                    className="rounded-xl h-9 px-4 text-xs font-bold disabled:opacity-30 border-slate-200"
-                  >
-                    Sebelumnya
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={currentPage >= Math.ceil(totalItems / pageSize)}
-                    onClick={() => setCurrentPage(prev => prev + 1)}
-                    className="rounded-xl h-9 px-4 text-xs font-bold disabled:opacity-30 border-slate-200"
-                  >
-                    Selanjutnya
-                  </Button>
-                </div>
+              {/* Navigation Arrows */}
+              <div className="flex items-center gap-1 pl-2 border-l border-white/5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => prev - 1)}
+                  className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                >
+                  <div className="w-full h-full flex items-center justify-center">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                  </div>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={currentPage >= Math.ceil(totalItems / pageSize)}
+                  onClick={() => setCurrentPage(prev => prev + 1)}
+                  className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                >
+                  <div className="w-full h-full flex items-center justify-center">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                  </div>
+                </Button>
               </div>
             </div>
           </div>
         )}
-      </div>
+      </Card>
 
       {/* Modal Tambah/Edit Petugas */}
       <Modal 

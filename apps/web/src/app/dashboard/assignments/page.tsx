@@ -3,19 +3,20 @@
 
 import React, { useState, useEffect } from 'react';
 import { Table } from '@/components/ui/Table';
+import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Badge } from '@/components/ui/Badge';
 import { ColumnDef } from '@tanstack/react-table';
 import api from '@/lib/api';
-import { toast } from 'react-hot-toast';
-import { 
-  ClipboardList, 
-  Plus, 
-  Calendar, 
-  User, 
-  Box, 
+import { toast } from 'sonner';
+import {
+  ClipboardList,
+  Plus,
+  Calendar,
+  User,
+  Box,
   ChevronRight,
   MoreVertical,
   Search,
@@ -32,6 +33,11 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuthStore } from '@/store/useAuthStore';
 import * as z from 'zod';
+import { FilterPills } from '@/components/ui/FilterPills';
+import { DropdownFilter } from '@/components/ui/DropdownFilter';
+import { cn } from '@/lib/utils';
+import { PeriodPicker } from '@/components/ui/PeriodPicker';
+import { ConfirmToast } from '@/components/ui/ConfirmToast';
 
 const assignmentSchema = z.object({
   branch_id: z.string().uuid('Pilih ranting'),
@@ -50,7 +56,7 @@ export default function AssignmentsPage() {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferringAssignment, setTransferringAssignment] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
-  
+
   const [cans, setCans] = useState([]);
   const [officers, setOfficers] = useState([]);
   const [branches, setBranches] = useState([]);
@@ -59,7 +65,7 @@ export default function AssignmentsPage() {
 
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
-  
+
   const [filter, setFilter] = useState({
     year: currentYear,
     month: currentMonth
@@ -82,14 +88,14 @@ export default function AssignmentsPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const response: any = await api.get('/admin/assignments', { 
-        params: { 
+      const response: any = await api.get('/admin/assignments', {
+        params: {
           ...filter,
           search,
           branch_id: branchFilter,
           page: currentPage,
           limit: pageSize
-        } 
+        }
       });
       if (response.success) {
         setData(response.data.items || []);
@@ -120,19 +126,19 @@ export default function AssignmentsPage() {
       setModalDukuhs([]);
       return;
     }
-    
+
     // Clear previous dukuhs immediately to avoid "sneaking" stale data
     setModalDukuhs([]);
     setFetchingDukuhs(true);
-    
+
     try {
-      const response: any = await api.get('/admin/dukuhs', { 
-        params: { 
+      const response: any = await api.get('/admin/dukuhs', {
+        params: {
           branch_id: branchId,
-          filter_assigned: true 
-        } 
+          filter_assigned: true
+        }
       });
-      
+
       // Safety check: only update if the branch hasn't changed in the meantime
       if (response.success) {
         setModalDukuhs(response.data || []);
@@ -218,44 +224,26 @@ export default function AssignmentsPage() {
   };
 
   const handleDeleteAssignment = (id: string) => {
-    toast((t) => (
-      <div className="flex flex-col gap-3 min-w-[280px]">
-        <div className="flex items-center gap-2 text-red-600">
-          <AlertTriangle size={20} />
-          <p className="text-sm font-bold">Hapus penugasan ini?</p>
-        </div>
-        <p className="text-[11px] text-slate-500 font-medium px-1">
-          Tindakan ini akan membatalkan jadwal penjemputan untuk kaleng tersebut di bulan berjalan.
-        </p>
-        <div className="flex justify-end gap-2 pt-1">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs font-bold rounded-lg"
-            onClick={() => toast.dismiss(t.id)}
-          >
-            Batal
-          </Button>
-          <Button
-            size="sm"
-            className="bg-red-600 hover:bg-red-700 text-white h-8 text-xs font-bold rounded-lg shadow-sm shadow-red-200 transition-all active:scale-95"
-            onClick={async () => {
-              toast.dismiss(t.id);
-              try {
-                const response: any = await api.delete(`/admin/assignments/${id}`);
-                if (response.success) {
-                  toast.success('Penugasan berhasil dihapus');
-                  fetchData();
-                }
-              } catch (error: any) {
-                toast.error(error.response?.data?.error?.message || 'Gagal menghapus penugasan');
-              }
-            }}
-          >
-            Ya, Hapus
-          </Button>
-        </div>
-      </div>
+    (toast as any).custom((t: any) => (
+      <ConfirmToast
+        id={t}
+        title="Hapus Penugasan?"
+        description="Tindakan ini akan membatalkan jadwal penjemputan untuk kaleng tersebut di bulan berjalan."
+        confirmLabel="Ya, Hapus"
+        onConfirm={() => {
+          toast.promise(
+            api.delete(`/admin/assignments/${id}`).then((res: any) => {
+              fetchData();
+              return res;
+            }),
+            {
+              loading: 'Sedang menghapus...',
+              success: 'Berhasil dihapus',
+              error: (err: any) => err.response?.data?.error?.message || 'Gagal menghapus',
+            }
+          );
+        }}
+      />
     ), { duration: 5000 });
   };
 
@@ -269,28 +257,26 @@ export default function AssignmentsPage() {
       accessorKey: 'can',
       header: 'Kaleng / Pemilik',
       cell: ({ row }) => (
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-            <Box size={16} />
-          </div>
-          <div>
-            <p className="font-bold text-slate-900">{row.original.can.qr_code}</p>
-            <p className="text-xs text-slate-500">{row.original.can.owner_name}</p>
-            <p className="text-xs text-slate-500">{row.original.can.branch_name?.replace(/ranting/gi, '').trim()}</p>
-          </div>
+        <div className="flex flex-col">
+          <p className="font-bold text-[#F4F1EA] tracking-tight">{row.original.can.owner_name}</p>
+          <p className="text-[10px] text-[#EAD19B]/60 font-bold uppercase tracking-widest mt-0.5">
+            {row.original.can.branch_name?.replace(/ranting/gi, '').trim() || 'PUSAT'}
+          </p>
+          <p className="text-[10px] text-[#F4F1EA]/40 font-bold tracking-tight mt-1">
+            #{row.original.can.qr_code}
+          </p>
         </div>
       ),
     },
     {
       accessorKey: 'address',
-      header: 'ALAMAT',
+      header: 'DUSUN',
       cell: ({ row }) => (
-        <div className="flex flex-col text-xs text-slate-600">
-          <div className="flex items-center gap-1">
-            <MapPin size={10} />
-            <span>{row.original.can.dukuh_name || row.original.can.dukuh || '-'}</span>
-          </div>
-          <span className="ml-3.5 opacity-70">RT {row.original.can.rt || '-'} / RW {row.original.can.rw || '-'}</span>
+        <div className="flex flex-col text-xs font-medium text-[#F4F1EA]/60">
+          <span className="uppercase tracking-tight">{row.original.can.dukuh_name || row.original.can.dukuh || '-'}</span>
+          <span className="text-[10px] opacity-50 font-bold uppercase tracking-widest mt-0.5">
+            RT {row.original.can.rt || '-'} / RW {row.original.can.rw || '-'}
+          </span>
         </div>
       ),
     },
@@ -299,12 +285,9 @@ export default function AssignmentsPage() {
       header: 'Petugas Lapangan',
       cell: ({ row }) => (
         <div className="flex flex-col">
-          <div className="flex items-center gap-2">
-            <User size={14} className="text-slate-400" />
-            <span className="font-bold text-slate-900">{row.original.officer.full_name}</span>
-          </div>
-          <span className="text-[10px] text-slate-600 ml-5 font-medium">
-            {row.original.officer.branch_name?.replace(/ranting/gi, '').trim()}
+          <span className="font-bold text-[#F4F1EA]">{row.original.officer.full_name}</span>
+          <span className="text-[10px] text-[#F4F1EA]/40 font-bold uppercase tracking-widest mt-0.5">
+            {row.original.officer.branch_name?.replace(/ranting/gi, '').trim() || 'PUSAT'}
           </span>
         </div>
       ),
@@ -313,10 +296,12 @@ export default function AssignmentsPage() {
       accessorKey: 'period',
       header: 'Periode',
       cell: ({ row }) => (
-        <div className="flex items-center gap-2 text-slate-600">
-          <Calendar size={14} className="text-slate-400" />
-          <span className="text-sm font-semibold">
-            {months[row.original.period_month - 1]} {row.original.period_year}
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs font-medium uppercase tracking-tight text-[#F4F1EA]/60">
+            {months[row.original.period_month - 1]}
+          </span>
+          <span className="text-[10px] text-[#F4F1EA]/40 font-bold tracking-[0.2em]">
+            {row.original.period_year}
           </span>
         </div>
       ),
@@ -326,17 +311,16 @@ export default function AssignmentsPage() {
       header: 'Status',
       cell: ({ row }) => {
         const statuses = {
-          ACTIVE: { label: 'Aktif', variant: 'sent' as const, icon: <Clock size={12} className="mr-1" /> },
-          COMPLETED: { label: 'Selesai', variant: 'sent' as const, icon: <CheckCircle2 size={12} className="mr-1" /> },
-          POSTPONED: { label: 'Tertunda', variant: 'pending' as const, icon: <Clock size={12} className="mr-1" /> },
-          REASSIGNED: { label: 'Re-assign', variant: 'default' as const, icon: <ChevronRight size={12} className="mr-1" /> },
+          ACTIVE: { label: 'ASSIGNED', color: 'text-[#DE6F4A]' },
+          COMPLETED: { label: 'SELESAI', color: 'text-[#1F8243]' },
+          POSTPONED: { label: 'TERTUNDA', color: 'text-[#EAD19B]' },
+          REASSIGNED: { label: 'RE-ASSIGN', color: 'text-[#EAD19B]' },
         };
         const s = statuses[row.original.status as keyof typeof statuses] || statuses.ACTIVE;
         return (
-          <Badge variant={s.variant} className="flex items-center">
-            {s.icon}
+          <span className={`text-[10px] font-bold uppercase tracking-widest ${s.color}`}>
             {s.label}
-          </Badge>
+          </span>
         );
       },
     },
@@ -344,29 +328,29 @@ export default function AssignmentsPage() {
       id: 'actions',
       header: '',
       cell: ({ row }) => (
-        <div className="flex items-center justify-end">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="h-8 w-8 p-0 rounded-lg hover:bg-green-50 hover:text-green-600 transition-colors border-slate-200"
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-white/10 transition-all duration-300 group"
             title="Transfer Penugasan"
             onClick={() => {
               setTransferringAssignment(row.original);
               setIsTransferModalOpen(true);
             }}
           >
-            <Repeat size={14} />
+            <Repeat size={14} className="text-[#EAD19B]" />
           </Button>
 
           {user?.role === 'ADMIN_KECAMATAN' && (
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="h-8 w-8 p-0 rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all border-slate-200 group ml-2"
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#D97A76] hover:bg-red-500/10 hover:border-red-500/20 transition-all duration-300 group"
               title="Hapus Penugasan"
               onClick={() => handleDeleteAssignment(row.original.id)}
             >
-              <Trash2 size={14} className="text-slate-400 group-hover:text-red-600" />
+              <Trash2 size={14} className="text-[#F4F1EA]/40 group-hover:text-[#D97A76]" />
             </Button>
           )}
         </div>
@@ -385,7 +369,9 @@ export default function AssignmentsPage() {
             <p className="text-[#F4F1EA]/60 text-sm font-medium">Atur jadwal pengambilan infaq bulanan petugas</p>
           </div>
         </div>
-        <Button 
+
+        {/* Primary Action Button */}
+        <Button
           onClick={() => {
             reset({
               branch_id: '',
@@ -394,183 +380,180 @@ export default function AssignmentsPage() {
             });
             setIsModalOpen(true);
           }}
-          className="bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 px-6 h-11 rounded-xl font-bold transition-all active:scale-95 flex items-center gap-2"
+          className="h-[35px] px-4 rounded-xl text-[11px] font-bold bg-[#EAD19B] text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 hover:bg-[#EAD19B]/90 transition-all active:scale-95 flex items-center gap-2"
         >
-          <Plus size={20} />
+          <Plus size={14} strokeWidth={3} />
           Tugaskan Petugas
         </Button>
       </div>
 
-      {/* Filter Toolbar */}
-      <div className="flex flex-col lg:flex-row gap-4 items-center justify-between bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-        <div className="relative w-full lg:w-96 group">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className="text-slate-400 group-focus-within:text-green-500 transition-colors" size={18} />
+      {/* Transparent Filter Toolbar */}
+      <div className="flex flex-col lg:flex-row gap-4 items-center justify-between bg-transparent p-5 border-none shadow-none">
+        <div className="relative w-[160px] group">
+          <div className="flex h-[35px] items-center bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1 transition-all duration-500 group-focus-within:ring-2 group-focus-within:ring-[#F4F1EA]/20 group-focus-within:border-[#F4F1EA]/30 shadow-lg shadow-black/5">
+            <div className="pl-2 pr-1 transition-transform group-focus-within:scale-110">
+              <Search size={14} strokeWidth={3} className="text-[#DE6F4A]" />
+            </div>
+            <input
+              type="text"
+              placeholder="Cari..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="bg-transparent w-full px-4 py-1 text-sm font-bold text-white placeholder-[#F4F1EA]/60 focus:outline-none"
+            />
           </div>
-          <input
-            type="text"
-            placeholder="Cari QR, pemilik, atau petugas..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 focus:bg-white transition-all shadow-sm group-hover:border-slate-300"
-          />
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-          <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100 shadow-sm">
-            <Calendar className="text-slate-400 ml-2" size={16} />
-            <select 
-              value={filter.month}
-              onChange={(e) => {
-                setFilter({...filter, month: parseInt(e.target.value)});
-                setCurrentPage(1);
-              }}
-              className="bg-transparent text-xs font-bold text-slate-900 px-2 py-1.5 focus:outline-none cursor-pointer"
-            >
-              {months.map((m, i) => {
-                const isFuture = mounted && (filter.year > currentYear || (filter.year === currentYear && i + 1 > currentMonth));
-                return (
-                  <option key={m} value={i + 1} disabled={isFuture} className={isFuture ? 'text-slate-300' : 'text-slate-900'}>
-                    {m.toUpperCase()}
-                  </option>
-                );
-              })}
-            </select>
-            <div className="w-px h-4 bg-slate-200 mx-1" />
-            <select 
-              value={filter.year}
-              onChange={(e) => {
-                setFilter({...filter, year: parseInt(e.target.value)});
-                setCurrentPage(1);
-              }}
-              className="bg-transparent text-xs font-bold text-slate-900 px-2 py-1.5 focus:outline-none cursor-pointer"
-            >
-              {[currentYear, currentYear - 1].map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-          </div>
+          <PeriodPicker
+            month={filter.month}
+            year={filter.year}
+            onChange={(m, y) => {
+              setFilter({ month: m, year: y });
+              setCurrentPage(1);
+            }}
+          />
 
           {user?.role === 'ADMIN_KECAMATAN' && (
-            <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100 shadow-sm hover:border-slate-200 transition-colors">
-              <Filter className="text-slate-400 ml-2" size={16} />
-              <select 
-                value={branchFilter}
-                onChange={(e) => {
-                  setBranchFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="bg-transparent text-xs font-bold text-slate-900 px-3 py-1.5 focus:outline-none cursor-pointer max-w-[150px]"
-              >
-                <option value="">SEMUA RANTING</option>
-                {branches.map((b: any) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name.replace(/ranting/gi, '').trim().toUpperCase()}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <DropdownFilter
+              label="Pilih Ranting"
+              placeholder="Cari ranting..."
+              options={[
+                { label: 'SEMUA RANTING', value: '' },
+                ...branches.map((b: any) => ({
+                  label: b.name.replace(/ranting/gi, '').trim().toUpperCase(),
+                  value: b.id
+                }))
+              ]}
+              value={branchFilter}
+              onChange={(val) => {
+                setBranchFilter(val);
+                setCurrentPage(1);
+              }}
+              className="h-[36px]"
+            />
           )}
 
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="h-10 rounded-xl px-4 text-xs font-bold text-slate-500 border-slate-200 hover:bg-slate-50 flex items-center gap-2"
+          <DropdownFilter
+            options={[
+              { label: '10', value: '10' },
+              { label: '20', value: '20' },
+              { label: '50', value: '50' },
+              { label: '100', value: '100' }
+            ]}
+            value={pageSize.toString()}
+            onChange={(val) => {
+              setPageSize(Number(val));
+              setCurrentPage(1);
+            }}
+            className="min-w-[80px]! h-[36px]"
+            popoverWidth="w-full"
+            showSearch={false}
+          />
+
+          <button
             onClick={() => {
               setSearch('');
               setBranchFilter('');
               setFilter({ year: currentYear, month: currentMonth });
               setCurrentPage(1);
+              setPageSize(10);
             }}
+            className="h-[36px] bg-[#F4F1EA]/10 backdrop-blur-md border border-[#F4F1EA]/20 rounded-2xl px-5 flex items-center gap-2 text-xs font-bold text-white/90 hover:bg-[#F4F1EA]/20 transition-all duration-300 active:scale-95 shadow-lg shadow-black/5"
           >
-            <RotateCcw size={14} />
-            RESET
-          </Button>
+            <RotateCcw size={14} strokeWidth={3} className="text-[#EAD19B]" />
+            Reset
+          </button>
         </div>
       </div>
 
-      {/* Main Table Container */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <Table columns={columns} data={data} loading={loading} />
-        
-        {/* Pagination Controls */}
+      {/* Table & Pagination Container wrapped in Glass Card */}
+      <Card variant="glass" className="p-0 border-white/5 shadow-2xl overflow-hidden w-full max-w-full transition-all duration-700">
+        <div className="overflow-x-auto w-full custom-scrollbar">
+          <Table columns={columns} data={data} loading={loading} variant="glass" />
+        </div>
+
+        {/* Smart Pagination Control - Standardized with Audit Log */}
         {!loading && totalItems > 0 && (
-          <div className="px-6 py-6 bg-slate-50/50 border-t border-slate-100 flex flex-col items-end gap-3">
-            <p className="text-xs font-medium text-slate-500">
-              Menampilkan <span className="font-bold text-slate-900">{data.length}</span> dari <span className="font-bold text-slate-900">{totalItems}</span> tugas
-            </p>
-            
-            <div className="flex items-center gap-4">
-              {/* Selector Baris moved here */}
-              <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Baris:</span>
-                <select 
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
-                >
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
+          <div className="px-6 py-5 bg-white/5 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
+            {/* Left: Summary Info Badge */}
+            <div className="flex items-center gap-2 bg-white/5 p-1 rounded-2xl border border-white/10 shadow-sm px-4 h-10">
+              <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">Menampilkan</span>
+              <div className="min-w-[24px] h-6 px-1.5 flex items-center justify-center bg-[#EAD19B]/10 rounded-lg">
+                <span className="text-xs font-black text-[#EAD19B]">{data.length}</span>
+              </div>
+              <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">dari</span>
+              <div className="min-w-[32px] h-6 px-1.5 flex items-center justify-center bg-[#F4F1EA]/5 rounded-lg border border-white/10">
+                <span className="text-xs font-black text-[#F4F1EA]">{totalItems}</span>
+              </div>
+              <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight ml-1">Tugas</span>
+            </div>
+
+            {/* Right: Smart Control Pill */}
+            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-2xl border border-white/10 shadow-sm transition-all hover:shadow-md">
+              {/* Page Info Badge */}
+              <div className="px-4 flex items-center gap-1.5 min-w-[140px] justify-center">
+                <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">Halaman</span>
+                <div className="w-6 h-6 flex items-center justify-center bg-[#EAD19B]/10 rounded-lg">
+                  <span className="text-xs font-black text-[#EAD19B]">{currentPage}</span>
+                </div>
+                <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">dari</span>
+                <div className="min-w-[24px] h-6 px-1.5 flex items-center justify-center bg-[#F4F1EA]/5 rounded-lg border border-white/10">
+                  <span className="text-xs font-black text-[#F4F1EA]">{Math.ceil(totalItems / pageSize)}</span>
+                </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
-                  Halaman <span className="text-green-600">{currentPage}</span> dari {Math.ceil(totalItems / pageSize)}
-                </span>
-                
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(prev => prev - 1)}
-                    className="rounded-xl h-9 px-4 text-xs font-bold disabled:opacity-30 border-slate-200"
-                  >
-                    Sebelumnya
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={currentPage >= Math.ceil(totalItems / pageSize)}
-                    onClick={() => setCurrentPage(prev => prev + 1)}
-                    className="rounded-xl h-9 px-4 text-xs font-bold disabled:opacity-30 border-slate-200"
-                  >
-                    Selanjutnya
-                  </Button>
-                </div>
+              {/* Navigation Arrows */}
+              <div className="flex items-center gap-1 pl-2 border-l border-white/5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => prev - 1)}
+                  className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                >
+                  <div className="w-full h-full flex items-center justify-center">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+                  </div>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={currentPage >= Math.ceil(totalItems / pageSize)}
+                  onClick={() => setCurrentPage(prev => prev + 1)}
+                  className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                >
+                  <div className="w-full h-full flex items-center justify-center">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+                  </div>
+                </Button>
               </div>
             </div>
           </div>
         )}
-      </div>
+      </Card>
 
       {/* Modal Penugasan */}
-      <Modal 
-        isOpen={isModalOpen} 
+      <Modal
+        isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title="Penugasan"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
           <div className="bg-green-50 p-4 rounded-2xl border border-green-100 flex gap-3 text-green-800 mb-2">
-             <Clock size={20} className="shrink-0" />
-             <div className="text-xs">
-               <p className="font-bold mb-0.5 uppercase tracking-wider">Periode Berjalan</p>
-               Penugasan akan otomatis dibuat untuk bulan <span className="font-bold">{months[currentMonth-1]} {currentYear}</span>.
-             </div>
+            <Clock size={20} className="shrink-0" />
+            <div className="text-xs">
+              <p className="font-bold mb-0.5 uppercase tracking-wider">Periode Berjalan</p>
+              Penugasan akan otomatis dibuat untuk bulan <span className="font-bold">{months[currentMonth - 1]} {currentYear}</span>.
+            </div>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-semibold text-gray-700">Pilih Petugas Lapangan</label>
-            <select 
+            <select
               {...register('officer_id')}
               className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer"
             >
@@ -584,7 +567,7 @@ export default function AssignmentsPage() {
 
           <div className="space-y-1.5">
             <label className="text-sm font-semibold text-gray-700">Pilih Ranting (Desa)</label>
-            <select 
+            <select
               {...register('branch_id')}
               className={`w-full h-11 px-3 border border-slate-200 rounded-xl text-sm font-medium outline-none shadow-sm pointer-events-none ${selectedBranchId ? 'bg-slate-100 text-slate-900' : 'bg-slate-50 text-slate-400'}`}
               tabIndex={-1}
@@ -605,7 +588,7 @@ export default function AssignmentsPage() {
               {selectedBranchId ? (
                 <>
                   <div className="flex items-center gap-2 pb-2 border-b border-slate-200 mb-2">
-                    <input 
+                    <input
                       type="checkbox"
                       id="selectAllDukuh"
                       className="w-4 h-4 rounded border-slate-300 text-green-600 focus:ring-green-500"
@@ -623,7 +606,7 @@ export default function AssignmentsPage() {
                   <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
                     {modalDukuhs.map((d: any) => (
                       <div key={d.id} className="flex items-center gap-2">
-                        <input 
+                        <input
                           type="checkbox"
                           id={`dukuh-${d.id}`}
                           value={d.id}
@@ -647,17 +630,17 @@ export default function AssignmentsPage() {
           </div>
 
           <div className="flex gap-3 pt-4">
-            <Button 
-              type="button" 
-              variant="secondary" 
-              className="flex-1" 
+            <Button
+              type="button"
+              variant="secondary"
+              className="flex-1"
               onClick={() => setIsModalOpen(false)}
             >
               Batal
             </Button>
-            <Button 
-              type="submit" 
-              className="flex-1" 
+            <Button
+              type="submit"
+              className="flex-1"
               isLoading={submitting}
             >
               Simpan Penugasan
@@ -688,9 +671,9 @@ export default function AssignmentsPage() {
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold text-gray-700">Pilih Petugas Pengganti</label>
-                <select 
+                <select
                   className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer"
-                  onChange={(e) => setTransferringAssignment({...transferringAssignment, newOfficerId: e.target.value})}
+                  onChange={(e) => setTransferringAssignment({ ...transferringAssignment, newOfficerId: e.target.value })}
                 >
                   <option value="">-- Pilih Petugas Baru --</option>
                   {officers
@@ -702,15 +685,15 @@ export default function AssignmentsPage() {
               </div>
 
               <div className="flex gap-3 pt-2">
-                <Button 
-                  variant="secondary" 
-                  className="flex-1" 
+                <Button
+                  variant="secondary"
+                  className="flex-1"
                   onClick={() => setIsTransferModalOpen(false)}
                 >
                   Batal
                 </Button>
-                <Button 
-                  className="flex-1" 
+                <Button
+                  className="flex-1"
                   isLoading={submitting}
                   disabled={!transferringAssignment.newOfficerId}
                   onClick={() => handleTransfer({ officer_id: transferringAssignment.newOfficerId })}

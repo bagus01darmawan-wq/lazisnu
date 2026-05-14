@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, Filter, RotateCcw, Calendar } from 'lucide-react';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/Button';
+import { DropdownFilter } from '@/components/ui/DropdownFilter';
+import { PeriodPicker } from '@/components/ui/PeriodPicker';
 
 export default function FilterDropdown() {
   const router = useRouter();
@@ -100,105 +102,98 @@ export default function FilterDropdown() {
     router.push(`?${params.toString()}`);
   };
 
-  const months = [
-    { value: '1', label: 'Januari' },
-    { value: '2', label: 'Februari' },
-    { value: '3', label: 'Maret' },
-    { value: '4', label: 'April' },
-    { value: '5', label: 'Mei' },
-    { value: '6', label: 'Juni' },
-    { value: '7', label: 'Juli' },
-    { value: '8', label: 'Agustus' },
-    { value: '9', label: 'September' },
-    { value: '10', label: 'Oktober' },
-    { value: '11', label: 'November' },
-    { value: '12', label: 'Desember' },
-  ];
-
-  const currentYearNum = new Date().getFullYear();
-  const years = [currentYearNum - 1, currentYearNum, currentYearNum + 1];
 
   const filteredOfficers = currentBranch
     ? officers.filter(o => (o.branch_id === currentBranch || o.branchId === currentBranch))
     : officers;
 
   return (
-    <>
-      {/* Left: Search Bar */}
-      <div className="relative w-full md:w-80 group">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-green-500 transition-colors" size={18} />
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={handleSearchChange}
-          placeholder="Cari..."
-          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 focus:bg-white transition-all shadow-sm group-hover:border-slate-300"
-        />
+    <div className="flex flex-col lg:flex-row gap-4 items-center justify-between w-full">
+      {/* Left: Compact Search Bar (160px) */}
+      <div className="relative w-[160px] group">
+        <div className="flex h-[35px] items-center bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1 transition-all duration-500 group-focus-within:ring-2 group-focus-within:ring-[#F4F1EA]/20 group-focus-within:border-[#F4F1EA]/30 shadow-lg shadow-black/5">
+          <div className="pl-2 pr-1 transition-transform group-focus-within:scale-110">
+            <Search size={14} strokeWidth={3} className="text-[#DE6F4A]" />
+          </div>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={handleSearchChange}
+            placeholder="Cari..."
+            className="bg-transparent w-full px-4 py-1 text-sm font-bold text-white placeholder-[#F4F1EA]/60 focus:outline-none"
+          />
+        </div>
       </div>
 
-      {/* Right: Filters & Reset */}
-      <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+      {/* Right: Filters & Actions */}
+      <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
         {/* Branch Filter */}
-        <div className="flex items-center bg-slate-50 p-1 rounded-xl border border-slate-100 shadow-sm hover:border-slate-200 transition-colors">
-          <select
-            value={currentBranch}
-            onChange={(e) => handleFilterChange('branch', e.target.value)}
-            className="bg-transparent text-xs font-bold text-slate-900 px-3 py-1.5 focus:outline-none cursor-pointer max-w-[150px] truncate"
-          >
-            <option value="">RANTING: SEMUA</option>
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>{b.name.replace(/ranting/gi, '').trim().toUpperCase()}</option>
-            ))}
-          </select>
-        </div>
+        <DropdownFilter
+          label="Pilih Ranting"
+          placeholder="Cari ranting..."
+          options={[
+            { label: 'RANTING: SEMUA', value: '' },
+            ...branches.map((b) => ({
+              label: b.name.replace(/ranting/gi, '').trim().toUpperCase(),
+              value: b.id
+            }))
+          ]}
+          value={currentBranch}
+          onChange={(val) => handleFilterChange('branch', val)}
+          className="h-[36px]"
+        />
 
         {/* Officer Filter */}
-        <div className="flex items-center bg-slate-50 p-1 rounded-xl border border-slate-100 shadow-sm hover:border-slate-200 transition-colors">
-          <select
-            value={currentOfficer}
-            onChange={(e) => handleFilterChange('officer', e.target.value)}
-            className="bg-transparent text-xs font-bold text-slate-900 px-3 py-1.5 focus:outline-none cursor-pointer max-w-[150px] truncate"
-          >
-            <option value="">PETUGAS: SEMUA</option>
-            {filteredOfficers.map((o) => (
-              <option key={o.id} value={o.id}>{(o.full_name || o.fullName).toUpperCase()}</option>
-            ))}
-          </select>
-        </div>
+        <DropdownFilter
+          label="Pilih Petugas"
+          placeholder="Cari petugas..."
+          options={[
+            { label: 'PETUGAS: SEMUA', value: '' },
+            ...filteredOfficers.map((o) => ({
+              label: (o.full_name || o.fullName).toUpperCase(),
+              value: o.id
+            }))
+          ]}
+          value={currentOfficer}
+          onChange={(val) => handleFilterChange('officer', val)}
+          className="h-[36px]"
+        />
 
-        {/* Combined Period Filter (Month & Year) */}
-        <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-xl border border-slate-100 shadow-sm hover:border-slate-200 transition-colors">
-          <Calendar className="text-slate-400 ml-1.5" size={16} />
-          <select
-            value={currentMonth}
-            onChange={(e) => handleFilterChange('month', e.target.value)}
-            className="bg-transparent text-xs font-bold text-slate-900 pl-1 pr-2 py-1.5 focus:outline-none cursor-pointer border-r border-slate-200"
-          >
-            {months.map((m) => (
-              <option key={m.value} value={m.value}>{m.label.toUpperCase()}</option>
-            ))}
-          </select>
-          <select
-            value={currentYear}
-            onChange={(e) => handleFilterChange('year', e.target.value)}
-            className="bg-transparent text-xs font-bold text-slate-900 px-3 py-1.5 focus:outline-none cursor-pointer"
-          >
-            {years.map((y) => (
-              <option key={y} value={y.toString()}>{y}</option>
-            ))}
-          </select>
-        </div>
+        {/* Period Filter Pill Wrapper */}
+        <PeriodPicker
+          month={Number(currentMonth)}
+          year={Number(currentYear)}
+          onChange={(m, y) => {
+            const params = new URLSearchParams(searchParams.toString());
+            params.set('month', m.toString());
+            params.set('year', y.toString());
+            params.delete('page');
+            router.push(`?${params.toString()}`);
+          }}
+        />
 
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-10 rounded-xl px-4 text-xs font-bold text-slate-500 border-slate-200 hover:bg-slate-50 flex items-center gap-2 transition-all active:scale-95"
+        <DropdownFilter
+          options={[
+            { label: '10', value: '10' },
+            { label: '20', value: '20' },
+            { label: '50', value: '50' },
+            { label: '100', value: '100' }
+          ]}
+          value={searchParams.get('limit') || '10'}
+          onChange={(val) => handleFilterChange('limit', val)}
+          className="min-w-[80px]! h-[36px]"
+          popoverWidth="w-full"
+          showSearch={false}
+        />
+
+        <button
           onClick={handleReset}
+          className="h-[36px] bg-[#F4F1EA]/10 backdrop-blur-md border border-[#F4F1EA]/20 rounded-2xl px-5 flex items-center gap-2 text-xs font-bold text-white/90 hover:bg-[#F4F1EA]/20 transition-all duration-300 active:scale-95 shadow-lg shadow-black/5"
         >
-          <RotateCcw size={14} />
-          RESET
-        </Button>
+          <RotateCcw size={14} strokeWidth={3} className="text-[#EAD19B]" />
+          Reset
+        </button>
       </div>
-    </>
+    </div>
   );
 }

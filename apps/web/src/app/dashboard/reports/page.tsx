@@ -114,60 +114,54 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="relative overflow-hidden group">
+        <Card variant="glass" className="relative overflow-hidden group border-white/5">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Perolehan Total</p>
-              <h3 className="text-2xl font-black text-gray-900 mt-1">
+              <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Perolehan Total</p>
+              <h3 className="text-2xl font-black text-[#F4F1EA] mt-1.5 tracking-tight">
                 Rp {totalAmount.toLocaleString('id-ID')}
               </h3>
             </div>
-            <div className="p-3 bg-green-50 text-green-600 rounded-xl group-hover:bg-green-600 group-hover:text-white transition-all duration-300">
+            <div className="p-3 bg-[#EAD19B]/10 text-[#EAD19B] rounded-2xl group-hover:bg-[#EAD19B] group-hover:text-[#2C473E] transition-all duration-500 shadow-lg">
               <Wallet size={20} />
             </div>
           </div>
-          <div className="mt-4 flex items-center gap-2">
-            <span className="flex items-center text-xs font-bold text-gray-400 bg-gray-50 px-2 py-1 rounded-lg">
+          <div className="mt-6 flex items-center gap-3">
+            <span className="flex items-center text-[10px] font-black text-[#F4F1EA]/40 bg-white/5 px-2.5 py-1.5 rounded-xl border border-white/5 uppercase tracking-wider">
               Total Penarikan
             </span>
-            <span className="text-xs text-green-600 font-bold">{totalCount} Kali</span>
+            <span className="text-xs text-[#EAD19B] font-bold">{totalCount} Kali</span>
           </div>
         </Card>
 
-        <Card className="relative overflow-hidden group">
+        <Card variant="glass" className="relative overflow-hidden group border-white/5">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Rata-Rata Per Kaleng</p>
-              <h3 className="text-2xl font-black text-gray-900 mt-1">
+              <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Rata-Rata Per Kaleng</p>
+              <h3 className="text-2xl font-black text-[#F4F1EA] mt-1.5 tracking-tight">
                 Rp {Math.round(averagePerCan).toLocaleString('id-ID')}
               </h3>
             </div>
-            <div className="p-3 bg-blue-50 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-all duration-300">
+            <div className="p-3 bg-[#6B9E9F]/10 text-[#6B9E9F] rounded-2xl group-hover:bg-[#6B9E9F] group-hover:text-[#2C473E] transition-all duration-500 shadow-lg">
               <FileSpreadsheet size={20} />
             </div>
           </div>
-          <div className="mt-4 flex items-center gap-2">
-            <span className="flex items-center text-xs font-bold text-gray-400 bg-gray-50 px-2 py-1 rounded-lg">
+          <div className="mt-6 flex items-center gap-3">
+            <span className="flex items-center text-[10px] font-black text-[#F4F1EA]/40 bg-white/5 px-2.5 py-1.5 rounded-xl border border-white/5 uppercase tracking-wider">
               Nilai Efisiensi
             </span>
-            <span className="text-xs text-slate-500 font-medium">Bulan Ini</span>
+            <span className="text-xs text-[#6B9E9F] font-bold">Bulan Ini</span>
           </div>
         </Card>
       </div>
 
-      {/* Toolbar Section (Search & Filter) */}
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between w-full bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+      {/* Transparent Toolbar Section */}
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-start w-full bg-transparent p-4 border-none shadow-none">
         <FilterDropdown />
       </div>
 
       {/* Recent Collections Table as a Report */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="font-bold text-[#F4F1EA] flex items-center gap-2">
-            <Calendar size={18} className="text-[#EAD19B]" />
-            Transaksi Terakhir
-          </h3>
-        </div>
         <Suspense fallback={<TableSkeleton />}>
           <TransactionList month={month} year={year} branch={branch} officer={officer} search={search} page={page} limit={limit} />
         </Suspense>

@@ -18,7 +18,12 @@ import { Table } from '@/components/ui/Table';
 import { Card } from '@/components/ui/Card';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
-import { toast } from 'react-hot-toast';
+import { toast } from 'sonner';
+import { DropdownFilter } from '@/components/ui/DropdownFilter';
+import { cn } from '@/lib/utils';
+import { Modal } from '@/components/ui/Modal';
+import { ConfirmToast } from '@/components/ui/ConfirmToast';
+import { AlertTriangle } from 'lucide-react';
 
 interface Branch {
   id: string;
@@ -127,27 +132,51 @@ export default function MasterDataPage() {
   };
 
   const handleDeleteBranch = async (id: string, name: string) => {
-    if (!confirm(`Hapus ranting ${name}? Ranting hanya bisa dihapus jika tidak memiliki dukuh, kaleng, atau petugas terkait.`)) return;
-    try {
-      await api.delete(`/admin/branches/${id}`);
-      toast.success('Ranting berhasil dihapus');
-      fetchBranches();
-    } catch (error: any) {
-      const msg = error.error?.message || error.message || 'Gagal menghapus ranting';
-      toast.error(msg);
-    }
+    (toast as any).custom((t: any) => (
+      <ConfirmToast
+        id={t}
+        title={`Hapus Ranting ${name}?`}
+        description="Ranting hanya bisa dihapus jika tidak memiliki dukuh, kaleng, atau petugas terkait."
+        confirmLabel="Ya, Hapus"
+        onConfirm={() => {
+          toast.promise(
+            api.delete(`/admin/branches/${id}`).then((res) => {
+              fetchBranches();
+              return res;
+            }),
+            {
+              loading: 'Menghapus...',
+              success: 'Ranting berhasil dihapus',
+              error: (err: any) => err.response?.data?.error?.message || 'Gagal menghapus ranting',
+            }
+          );
+        }}
+      />
+    ), { duration: 5000 });
   };
 
   const handleDeleteDukuh = async (id: string, name: string) => {
-    if (!confirm(`Hapus dukuh ${name}? Dukuh hanya bisa dihapus jika tidak memiliki kaleng terkait.`)) return;
-    try {
-      await api.delete(`/admin/dukuhs/${id}`);
-      toast.success('Dukuh berhasil dihapus');
-      if (selectedBranch) fetchDukuhs(selectedBranch.id);
-    } catch (error: any) {
-      const msg = error.error?.message || error.message || 'Gagal menghapus dukuh';
-      toast.error(msg);
-    }
+    (toast as any).custom((t: any) => (
+      <ConfirmToast
+        id={t}
+        title={`Hapus Dukuh ${name}?`}
+        description="Dukuh hanya bisa dihapus jika tidak memiliki kaleng terkait."
+        confirmLabel="Ya, Hapus"
+        onConfirm={() => {
+          toast.promise(
+            api.delete(`/admin/dukuhs/${id}`).then((res) => {
+              if (selectedBranch) fetchDukuhs(selectedBranch.id);
+              return res;
+            }),
+            {
+              loading: 'Menghapus...',
+              success: 'Dukuh berhasil dihapus',
+              error: (err: any) => err.response?.data?.error?.message || 'Gagal menghapus dukuh',
+            }
+          );
+        }}
+      />
+    ), { duration: 5000 });
   };
 
   const filteredBranches = branches.filter(b => 
@@ -172,12 +201,12 @@ export default function MasterDataPage() {
     {
       header: 'Kode',
       accessorKey: 'code',
-      cell: (info: any) => <span className="font-mono font-bold text-slate-600">{info.getValue()}</span>
+      cell: (info: any) => <span className="text-[10px] font-bold text-[#F4F1EA]/40 tracking-tight uppercase">{info.getValue()}</span>
     },
     {
       header: 'Nama Ranting',
       accessorKey: 'name',
-      cell: (info: any) => <span className="font-bold text-slate-900">{info.getValue()}</span>
+      cell: (info: any) => <span className="font-bold text-[#F4F1EA]">{info.getValue()}</span>
     },
     {
       header: 'Aksi',
@@ -189,34 +218,34 @@ export default function MasterDataPage() {
             <Button 
               variant="outline" 
               size="sm" 
-              className="h-8 w-8 p-0 rounded-lg hover:bg-green-50 hover:text-green-600 hover:border-green-200 transition-all border-slate-200 group"
+              className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-white/10 transition-all duration-300 group"
               onClick={() => {
                 setEditingItem(row);
                 setFormData({ name: row.name, code: row.code });
                 setIsBranchModalOpen(true);
               }}
             >
-              <Edit size={14} className="text-slate-500 group-hover:text-green-600" />
+              <Edit size={14} className="text-[#EAD19B]" />
             </Button>
             <Button 
               variant="outline" 
               size="sm" 
-              className="h-8 w-8 p-0 rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all border-slate-200 group"
+              className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#D97A76] hover:bg-red-500/10 hover:border-red-500/20 transition-all duration-300 group"
               onClick={() => handleDeleteBranch(row.id, row.name)}
             >
-              <Trash2 size={14} className="text-slate-500 group-hover:text-red-600" />
+              <Trash2 size={14} className="text-[#F4F1EA]/40 group-hover:text-[#D97A76]" />
             </Button>
             <Button 
               variant="ghost" 
               size="sm" 
-              className="h-8 px-2 rounded-lg hover:bg-green-50 text-green-600 flex items-center gap-1 group"
+              className="h-8 px-3 rounded-xl hover:bg-white/10 text-[#EAD19B] flex items-center gap-1 group transition-all duration-300"
               onClick={() => {
                 setSelectedBranch(row);
                 setSearch('');
                 fetchDukuhs(row.id);
               }}
             >
-              <span className="text-xs font-bold">Kelola Dukuh</span>
+              <span className="text-[11px] font-bold uppercase tracking-tight">Kelola Dukuh</span>
               <ChevronRight size={14} className="transition-transform group-hover:translate-x-0.5" />
             </Button>
           </div>
@@ -229,7 +258,7 @@ export default function MasterDataPage() {
     {
       header: 'Nama Dukuh',
       accessorKey: 'name',
-      cell: (info: any) => <span className="font-bold text-slate-900">{info.getValue()}</span>
+      cell: (info: any) => <span className="font-bold text-[#F4F1EA]">{info.getValue()}</span>
     },
     {
       header: 'Aksi',
@@ -241,22 +270,22 @@ export default function MasterDataPage() {
             <Button 
               variant="outline" 
               size="sm" 
-              className="h-8 w-8 p-0 rounded-lg hover:bg-green-50 hover:text-green-600 hover:border-green-200 transition-all border-slate-200 group"
+              className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-white/10 transition-all duration-300 group"
               onClick={() => {
                 setEditingItem(row);
                 setFormData({ name: row.name, code: '' });
                 setIsDukuhModalOpen(true);
               }}
             >
-              <Edit size={14} className="text-slate-500 group-hover:text-green-600" />
+              <Edit size={14} className="text-[#EAD19B]" />
             </Button>
             <Button 
               variant="outline" 
               size="sm" 
-              className="h-8 w-8 p-0 rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all border-slate-200 group"
+              className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#D97A76] hover:bg-red-500/10 hover:border-red-500/20 transition-all duration-300 group"
               onClick={() => handleDeleteDukuh(row.id, row.name)}
             >
-              <Trash2 size={14} className="text-slate-500 group-hover:text-red-600" />
+              <Trash2 size={14} className="text-[#F4F1EA]/40 group-hover:text-[#D97A76]" />
             </Button>
           </div>
         );
@@ -275,7 +304,7 @@ export default function MasterDataPage() {
                 setSelectedBranch(null);
                 setSearch('');
               }}
-              className="h-10 w-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all shadow-sm active:scale-95"
+              className="h-10 w-10 flex items-center justify-center rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-[#F4F1EA] hover:bg-white/20 transition-all shadow-lg active:scale-95"
             >
               <ArrowLeft size={20} />
             </button>
@@ -284,16 +313,17 @@ export default function MasterDataPage() {
           )}
           <div>
             <h1 className="text-2xl font-bold text-[#F4F1EA] tracking-tight">
-              {selectedBranch ? `Kelola Dukuh: ${selectedBranch.name}` : 'Data Master'}
+              {selectedBranch ? `Dukuh: ${selectedBranch.name}` : 'Data Master'}
             </h1>
             <p className="text-[#F4F1EA]/60 text-sm font-medium">
               {selectedBranch 
-                ? `Manajemen daftar dukuh/dusun di wilayah ${selectedBranch.name}`
+                ? `Manajemen daftar dukuh di wilayah ${selectedBranch.name}`
                 : 'Kelola informasi wilayah Ranting dan Dukuh.'}
             </p>
           </div>
         </div>
         
+        {/* Primary Action Button */}
         <Button 
           onClick={() => {
             setEditingItem(null);
@@ -301,201 +331,226 @@ export default function MasterDataPage() {
             if (selectedBranch) setIsDukuhModalOpen(true);
             else setIsBranchModalOpen(true);
           }}
-          className="bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 px-6 h-11 rounded-xl font-bold transition-all active:scale-95 flex items-center gap-2"
+          className="h-[35px] px-4 rounded-xl text-[11px] font-bold bg-[#EAD19B] text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 hover:bg-[#EAD19B]/90 transition-all active:scale-95 flex items-center gap-2"
         >
-          <Plus size={20} />
+          <Plus size={14} strokeWidth={3} />
           {selectedBranch ? 'Tambah Dukuh' : 'Tambah Ranting'}
         </Button>
       </div>
 
-      {/* Toolbar */}
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-        <div className="relative w-full md:w-80 group">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-green-500 transition-colors" size={18} />
-          <input
-            type="text"
-            placeholder={selectedBranch ? "Cari dukuh..." : "Cari ranting (nama, kode)..."}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-500 focus:bg-white transition-all shadow-sm group-hover:border-slate-300"
+      {/* Transparent Toolbar */}
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-transparent p-4 border-none shadow-none">
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          <div className="relative w-[160px] group">
+            <div className="flex h-[35px] items-center bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1 transition-all duration-500 group-focus-within:ring-2 group-focus-within:ring-[#F4F1EA]/20 group-focus-within:border-[#F4F1EA]/30 shadow-lg shadow-black/5">
+              <div className="pl-2 pr-1 transition-transform group-focus-within:scale-110">
+                <Search size={14} strokeWidth={3} className="text-[#DE6F4A]" />
+              </div>
+              <input
+                type="text"
+                placeholder="Cari..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="bg-transparent w-full px-4 py-1 text-sm font-bold text-white placeholder-[#F4F1EA]/60 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <DropdownFilter 
+            options={[
+              { label: '10', value: '10' },
+              { label: '20', value: '20' },
+              { label: '50', value: '50' }
+            ]}
+            value={pageSize.toString()}
+            onChange={(val) => {
+              setPageSize(Number(val));
+              setCurrentPage(1);
+            }}
+            className="min-w-[80px]! h-[36px]"
+            popoverWidth="w-full"
+            showSearch={false}
           />
         </div>
-
       </div>
 
-      {/* Content */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden min-h-[400px]">
-        {selectedBranch ? (
-          <Table 
-            columns={dukuhColumns} 
-            data={pagedData as any[]} 
-            loading={loading}
-          />
-        ) : (
-          <Table 
-            columns={branchColumns} 
-            data={pagedData as any[]} 
-            loading={loading}
-          />
-        )}
+      {/* Content wrapped in Glass Card */}
+      <Card variant="glass" className="p-0 border-white/5 shadow-2xl overflow-hidden min-h-[400px]">
+        <div className="overflow-x-auto w-full custom-scrollbar">
+          {selectedBranch ? (
+            <Table 
+              columns={dukuhColumns} 
+              data={pagedData as any[]} 
+              loading={loading}
+              variant="glass"
+            />
+          ) : (
+            <Table 
+              columns={branchColumns} 
+              data={pagedData as any[]} 
+              loading={loading}
+              variant="glass"
+            />
+          )}
+        </div>
         
+        {/* Smart Pagination Control - Standardized */}
         {!loading && totalItems > 0 && (
-          <div className="px-6 py-6 bg-slate-50/50 border-t border-slate-100 flex flex-col items-end gap-3">
-            <p className="text-xs font-medium text-slate-500">
-              Menampilkan <span className="font-bold text-slate-900">{pagedData.length}</span> dari <span className="font-bold text-slate-900">{totalItems}</span> {selectedBranch ? 'dukuh' : 'ranting'}
-            </p>
-            
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Baris:</span>
-                <select 
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
-                >
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                </select>
+          <div className="px-6 py-5 bg-white/5 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
+            {/* Left: Summary Info Badge */}
+            <div className="flex items-center gap-2 bg-white/5 p-1 rounded-2xl border border-white/10 shadow-sm px-4 h-10">
+              <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">Menampilkan</span>
+              <div className="min-w-[24px] h-6 px-1.5 flex items-center justify-center bg-[#EAD19B]/10 rounded-lg">
+                <span className="text-xs font-black text-[#EAD19B]">{pagedData.length}</span>
+              </div>
+              <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">dari</span>
+              <div className="min-w-[32px] h-6 px-1.5 flex items-center justify-center bg-[#F4F1EA]/5 rounded-lg border border-white/10">
+                <span className="text-xs font-black text-[#F4F1EA]">{totalItems}</span>
+              </div>
+              <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight ml-1">{selectedBranch ? 'Dukuh' : 'Ranting'}</span>
+            </div>
+
+            {/* Right: Smart Control Pill */}
+            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-2xl border border-white/10 shadow-sm transition-all hover:shadow-md">
+              {/* Page Info Badge */}
+              <div className="px-4 flex items-center gap-1.5 min-w-[140px] justify-center">
+                <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">Halaman</span>
+                <div className="w-6 h-6 flex items-center justify-center bg-[#EAD19B]/10 rounded-lg">
+                  <span className="text-xs font-black text-[#EAD19B]">{currentPage}</span>
+                </div>
+                <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">dari</span>
+                <div className="min-w-[24px] h-6 px-1.5 flex items-center justify-center bg-[#F4F1EA]/5 rounded-lg border border-white/10">
+                  <span className="text-xs font-black text-[#F4F1EA]">{totalPages || 1}</span>
+                </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
-                  Halaman <span className="text-green-600">{currentPage}</span> dari {totalPages || 1}
-                </span>
-                
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(prev => prev - 1)}
-                    className="rounded-xl h-9 px-4 text-xs font-bold disabled:opacity-30 border-slate-200"
-                  >
-                    Sebelumnya
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={currentPage >= totalPages}
-                    onClick={() => setCurrentPage(prev => prev + 1)}
-                    className="rounded-xl h-9 px-4 text-xs font-bold disabled:opacity-30 border-slate-200"
-                  >
-                    Selanjutnya
-                  </Button>
-                </div>
+              {/* Navigation Arrows */}
+              <div className="flex items-center gap-1 pl-2 border-l border-white/5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => prev - 1)}
+                  className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                >
+                  <div className="w-full h-full flex items-center justify-center">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                  </div>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage(prev => prev + 1)}
+                  className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                >
+                  <div className="w-full h-full flex items-center justify-center">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                  </div>
+                </Button>
               </div>
             </div>
           </div>
         )}
         
         {!loading && totalItems === 0 && (
-          <div className="py-20 flex flex-col items-center justify-center text-slate-400">
+          <div className="py-20 flex flex-col items-center justify-center text-[#F4F1EA]/20">
             <MapPin size={48} className="mb-4 opacity-20" />
-            <p className="text-sm font-medium">Tidak ada data ditemukan</p>
+            <p className="text-sm font-medium tracking-tight">Tidak ada data ditemukan</p>
           </div>
         )}
-      </div>
+      </Card>
 
       {/* Branch Modal */}
-      {isBranchModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="bg-slate-50 px-8 py-6 border-b border-slate-100">
-              <h3 className="text-xl font-bold text-slate-900">{editingItem ? 'Edit Ranting' : 'Tambah Ranting Baru'}</h3>
-              <p className="text-sm text-slate-500 mt-1">Lengkapi informasi ranting di bawah ini.</p>
-            </div>
-            
-            <form onSubmit={handleBranchSubmit} className="p-8 space-y-5">
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider ml-1">Kode Ranting</label>
-                <input 
-                  type="text" 
-                  value={formData.code}
-                  onChange={(e) => setFormData({...formData, code: e.target.value})}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-green-500/10 focus:border-green-500 outline-none transition-all font-medium text-slate-900"
-                  placeholder="Misal: RTG01"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider ml-1">Nama Ranting</label>
-                <input 
-                  type="text" 
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-green-500/10 focus:border-green-500 outline-none transition-all font-medium text-slate-900"
-                  placeholder="Nama Desa/Kelurahan"
-                  required
-                />
-              </div>
-              
-              <div className="flex gap-3 pt-4">
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => setIsBranchModalOpen(false)}
-                  className="flex-1 rounded-xl h-12 font-bold"
-                >
-                  Batal
-                </Button>
-                <Button 
-                  type="submit" 
-                  className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] rounded-xl h-12 font-bold shadow-lg shadow-[#EAD19B]/20"
-                >
-                  Simpan
-                </Button>
-              </div>
-            </form>
+      <Modal
+        isOpen={isBranchModalOpen}
+        onClose={() => setIsBranchModalOpen(false)}
+        title={editingItem ? 'Edit Ranting' : 'Tambah Ranting Baru'}
+      >
+        <form onSubmit={handleBranchSubmit} className="space-y-5">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider ml-1">Kode Ranting</label>
+            <input 
+              type="text" 
+              value={formData.code}
+              onChange={(e) => setFormData({...formData, code: e.target.value})}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-green-500/10 focus:border-green-500 outline-none transition-all font-medium text-slate-900"
+              placeholder="Misal: RTG01"
+              required
+            />
           </div>
-        </div>
-      )}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider ml-1">Nama Ranting</label>
+            <input 
+              type="text" 
+              value={formData.name}
+              onChange={(e) => setFormData({...formData, name: e.target.value})}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-green-500/10 focus:border-green-500 outline-none transition-all font-medium text-slate-900"
+              placeholder="Nama Desa/Kelurahan"
+              required
+            />
+          </div>
+          
+          <div className="flex gap-3 pt-4">
+            <Button 
+              type="button" 
+              variant="secondary" 
+              onClick={() => setIsBranchModalOpen(false)}
+              className="flex-1"
+            >
+              Batal
+            </Button>
+            <Button 
+              type="submit" 
+              className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] font-bold rounded-xl h-11 shadow-lg shadow-[#EAD19B]/20"
+            >
+              Simpan
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Dukuh Modal */}
-      {isDukuhModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="bg-slate-50 px-8 py-6 border-b border-slate-100">
-              <h3 className="text-xl font-bold text-slate-900">{editingItem ? 'Edit Dukuh' : 'Tambah Dukuh Baru'}</h3>
-              <p className="text-sm text-slate-500 mt-1">Ranting: <span className="font-bold text-green-600">{selectedBranch?.name}</span></p>
-            </div>
-            
-            <form onSubmit={handleDukuhSubmit} className="p-8 space-y-5">
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider ml-1">Nama Dukuh/Dusun</label>
-                <input 
-                  type="text" 
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-green-500/10 focus:border-green-500 outline-none transition-all font-medium text-slate-900"
-                  placeholder="Misal: Dusun Krajan"
-                  required
-                />
-              </div>
-              
-              <div className="flex gap-3 pt-4">
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => setIsDukuhModalOpen(false)}
-                  className="flex-1 rounded-xl h-12 font-bold"
-                >
-                  Batal
-                </Button>
-                <Button 
-                  type="submit" 
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl h-12 font-bold shadow-lg shadow-green-600/20"
-                >
-                  Simpan
-                </Button>
-              </div>
-            </form>
-          </div>
+      <Modal
+        isOpen={isDukuhModalOpen}
+        onClose={() => setIsDukuhModalOpen(false)}
+        title={editingItem ? 'Edit Dukuh' : 'Tambah Dukuh Baru'}
+      >
+        <div className="mb-4">
+           <p className="text-sm text-slate-500 mt-1">Ranting: <span className="font-bold text-green-600">{selectedBranch?.name}</span></p>
         </div>
-      )}
+        
+        <form onSubmit={handleDukuhSubmit} className="space-y-5">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider ml-1">Nama Dukuh/Dusun</label>
+            <input 
+              type="text" 
+              value={formData.name}
+              onChange={(e) => setFormData({...formData, name: e.target.value})}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-green-500/10 focus:border-green-500 outline-none transition-all font-medium text-slate-900"
+              placeholder="Misal: Dusun Krajan"
+              required
+            />
+          </div>
+          
+          <div className="flex gap-3 pt-4">
+            <Button 
+              type="button" 
+              variant="secondary" 
+              onClick={() => setIsDukuhModalOpen(false)}
+              className="flex-1"
+            >
+              Batal
+            </Button>
+            <Button 
+              type="submit" 
+              className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] font-bold rounded-xl h-11 shadow-lg shadow-[#EAD19B]/20"
+            >
+              Simpan
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

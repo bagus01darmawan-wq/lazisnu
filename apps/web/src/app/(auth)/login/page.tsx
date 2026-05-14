@@ -13,6 +13,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import api from '@/lib/api';
 import Cookies from 'js-cookie';
 import { LogIn, Phone, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const loginSchema = z.object({
   identifier: z.string().min(3, 'Email atau Nomor HP minimal 3 karakter'),
@@ -63,7 +64,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-slate-950 relative overflow-hidden">
+    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-[#0d1a15] relative overflow-hidden">
       {/* Deep Emerald Glows */}
       <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-emerald-900/20 rounded-full blur-[120px] animate-pulse" />
       <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-green-900/20 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '2s' }} />
@@ -71,7 +72,7 @@ export default function LoginPage() {
 
       <Card className="w-full max-w-md relative z-10 p-8 shadow-2xl border-white/10 bg-white/5 backdrop-blur-2xl rounded-3xl">
         <div className="flex flex-col items-center text-center mb-10">
-          <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-700 rounded-2xl flex items-center justify-center shadow-2xl shadow-green-900/40 mb-6 group transition-transform hover:rotate-3 duration-500">
+          <div className="w-20 h-20 bg-linear-to-br from-green-500 to-emerald-700 rounded-2xl flex items-center justify-center shadow-2xl shadow-green-900/40 mb-6 group transition-transform hover:rotate-3 duration-500">
             <LogIn className="text-white" size={40} />
           </div>
           <h1 className="text-4xl font-bold tracking-tight text-white mb-2 uppercase" style={{ fontFamily: 'Cambria, Georgia, serif' }}>
@@ -80,7 +81,13 @@ export default function LoginPage() {
           <p className="text-emerald-500/80 font-bold tracking-[0.2em] text-xs uppercase">MWC Paninggaran</p>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <form 
+          onSubmit={handleSubmit(onSubmit)} 
+          className={cn(
+            "space-y-6 transition-all duration-500",
+            isLoading && "opacity-40 blur-[2px] pointer-events-none scale-[0.98]"
+          )}
+        >
           {error && (
             <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl flex items-start gap-3 animate-in fade-in zoom-in-95 duration-300">
               <AlertCircle size={20} className="shrink-0 mt-0.5" />
@@ -94,7 +101,7 @@ export default function LoginPage() {
               <Input
                 {...register('identifier')}
                 placeholder="Email atau Nomor HP"
-                className="pl-12 h-14 !bg-slate-900/50 border-white/10 focus:border-green-500/50 focus:ring-green-500/20 rounded-2xl transition-all !text-white placeholder:text-slate-500 caret-green-400 text-base autofill:shadow-[0_0_0_30px_#0f172a_inset] autofill:[-webkit-text-fill-color:white]"
+                className="pl-12 h-14 bg-slate-900/50! border-white/10 focus:border-green-500/50 focus:ring-green-500/20 rounded-2xl transition-all text-white! placeholder:text-slate-500 caret-green-400 text-base autofill:shadow-[0_0_0_30px_#0f172a_inset] autofill:[-webkit-text-fill-color:white]"
                 error={errors.identifier?.message}
               />
             </div>
@@ -105,12 +112,13 @@ export default function LoginPage() {
                 {...register('password')}
                 type={showPassword ? 'text' : 'password'}
                 placeholder="Password"
-                className="pl-12 pr-12 h-14 !bg-slate-900/50 border-white/10 focus:border-green-500/50 focus:ring-green-500/20 rounded-2xl transition-all !text-white placeholder:text-slate-500 caret-green-400 text-base autofill:shadow-[0_0_0_30px_#0f172a_inset] autofill:[-webkit-text-fill-color:white]"
+                className="pl-12 pr-12 h-14 bg-slate-900/50! border-white/10 focus:border-green-500/50 focus:ring-green-500/20 rounded-2xl transition-all text-white! placeholder:text-slate-500 caret-green-400 text-base autofill:shadow-[0_0_0_30px_#0f172a_inset] autofill:[-webkit-text-fill-color:white]"
                 error={errors.password?.message}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-green-400 transition-colors z-20"
               >
                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -120,7 +128,7 @@ export default function LoginPage() {
 
           <Button
             type="submit"
-            className="w-full h-14 text-lg font-black bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 transition-all rounded-2xl shadow-xl shadow-green-900/20 active:scale-[0.98] duration-200"
+            className="w-full h-14 text-lg font-black bg-linear-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 transition-all rounded-2xl shadow-xl shadow-green-900/20 active:scale-[0.98] duration-200"
             isLoading={isLoading}
           >
             MASUK SEKARANG

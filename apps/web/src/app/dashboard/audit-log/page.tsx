@@ -12,6 +12,9 @@ import { id } from 'date-fns/locale';
 import { ShieldAlert, RefreshCw, Eye, Search, Calendar, ChevronLeft, ChevronRight, RotateCcw, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
+import { FilterPills } from '@/components/ui/FilterPills';
+import { DropdownFilter } from '@/components/ui/DropdownFilter';
+import { PeriodPicker } from '@/components/ui/PeriodPicker';
 
 interface AuditLog {
   id: string;
@@ -33,20 +36,20 @@ export default function AuditLogPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [pageSize, setPageSize] = useState(20);
-  const [month, setMonth] = useState((new Date().getMonth() + 1).toString());
-  const [year, setYear] = useState(new Date().getFullYear().toString());
+  const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
+  const [year, setYear] = useState<number>(new Date().getFullYear());
 
   const fetchLogs = async (currentPage = page, searchQuery = search, m = month, y = year, limit = pageSize) => {
     try {
       setLoading(true);
-      
-      const startOfMonth = new Date(parseInt(y), parseInt(m) - 1, 1).toISOString();
-      const endOfMonth = new Date(parseInt(y), parseInt(m), 0, 23, 59, 59).toISOString();
+
+      const startOfMonth = new Date(Number(y), Number(m) - 1, 1).toISOString();
+      const endOfMonth = new Date(Number(y), Number(m), 0, 23, 59, 59).toISOString();
 
       const response: any = await api.get('/admin/audit-logs', {
-        params: { 
-          page: currentPage, 
-          limit: limit, 
+        params: {
+          page: currentPage,
+          limit: limit,
           search: searchQuery,
           start_date: startOfMonth,
           end_date: endOfMonth
@@ -74,8 +77,8 @@ export default function AuditLogPage() {
 
   const handleReset = () => {
     setSearch('');
-    setMonth((new Date().getMonth() + 1).toString());
-    setYear(new Date().getFullYear().toString());
+    setMonth(new Date().getMonth() + 1);
+    setYear(new Date().getFullYear());
     setPage(1);
   };
 
@@ -85,16 +88,7 @@ export default function AuditLogPage() {
     fetchLogs(newPage, search, month, year);
   };
 
-  const months = [
-    { value: '1', label: 'Januari' }, { value: '2', label: 'Februari' },
-    { value: '3', label: 'Maret' }, { value: '4', label: 'April' },
-    { value: '5', label: 'Mei' }, { value: '6', label: 'Juni' },
-    { value: '7', label: 'Juli' }, { value: '8', label: 'Agustus' },
-    { value: '9', label: 'September' }, { value: '10', label: 'Oktober' },
-    { value: '11', label: 'November' }, { value: '12', label: 'Desember' },
-  ];
-  const currentYearNum = new Date().getFullYear();
-  const years = [currentYearNum - 1, currentYearNum, currentYearNum + 1];
+
 
   const columns: ColumnDef<AuditLog>[] = [
     {
@@ -104,7 +98,7 @@ export default function AuditLogPage() {
       cell: ({ row }) => {
         const date = new Date(row.original.createdAt);
         return (
-          <span className="text-xs font-medium text-gray-500">
+          <span className="text-xs font-medium text-[#F4F1EA]/60">
             {isValid(date) ? format(date, 'PPP HH:mm', { locale: id }) : '-'}
           </span>
         );
@@ -115,21 +109,21 @@ export default function AuditLogPage() {
       accessorKey: 'actionType',
       header: 'Aksi',
       cell: ({ row }) => {
-        const type = row.original.actionType || '';
-        let variant: 'sent' | 'pending' | 'failed' | 'default' = 'default';
-        if (type.includes('POST')) variant = 'sent';
-        if (type.includes('PUT') || type.includes('PATCH')) variant = 'pending';
-        if (type.includes('DELETE')) variant = 'failed';
-        
-        return <Badge variant={variant}>{type || 'UNKNOWN'}</Badge>;
+        const type = row.original.actionType || 'UNKNOWN';
+        let color = 'text-[#F4F1EA]/60';
+        if (type.includes('POST')) color = 'text-[#1F8243]';
+        else if (type.includes('PUT') || type.includes('PATCH')) color = 'text-[#EAD19B]';
+        else if (type.includes('DELETE')) color = 'text-[#D97A76]';
+
+        return <span className={`text-[10px] font-bold uppercase tracking-widest ${color}`}>{type}</span>;
       },
     },
     {
       header: 'Operator',
       cell: ({ row }) => (
         <div>
-          <p className="font-bold text-gray-900">{row.original.user?.fullName || row.original.officer?.fullName || 'System'}</p>
-          <p className="text-[10px] text-gray-400 uppercase font-black">{row.original.user?.role || 'System'}</p>
+          <p className="font-bold text-[#F4F1EA]">{row.original.user?.fullName || row.original.officer?.fullName || 'System'}</p>
+          <p className="text-[10px] text-[#F4F1EA]/40 uppercase font-black">{row.original.user?.role || 'System'}</p>
         </div>
       ),
     },
@@ -137,19 +131,19 @@ export default function AuditLogPage() {
       id: 'entityType',
       accessorKey: 'entityType',
       header: 'Entitas',
-      cell: ({ row }) => <span className="font-mono text-xs uppercase text-slate-500">{row.original.entityType || '-'}</span>,
+      cell: ({ row }) => <span className="font-mono text-xs uppercase text-[#F4F1EA]/60">{row.original.entityType || '-'}</span>,
     },
     {
       id: 'actions',
       header: '',
       cell: ({ row }) => (
-        <Button 
-          variant="outline" 
-          size="sm" 
+        <Button
+          variant="outline"
+          size="sm"
           onClick={() => setSelectedLog(row.original)}
-          className="h-8 gap-2"
+          className="h-8 gap-2 border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-white/10 transition-all duration-300"
         >
-          <Eye size={14} />
+          <Eye size={14} className="text-[#EAD19B]" />
           Detail
         </Button>
       ),
@@ -167,97 +161,122 @@ export default function AuditLogPage() {
           </div>
         </div>
       </div>
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between w-full bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-        <div className="relative group flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#2C473E]/40" size={18} />
-          <input
-            type="text"
-            placeholder="Cari aktivitas atau pelaku..."
-            className="w-full pl-10 pr-4 py-2.5 bg-[#F4F1EA] border border-[#2C473E]/10 rounded-xl text-sm text-[#2C473E] font-medium focus:outline-none focus:ring-4 focus:ring-[#1F8243]/10 focus:border-[#1F8243] transition-all shadow-sm"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+      {/* Transparent Toolbar */}
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-between w-full bg-transparent p-4 border-none shadow-none">
+        <div className="relative group flex-1 md:max-w-[320px]">
+          <div className="flex h-[35px] items-center bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1 transition-all duration-500 group-focus-within:ring-2 group-focus-within:ring-[#F4F1EA]/20 group-focus-within:border-[#F4F1EA]/30 shadow-lg shadow-black/5">
+            <div className="pl-2 pr-1 transition-transform group-focus-within:scale-110">
+              <Search size={14} strokeWidth={3} className="text-[#DE6F4A]" />
+            </div>
+            <input
+              type="text"
+              placeholder="Cari..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="bg-transparent w-full px-4 py-1 text-sm font-bold text-white placeholder-[#F4F1EA]/60 focus:outline-none"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+          <button
+            onClick={() => void fetchLogs(page, search, month, year, pageSize)}
+            className="h-[36px] bg-[#F4F1EA]/10 backdrop-blur-md border border-[#F4F1EA]/20 rounded-2xl px-5 flex items-center gap-2 text-xs font-bold text-white/90 hover:bg-[#F4F1EA]/20 transition-all duration-300 active:scale-95 shadow-lg shadow-black/5"
+          >
+            <RefreshCw size={14} strokeWidth={3} className={cn("text-[#EAD19B]", loading && "animate-spin")} />
+            Refresh
+          </button>
+
+          <PeriodPicker
+            month={month}
+            year={year}
+            onChange={(m, y) => {
+              setMonth(m);
+              setYear(y);
+              setPage(1);
+            }}
           />
-        </div>
 
-        <div className="flex items-center gap-1 bg-[#F4F1EA] p-1 rounded-xl border border-[#2C473E]/10 shadow-sm">
-          {[10, 20, 50].map((size) => (
-            <button
-              key={size}
-              onClick={() => setPageSize(size)}
-              className={cn(
-                "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
-                pageSize === size 
-                  ? "bg-[#1F8243] text-white shadow-sm" 
-                  : "text-[#2C473E]/60 hover:bg-[#2C473E]/5"
-              )}
-            >
-              {size}
-            </button>
-          ))}
-        </div>
+          <DropdownFilter
+            options={[
+              { label: '10', value: '10' },
+              { label: '20', value: '20' },
+              { label: '50', value: '50' },
+              { label: '100', value: '100' }
+            ]}
+            value={pageSize.toString()}
+            onChange={(val) => {
+              setPageSize(Number(val));
+              setPage(1);
+            }}
+            className="min-w-[80px]! h-[36px]"
+            popoverWidth="w-full"
+            showSearch={false}
+          />
 
-        <button 
-          onClick={() => void fetchLogs(page, search, month, year, pageSize)}
-          className="h-10 rounded-xl px-4 text-xs font-bold text-[#2C473E]/60 border-[#2C473E]/10 hover:bg-[#F4F1EA] flex items-center gap-2"
-        >
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          <span>Refresh</span>
-        </button>
+          <button
+            onClick={handleReset}
+            className="h-[36px] bg-[#F4F1EA]/10 backdrop-blur-md border border-[#F4F1EA]/20 rounded-2xl px-5 flex items-center gap-2 text-xs font-bold text-white/90 hover:bg-[#F4F1EA]/20 transition-all duration-300 active:scale-95 shadow-lg shadow-black/5"
+          >
+            <RotateCcw size={14} strokeWidth={3} className="text-[#EAD19B]" />
+            Reset
+          </button>
+        </div>
       </div>
 
-      <Card className="p-0 border-none shadow-lg overflow-hidden">
-        <Table columns={columns} data={logs} loading={loading} />
-        
-        {/* Pagination Controls (Cans-style) */}
-        {!loading && totalItems > 0 && (
-          <div className="px-6 py-6 bg-slate-50/50 border-t border-slate-100 flex flex-col items-end gap-3">
-            <p className="text-xs font-medium text-slate-500">
-              Menampilkan <span className="font-bold text-slate-900">{logs.length}</span> dari <span className="font-bold text-slate-900">{totalItems}</span> aktivitas
-            </p>
+      <Card variant="glass" className="p-0 border-white/5 shadow-2xl overflow-hidden transition-all duration-700">
+        <Table columns={columns} data={logs} loading={loading} variant="glass" />
 
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Baris:</span>
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setPage(1);
-                  }}
-                  className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
-                >
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
+        {/* Smart Pagination Control (Option 2: Smart Info Badge) */}
+        {!loading && totalItems > 0 && (
+          <div className="px-6 py-5 bg-white/5 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
+            {/* Left: Summary Info (Styled like Page Badge) */}
+            <div className="flex items-center gap-2 bg-white/5 p-1 rounded-2xl border border-white/10 shadow-sm px-4 h-10">
+              <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">Menampilkan</span>
+              <div className="min-w-[24px] h-6 px-1.5 flex items-center justify-center bg-[#EAD19B]/10 rounded-lg">
+                <span className="text-xs font-black text-[#EAD19B]">{logs.length}</span>
+              </div>
+              <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">dari</span>
+              <div className="min-w-[32px] h-6 px-1.5 flex items-center justify-center bg-[#F4F1EA]/5 rounded-lg border border-white/10">
+                <span className="text-xs font-black text-[#F4F1EA]">{totalItems}</span>
+              </div>
+              <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight ml-1">Aktivitas</span>
+            </div>
+
+            {/* Right: Smart Control Pill */}
+            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-2xl border border-white/10 shadow-sm transition-all hover:shadow-md">
+              {/* Page Info Badge */}
+              <div className="px-4 flex items-center gap-1.5 min-w-[140px] justify-center">
+                <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">Halaman</span>
+                <div className="w-6 h-6 flex items-center justify-center bg-[#EAD19B]/10 rounded-lg">
+                  <span className="text-xs font-black text-[#EAD19B]">{page}</span>
+                </div>
+                <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">dari</span>
+                <div className="min-w-[24px] h-6 px-1.5 flex items-center justify-center bg-[#F4F1EA]/5 rounded-lg border border-white/10">
+                  <span className="text-xs font-black text-[#F4F1EA]">{totalPages}</span>
+                </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
-                  Halaman <span className="text-green-600">{page}</span> dari {totalPages}
-                </span>
-
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page === 1}
-                    onClick={() => handlePageChange(page - 1)}
-                    className="rounded-xl h-9 px-4 text-xs font-bold disabled:opacity-30 border-slate-200"
-                  >
-                    Sebelumnya
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page >= totalPages}
-                    onClick={() => handlePageChange(page + 1)}
-                    className="rounded-xl h-9 px-4 text-xs font-bold disabled:opacity-30 border-slate-200"
-                  >
-                    Selanjutnya
-                  </Button>
-                </div>
+              {/* Navigation Arrows */}
+              <div className="flex items-center gap-1 pl-2 border-l border-white/5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={page === 1}
+                  onClick={() => handlePageChange(page - 1)}
+                  className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                >
+                  <ChevronLeft size={16} strokeWidth={3} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={page >= totalPages}
+                  onClick={() => handlePageChange(page + 1)}
+                  className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                >
+                  <ChevronRight size={16} strokeWidth={3} />
+                </Button>
               </div>
             </div>
           </div>
