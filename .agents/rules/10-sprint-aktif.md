@@ -3,7 +3,7 @@ trigger: manual
 ---
 
 # Rule: Sprint Aktif
-# Scope: Semua agent — baca ini untuk tahu SEDANG ADA DI MANA dalam pengembangan
+# Scope: Semua agent — baca ini untuk memahami posisi pengembangan saat ini
 # ⚠️ UPDATE file ini setiap kali berganti fase atau sprint
 
 ---
@@ -11,111 +11,110 @@ trigger: manual
 ## Status Saat Ini
 
 ```
-FASE AKTIF : FASE 7 — Sprint 5: UI Modernization & Final Brand Identity
-MINGGU     : 14–15
-STATUS     : ✅ Earthy & Premium Theme Applied | ✅ 10 Modules Synchronized | ✅ Brand Tokens Defined | 🚀 Ready for Final Review
+FASE AKTIF : Finalization & Learning-Assisted Completion
+STATUS     : Project berjalan menuju penyelesaian; fokus pada stabilisasi, review, testing, deploy readiness, dokumentasi, dan peningkatan pemahaman developer.
+FOKUS      : Bugfix terarah, konsistensi contract backend-web-mobile, shared-types, audit tech debt, testing strategy, dan learning checkpoint.
+```
+
+Catatan untuk agent:
+- Jangan menganggap semua modul sudah final hanya karena ada checklist lama yang selesai.
+- Verifikasi kondisi aktual codebase sebelum menyimpulkan fitur sudah lengkap.
+- Untuk task kecil, jangan memaksa workflow besar. Untuk task lintas modul atau berisiko, ikuti `00-workflow-guarantee.md`.
+- Developer adalah pemula yang sedang belajar dari project ini. Sertakan penjelasan singkat dan latihan kecil setelah perubahan penting.
+
+---
+
+## Prioritas Sprint Saat Ini
+
+### P0 — Stabilitas dan Bugfix
+
+- Pastikan project bisa dijalankan, dibuild, dan dilint untuk area yang sedang dikerjakan.
+- Perbaiki error yang memblokir login, dashboard, submit collection, sync mobile, laporan, atau build.
+- Jangan melakukan refactor besar tanpa alasan kuat dan tanpa rencana test.
+
+### P1 — Contract Consistency
+
+- Pastikan `packages/shared-types` menjadi acuan kontrak lintas app.
+- Pastikan perubahan backend response/request dicek dampaknya ke `apps/web` dan `apps/mobile`.
+- Hindari duplikasi type yang bisa membuat web/mobile berbeda dari backend.
+
+### P2 — Testing dan Deploy Readiness
+
+- Buat test plan untuk flow kritis.
+- Tambahkan regression checklist sebelum merge/deploy.
+- Siapkan rollback plan untuk perubahan database, auth, API contract, dan deploy.
+
+### P3 — Learning-Oriented Maintenance
+
+- Setiap bantuan agent harus membantu user memahami minimal satu konsep baru.
+- Prioritaskan task kecil yang bisa dikerjakan user sendiri dengan review AI.
+- Gunakan skill `.agents/skills/` sesuai konteks: debug, code review, testing, architecture, tech debt, deploy checklist.
+
+---
+
+## Konteks Teknis Aktual yang Harus Diingat
+
+```
+Repo      : lazisnu
+Monorepo  : PNPM workspace apps/* dan packages/*
+Backend   : Fastify + TypeScript + Drizzle ORM + PostgreSQL + Redis/BullMQ + Zod
+Web       : Next.js 16 App Router + React 19 + TypeScript + Tailwind CSS 4
+Mobile    : React Native Android-first + MMKV + offline-first
+Shared    : packages/shared-types untuk kontrak data lintas app
 ```
 
 ---
 
-## Progres & Refactor Audit (April 2026)
+## Aturan Domain Paling Penting
 
-```
-Pilar 1: Immortality & Immutability
-  [x] Tabel 'collections' menggunakan tipe data BIGINT (nominal)
-  [x] PostgreSQL RULES (disable_delete, disable_update_nominal) aktif
-  [x] Endpoint /resubmit (Sequence++) - COMPLETED
-  [x] Resubmit via mobile (POST /mobile/collections/:id/resubmit) - COMPLETED
+### Collections Immutable
 
-Pilar 2: WhatsApp & Reliability
-  [x] BullMQ + Redis integration - COMPLETED
-  [x] WhatsApp Async Worker - COMPLETED
-  [x] WhatsApp status response fix (waResult.status undefined bug) - COMPLETED
+- `collections` adalah data finansial/audit.
+- Jangan UPDATE/DELETE data transaksi untuk mengubah nominal, metode bayar, petugas, atau identitas transaksi.
+- Koreksi dilakukan dengan re-submit: INSERT record baru + sequence bertambah + flag latest/versioning yang diizinkan.
 
-Pilar 3: Audit Trail
-  [x] Global Audit Logger middleware - COMPLETED
-  [x] Audit log viewer di web dashboard - COMPLETED
+### WhatsApp Async
 
-Pilar 4: Web Dashboard (Next.js Migration)
-  [x] Migrasi dari Vite ke Next.js 14 App Router - COMPLETED
-  [x] Authentication flow (login, cookie-based session) - COMPLETED
-  [x] RBAC sidebar (menu per role) - COMPLETED
-  [x] Halaman: Overview, Cans, Assignments, Audit Log - COMPLETED
-  [x] Halaman: Reports, Resubmit, WA Monitor, Users - COMPLETED
-  [x] RBAC middleware fix (Admin Kecamatan akses lintas ranting) - COMPLETED
+- Notifikasi WhatsApp setelah submit collection harus diproses async melalui queue.
+- Kegagalan WhatsApp tidak boleh membatalkan collection yang sudah valid tersimpan.
+
+### Mobile Offline-first
+
+- Mobile fokus Android.
+- Gunakan MMKV/offline queue untuk data yang perlu bertahan saat sinyal buruk.
+- Sync harus aman terhadap retry dan duplikasi.
+
+---
+
+## Checklist untuk Agent Sebelum Mengubah Kode
+
+```txt
+1. Apakah task ini kecil atau lintas modul?
+2. File/folder mana yang terdampak?
+3. Apakah shared-types perlu dicek?
+4. Apakah API contract berubah?
+5. Apakah mobile/web/backend ikut terdampak?
+6. Apakah ada risiko database atau data finansial?
+7. Command test/build/lint apa yang relevan?
+8. Learning checkpoint apa yang akan diberikan ke user?
 ```
 
 ---
 
-## 🔴 Bug Kritis Yang Harus Diselesaikan Sprint Ini
+## Riwayat Penting yang Masih Relevan
 
 ```
-PRIORITAS 1 — Production Blocker:
-  [x] Mobile API Base URL: localhost:3000 → 10.0.2.2:3001
-  [x] Field mismatch: mobile mengirim 'amount', backend expect 'nominal'
-  [x] QR Token: HMAC-SHA256 signing IMPLEMENTED (utils/qr.ts)
-  [x] Refresh token: Redis blacklist + endpoint /auth/logout IMPLEMENTED
-  [x] WhatsApp: waResult.status undefined fix IMPLEMENTED
-
-PRIORITAS 2 — Stabilitas:
-  [x] Packages shared-types & shared-utils (INITIALIZED)
-  [x] GET /assignments: filter role di DB-level (COMPLETED)
-  [x] GET /bendahara/collections: pagination DB-level (COMPLETED)
-  [x] Update .agents/rules agar sinkron dengan implementasi aktual (COMPLETED)
-  [x] Mobile stores: ganti AsyncStorage → MMKV sepenuhnya (COMPLETED)
+- Project sudah memakai monorepo PNPM.
+- Database menggunakan nama domain Inggris seperti collections, cans, assignments, districts, branches.
+- Rule visual dashboard memakai tema Earthy & Premium.
+- Agent rules dan skills mulai difokuskan untuk mentor-mode agar developer pemula ikut berkembang.
 ```
+
+Detail historis lama boleh dijadikan referensi, tetapi jangan dianggap sebagai kondisi final tanpa verifikasi codebase aktual.
 
 ---
 
-## Konteks untuk Agent
-
-```
-Codebase saat ini sudah terstruktur sebagai MONOREPO dengan modularisasi route.
-Backend (Fastify + Drizzle) menggunakan folder structure per-domain (admin/, mobile/).
-Database: PostgreSQL dengan schema aktual menggunakan nama INGGRIS (collections, cans, districts, branches).
-
-Kesiapan Ekosistem Saat Ini:
-  - Backend: 95% (Hanya sisa minor fitur opsional)
-  | Fase 6 | Optimasi Performa & Refactoring | Selesai | 2026-04-22 | Perbaikan Build Android & Optimasi Dashboard |
-  | Fase 7 | Persiapan UAT & Staging | Siap | 2026-04-23 | Menunggu deployment ke staging |
-
-⚠️ PERHATIAN AGENT: Gunakan @lazisnu/shared-types untuk interface bersama.
-Jangan mendefinisikan ulang User atau Collection di level app jika sudah ada di package.
-```
-
----
-
-## Analisis Komprehensif (22 April 2026)
-
-```
-Update Terakhir:
-  - Seluruh "God Files" (admin.ts, mobile.ts) telah dimodularisasi ke folder routes/.
-  - Security pilar diperkuat dengan HMAC-SHA256 QR dan Redis Refresh Token Blacklist.
-  - Performa query ditingkatkan dengan DB-level filtering dan proper pagination.
-  - Sinkronisasi antara mobile (MMKV) dan backend (nominal field) telah diverifikasi.
-Update 29 April 2026:
-  - Dukuh Management: Implementasi fitur Dukuh (sub-village) dinamis, CRUD, dan relasi database cans-dukuhs.
-  - Assignment UX: Optimasi alur penugasan massal dengan deteksi ranting otomatis dan multi-select dukuh cerdas.
-  - UI Standardization: Sinkronisasi layout paginasi, navigasi, dan standarisasi ikon aksi (Edit/Trash) di dashboard.
-  - Routing Fix: Perbaikan bug 404 saat navigasi kembali ke Overview dari halaman lain.
-  - Super Admin: Implementasi fitur reset (delete) penugasan khusus ADMIN_KECAMATAN.
-Update 05 Mei 2026:
-  - UI/UX Standardization: Sinkronisasi total halaman Manajemen User dengan "Gold Standard" Kelola Kaleng.
-  - Adaptive Admin Actions: Implementasi tombol aksi dinamis dan Premium Toast Confirmation (react-hot-toast).
-  - UX Optimization: Pengaturan durasi Toast yang nyaman (5s Hapus, 3s Aktifkan) & pembersihan redundansi kode.
-  - Backend API: Migrasi status DELETE dari 204 ke 200 {success:true} untuk konsistensi feedback frontend.
-  - Technical Debt: BUG FIXED. Re-aktivasi otomatis mensinkronisasi tabel users dan officers.
-Update 09 Mei 2026:
-  - UI Modernization: Overhaul total identitas visual dashboard menggunakan palet "Earthy & Premium" (#2C473E, #F4F1EA, #1F8243, #EAD19B).
-  - Header Synchronization: Penyeragaman warna judul H1 (Krem) dan ikon judul (Muted Sand) di 10 modul utama untuk kontras maksimal.
-  - Button Refinement: Implementasi gaya tombol Solid Sand (Primary) dan Outline Sand (Secondary) dengan efek shadow premium.
-  - WA Monitor: Pembersihan fungsionalitas tombol redundant (Reset) dan optimasi ikon status yang interaktif.
-  - Rules Update: Sinkronisasi Design Tokens pada AGENTS.md dan pedoman-web.md sebagai acuan pengembangan masa depan.
-```
-
----
-
-## Konteks Teknis Tambahan (UI)
+## Konteks Teknis UI
 
 ```css
 /* Acuan Warna Utama Dashboard: */
@@ -129,4 +128,4 @@ Update 09 Mei 2026:
 
 *Lazisnu Infaq Collection System — rules/10-sprint-aktif.md*
 *⚠️ Update file ini setiap berganti sprint/fase*
-*Last updated: 2026-05-09*
+*Last updated: 2026-05-16*
