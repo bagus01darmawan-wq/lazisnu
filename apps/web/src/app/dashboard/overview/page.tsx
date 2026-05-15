@@ -23,6 +23,7 @@ import {
   ArrowDownRight,
   Loader2,
   BarChart3,
+  BarChart2,
   AlertTriangle,
   LogIn,
   Calendar
@@ -30,8 +31,7 @@ import {
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
 import { cn } from '@/lib/utils';
-import { FilterPills } from '@/components/ui/FilterPills';
-import { DropdownFilter } from '@/components/ui/DropdownFilter';
+
 
 
 
@@ -41,9 +41,7 @@ export default function OverviewPage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
-  // Filter states
-  const [activePeriod, setActivePeriod] = React.useState('Bulan Ini');
-  const [selectedBranch, setSelectedBranch] = React.useState('all');
+
 
   const fetchStats = async () => {
     try {
@@ -145,44 +143,19 @@ export default function OverviewPage() {
           </div>
         </div>
 
-        {/* Filter Section */}
-        <div className="flex flex-wrap items-center gap-3">
-          <FilterPills
-            options={[
-              { label: 'Hari Ini', value: 'Hari Ini' },
-              { label: 'Minggu Ini', value: 'Minggu Ini' },
-              { label: 'Bulan Ini', value: 'Bulan Ini' }
-            ]}
-            value={activePeriod}
-            onChange={setActivePeriod}
-          />
-
-          <DropdownFilter
-            label="Filter Ranting"
-            placeholder="Cari ranting..."
-            options={[
-              { label: 'Semua Ranting', value: 'all' },
-              { label: 'Kecamatan Tengah', value: 'tengah' },
-              { label: 'Ranting Utara', value: 'utara' },
-              { label: 'Ranting Selatan', value: 'selatan' }
-            ]}
-            value={selectedBranch}
-            onChange={setSelectedBranch}
-          />
-        </div>
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="relative overflow-hidden group bg-[#F4F1EA] border-none">
+        <Card variant="glass" className="relative overflow-hidden group border-white/5">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-bold text-[#2C473E]/50 uppercase tracking-wider">Total Infaq</p>
-              <h3 className="text-2xl font-black text-[#2C473E] mt-1">
+              <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Total Infaq</p>
+              <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">
                 Rp {Number(summary.month_collection).toLocaleString('id-ID')}
               </h3>
             </div>
-            <div className="p-3 bg-[#1F8243]/10 text-[#1F8243] rounded-xl group-hover:bg-[#1F8243] group-hover:text-white transition-all duration-300">
+            <div className="p-3 bg-[#1F8243]/10 text-[#1F8243] rounded-xl group-hover:bg-[#1F8243] group-hover:text-[#2C473E] transition-all duration-300">
               <Wallet size={20} />
             </div>
           </div>
@@ -191,34 +164,34 @@ export default function OverviewPage() {
               {collTrend >= 0 ? <ArrowUpRight size={12} className="mr-1" /> : <ArrowDownRight size={12} className="mr-1" />}
               {Math.abs(collTrend).toFixed(1)}%
             </span>
-            <span className="text-xs text-[#2C473E]/40 font-medium">dari bulan lalu</span>
+            <span className="text-xs text-[#F4F1EA]/40 font-medium">dari bulan lalu</span>
           </div>
         </Card>
 
-        <Card className="relative overflow-hidden group bg-[#F4F1EA] border-none">
+        <Card variant="glass" className="relative overflow-hidden group border-white/5">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-bold text-[#2C473E]/50 uppercase tracking-wider">Kaleng Aktif</p>
-              <h3 className="text-2xl font-black text-[#2C473E] mt-1">{summary.active_cans}</h3>
+              <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Kaleng Aktif</p>
+              <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">{summary.active_cans}</h3>
             </div>
-            <div className="p-3 bg-[#C959A0]/10 text-[#C959A0] rounded-xl group-hover:bg-[#C959A0] group-hover:text-white transition-all duration-300">
+            <div className="p-3 bg-[#C959A0]/10 text-[#C959A0] rounded-xl group-hover:bg-[#C959A0] group-hover:text-[#2C473E] transition-all duration-300">
               <Box size={20} />
             </div>
           </div>
           <div className="mt-4 flex items-center gap-2">
             <span className="flex items-center text-xs font-bold text-[#C959A0] bg-[#C959A0]/10 px-2 py-1 rounded-lg">{inactiveCans} Nonaktif
             </span>
-            <span className="text-xs text-[#2C473E]/60 font-bold"> Total {summary.total_cans} </span>
+            <span className="text-xs text-[#F4F1EA]/60 font-bold"> Total {summary.total_cans} </span>
           </div>
         </Card>
 
-        <Card className="relative overflow-hidden group bg-[#F4F1EA] border-none">
+        <Card variant="glass" className="relative overflow-hidden group border-white/5">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-bold text-[#2C473E]/50 uppercase tracking-wider">Petugas Lapangan</p>
-              <h3 className="text-2xl font-black text-[#2C473E] mt-1">{summary.total_officers}</h3>
+              <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Petugas Lapangan</p>
+              <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">{summary.total_officers}</h3>
             </div>
-            <div className="p-3 bg-[#6B9E9F]/10 text-[#6B9E9F] rounded-xl group-hover:bg-[#6B9E9F] group-hover:text-white transition-all duration-300">
+            <div className="p-3 bg-[#6B9E9F]/10 text-[#6B9E9F] rounded-xl group-hover:bg-[#6B9E9F] group-hover:text-[#2C473E] transition-all duration-300">
               <Users size={20} />
             </div>
           </div>
@@ -229,13 +202,13 @@ export default function OverviewPage() {
           </div>
         </Card>
 
-        <Card className="relative overflow-hidden group bg-[#F4F1EA] border-none">
+        <Card variant="glass" className="relative overflow-hidden group border-white/5">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-bold text-[#2C473E]/50 uppercase tracking-wider">Penjemputan</p>
-              <h3 className="text-2xl font-black text-[#2C473E] mt-1">{currentRate.toFixed(1)}%</h3>
+              <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Penjemputan</p>
+              <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">{currentRate.toFixed(1)}%</h3>
             </div>
-            <div className="p-3 bg-[#DE6F4A]/10 text-[#DE6F4A] rounded-xl group-hover:bg-[#DE6F4A] group-hover:text-white transition-all duration-300">
+            <div className="p-3 bg-[#DE6F4A]/10 text-[#DE6F4A] rounded-xl group-hover:bg-[#DE6F4A] group-hover:text-[#2C473E] transition-all duration-300">
               <TrendingUp size={20} />
             </div>
           </div>
@@ -244,38 +217,45 @@ export default function OverviewPage() {
               {rateTrend >= 0 ? <ArrowUpRight size={12} className="mr-1" /> : <ArrowDownRight size={12} className="mr-1" />}
               {Math.abs(rateTrend).toFixed(1)}%
             </span>
-            <span className="text-xs text-[#2C473E]/40 font-medium">dari bulan lalu</span>
+            <span className="text-xs text-[#F4F1EA]/40 font-medium">dari bulan lalu</span>
           </div>
         </Card>
       </div>
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <Card title={user?.role === 'ADMIN_KECAMATAN' ? "Perolehan per Ranting" : "Perolehan per Petugas"} className="h-[450px] flex flex-col bg-[#F4F1EA] border-none">
-          <div className="flex-1 w-full mt-4">
+        <Card variant="glass" className="h-[450px] flex flex-col border-white/5">
+          <div className="px-6 py-4 border-b border-white/5">
+            <h3 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
+              <BarChart2 size={16} className="text-[#EAD19B]" />
+              {user?.role === 'ADMIN_KECAMATAN' ? "Perolehan per Ranting" : "Perolehan per Petugas"}
+            </h3>
+          </div>
+          <div className="flex-1 w-full mt-4 px-2">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={user?.role === 'ADMIN_KECAMATAN' ? data.by_branch : data.by_officer}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(44, 71, 62, 0.1)" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(244, 241, 234, 0.08)" />
                 <XAxis
                   dataKey={user?.role === 'ADMIN_KECAMATAN' ? "branch_name" : "officer_name"}
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 10, fill: '#2C473E', fontWeight: 600 }}
+                  tick={{ fontSize: 10, fill: '#F4F1EA', fontWeight: 600 }}
                   dy={10}
                 />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 10, fill: '#2C473E' }}
+                  tick={{ fontSize: 10, fill: '#F4F1EA' }}
                 />
                 <Tooltip
-                  cursor={{ fill: 'rgba(44, 71, 62, 0.05)' }}
+                  cursor={{ fill: 'rgba(244, 241, 234, 0.05)' }}
                   contentStyle={{
                     borderRadius: '12px',
-                    border: '1px solid rgba(44, 71, 62, 0.1)',
-                    backgroundColor: '#F4F1EA',
-                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-                    fontSize: '12px'
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    backgroundColor: '#2C473E',
+                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
+                    fontSize: '12px',
+                    color: '#F4F1EA'
                   }}
                   formatter={(value: any) => [`Rp ${value.toLocaleString('id-ID')}`, 'Nominal']}
                 />
@@ -290,8 +270,14 @@ export default function OverviewPage() {
           </div>
         </Card>
 
-        <Card title="Tren Infaq Harian (Minggu Ini)" className="h-[450px] flex flex-col bg-[#F4F1EA] border-none">
-          <div className="flex-1 w-full mt-4">
+        <Card variant="glass" className="h-[450px] flex flex-col border-white/5">
+          <div className="px-6 py-4 border-b border-white/5">
+            <h3 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
+              <TrendingUp size={16} className="text-[#EAD19B]" />
+              Tren Infaq Harian (Minggu Ini)
+            </h3>
+          </div>
+          <div className="flex-1 w-full mt-4 px-2">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={data.daily_trends || []}>
                 <defs>
@@ -300,26 +286,27 @@ export default function OverviewPage() {
                     <stop offset="95%" stopColor="#DE6F4A" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(44, 71, 62, 0.1)" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(244, 241, 234, 0.08)" />
                 <XAxis
                   dataKey="day"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 11, fill: '#2C473E', fontWeight: 600 }}
+                  tick={{ fontSize: 11, fill: '#F4F1EA', fontWeight: 600 }}
                   dy={10}
                 />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 11, fill: '#2C473E' }}
+                  tick={{ fontSize: 11, fill: '#F4F1EA' }}
                 />
                 <Tooltip
                   contentStyle={{
                     borderRadius: '12px',
-                    border: '1px solid rgba(44, 71, 62, 0.1)',
-                    backgroundColor: '#F4F1EA',
-                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-                    fontSize: '12px'
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    backgroundColor: '#2C473E',
+                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
+                    fontSize: '12px',
+                    color: '#F4F1EA'
                   }}
                 />
                 <Area

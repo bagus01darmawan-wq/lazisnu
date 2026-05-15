@@ -12,6 +12,7 @@ interface ModalProps {
   children: React.ReactNode;
   footer?: React.ReactNode;
   className?: string;
+  variant?: 'default' | 'glass';
 }
 
 const Modal = ({
@@ -21,6 +22,7 @@ const Modal = ({
   children,
   footer,
   className,
+  variant = 'default',
 }: ModalProps) => {
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -41,24 +43,51 @@ const Modal = ({
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Overlay */}
-      <div 
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity" 
+      <div
+        className={cn(
+          'fixed inset-0 transition-opacity',
+          variant === 'glass'
+            ? 'bg-black/60 backdrop-blur-md'
+            : 'bg-black/50 backdrop-blur-sm'
+        )}
         onClick={onClose}
       />
-      
+
       {/* Modal Content */}
-      <div 
+      <div
         className={cn(
           'relative z-10 w-full max-w-2xl transform bg-white rounded-2xl shadow-2xl transition-all flex flex-col max-h-[90vh]',
+          variant === 'glass'
+            ? 'bg-[#F4F1EA]/5 backdrop-blur-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.4)]'
+            : 'bg-white rounded-2xl shadow-2xl',
           className
         )}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50 rounded-t-2xl">
-          <h3 className="text-lg font-bold text-gray-900">{title || 'Detail'}</h3>
-          <button 
+        <div
+          className={cn(
+            'flex items-center justify-between px-6 py-4 rounded-t-2xl',
+            variant === 'glass'
+              ? 'border-b border-white/10 bg-white/5'
+              : 'border-b border-gray-100 bg-gray-50/50'
+          )}
+        >
+          <h3
+            className={cn(
+              'text-lg font-bold',
+              variant === 'glass' ? 'text-[#F4F1EA]' : 'text-gray-900'
+            )}
+          >
+            {title || 'Detail'}
+          </h3>
+          <button
             onClick={onClose}
-            className="p-1 rounded-full hover:bg-gray-200 transition-colors text-gray-400 hover:text-gray-600"
+            className={cn(
+              'p-1 rounded-full transition-colors',
+              variant === 'glass'
+                ? 'text-[#F4F1EA]/40 hover:bg-white/10 hover:text-[#F4F1EA]'
+                : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600'
+            )}
           >
             <X size={20} />
           </button>
@@ -71,7 +100,14 @@ const Modal = ({
 
         {/* Footer */}
         {footer && (
-          <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 rounded-b-2xl">
+          <div
+            className={cn(
+              'px-6 py-4 rounded-b-2xl',
+              variant === 'glass'
+                ? 'border-t border-white/10 bg-white/5'
+                : 'border-t border-gray-100 bg-gray-50/50'
+            )}
+          >
             {footer}
           </div>
         )}

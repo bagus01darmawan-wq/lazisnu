@@ -9,7 +9,7 @@ import { Modal } from '@/components/ui/Modal';
 import { ColumnDef } from '@tanstack/react-table';
 import { format, isValid } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { ShieldAlert, RefreshCw, Eye, Search, Calendar, ChevronLeft, ChevronRight, RotateCcw, History } from 'lucide-react';
+import { ShieldAlert, RefreshCw, Eye, Search, Calendar as CalendarIcon, ChevronLeft, ChevronRight, RotateCcw, History, Clock, User, Database } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 import { FilterPills } from '@/components/ui/FilterPills';
@@ -94,7 +94,12 @@ export default function AuditLogPage() {
     {
       id: 'createdAt',
       accessorKey: 'createdAt',
-      header: 'Waktu',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <Clock size={12} className="text-[#EAD19B]" />
+          <span>Waktu</span>
+        </div>
+      ),
       cell: ({ row }) => {
         const date = new Date(row.original.createdAt);
         return (
@@ -107,7 +112,12 @@ export default function AuditLogPage() {
     {
       id: 'actionType',
       accessorKey: 'actionType',
-      header: 'Aksi',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <ShieldAlert size={12} className="text-[#EAD19B]" />
+          <span>Aksi</span>
+        </div>
+      ),
       cell: ({ row }) => {
         const type = row.original.actionType || 'UNKNOWN';
         let color = 'text-[#F4F1EA]/60';
@@ -119,7 +129,13 @@ export default function AuditLogPage() {
       },
     },
     {
-      header: 'Operator',
+      id: 'user',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <User size={12} className="text-[#EAD19B]" />
+          <span>Operator</span>
+        </div>
+      ),
       cell: ({ row }) => (
         <div>
           <p className="font-bold text-[#F4F1EA]">{row.original.user?.fullName || row.original.officer?.fullName || 'System'}</p>
@@ -130,7 +146,12 @@ export default function AuditLogPage() {
     {
       id: 'entityType',
       accessorKey: 'entityType',
-      header: 'Entitas',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <Database size={12} className="text-[#EAD19B]" />
+          <span>Entitas</span>
+        </div>
+      ),
       cell: ({ row }) => <span className="font-mono text-xs uppercase text-[#F4F1EA]/60">{row.original.entityType || '-'}</span>,
     },
     {

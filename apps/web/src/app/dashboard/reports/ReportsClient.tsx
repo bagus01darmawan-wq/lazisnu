@@ -9,7 +9,7 @@ import { id } from 'date-fns/locale';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
-import { Calendar } from 'lucide-react';
+import { Calendar, QrCode, User, UserCheck, Wallet } from 'lucide-react';
 
 export default function ReportsClient({ data, pagination }: { data: any[], pagination?: { page: number, limit: number, total: number, total_pages: number } }) {
   const router = useRouter();
@@ -23,7 +23,12 @@ export default function ReportsClient({ data, pagination }: { data: any[], pagin
   const columns: ColumnDef<any>[] = [
     {
       accessorKey: 'collected_at',
-      header: 'Tanggal',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <Calendar size={12} className="text-[#EAD19B]" />
+          <span>Tanggal</span>
+        </div>
+      ),
       cell: ({ row }) => (
         <span className="text-xs font-medium text-[#F4F1EA]/60">
           {format(new Date(row.original.collected_at), 'PPP', { locale: id })}
@@ -32,29 +37,44 @@ export default function ReportsClient({ data, pagination }: { data: any[], pagin
     },
     {
       accessorKey: 'qr_code',
-      header: 'Kode Kaleng',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <QrCode size={12} className="text-[#EAD19B]" />
+          <span>Kode Kaleng</span>
+        </div>
+      ),
       cell: ({ row }) => <span className="font-bold text-[#F4F1EA]">{row.original.qr_code}</span>,
     },
     {
       accessorKey: 'owner_name',
-      header: 'Penyumbang',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <User size={12} className="text-[#EAD19B]" />
+          <span>Penyumbang</span>
+        </div>
+      ),
       cell: ({ row }) => <span className="text-sm font-bold text-[#F4F1EA]">{row.original.owner_name}</span>,
     },
     {
       accessorKey: 'officer_name',
-      header: 'Petugas',
-      cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-[#EAD19B]">
-            {row.original.officer_name.charAt(0)}
-          </div>
-          <span className="text-sm font-medium text-[#F4F1EA]/80">{row.original.officer_name}</span>
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <UserCheck size={12} className="text-[#EAD19B]" />
+          <span>Petugas</span>
         </div>
+      ),
+      cell: ({ row }) => (
+        <span className="text-sm font-medium text-[#F4F1EA]/80">{row.original.officer_name}</span>
       ),
     },
     {
       accessorKey: 'nominal',
-      header: 'Nominal',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <Wallet size={12} className="text-[#EAD19B]" />
+          <span>Nominal</span>
+        </div>
+      ),
       cell: ({ row }) => (
         <span className="font-bold text-[#1F8243]">
           Rp {Number(row.original.nominal).toLocaleString('id-ID')}

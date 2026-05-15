@@ -27,7 +27,10 @@ import {
   Repeat,
   Trash2,
   MapPin,
-  RotateCcw
+  RotateCcw,
+  UserCheck,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -35,6 +38,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import * as z from 'zod';
 import { FilterPills } from '@/components/ui/FilterPills';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
+import { GlassSelect } from '@/components/ui/GlassSelect';
 import { cn } from '@/lib/utils';
 import { PeriodPicker } from '@/components/ui/PeriodPicker';
 import { ConfirmToast } from '@/components/ui/ConfirmToast';
@@ -56,6 +60,9 @@ export default function AssignmentsPage() {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferringAssignment, setTransferringAssignment] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkReassignModalOpen, setIsBulkReassignModalOpen] = useState(false);
+  const [bulkReassignOfficerId, setBulkReassignOfficerId] = useState('');
 
   const [cans, setCans] = useState([]);
   const [officers, setOfficers] = useState([]);
@@ -223,6 +230,73 @@ export default function AssignmentsPage() {
     }
   };
 
+  const toggleSelectAll = () => {
+    if (data.length === 0) return;
+    if (selectedIds.length === data.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(data.map((item: any) => item.id));
+    }
+  };
+
+  const toggleSelectId = (item: any) => {
+    setSelectedIds(prev =>
+      prev.includes(item.id) ? prev.filter(i => i !== item.id) : [...prev, item.id]
+    );
+  };
+
+  const handleBulkDeleteAssignment = async () => {
+    if (selectedIds.length === 0) return;
+
+    (toast as any).custom((t: any) => (
+      <ConfirmToast
+        id={t}
+        title="Hapus Massal?"
+        description={`Hapus ${selectedIds.length} penugasan terpilih?`}
+        confirmLabel="Ya, Hapus"
+        onConfirm={async () => {
+          toast.loading('Menghapus...');
+          try {
+            await Promise.all(selectedIds.map(id => api.delete(`/admin/assignments/${id}`)));
+            toast.dismiss();
+            toast.success(`Berhasil menghapus ${selectedIds.length} penugasan`);
+            setSelectedIds([]);
+            fetchData();
+          } catch (error: any) {
+            toast.dismiss();
+            toast.error('Gagal menghapus beberapa penugasan');
+          }
+        }}
+        variant="danger"
+      />
+    ), { duration: 5000 });
+  };
+
+  const handleBulkReassign = async () => {
+    if (selectedIds.length === 0 || !bulkReassignOfficerId) return;
+    setSubmitting(true);
+    try {
+      const results = await Promise.allSettled(
+        selectedIds.map(id =>
+          api.put(`/admin/assignments/${id}`, {
+            officer_id: bulkReassignOfficerId,
+            status: 'REASSIGNED'
+          })
+        )
+      );
+      const successCount = results.filter(r => r.status === 'fulfilled').length;
+      toast.success(`Berhasil re-assign ${successCount} dari ${selectedIds.length} penugasan`);
+      setIsBulkReassignModalOpen(false);
+      setBulkReassignOfficerId('');
+      setSelectedIds([]);
+      fetchData();
+    } catch (error) {
+      toast.error('Gagal melakukan re-assign massal');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleDeleteAssignment = (id: string) => {
     (toast as any).custom((t: any) => (
       <ConfirmToast
@@ -254,8 +328,44 @@ export default function AssignmentsPage() {
 
   const columns: ColumnDef<any>[] = [
     {
+      id: 'selection',
+      header: () => {
+        const isAllSelected = data.length > 0 && selectedIds.length === data.length;
+        return (
+          <button
+            onClick={toggleSelectAll}
+            disabled={data.length === 0}
+            className="p-1 hover:bg-[#1F8243]/30 rounded transition-colors disabled:opacity-30"
+          >
+            {isAllSelected ? (
+              <CheckSquare size={18} className="text-[#1F8243]" />
+            ) : (
+              <Square size={18} className="text-[#F4F1EA]/30" />
+            )}
+          </button>
+        );
+      },
+      cell: ({ row }) => (
+        <button
+          onClick={() => toggleSelectId(row.original)}
+          className="p-1 hover:bg-[#1F8243]/30 rounded transition-colors"
+        >
+          {selectedIds.includes(row.original.id) ? (
+            <CheckSquare size={18} className="text-[#1F8243]" />
+          ) : (
+            <Square size={18} className="text-[#F4F1EA]/30" />
+          )}
+        </button>
+      ),
+    },
+    {
       accessorKey: 'can',
-      header: 'Kaleng / Pemilik',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <Box size={12} className="text-[#EAD19B]" />
+          <span>Kaleng / Pemilik</span>
+        </div>
+      ),
       cell: ({ row }) => (
         <div className="flex flex-col">
           <p className="font-bold text-[#F4F1EA] tracking-tight">{row.original.can.owner_name}</p>
@@ -270,7 +380,12 @@ export default function AssignmentsPage() {
     },
     {
       accessorKey: 'address',
-      header: 'DUSUN',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <MapPin size={12} className="text-[#EAD19B]" />
+          <span>DUSUN</span>
+        </div>
+      ),
       cell: ({ row }) => (
         <div className="flex flex-col text-xs font-medium text-[#F4F1EA]/60">
           <span className="uppercase tracking-tight">{row.original.can.dukuh_name || row.original.can.dukuh || '-'}</span>
@@ -282,7 +397,12 @@ export default function AssignmentsPage() {
     },
     {
       accessorKey: 'officer',
-      header: 'Petugas Lapangan',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <UserCheck size={12} className="text-[#EAD19B]" />
+          <span>Petugas Lapangan</span>
+        </div>
+      ),
       cell: ({ row }) => (
         <div className="flex flex-col">
           <span className="font-bold text-[#F4F1EA]">{row.original.officer.full_name}</span>
@@ -294,7 +414,12 @@ export default function AssignmentsPage() {
     },
     {
       accessorKey: 'period',
-      header: 'Periode',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <Calendar size={12} className="text-[#EAD19B]" />
+          <span>Periode</span>
+        </div>
+      ),
       cell: ({ row }) => (
         <div className="flex flex-col gap-0.5">
           <span className="text-xs font-medium uppercase tracking-tight text-[#F4F1EA]/60">
@@ -308,7 +433,12 @@ export default function AssignmentsPage() {
     },
     {
       accessorKey: 'status',
-      header: 'Status',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <CheckCircle2 size={12} className="text-[#EAD19B]" />
+          <span>Status</span>
+        </div>
+      ),
       cell: ({ row }) => {
         const statuses = {
           ACTIVE: { label: 'ASSIGNED', color: 'text-[#DE6F4A]' },
@@ -370,21 +500,47 @@ export default function AssignmentsPage() {
           </div>
         </div>
 
-        {/* Primary Action Button */}
-        <Button
-          onClick={() => {
-            reset({
-              branch_id: '',
-              officer_id: '',
-              dukuh_ids: []
-            });
-            setIsModalOpen(true);
-          }}
-          className="h-[35px] px-4 rounded-xl text-[11px] font-bold bg-[#EAD19B] text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 hover:bg-[#EAD19B]/90 transition-all active:scale-95 flex items-center gap-2"
-        >
-          <Plus size={14} strokeWidth={3} />
-          Tugaskan Petugas
-        </Button>
+        <div className="flex items-center gap-4">
+          {/* Bulk Action Pill Wrapper */}
+          {selectedIds.length > 0 && (
+            <div className="flex bg-[#F4F1EA]/10 backdrop-blur-md p-1 rounded-2xl border border-[#F4F1EA]/20 shadow-sm">
+              <div className="bg-[#1F8243]/5 backdrop-blur-sm rounded-xl border border-[#1F8243]/10">
+                <button
+                  onClick={() => setIsBulkReassignModalOpen(true)}
+                  className="h-[33px] px-4 rounded-xl text-[11px] font-bold text-[#F4F1EA] hover:bg-[#1F8243]/10 transition-all active:scale-95 flex items-center gap-2"
+                >
+                  <Repeat size={14} strokeWidth={3} />
+                  Re-Assign ({selectedIds.length})
+                </button>
+              </div>
+              {user?.role === 'ADMIN_KECAMATAN' && (
+                <button
+                  onClick={handleBulkDeleteAssignment}
+                  className="h-[33px] px-4 rounded-xl text-[11px] font-bold transition-all active:scale-95 flex items-center gap-2 text-[#D97A76] hover:bg-[#D97A76]/10"
+                >
+                  <Trash2 size={14} strokeWidth={3} />
+                  Hapus ({selectedIds.length})
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Primary Action Button */}
+          <Button
+            onClick={() => {
+              reset({
+                branch_id: '',
+                officer_id: '',
+                dukuh_ids: []
+              });
+              setIsModalOpen(true);
+            }}
+            className="h-[35px] px-4 rounded-xl text-[11px] font-bold bg-[#EAD19B] text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 hover:bg-[#EAD19B]/90 transition-all active:scale-95 flex items-center gap-2"
+          >
+            <Plus size={14} strokeWidth={3} />
+            Tugaskan Petugas
+          </Button>
+        </div>
       </div>
 
       {/* Transparent Filter Toolbar */}
@@ -541,57 +697,56 @@ export default function AssignmentsPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title="Penugasan"
+        variant="glass"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-          <div className="bg-green-50 p-4 rounded-2xl border border-green-100 flex gap-3 text-green-800 mb-2">
-            <Clock size={20} className="shrink-0" />
-            <div className="text-xs">
+          <div className="bg-[#1F8243]/10 p-4 rounded-2xl border border-[#1F8243]/20 flex gap-3 text-[#F4F1EA] mb-2">
+            <Clock size={20} className="shrink-0 text-[#1F8243]" />
+            <div className="text-xs text-[#F4F1EA]/60">
               <p className="font-bold mb-0.5 uppercase tracking-wider">Periode Berjalan</p>
-              Penugasan akan otomatis dibuat untuk bulan <span className="font-bold">{months[currentMonth - 1]} {currentYear}</span>.
+              Penugasan akan otomatis dibuat untuk bulan <span className="font-bold text-[#EAD19B]">{months[currentMonth - 1]} {currentYear}</span>.
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-gray-700">Pilih Petugas Lapangan</label>
-            <select
-              {...register('officer_id')}
-              className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer"
-            >
-              <option value="">-- Pilih Petugas --</option>
-              {officers.map((o: any) => (
-                <option key={o.id} value={o.id}>{o.full_name} ({o.employee_code})</option>
-              ))}
-            </select>
-            {errors.officer_id && <p className="text-xs font-medium text-red-500">{errors.officer_id.message}</p>}
+            <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih Petugas Lapangan</label>
+            <GlassSelect
+              value={watch('officer_id') || ''}
+              onChange={(val) => setValue('officer_id', val)}
+              placeholder="-- Pilih Petugas --"
+              options={officers.map((o: any) => ({
+                label: `${o.full_name} (${o.employee_code})`,
+                value: o.id
+              }))}
+              error={errors.officer_id?.message}
+              searchable
+            />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-gray-700">Pilih Ranting (Desa)</label>
-            <select
-              {...register('branch_id')}
-              className={`w-full h-11 px-3 border border-slate-200 rounded-xl text-sm font-medium outline-none shadow-sm pointer-events-none ${selectedBranchId ? 'bg-slate-100 text-slate-900' : 'bg-slate-50 text-slate-400'}`}
-              tabIndex={-1}
-            >
-              <option value="">-- Deteksi Ranting Otomatis --</option>
-              {branches.map((b: any) => (
-                <option key={b.id} value={b.id}>
-                  {b.name.replace(/ranting/gi, '').trim().toUpperCase()}
-                </option>
-              ))}
-            </select>
-            {errors.branch_id && <p className="text-xs font-medium text-red-500">{errors.branch_id.message}</p>}
+            <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih Ranting (Desa)</label>
+            <GlassSelect
+              value={watch('branch_id') || ''}
+              onChange={(val) => setValue('branch_id', val)}
+              placeholder="-- Deteksi Ranting Otomatis --"
+              options={branches.map((b: any) => ({
+                label: b.name.replace(/ranting/gi, '').trim().toUpperCase(),
+                value: b.id
+              }))}
+              error={errors.branch_id?.message}
+            />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-gray-700">Pilih Dukuh (Bisa lebih dari satu)</label>
-            <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/50 space-y-2">
+            <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih Dukuh (Bisa lebih dari satu)</label>
+            <div className="border border-white/10 rounded-xl p-3 bg-white/[0.03] space-y-2">
               {selectedBranchId ? (
                 <>
-                  <div className="flex items-center gap-2 pb-2 border-b border-slate-200 mb-2">
+                  <div className="flex items-center gap-2 pb-2 border-b border-white/10 mb-2">
                     <input
                       type="checkbox"
                       id="selectAllDukuh"
-                      className="w-4 h-4 rounded border-slate-300 text-green-600 focus:ring-green-500"
+                      className="w-4 h-4 rounded border-white/20 text-[#EAD19B] focus:ring-[#EAD19B]/30"
                       checked={modalDukuhs.length > 0 && watch('dukuh_ids').length === modalDukuhs.length}
                       onChange={(e) => {
                         if (e.target.checked) {
@@ -601,7 +756,7 @@ export default function AssignmentsPage() {
                         }
                       }}
                     />
-                    <label htmlFor="selectAllDukuh" className="text-xs font-bold text-slate-700 cursor-pointer">PILIH SEMUA DUKUH</label>
+                    <label htmlFor="selectAllDukuh" className="text-xs font-bold text-[#F4F1EA]/60 cursor-pointer">PILIH SEMUA DUKUH</label>
                   </div>
                   <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
                     {modalDukuhs.map((d: any) => (
@@ -610,37 +765,37 @@ export default function AssignmentsPage() {
                           type="checkbox"
                           id={`dukuh-${d.id}`}
                           value={d.id}
-                          className="w-4 h-4 rounded border-slate-300 text-green-600 focus:ring-green-500"
+                          className="w-4 h-4 rounded border-white/20 text-[#EAD19B] focus:ring-[#EAD19B]/30"
                           {...register('dukuh_ids')}
                         />
-                        <label htmlFor={`dukuh-${d.id}`} className="text-sm text-slate-700 cursor-pointer">{d.name}</label>
+                        <label htmlFor={`dukuh-${d.id}`} className="text-sm text-[#F4F1EA] cursor-pointer">{d.name}</label>
                       </div>
                     ))}
                     {modalDukuhs.length === 0 && !fetchingDukuhs && (
-                      <p className="text-xs text-slate-500 italic">Tidak ada data dukuh di ranting ini</p>
+                      <p className="text-xs text-[#F4F1EA]/40 italic">Tidak ada data dukuh di ranting ini</p>
                     )}
-                    {fetchingDukuhs && <p className="text-xs text-slate-500">Memuat data...</p>}
+                    {fetchingDukuhs && <p className="text-xs text-[#F4F1EA]/40">Memuat data...</p>}
                   </div>
                 </>
               ) : (
-                <p className="text-xs text-slate-500 italic">Pilih petugas terlebih dahulu untuk deteksi ranting & dukuh</p>
+                <p className="text-xs text-[#F4F1EA]/40 italic">Pilih petugas terlebih dahulu untuk deteksi ranting & dukuh</p>
               )}
             </div>
-            {errors.dukuh_ids && <p className="text-xs font-medium text-red-500">{errors.dukuh_ids.message}</p>}
+            {errors.dukuh_ids && <p className="text-xs font-medium text-red-400">{errors.dukuh_ids.message}</p>}
           </div>
 
           <div className="flex gap-3 pt-4">
             <Button
               type="button"
               variant="secondary"
-              className="flex-1"
+              className="flex-1 border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-white/10 hover:text-[#F4F1EA]"
               onClick={() => setIsModalOpen(false)}
             >
               Batal
             </Button>
             <Button
               type="submit"
-              className="flex-1"
+              className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] font-bold rounded-xl h-11 shadow-lg shadow-[#EAD19B]/20"
               isLoading={submitting}
             >
               Simpan Penugasan
@@ -654,46 +809,48 @@ export default function AssignmentsPage() {
         isOpen={isTransferModalOpen}
         onClose={() => setIsTransferModalOpen(false)}
         title="Transfer Penugasan"
+        variant="glass"
       >
         {transferringAssignment && (
           <div className="space-y-6">
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
+            <div className="bg-white/[0.03] p-4 rounded-2xl border border-white/10 space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Kaleng / Pemilik</span>
-                <span className="text-xs font-bold text-slate-900">{transferringAssignment.can.qr_code}</span>
+                <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase">Kaleng / Pemilik</span>
+                <span className="text-xs font-bold text-[#F4F1EA]">{transferringAssignment.can.qr_code}</span>
               </div>
-              <div className="flex justify-between items-center border-t border-slate-200 pt-3">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Petugas Saat Ini</span>
-                <span className="text-xs font-bold text-red-600">{transferringAssignment.officer.full_name}</span>
+              <div className="flex justify-between items-center border-t border-white/10 pt-3">
+                <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase">Petugas Saat Ini</span>
+                <span className="text-xs font-bold text-[#D97A76]">{transferringAssignment.officer.full_name}</span>
               </div>
             </div>
 
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-gray-700">Pilih Petugas Pengganti</label>
-                <select
-                  className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer"
-                  onChange={(e) => setTransferringAssignment({ ...transferringAssignment, newOfficerId: e.target.value })}
-                >
-                  <option value="">-- Pilih Petugas Baru --</option>
-                  {officers
+                <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih Petugas Pengganti</label>
+                <GlassSelect
+                  value={transferringAssignment.newOfficerId || ''}
+                  onChange={(val) => setTransferringAssignment({ ...transferringAssignment, newOfficerId: val })}
+                  placeholder="-- Pilih Petugas Baru --"
+                  options={officers
                     .filter((o: any) => o.id !== transferringAssignment.officer_id && o.branch_id === transferringAssignment.can.branch_id)
-                    .map((o: any) => (
-                      <option key={o.id} value={o.id}>{o.full_name} ({o.employee_code})</option>
-                    ))}
-                </select>
+                    .map((o: any) => ({
+                      label: `${o.full_name} (${o.employee_code})`,
+                      value: o.id
+                    }))}
+                  searchable
+                />
               </div>
 
               <div className="flex gap-3 pt-2">
                 <Button
                   variant="secondary"
-                  className="flex-1"
+                  className="flex-1 border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-white/10 hover:text-[#F4F1EA]"
                   onClick={() => setIsTransferModalOpen(false)}
                 >
                   Batal
                 </Button>
                 <Button
-                  className="flex-1"
+                  className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] font-bold rounded-xl h-11 shadow-lg shadow-[#EAD19B]/20"
                   isLoading={submitting}
                   disabled={!transferringAssignment.newOfficerId}
                   onClick={() => handleTransfer({ officer_id: transferringAssignment.newOfficerId })}
@@ -704,6 +861,62 @@ export default function AssignmentsPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Modal Bulk Re-Assign */}
+      <Modal
+        isOpen={isBulkReassignModalOpen}
+        onClose={() => {
+          setIsBulkReassignModalOpen(false);
+          setBulkReassignOfficerId('');
+        }}
+        title="Re-Assign Massal"
+        variant="glass"
+      >
+        <div className="space-y-6">
+          <div className="bg-white/[0.03] p-4 rounded-2xl border border-white/10">
+            <p className="text-sm text-[#F4F1EA]/60">
+              Akan memindahkan <span className="font-bold text-[#EAD19B]">{selectedIds.length}</span> penugasan ke petugas baru.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih Petugas Pengganti</label>
+              <GlassSelect
+                value={bulkReassignOfficerId}
+                onChange={(val) => setBulkReassignOfficerId(val)}
+                placeholder="-- Pilih Petugas Baru --"
+                options={officers.map((o: any) => ({
+                  label: `${o.full_name} (${o.employee_code})`,
+                  value: o.id
+                }))}
+                searchable
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="secondary"
+                className="flex-1 border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-white/10 hover:text-[#F4F1EA]"
+                onClick={() => {
+                  setIsBulkReassignModalOpen(false);
+                  setBulkReassignOfficerId('');
+                }}
+              >
+                Batal
+              </Button>
+              <Button
+                className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] font-bold rounded-xl h-11 shadow-lg shadow-[#EAD19B]/20"
+                isLoading={submitting}
+                disabled={!bulkReassignOfficerId}
+                onClick={handleBulkReassign}
+              >
+                Konfirmasi Re-Assign
+              </Button>
+            </div>
+          </div>
+        </div>
       </Modal>
     </div>
   );

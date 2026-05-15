@@ -1,3 +1,7 @@
+---
+trigger: manual
+---
+
 # 12 - Standar UI Web Dashboard
 
 Dokumen ini adalah standar resmi untuk seluruh komponen UI interaktif pada aplikasi web dashboard Lazisnu. Referensi utama: halaman `cans/page.tsx` (implementasi paling matang). Setiap modul baru atau modifikasi **WAJIB** mengacu panduan ini.

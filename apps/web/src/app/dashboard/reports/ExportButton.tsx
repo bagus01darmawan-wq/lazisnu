@@ -2,11 +2,11 @@
 
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { Download, Calendar } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { authHelper } from '@/lib/auth';
 import { Modal } from '@/components/ui/Modal';
-import { Input } from '@/components/ui/Input';
+import { GlassDatePicker } from '@/components/ui/GlassDatePicker';
 
 export default function ExportButton() {
   const [isOpen, setIsOpen] = useState(false);
@@ -74,13 +74,14 @@ export default function ExportButton() {
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
         title="Export Laporan CSV"
+        variant="glass"
         footer={
           <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setIsOpen(false)}>
+            <Button variant="outline" onClick={() => setIsOpen(false)} className="border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-white/10 hover:text-[#F4F1EA]">
               Batal
             </Button>
-            <Button 
-              onClick={handleExport} 
+            <Button
+              onClick={handleExport}
               isLoading={loading}
               className="bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] font-bold px-6 rounded-xl"
             >
@@ -90,26 +91,24 @@ export default function ExportButton() {
         }
       >
         <div className="space-y-4 py-2">
-          <p className="text-sm text-slate-500 mb-4">
+          <p className="text-sm text-[#F4F1EA]/60 mb-4">
             Pilih rentang tanggal penjemputan infaq yang ingin diunduh dalam format CSV.
           </p>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase">Tanggal Mulai</label>
-              <Input 
-                type="date" 
-                value={startDate} 
-                onChange={(e) => setStartDate(e.target.value)}
-                className="rounded-xl border-slate-200"
+              <label className="text-xs font-bold text-[#F4F1EA]/60 uppercase">Tanggal Mulai</label>
+              <GlassDatePicker
+                value={startDate}
+                onChange={(val) => setStartDate(val)}
+                max={endDate}
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase">Tanggal Selesai</label>
-              <Input 
-                type="date" 
-                value={endDate} 
-                onChange={(e) => setEndDate(e.target.value)}
-                className="rounded-xl border-slate-200"
+              <label className="text-xs font-bold text-[#F4F1EA]/60 uppercase">Tanggal Selesai</label>
+              <GlassDatePicker
+                value={endDate}
+                onChange={(val) => setEndDate(val)}
+                min={startDate}
               />
             </div>
           </div>

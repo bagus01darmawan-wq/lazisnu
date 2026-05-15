@@ -19,7 +19,9 @@ import {
   AlertCircle,
   Clock,
   CheckCircle2,
-  User as UserIcon
+  User as UserIcon,
+  QrCode,
+  Wallet
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -110,7 +112,12 @@ export default function ResubmitPage() {
   const columns: ColumnDef<any>[] = [
     {
       accessorKey: 'collected_at',
-      header: 'Waktu Ambil',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <Clock size={12} className="text-[#EAD19B]" />
+          <span>Waktu Ambil</span>
+        </div>
+      ),
       cell: ({ row }) => {
         const date = new Date(row.original.collected_at);
         return (
@@ -122,12 +129,22 @@ export default function ResubmitPage() {
     },
     {
       accessorKey: 'qr_code',
-      header: 'Kode Kaleng',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <QrCode size={12} className="text-[#EAD19B]" />
+          <span>Kode Kaleng</span>
+        </div>
+      ),
       cell: ({ row }) => <span className="text-[12px] font-bold text-[#F4F1EA]/40 tracking-tight">#{row.original.qr_code}</span>,
     },
     {
       accessorKey: 'owner_name',
-      header: 'Donatur',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <UserIcon size={12} className="text-[#EAD19B]" />
+          <span>Donatur</span>
+        </div>
+      ),
       cell: ({ row }) => (
         <div className="flex flex-col">
           <span className="font-bold text-[#F4F1EA]">{row.original.owner_name}</span>
@@ -137,7 +154,12 @@ export default function ResubmitPage() {
     },
     {
       accessorKey: 'nominal',
-      header: 'Nominal Aktual',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <Wallet size={12} className="text-[#EAD19B]" />
+          <span>Nominal Aktual</span>
+        </div>
+      ),
       cell: ({ row }) => (
         <span className="font-bold text-[#EAD19B]">
           Rp {Number(row.original.nominal).toLocaleString('id-ID')}
@@ -309,17 +331,18 @@ export default function ResubmitPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title="Formulir Koreksi (Re-submit)"
+        variant="glass"
       >
         {selectedCol && (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
-              <div className="flex justify-between text-xs font-bold uppercase text-slate-400 tracking-wider">
+            <div className="p-4 bg-white/[0.03] rounded-xl border border-white/10 space-y-2">
+              <div className="flex justify-between text-xs font-bold uppercase text-[#F4F1EA]/40 tracking-wider">
                 <span>Transaksi Original</span>
                 <span>ID: {selectedCol.id.substring(0, 8)}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-slate-700">{selectedCol.owner_name}</span>
-                <span className="text-sm font-black text-slate-900">Rp {Number(selectedCol.nominal).toLocaleString('id-ID')}</span>
+                <span className="text-sm font-medium text-[#F4F1EA]">{selectedCol.owner_name}</span>
+                <span className="text-sm font-black text-[#EAD19B]">Rp {Number(selectedCol.nominal).toLocaleString('id-ID')}</span>
               </div>
             </div>
 
@@ -329,25 +352,26 @@ export default function ResubmitPage() {
                 type="number"
                 placeholder="Masukkan nominal koreksi"
                 error={errors.nominal?.message}
+                variant="glass"
                 {...register('nominal', { valueAsNumber: true })}
               />
               <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-gray-700">Alasan Koreksi</label>
+                <label className="text-sm font-semibold text-[#F4F1EA]/60">Alasan Koreksi</label>
                 <textarea
                   {...register('alasan_resubmit')}
-                  className="w-full h-24 p-3 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none shadow-sm"
+                  className="w-full h-24 p-3 bg-white/[0.03] border border-white/10 rounded-xl text-sm text-[#F4F1EA] focus:ring-2 focus:ring-[#EAD19B]/30 outline-none placeholder:text-[#F4F1EA]/30"
                   placeholder="Jelaskan alasan koreksi data ini..."
                 />
-                {errors.alasan_resubmit && <p className="text-xs font-medium text-red-500">{errors.alasan_resubmit.message}</p>}
+                {errors.alasan_resubmit && <p className="text-xs font-medium text-red-400">{errors.alasan_resubmit.message}</p>}
               </div>
             </div>
 
-            <div className="bg-red-50 p-4 rounded-xl border border-red-100 text-[11px] text-red-700">
+            <div className="bg-[#D97A76]/10 p-4 rounded-xl border border-[#D97A76]/20 text-[11px] text-[#F4F1EA]/60">
               <strong>PERHATIAN:</strong> Re-submit akan mengirimkan notifikasi WhatsApp baru ke donatur dengan nominal yang baru. Tindakan ini tercatat dalam audit log.
             </div>
 
             <div className="flex gap-3 pt-4">
-              <Button type="button" variant="secondary" className="flex-1" onClick={() => setIsModalOpen(false)}>
+              <Button type="button" variant="secondary" className="flex-1 border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-white/10 hover:text-[#F4F1EA]" onClick={() => setIsModalOpen(false)}>
                 Batal
               </Button>
               <Button

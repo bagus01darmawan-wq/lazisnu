@@ -31,13 +31,16 @@ import {
   AlertTriangle,
   Printer,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  User,
+  CheckCircle2
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { FilterPills } from '@/components/ui/FilterPills';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
+import { GlassSelect } from '@/components/ui/GlassSelect';
 import { Card } from '@/components/ui/Card';
 
 const canSchema = z.object({
@@ -460,16 +463,26 @@ export default function CansPage() {
     },
     {
       accessorKey: 'qr_code',
-      header: 'QR CODE',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <QrCode size={12} className="text-[#EAD19B]" />
+          <span>Kode Kaleng</span>
+        </div>
+      ),
       cell: ({ row }) => (
         <div className="flex flex-col">
-          <span className="text-[12px] font-bold text-[#F4F1EA]/40 tracking-tight">#{row.original.qr_code}</span>
+          <span className="text-[12px] font-bold text-[#F4F1EA]/40 tracking-tight">{row.original.qr_code}</span>
         </div>
       ),
     },
     {
       accessorKey: 'owner_name',
-      header: 'PEMILIK',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <User size={12} className="text-[#EAD19B]" />
+          <span>PEMILIK</span>
+        </div>
+      ),
       cell: ({ row }) => (
         <div className="flex flex-col">
           <span className="font-bold text-[#F4F1EA] tracking-tight">{row.original.owner_name}</span>
@@ -481,7 +494,12 @@ export default function CansPage() {
     },
     {
       accessorKey: 'address',
-      header: 'DUSUN',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <MapPin size={12} className="text-[#EAD19B]" />
+          <span>DUSUN</span>
+        </div>
+      ),
       cell: ({ row }) => (
         <div className="flex flex-col">
           <span className="text-xs font-medium uppercase tracking-tight text-[#F4F1EA]/60">
@@ -495,7 +513,12 @@ export default function CansPage() {
     },
     {
       accessorKey: 'owner_whatsapp',
-      header: 'WHATSAPP',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <Phone size={12} className="text-[#EAD19B]" />
+          <span>WHATSAPP</span>
+        </div>
+      ),
       cell: ({ row }) => (
         <span className="text-[12px] font-bold text-[#F4F1EA]/40 tracking-tight">
           {row.original.owner_whatsapp}
@@ -504,7 +527,12 @@ export default function CansPage() {
     },
     {
       accessorKey: 'is_active',
-      header: 'STATUS',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <CheckCircle2 size={12} className="text-[#EAD19B]" />
+          <span>STATUS</span>
+        </div>
+      ),
       cell: ({ row }) => {
         const can = row.original;
         const isAssigned = can.assignments && can.assignments.length > 0;
@@ -806,46 +834,45 @@ export default function CansPage() {
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         title="Impor Data Kaleng (Massal)"
+        variant="glass"
       >
         <div className="space-y-5">
-          <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 space-y-2">
-            <h4 className="text-sm font-bold text-blue-900 flex items-center gap-2">
+          <div className="bg-[#6B9E9F]/10 p-4 rounded-2xl border border-white/10 space-y-2">
+            <h4 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
               <Filter size={16} /> Panduan Format CSV
             </h4>
-            <div className="text-[11px] text-blue-800 space-y-1">
+            <div className="text-[11px] text-[#F4F1EA]/60 space-y-1">
               <p>1. Gunakan file CSV (Comma Separated Values)</p>
               <p>2. Urutan Kolom: <strong>Nama Pemilik, WhatsApp, Nama Dukuh, RT, RW</strong></p>
-              <p>3. Contoh Baris: <code className="bg-white px-1 rounded">Budi, 62812345678, Dukuh A, 001, 002</code></p>
+              <p>3. Contoh Baris: <code className="bg-white/10 px-1 rounded">Budi, 62812345678, Dukuh A, 001, 002</code></p>
               <p>4. Nama Dukuh harus persis dengan yang terdaftar di sistem.</p>
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-gray-700">Pilih Ranting Tujuan</label>
-            <select
+            <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih Ranting Tujuan</label>
+            <GlassSelect
               value={importBranchId}
-              onChange={(e) => setImportBranchId(e.target.value)}
-              className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer"
-            >
-              <option value="">-- Pilih Ranting --</option>
-              {branches.map((b: any) => (
-                <option key={b.id} value={b.id}>
-                  {cleanBranchName(b.name).toUpperCase()}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setImportBranchId(val)}
+              placeholder="-- Pilih Ranting --"
+              options={branches.map((b: any) => ({
+                label: cleanBranchName(b.name).toUpperCase(),
+                value: b.id
+              }))}
+              searchable
+            />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-gray-700">Pilih File CSV</label>
+            <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih File CSV</label>
             <div className="flex items-center justify-center w-full">
-              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-300 border-dashed rounded-2xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-all">
+              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-white/20 border-dashed rounded-2xl cursor-pointer bg-white/[0.03] hover:bg-white/5 transition-all">
                 <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                  <RefreshCcw className="w-8 h-8 mb-3 text-slate-400" />
-                  <p className="mb-2 text-sm text-slate-500">
+                  <RefreshCcw className="w-8 h-8 mb-3 text-[#F4F1EA]/40" />
+                  <p className="mb-2 text-sm text-[#F4F1EA]/60">
                     <span className="font-bold">{importFile ? importFile.name : 'Klik untuk unggah'}</span>
                   </p>
-                  <p className="text-xs text-slate-400">File CSV saja (Maks 2MB)</p>
+                  <p className="text-xs text-[#F4F1EA]/40">File CSV saja (Maks 2MB)</p>
                 </div>
                 <input
                   type="file"
@@ -860,13 +887,13 @@ export default function CansPage() {
           <div className="flex gap-3 pt-4">
             <Button
               variant="secondary"
-              className="flex-1 rounded-xl h-12 font-bold"
+              className="flex-1 rounded-xl h-12 font-bold border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-white/10 hover:text-[#F4F1EA]"
               onClick={() => setIsImportModalOpen(false)}
             >
               Batal
             </Button>
             <Button
-              className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl h-12 font-bold"
+              className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] rounded-xl h-12 font-bold"
               onClick={handleImport}
               isLoading={importing}
               disabled={!importBranchId || !importFile}
@@ -885,86 +912,92 @@ export default function CansPage() {
           setEditingCan(null);
         }}
         title={editingCan ? "Edit Data Kaleng" : "Tambah Kaleng Baru"}
+        variant="glass"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-gray-700">Nama Lengkap Pemilik</label>
-            <Input {...register('owner_name')} placeholder="Contoh: Bpk. Slamet" />
-            {errors.owner_name && <p className="text-xs font-medium text-red-500">{errors.owner_name.message}</p>}
+            <label className="text-sm font-semibold text-[#F4F1EA]/60">Nama Lengkap Pemilik</label>
+            <Input {...register('owner_name')} placeholder="Contoh: Bpk. Slamet" variant="glass" />
+            {errors.owner_name && <p className="text-xs font-medium text-red-400">{errors.owner_name.message}</p>}
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-gray-700">Pilih Ranting (Desa)</label>
-            <select
-              {...register('branch_id')}
-              className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer"
-            >
-              <option value="">-- Pilih Ranting --</option>
-              {branches.map((b: any) => (
-                <option key={b.id} value={b.id}>
-                  {cleanBranchName(b.name).toUpperCase()}
-                </option>
-              ))}
-            </select>
-            {errors.branch_id && <p className="text-xs font-medium text-red-500">{errors.branch_id.message}</p>}
+            <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih Ranting (Desa)</label>
+            <GlassSelect
+              value={watch('branch_id') || ''}
+              onChange={(val) => {
+                setValue('branch_id', val);
+                setValue('dukuh_id', '');
+              }}
+              placeholder="-- Pilih Ranting --"
+              options={branches.map((b: any) => ({
+                label: cleanBranchName(b.name).toUpperCase(),
+                value: b.id
+              }))}
+              error={errors.branch_id?.message}
+              searchable
+            />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-gray-700">Pilih Dukuh</label>
-            <select
-              {...register('dukuh_id')}
-              disabled={!selectedBranchId}
-              className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer disabled:bg-slate-50 disabled:text-slate-400"
-            >
-              <option value="">-- Pilih Dukuh --</option>
-              {dukuhs.map((d: any) => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
-            {errors.dukuh_id && <p className="text-xs font-medium text-red-500">{errors.dukuh_id.message}</p>}
+            <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih Dukuh</label>
+            <GlassSelect
+              value={watch('dukuh_id') || ''}
+              onChange={(val) => setValue('dukuh_id', val)}
+              placeholder="-- Pilih Dukuh --"
+              options={dukuhs.map((d: any) => ({
+                label: d.name,
+                value: d.id
+              }))}
+              error={errors.dukuh_id?.message}
+              disabled={!watch('branch_id')}
+              searchable
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-gray-700">RT</label>
+              <label className="text-sm font-semibold text-[#F4F1EA]/60">RT</label>
               <Input
                 {...register('rt')}
                 placeholder="000"
                 maxLength={3}
+                variant="glass"
                 className="text-center font-mono tracking-widest"
               />
-              {errors.rt && <p className="text-xs font-medium text-red-500">{errors.rt.message}</p>}
+              {errors.rt && <p className="text-xs font-medium text-red-400">{errors.rt.message}</p>}
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-gray-700">RW</label>
+              <label className="text-sm font-semibold text-[#F4F1EA]/60">RW</label>
               <Input
                 {...register('rw')}
                 placeholder="000"
                 maxLength={3}
+                variant="glass"
                 className="text-center font-mono tracking-widest"
               />
-              {errors.rw && <p className="text-xs font-medium text-red-500">{errors.rw.message}</p>}
+              {errors.rw && <p className="text-xs font-medium text-red-400">{errors.rw.message}</p>}
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-green-600 uppercase tracking-wider">Nomor WhatsApp (Wajib)</label>
+            <label className="text-xs font-bold text-[#EAD19B] uppercase tracking-wider">Nomor WhatsApp (Wajib)</label>
             <div className="relative group">
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-green-500 transition-colors" size={16} />
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-[#F4F1EA]/40 group-focus-within:text-[#EAD19B] transition-colors" size={16} />
               <input
                 {...register('owner_whatsapp')}
                 placeholder="Contoh: 628123456789"
-                className="w-full h-11 pl-10 pr-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm transition-all"
+                className="w-full h-11 pl-10 pr-3 bg-white/[0.03] border border-white/10 rounded-xl text-sm text-[#F4F1EA] font-medium focus:ring-2 focus:ring-[#EAD19B]/30 outline-none transition-all placeholder:text-[#F4F1EA]/30"
               />
             </div>
-            {errors.owner_whatsapp && <p className="text-xs font-medium text-red-500">{errors.owner_whatsapp.message}</p>}
+            {errors.owner_whatsapp && <p className="text-xs font-medium text-red-400">{errors.owner_whatsapp.message}</p>}
           </div>
 
           <div className="flex gap-3 pt-4">
             <Button
               type="button"
               variant="secondary"
-              className="flex-1 rounded-xl h-12 font-bold"
+              className="flex-1 rounded-xl h-12 font-bold border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-white/10 hover:text-[#F4F1EA]"
               onClick={() => {
                 setIsModalOpen(false);
                 setEditingCan(null);
@@ -974,7 +1007,7 @@ export default function CansPage() {
             </Button>
             <Button
               type="submit"
-              className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl h-12 font-bold shadow-lg shadow-green-600/20"
+              className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] rounded-xl h-12 font-bold shadow-lg shadow-[#EAD19B]/20"
             >
               {editingCan ? 'Simpan Perubahan' : 'Simpan Kaleng'}
             </Button>
@@ -987,36 +1020,37 @@ export default function CansPage() {
         isOpen={isQrModalOpen}
         onClose={() => !isGeneratingQr && setIsQrModalOpen(false)}
         title={isBulkPrint ? "Cetak Label QR (Massal)" : "Cetak Label QR"}
+        variant="glass"
       >
         <div className="flex flex-col items-center justify-center p-4 space-y-6">
           {isGeneratingQr ? (
             <div className="flex flex-col items-center space-y-4 py-8">
-              <div className="w-12 h-12 border-4 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
-              <p className="text-sm font-medium text-slate-600">
+              <div className="w-12 h-12 border-4 border-[#EAD19B]/20 border-t-[#EAD19B] rounded-full animate-spin"></div>
+              <p className="text-sm font-medium text-[#F4F1EA]/60">
                 {isBulkPrint ? "Sedang merangkai PDF A4..." : "Sedang memproses QR Code..."}
               </p>
             </div>
           ) : qrData ? (
             <>
               {!isBulkPrint && qrData.qr_image_url && (
-                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center gap-2">
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-white/10 flex flex-col items-center gap-2">
                   <img src={qrData.qr_image_url} alt="QR Code" className="w-40 h-40 object-contain" />
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{qrData.qr_code}</p>
+                  <p className="text-xs font-bold text-[#F4F1EA]/40 uppercase tracking-widest">{qrData.qr_code}</p>
                 </div>
               )}
               {isBulkPrint && (
-                <div className="bg-green-50 p-6 rounded-2xl border border-green-100 flex flex-col items-center text-center">
-                  <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
-                    <Printer size={28} className="text-green-600" />
+                <div className="bg-[#1F8243]/10 p-6 rounded-2xl border border-[#1F8243]/20 flex flex-col items-center text-center">
+                  <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center shadow-sm mb-4">
+                    <Printer size={28} className="text-[#1F8243]" />
                   </div>
-                  <h4 className="text-lg font-bold text-green-900 mb-1">Berhasil Dirangkai!</h4>
-                  <p className="text-sm text-green-700">PDF berisi {qrData.count} label QR Code siap diunduh.</p>
+                  <h4 className="text-lg font-bold text-[#F4F1EA] mb-1">Berhasil Dirangkai!</h4>
+                  <p className="text-sm text-[#F4F1EA]/60">PDF berisi {qrData.count} label QR Code siap diunduh.</p>
                 </div>
               )}
               <div className="w-full flex gap-3 pt-2">
-                <Button variant="secondary" className="flex-1 rounded-xl h-12 font-bold" onClick={() => setIsQrModalOpen(false)}>Tutup</Button>
+                <Button variant="secondary" className="flex-1 rounded-xl h-12 font-bold border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-white/10 hover:text-[#F4F1EA]" onClick={() => setIsQrModalOpen(false)}>Tutup</Button>
                 <Button
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl h-12 font-bold shadow-lg shadow-green-600/20 flex items-center gap-2 justify-center"
+                  className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] rounded-xl h-12 font-bold shadow-lg shadow-[#EAD19B]/20 flex items-center gap-2 justify-center"
                   onClick={() => {
                     const a = document.createElement('a');
                     a.href = qrData.print_url;
@@ -1032,7 +1066,7 @@ export default function CansPage() {
               </div>
             </>
           ) : (
-            <p className="text-red-500">Gagal memuat data QR</p>
+            <p className="text-red-400">Gagal memuat data QR</p>
           )}
         </div>
       </Modal>

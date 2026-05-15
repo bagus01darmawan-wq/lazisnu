@@ -115,42 +115,46 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card variant="glass" className="relative overflow-hidden group border-white/5">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Perolehan Total</p>
-              <h3 className="text-2xl font-black text-[#F4F1EA] mt-1.5 tracking-tight">
-                Rp {totalAmount.toLocaleString('id-ID')}
-              </h3>
+          <div className="bg-white/[0.03] -m-6 p-6">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Perolehan Total</p>
+                <h3 className="text-2xl font-black text-[#F4F1EA] mt-1.5 tracking-tight">
+                  Rp {totalAmount.toLocaleString('id-ID')}
+                </h3>
+              </div>
+              <div className="p-3 bg-[#EAD19B]/10 text-[#EAD19B] rounded-2xl group-hover:bg-[#EAD19B] group-hover:text-[#2C473E] transition-all duration-500 shadow-lg">
+                <Wallet size={20} />
+              </div>
             </div>
-            <div className="p-3 bg-[#EAD19B]/10 text-[#EAD19B] rounded-2xl group-hover:bg-[#EAD19B] group-hover:text-[#2C473E] transition-all duration-500 shadow-lg">
-              <Wallet size={20} />
+            <div className="mt-6 flex items-center gap-3">
+              <span className="flex items-center text-[10px] font-black text-[#F4F1EA]/40 bg-white/5 px-2.5 py-1.5 rounded-xl border border-white/5 uppercase tracking-wider">
+                Total Penarikan
+              </span>
+              <span className="text-xs text-[#EAD19B] font-bold">{totalCount} Kali</span>
             </div>
-          </div>
-          <div className="mt-6 flex items-center gap-3">
-            <span className="flex items-center text-[10px] font-black text-[#F4F1EA]/40 bg-white/5 px-2.5 py-1.5 rounded-xl border border-white/5 uppercase tracking-wider">
-              Total Penarikan
-            </span>
-            <span className="text-xs text-[#EAD19B] font-bold">{totalCount} Kali</span>
           </div>
         </Card>
 
         <Card variant="glass" className="relative overflow-hidden group border-white/5">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Rata-Rata Per Kaleng</p>
-              <h3 className="text-2xl font-black text-[#F4F1EA] mt-1.5 tracking-tight">
-                Rp {Math.round(averagePerCan).toLocaleString('id-ID')}
-              </h3>
+          <div className="bg-white/[0.03] -m-6 p-6">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Rata-Rata Per Kaleng</p>
+                <h3 className="text-2xl font-black text-[#F4F1EA] mt-1.5 tracking-tight">
+                  Rp {Math.round(averagePerCan).toLocaleString('id-ID')}
+                </h3>
+              </div>
+              <div className="p-3 bg-[#6B9E9F]/10 text-[#6B9E9F] rounded-2xl group-hover:bg-[#6B9E9F] group-hover:text-[#2C473E] transition-all duration-500 shadow-lg">
+                <FileSpreadsheet size={20} />
+              </div>
             </div>
-            <div className="p-3 bg-[#6B9E9F]/10 text-[#6B9E9F] rounded-2xl group-hover:bg-[#6B9E9F] group-hover:text-[#2C473E] transition-all duration-500 shadow-lg">
-              <FileSpreadsheet size={20} />
+            <div className="mt-6 flex items-center gap-3">
+              <span className="flex items-center text-[10px] font-black text-[#F4F1EA]/40 bg-white/5 px-2.5 py-1.5 rounded-xl border border-white/5 uppercase tracking-wider">
+                Nilai Efisiensi
+              </span>
+              <span className="text-xs text-[#6B9E9F] font-bold">Bulan Ini</span>
             </div>
-          </div>
-          <div className="mt-6 flex items-center gap-3">
-            <span className="flex items-center text-[10px] font-black text-[#F4F1EA]/40 bg-white/5 px-2.5 py-1.5 rounded-xl border border-white/5 uppercase tracking-wider">
-              Nilai Efisiensi
-            </span>
-            <span className="text-xs text-[#6B9E9F] font-bold">Bulan Ini</span>
           </div>
         </Card>
       </div>

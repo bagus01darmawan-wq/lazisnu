@@ -7,12 +7,14 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Badge } from '@/components/ui/Badge';
+import { GlassSelect } from '@/components/ui/GlassSelect';
 import { ColumnDef } from '@tanstack/react-table';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import { ConfirmToast } from '@/components/ui/ConfirmToast';
 import { 
   Users, 
+  User,
   Plus, 
   Search, 
   UserPlus, 
@@ -63,7 +65,7 @@ export default function UsersPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const { user } = useAuthStore();
 
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<OfficerFormValues>({
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<OfficerFormValues>({
     resolver: zodResolver(officerSchema as any),
   });
 
@@ -284,22 +286,27 @@ export default function UsersPage() {
     },
     {
       accessorKey: 'full_name',
-      header: 'Nama Lengkap',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <User size={12} className="text-[#EAD19B]" />
+          <span>Nama Lengkap</span>
+        </div>
+      ),
       cell: ({ row }) => (
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-[#EAD19B] font-bold border border-white/10 shadow-sm">
-            {row.original.full_name?.charAt(0) || 'U'}
-          </div>
-          <div className="space-y-0.5">
-            <p className="font-bold text-[#F4F1EA]">{row.original.full_name}</p>
-            <p className="text-[10px] text-[#F4F1EA]/40 font-bold uppercase tracking-widest">{row.original.employee_code}</p>
-          </div>
+        <div className="space-y-0.5">
+          <p className="font-bold text-[#F4F1EA]">{row.original.full_name}</p>
+          <p className="text-[10px] text-[#F4F1EA]/40 font-bold uppercase tracking-widest">{row.original.employee_code}</p>
         </div>
       ),
     },
     {
       accessorKey: 'phone',
-      header: 'Kontak',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <Phone size={12} className="text-[#EAD19B]" />
+          <span>Kontak</span>
+        </div>
+      ),
       cell: ({ row }) => (
         <div className="flex flex-col">
           <span className="text-[12px] font-bold text-[#F4F1EA]/40 tracking-tight">{row.original.phone}</span>
@@ -308,7 +315,12 @@ export default function UsersPage() {
     },
     {
       accessorKey: 'branch',
-      header: 'Asal Ranting',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <Map size={12} className="text-[#EAD19B]" />
+          <span>Asal Ranting</span>
+        </div>
+      ),
       cell: ({ row }) => {
         const branchName = row.original.branch?.name || 'Belum diatur';
         return (
@@ -322,7 +334,12 @@ export default function UsersPage() {
     },
     {
       accessorKey: 'is_active',
-      header: 'Status',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <UserCheck size={12} className="text-[#EAD19B]" />
+          <span>Status</span>
+        </div>
+      ),
       cell: ({ row }) => (
         row.original.is_active ? (
           <span className="text-[10px] font-bold uppercase tracking-widest text-[#1F8243]">AKTIF</span>
@@ -583,57 +600,61 @@ export default function UsersPage() {
       </Card>
 
       {/* Modal Tambah/Edit Petugas */}
-      <Modal 
-        isOpen={isModalOpen} 
+      <Modal
+        isOpen={isModalOpen}
         onClose={() => {
           setIsModalOpen(false);
           setEditingOfficer(null);
           reset();
         }}
         title={editingOfficer ? "Edit Data Petugas" : "Tambah Petugas Baru"}
+        variant="glass"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <Input 
-            label="Nama Lengkap" 
+          <Input
+            label="Nama Lengkap"
             placeholder="Masukkan nama lengkap petugas"
             error={errors.full_name?.message}
+            variant="glass"
             {...register('full_name')}
           />
-          <Input 
-            label="Nomor Handphone" 
+          <Input
+            label="Nomor Handphone"
             placeholder="0812..."
             error={errors.phone?.message}
+            variant="glass"
             {...register('phone')}
           />
 
           {user?.role === 'ADMIN_KECAMATAN' && (
             <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-gray-700">Pilih Ranting</label>
-              <select 
-                {...register('branch_id')}
-                className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:ring-2 focus:ring-green-500 outline-none shadow-sm"
-              >
-                <option value="">-- Pilih Ranting --</option>
-                {branches.map((b: any) => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-              {errors.branch_id && <p className="text-xs font-medium text-red-500">{errors.branch_id.message}</p>}
+              <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih Ranting</label>
+              <GlassSelect
+                value={watch('branch_id') || ''}
+                onChange={(val) => setValue('branch_id', val)}
+                placeholder="-- Pilih Ranting --"
+                options={branches.map((b: any) => ({
+                  label: b.name,
+                  value: b.id
+                }))}
+                error={errors.branch_id?.message}
+                searchable
+              />
             </div>
           )}
-          <div className="text-xs text-slate-500 bg-slate-50 p-4 rounded-xl border border-slate-100">
-             <div className="flex gap-2 items-center mb-1 font-bold text-slate-700">
-               <Shield size={14} />
+          <div className="text-xs text-[#F4F1EA]/60 bg-white/[0.03] p-4 rounded-xl border border-white/10">
+             <div className="flex gap-2 items-center mb-1 font-bold text-[#F4F1EA]">
+               <Shield size={14} className="text-[#EAD19B]" />
                <span>Informasi Akses</span>
              </div>
              Email login akan diproduksi otomatis menggunakan nomor HP. Password awal akan dikosongkan (login via OTP WhatsApp).
           </div>
 
           <div className="flex gap-3 pt-4">
-            <Button 
-              type="button" 
-              variant="secondary" 
-              className="flex-1" 
+            <Button
+              type="button"
+              variant="secondary"
+              className="flex-1 border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-white/10 hover:text-[#F4F1EA]"
               onClick={() => {
                 setIsModalOpen(false);
                 setEditingOfficer(null);
@@ -642,9 +663,9 @@ export default function UsersPage() {
             >
               Batal
             </Button>
-            <Button 
-              type="submit" 
-              className="flex-1" 
+            <Button
+              type="submit"
+              className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] font-bold rounded-xl h-11 shadow-lg shadow-[#EAD19B]/20"
               isLoading={submitting}
             >
               {editingOfficer ? 'Simpan Perubahan' : 'Simpan Petugas'}

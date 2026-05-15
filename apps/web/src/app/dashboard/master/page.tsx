@@ -1,17 +1,19 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Database, 
-  Plus, 
-  Search, 
-  Filter, 
-  Edit, 
+import {
+  Database,
+  Plus,
+  Search,
+  Filter,
+  Edit,
   ChevronRight,
   ArrowLeft,
   MapPin,
   Loader2,
-  Trash2
+  Trash2,
+  Hash,
+  Building2
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Table } from '@/components/ui/Table';
@@ -199,25 +201,67 @@ export default function MasterDataPage() {
 
   const branchColumns: any[] = [
     {
-      header: 'Kode',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <Hash size={12} className="text-[#EAD19B]" />
+          <span>Kode</span>
+        </div>
+      ),
       accessorKey: 'code',
-      cell: (info: any) => <span className="text-[10px] font-bold text-[#F4F1EA]/40 tracking-tight uppercase">{info.getValue()}</span>
+      cell: (info: any) => <span className="text-[12px] font-bold text-[#F4F1EA]/40 tracking-tight">{info.getValue()}</span>
     },
     {
-      header: 'Nama Ranting',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <Building2 size={12} className="text-[#EAD19B]" />
+          <span>Nama Ranting</span>
+        </div>
+      ),
       accessorKey: 'name',
       cell: (info: any) => <span className="font-bold text-[#F4F1EA]">{info.getValue()}</span>
     },
     {
-      header: 'Aksi',
+      id: 'kelola_dukuh',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <MapPin size={12} className="text-[#EAD19B]" />
+          <span>Kelola Dukuh</span>
+        </div>
+      ),
+      cell: (info: any) => {
+        const row = info.row.original;
+        return (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 px-3 rounded-xl hover:bg-white/10 text-[#EAD19B] flex items-center gap-1 group transition-all duration-300"
+            onClick={() => {
+              setSelectedBranch(row);
+              setSearch('');
+              fetchDukuhs(row.id);
+            }}
+          >
+            <span className="text-[11px] font-bold uppercase tracking-tight">Kelola</span>
+            <ChevronRight size={14} className="transition-transform group-hover:translate-x-0.5" />
+          </Button>
+        );
+      }
+    },
+    {
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <Edit size={12} className="text-[#EAD19B]" />
+          <span>Aksi</span>
+        </div>
+      ),
       id: 'actions',
       cell: (info: any) => {
         const row = info.row.original;
         return (
           <div className="flex items-center gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-white/10 transition-all duration-300 group"
               onClick={() => {
                 setEditingItem(row);
@@ -227,26 +271,13 @@ export default function MasterDataPage() {
             >
               <Edit size={14} className="text-[#EAD19B]" />
             </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#D97A76] hover:bg-red-500/10 hover:border-red-500/20 transition-all duration-300 group"
               onClick={() => handleDeleteBranch(row.id, row.name)}
             >
               <Trash2 size={14} className="text-[#F4F1EA]/40 group-hover:text-[#D97A76]" />
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="h-8 px-3 rounded-xl hover:bg-white/10 text-[#EAD19B] flex items-center gap-1 group transition-all duration-300"
-              onClick={() => {
-                setSelectedBranch(row);
-                setSearch('');
-                fetchDukuhs(row.id);
-              }}
-            >
-              <span className="text-[11px] font-bold uppercase tracking-tight">Kelola Dukuh</span>
-              <ChevronRight size={14} className="transition-transform group-hover:translate-x-0.5" />
             </Button>
           </div>
         );
@@ -256,9 +287,14 @@ export default function MasterDataPage() {
 
   const dukuhColumns: any[] = [
     {
-      header: 'Nama Dukuh',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <MapPin size={12} className="text-[#EAD19B]" />
+          <span>Nama Dukuh</span>
+        </div>
+      ),
       accessorKey: 'name',
-      cell: (info: any) => <span className="font-bold text-[#F4F1EA]">{info.getValue()}</span>
+      cell: (info: any) => <span className="text-[12px] font-bold text-[#F4F1EA]/40 tracking-tight">{info.getValue()}</span>
     },
     {
       header: 'Aksi',
@@ -466,42 +502,43 @@ export default function MasterDataPage() {
         isOpen={isBranchModalOpen}
         onClose={() => setIsBranchModalOpen(false)}
         title={editingItem ? 'Edit Ranting' : 'Tambah Ranting Baru'}
+        variant="glass"
       >
         <form onSubmit={handleBranchSubmit} className="space-y-5">
           <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider ml-1">Kode Ranting</label>
-            <input 
-              type="text" 
+            <label className="text-xs font-bold text-[#F4F1EA]/60 uppercase tracking-wider ml-1">Kode Ranting</label>
+            <input
+              type="text"
               value={formData.code}
               onChange={(e) => setFormData({...formData, code: e.target.value})}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-green-500/10 focus:border-green-500 outline-none transition-all font-medium text-slate-900"
+              className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl focus:ring-4 focus:ring-[#EAD19B]/20 focus:border-[#EAD19B]/50 outline-none transition-all font-medium text-[#F4F1EA] placeholder:text-[#F4F1EA]/30"
               placeholder="Misal: RTG01"
               required
             />
           </div>
           <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider ml-1">Nama Ranting</label>
-            <input 
-              type="text" 
+            <label className="text-xs font-bold text-[#F4F1EA]/60 uppercase tracking-wider ml-1">Nama Ranting</label>
+            <input
+              type="text"
               value={formData.name}
               onChange={(e) => setFormData({...formData, name: e.target.value})}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-green-500/10 focus:border-green-500 outline-none transition-all font-medium text-slate-900"
+              className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl focus:ring-4 focus:ring-[#EAD19B]/20 focus:border-[#EAD19B]/50 outline-none transition-all font-medium text-[#F4F1EA] placeholder:text-[#F4F1EA]/30"
               placeholder="Nama Desa/Kelurahan"
               required
             />
           </div>
-          
+
           <div className="flex gap-3 pt-4">
-            <Button 
-              type="button" 
-              variant="secondary" 
+            <Button
+              type="button"
+              variant="secondary"
               onClick={() => setIsBranchModalOpen(false)}
-              className="flex-1"
+              className="flex-1 border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-white/10 hover:text-[#F4F1EA]"
             >
               Batal
             </Button>
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] font-bold rounded-xl h-11 shadow-lg shadow-[#EAD19B]/20"
             >
               Simpan
@@ -515,35 +552,36 @@ export default function MasterDataPage() {
         isOpen={isDukuhModalOpen}
         onClose={() => setIsDukuhModalOpen(false)}
         title={editingItem ? 'Edit Dukuh' : 'Tambah Dukuh Baru'}
+        variant="glass"
       >
         <div className="mb-4">
-           <p className="text-sm text-slate-500 mt-1">Ranting: <span className="font-bold text-green-600">{selectedBranch?.name}</span></p>
+           <p className="text-sm text-[#F4F1EA]/60 mt-1">Ranting: <span className="font-bold text-[#EAD19B]">{selectedBranch?.name}</span></p>
         </div>
-        
+
         <form onSubmit={handleDukuhSubmit} className="space-y-5">
           <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider ml-1">Nama Dukuh/Dusun</label>
-            <input 
-              type="text" 
+            <label className="text-xs font-bold text-[#F4F1EA]/60 uppercase tracking-wider ml-1">Nama Dukuh/Dusun</label>
+            <input
+              type="text"
               value={formData.name}
               onChange={(e) => setFormData({...formData, name: e.target.value})}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-green-500/10 focus:border-green-500 outline-none transition-all font-medium text-slate-900"
+              className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl focus:ring-4 focus:ring-[#EAD19B]/20 focus:border-[#EAD19B]/50 outline-none transition-all font-medium text-[#F4F1EA] placeholder:text-[#F4F1EA]/30"
               placeholder="Misal: Dusun Krajan"
               required
             />
           </div>
-          
+
           <div className="flex gap-3 pt-4">
-            <Button 
-              type="button" 
-              variant="secondary" 
+            <Button
+              type="button"
+              variant="secondary"
               onClick={() => setIsDukuhModalOpen(false)}
-              className="flex-1"
+              className="flex-1 border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-white/10 hover:text-[#F4F1EA]"
             >
               Batal
             </Button>
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] font-bold rounded-xl h-11 shadow-lg shadow-[#EAD19B]/20"
             >
               Simpan

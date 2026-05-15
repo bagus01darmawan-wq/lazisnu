@@ -17,7 +17,9 @@ import {
   RotateCcw,
   Trash2,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  User,
+  Phone
 } from 'lucide-react';
 import { format, isValid } from 'date-fns';
 import { id } from 'date-fns/locale';
@@ -93,7 +95,12 @@ export default function WAMonitorPage() {
   const columns: ColumnDef<any>[] = [
     {
       accessorKey: 'time',
-      header: 'Waktu',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <Clock size={12} className="text-[#EAD19B]" />
+          <span>Waktu</span>
+        </div>
+      ),
       cell: ({ row }) => {
         const date = new Date(row.original.time);
         return (
@@ -105,7 +112,12 @@ export default function WAMonitorPage() {
     },
     {
       accessorKey: 'recipient',
-      header: 'Penerima',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <User size={12} className="text-[#EAD19B]" />
+          <span>Penerima</span>
+        </div>
+      ),
       cell: ({ row }) => (
         <div className="flex flex-col">
           <span className="font-bold text-[#F4F1EA]">{row.original.recipient}</span>
@@ -115,12 +127,22 @@ export default function WAMonitorPage() {
     },
     {
       accessorKey: 'message',
-      header: 'Pesan',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <MessageSquare size={12} className="text-[#EAD19B]" />
+          <span>Pesan</span>
+        </div>
+      ),
       cell: ({ row }) => <span className="text-xs text-[#F4F1EA]/60 line-clamp-1">{row.original.message}</span>,
     },
     {
       accessorKey: 'status',
-      header: 'Status',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <CheckCircle2 size={12} className="text-[#EAD19B]" />
+          <span>Status</span>
+        </div>
+      ),
       cell: ({ row }) => {
         let statusColor = "text-[#F4F1EA]/40";
         if (row.original.status === 'SENT') statusColor = "text-[#1F8243]";
