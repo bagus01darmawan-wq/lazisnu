@@ -12,11 +12,19 @@ trigger: manual
 ```
 Pengguna  : Admin Kecamatan, Admin Ranting, Bendahara
 Platform  : Browser desktop (utama) + browser HP (responsive)
-Framework : Next.js 14 App Router + TypeScript + Tailwind CSS
+Framework : Next.js 16 App Router + React 19 + TypeScript + Tailwind CSS 4
 
 Catatan: Admin Ranting mengakses dashboard ini dari HP via browser.
 Pastikan semua halaman responsive dan nyaman dipakai di layar 360px.
 ```
+
+---
+
+## Catatan Kompatibilitas Stack Aktual
+
+- Ikuti versi aktual di `apps/web/package.json` sebagai sumber kebenaran.
+- Hindari memberi solusi yang spesifik untuk Next.js 14 jika API/perilakunya sudah berubah di Next.js 16.
+- Gunakan pola App Router modern, Server/Client Component boundary yang jelas, dan hindari dependensi baru tanpa alasan kuat.
 
 ---
 
