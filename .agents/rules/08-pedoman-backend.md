@@ -10,15 +10,20 @@ trigger: manual
 ## Stack & Versi
 
 ```
-Runtime   : Node.js 20 LTS
+Runtime   : Node.js 20 LTS recommended
+Minimum   : Node.js >=18 sesuai root package.json
 Framework : Fastify 4.x + TypeScript
 ORM       : Drizzle ORM
-Database  : PostgreSQL 16
+Database  : PostgreSQL 16 recommended / PostgreSQL 14+ compatible jika environment masih lama
 Cache     : Redis 7 via ioredis
 Queue     : BullMQ
-Scheduler : node-cron
 Validator : Zod
 ```
+
+Catatan:
+- Ikuti `package.json` root dan `apps/backend/package.json` sebagai sumber kebenaran dependency aktual.
+- Jangan memberi saran yang membutuhkan Node.js >20 kecuali dependency project sudah mendukung dan user menyetujui upgrade.
+- Untuk deployment baru, gunakan Node.js 20 LTS agar konsisten dan aman.
 
 ---
 
@@ -26,25 +31,19 @@ Validator : Zod
 
 ```typescript
 // apps/backend/src/app.ts
-// Urutan plugin registration PENTING — jangan diubah:
+// Urutan plugin registration penting jika project memakai plugin terpisah:
 
-app.register(fastifyHelmet)           // 1. Security headers
-app.register(fastifyCors, corsOptions) // 2. CORS
-app.register(fastifyRateLimit, rateOptions) // 3. Rate limiting
-app.register(fastifyJwt, jwtOptions)  // 4. JWT plugin
-app.register(dbPlugin)                // 5. Database connection
-app.register(redisPlugin)             // 6. Redis connection
-app.register(auditLoggerPlugin)       // 7. Audit trail middleware
+app.register(fastifyCors, corsOptions)
+app.register(fastifyRateLimit, rateOptions)
+app.register(fastifyJwt, jwtOptions)
+app.register(dbPlugin)
+app.register(redisPlugin)
+app.register(auditLoggerPlugin)
 
-// Routes — register setelah semua plugin:
-app.register(authRoutes,       { prefix: '/auth' })
-app.register(wilayahRoutes,    { prefix: '/wilayah' })
-app.register(usersRoutes,      { prefix: '/users' })
-app.register(kalengRoutes,     { prefix: '/kaleng' })
-app.register(assignmentRoutes, { prefix: '/assignments' })
-app.register(koleksiRoutes,    { prefix: '/koleksi' })
-app.register(laporanRoutes,    { prefix: '/laporan' })
+// Routes register setelah plugin dasar siap.
 ```
+
+Jika implementasi aktual belum memakai semua plugin di atas, jangan menambahkan semuanya sekaligus tanpa alasan. Tambahkan hanya yang relevan dengan task.
 
 ---
 
@@ -52,13 +51,10 @@ app.register(laporanRoutes,    { prefix: '/laporan' })
 
 ### JWT Auth Middleware
 ```typescript
-// src/middleware/jwt-auth.ts
-// Pasang sebagai preHandler di semua route protected
-
+// Pasang sebagai preHandler di semua route protected.
 export async function jwtAuthMiddleware(req: FastifyRequest, reply: FastifyReply) {
   try {
     await req.jwtVerify()
-    // req.user sudah terisi dengan JwtPayload setelah ini
   } catch {
     throw new AppError('UNAUTHORIZED', 'Token tidak valid atau expired', 401)
   }
@@ -67,197 +63,115 @@ export async function jwtAuthMiddleware(req: FastifyRequest, reply: FastifyReply
 
 ### Role Guard
 ```typescript
-// src/middleware/role-guard.ts
-// Factory function — buat untuk setiap kombinasi role yang diizinkan:
-
 export const requireRole = (...allowedRoles: UserRole[]) =>
   async (req: FastifyRequest, reply: FastifyReply) => {
     if (!allowedRoles.includes(req.user.role)) {
       throw new AppError('FORBIDDEN', 'Akses ditolak untuk role ini', 403)
     }
   }
-
-// Contoh pemakaian di route:
-{
-  preHandler: [jwtAuthMiddleware, requireRole('admin_kecamatan')],
-  handler: generateQrBatchHandler
-}
 ```
 
 ### Audit Logger
 ```typescript
-// src/middleware/audit-logger.ts
-// Gunakan Fastify onResponse hook — berjalan SETELAH handler selesai
-
-fastify.addHook('onResponse', async (req, reply) => {
-  const shouldLog =
-    ['POST', 'PUT'].includes(req.method) &&
-    reply.statusCode >= 200 && reply.statusCode < 300 &&
-    req.user != null &&
-    !req.url.startsWith('/auth')
-
-  if (!shouldLog) return
-
-  await auditLogService.log({
-    userId    : req.user.id,
-    action    : `${req.method} ${req.routerPath}`,
-    entity    : inferEntity(req.routerPath),
-    entityId  : (req.params as any)?.id ?? null,
-    oldValue  : req.auditContext?.oldValue ?? null,
-    newValue  : req.auditContext?.newValue ?? null,
-    ipAddress : req.headers['x-forwarded-for']?.toString() ?? req.ip,
-  })
-})
+// Gunakan hook/middleware setelah request berhasil untuk mencatat aksi penting.
+// Jangan mencatat password, token, secret, atau data sensitif mentah.
 ```
 
 ---
 
 ## Drizzle ORM — Konvensi
 
-```typescript
-// Schema definition (src/database/schema/koleksi.schema.ts):
-export const koleksi = pgTable('koleksi', {
-  id              : uuid('id').primaryKey().defaultRandom(),
-  kalengId        : uuid('kaleng_id').notNull().references(() => kaleng.id),
-  nominal         : bigint('nominal', { mode: 'number' }).notNull(),
-  metodeBayar     : metodeBayarEnum('metode_bayar').notNull(),
-  submitSequence  : integer('submit_sequence').notNull().default(1),
-  isLatest        : boolean('is_latest').notNull().default(true),
-  alasanResubmit  : text('alasan_resubmit'),
-  createdAt       : timestamp('created_at').notNull().defaultNow(),
-})
+Gunakan nama aktual implementasi database/API berbahasa Inggris untuk kode dan schema:
 
-// Query pattern:
-const tasks = await db
-  .select()
-  .from(assignments)
-  .innerJoin(kaleng, eq(assignments.kalengId, kaleng.id))
-  .where(and(
-    eq(assignments.petugasId, userId),
-    eq(assignments.periodeBulan, bulan),
-    eq(assignments.isActive, true)
-  ))
+```typescript
+// Contoh gaya penamaan yang disarankan:
+collections
+cans
+assignments
+paymentMethod
+submitSequence
+isLatest
+reason
 ```
+
+Label UI boleh tetap bahasa Indonesia seperti “Kaleng”, “Koleksi”, dan “Penugasan”. Jangan membuat field baru hanya karena perbedaan istilah bahasa.
+
+Query harus:
+- menerapkan role filter sebelum mengambil data;
+- menghindari query tak terbatas untuk list besar;
+- memakai pagination untuk endpoint laporan/list;
+- menjaga constraint immutable untuk `collections`.
 
 ---
 
 ## BullMQ — WhatsApp Queue
 
 ```typescript
-// src/workers/wa-sender.ts
-import { Worker, Queue } from 'bullmq'
-
-export const waQueue = new Queue('wa-notifications', { connection: redis })
-
-export const waWorker = new Worker('wa-notifications', async (job) => {
-  const { koleksiId } = job.data
-
-  // Ambil data yang dibutuhkan
-  const detail = await getKoleksiDetail(koleksiId)
-
-  // Kirim WA
-  await sendWhatsApp({
-    to      : detail.nomor_hp_pemilik,
-    template: detail.submit_sequence === 1
-                ? process.env.WA_TEMPLATE_SUBMIT!
-                : process.env.WA_TEMPLATE_RESUBMIT!,
-    params  : [detail.nama_pemilik, formatRupiah(detail.nominal), formatTanggal(detail.created_at)]
-  })
-
-  // Update wa_status di DB
-  await db.update(koleksiTable)
-    .set({ waStatus: 'sent', waSentAt: new Date() })
-    .where(eq(koleksiTable.id, koleksiId))
-
-}, {
-  connection: redis,
-  attempts  : 3,
-  backoff   : { type: 'exponential', delay: 60_000 }, // 1 menit, 5 menit, 30 menit
-})
-
-waWorker.on('failed', async (job, err) => {
-  if (job && job.attemptsMade >= 3) {
-    await db.update(koleksiTable)
-      .set({ waStatus: 'failed' })
-      .where(eq(koleksiTable.id, job.data.koleksiId))
-  }
-})
+// Prinsip utama:
+// 1. Insert collection berhasil.
+// 2. Push job ke queue WhatsApp.
+// 3. Response API tidak menunggu WA selesai.
+// 4. Worker mengirim WA dan mencatat status.
 ```
+
+Aturan:
+- retry otomatis wajib ada;
+- error WA tidak boleh menggagalkan transaksi collection yang sudah valid;
+- log status WA harus bisa ditelusuri dari collection terkait;
+- jangan log token WA atau nomor HP secara mentah di log level INFO/DEBUG.
 
 ---
 
-## node-cron — Scheduler
+## Scheduler
 
-```typescript
-// src/jobs/assignment-generator.ts
-import cron from 'node-cron'
+Scheduler hanya boleh membuat perubahan yang idempotent atau aman dijalankan ulang.
 
-// Jalankan tiap tanggal 1 pukul 00.00 WIB
-cron.schedule('0 17 0 1 * *', async () => {
-  // 17.00 UTC = 00.00 WIB
-  const bulanSebelumnya = getPreviousMonth()
-  const bulanBaru       = getCurrentMonth()
-
-  const lastAssignments = await db.query.assignments.findMany({
-    where: and(
-      eq(assignments.periodeBulan, bulanSebelumnya.bulan),
-      eq(assignments.periodeТahun, bulanSebelumnya.tahun),
-      eq(assignments.isActive, true)
-    )
-  })
-
-  // Duplikasi ke bulan baru
-  await db.insert(assignments).values(
-    lastAssignments.map(a => ({
-      ...a,
-      id           : randomUUID(),
-      periodeBulan : bulanBaru.bulan,
-      periodeТahun : bulanBaru.tahun,
-      assignedBy   : SYSTEM_USER_ID,
-      createdAt    : new Date(),
-    }))
-  )
-
-  // Kirim FCM ke semua petugas
-  await notificationService.broadcast('ASSIGNMENT_NEW', 'Assignment bulan baru tersedia')
-}, { timezone: 'Asia/Jakarta' })
-```
+Sebelum membuat job terjadwal:
+- jelaskan kapan job berjalan;
+- jelaskan timezone;
+- jelaskan apa yang terjadi jika job gagal di tengah jalan;
+- jelaskan cara retry/manual recovery.
 
 ---
 
 ## Generate QR PDF
 
-```typescript
-// Gunakan library: pdfkit atau pdf-lib
-// Layout per halaman A4: 2 kolom x 5 baris = 10 QR per halaman
-// Setiap QR cell berisi:
-//   - QR image (generated dari qr_token menggunakan library qrcode)
-//   - kode_unik (teks kecil di bawah QR)
-//   - nama_pemilik (teks di bawah kode)
-//   - alamat singkat (truncate jika > 40 karakter)
-
-// Setelah PDF dibuat:
-// Upload ke Cloudflare R2 dengan nama: qr-batch-{timestamp}.pdf
-// Return signed URL dengan expiry 1 jam untuk download
-```
+Untuk fitur QR PDF:
+- generate QR dari token/kode yang sudah valid;
+- layout PDF harus jelas untuk dicetak;
+- upload file ke storage jika fitur storage aktif;
+- return URL atau response sesuai API contract aktual;
+- jangan menyimpan secret QR di frontend.
 
 ---
 
 ## Environment & Security
 
 ```
-Rate limiting: 100 req/menit per IP untuk semua endpoint
-Rate limiting login: 5 percobaan per menit per IP
-
-JWT secret WAJIB di-rotate secara berkala di production
-APP_SECRET untuk HMAC QR TIDAK BOLEH sama dengan JWT secret
+Rate limiting login wajib lebih ketat dari endpoint umum.
+JWT_ACCESS_SECRET dan JWT_REFRESH_SECRET harus berbeda.
+APP_SECRET untuk HMAC QR tidak boleh sama dengan JWT secret.
+```
 
 Jangan pernah log:
-- Password atau password hash
-- JWT token
-- APP_SECRET atau JWT secret
-- Nomor HP pengguna di log level INFO atau DEBUG
-```
+- password atau password hash;
+- JWT token;
+- APP_SECRET atau JWT secret;
+- private key;
+- access token WhatsApp;
+- nomor HP pengguna di log level INFO/DEBUG.
+
+---
+
+## Learning Requirement
+
+Untuk task backend, agent wajib menjelaskan:
+
+- route mana yang menerima request;
+- service mana yang menjalankan business logic;
+- tabel mana yang terdampak;
+- validasi Zod atau boundary validation yang digunakan;
+- cara test endpoint atau build backend.
 
 ---
 
