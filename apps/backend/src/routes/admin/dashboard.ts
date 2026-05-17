@@ -2,9 +2,9 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
 import { eq, and, desc, gte, lt, sql } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
 import { authorize } from '../../middleware/auth';
 import { sendSuccess, sendInternalError } from '../../utils/response';
+import { getLatestCollectionCondition } from '../../services/collectionSubmission';
 
 const ranting = { preHandler: [authorize('ADMIN_RANTING')] };
 
@@ -14,16 +14,7 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
       const user = request.currentUser!;
       const branchId = user.branchId;
 
-      const c2 = alias(schema.collections, 'c2');
-      const latestCollectionCondition = eq(
-        schema.collections.submitSequence,
-        db.select({ maxSeq: sql<number>`max(${c2.submitSequence})` })
-          .from(c2)
-          .where(and(
-            eq(c2.assignmentId, schema.collections.assignmentId),
-            eq(c2.canId, schema.collections.canId)
-          ))
-      );
+      const latestCollectionCondition = getLatestCollectionCondition();
 
       if (!branchId) {
         return reply.status(403).send({

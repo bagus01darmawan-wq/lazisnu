@@ -2,9 +2,9 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
 import { eq, and, desc, asc, gte, sql } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
 import { verifyQRCode } from '../../utils/qr';
-import { sendInternalError } from '../../utils/response';
+import { sendSuccess, sendInternalError } from '../../utils/response';
+import { getLatestCollectionCondition } from '../../services/collectionSubmission';
 
 export async function tasksRoutes(fastify: FastifyInstance) {
   // GET /mobile/dashboard
@@ -20,16 +20,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const c2 = alias(schema.collections, 'c2');
-      const latestCollectionCondition = eq(
-        schema.collections.submitSequence,
-        db.select({ maxSeq: sql<number>`max(${c2.submitSequence})` })
-          .from(c2)
-          .where(and(
-            eq(c2.assignmentId, schema.collections.assignmentId),
-            eq(c2.canId, schema.collections.canId)
-          ))
-      );
+      const latestCollectionCondition = getLatestCollectionCondition();
 
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -79,35 +70,32 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         }),
       ]);
 
-      return reply.send({
-        success: true,
-        data: {
-          today_stats: {
-            collected: todayStats.collected,
-            total_nominal: Number(todayStats.total_nominal),
-            remaining: pendingAssignments.length,
-          },
-          week_stats: {
-            collected: weekStats.collected,
-            total_nominal: Number(weekStats.total_nominal),
-          },
-          pending_tasks: pendingAssignments.map((a) => ({
-            id: a.id,
-            qr_code: a.can.qrCode,
-            owner_name: a.can.ownerName,
-            address: a.can.ownerAddress,
-            latitude: a.can.latitude,
-            longitude: a.can.longitude,
-            assigned_at: a.assignedAt,
-          })),
-          recent_collections: latestRecent.map((c) => ({
-            id: c.id,
-            qr_code: c.can.qrCode,
-            owner_name: c.can.ownerName,
-            nominal: Number(c.nominal),
-            collected_at: c.collectedAt,
-          })),
+      return sendSuccess(reply, {
+        today_stats: {
+          collected: todayStats.collected,
+          total_nominal: Number(todayStats.total_nominal),
+          remaining: pendingAssignments.length,
         },
+        week_stats: {
+          collected: weekStats.collected,
+          total_nominal: Number(weekStats.total_nominal),
+        },
+        pending_tasks: pendingAssignments.map((a) => ({
+          id: a.id,
+          qr_code: a.can.qrCode,
+          owner_name: a.can.ownerName,
+          address: a.can.ownerAddress,
+          latitude: a.can.latitude,
+          longitude: a.can.longitude,
+          assigned_at: a.assignedAt,
+        })),
+        recent_collections: latestRecent.map((c) => ({
+          id: c.id,
+          qr_code: c.can.qrCode,
+          owner_name: c.can.ownerName,
+          nominal: Number(c.nominal),
+          collected_at: c.collectedAt,
+        })),
       });
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
@@ -154,27 +142,24 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         db.$count(schema.assignments, whereClause),
       ]);
 
-      return reply.send({
-        success: true,
-        data: {
-          tasks: assignments.map((a) => ({
-            id: a.id,
-            qr_code: a.can.qrCode,
-            owner_name: a.can.ownerName,
-            owner_phone: a.can.ownerPhone,
-            owner_address: a.can.ownerAddress,
-            latitude: a.can.latitude,
-            longitude: a.can.longitude,
-            status: a.status,
-            assigned_at: a.assignedAt,
-            period: `${a.periodYear}-${String(a.periodMonth).padStart(2, '0')}`,
-          })),
-          pagination: {
-            page,
-            limit,
-            total,
-            total_pages: Math.ceil(total / limit),
-          },
+      return sendSuccess(reply, {
+        tasks: assignments.map((a) => ({
+          id: a.id,
+          qr_code: a.can.qrCode,
+          owner_name: a.can.ownerName,
+          owner_phone: a.can.ownerPhone,
+          owner_address: a.can.ownerAddress,
+          latitude: a.can.latitude,
+          longitude: a.can.longitude,
+          status: a.status,
+          assigned_at: a.assignedAt,
+          period: `${a.periodYear}-${String(a.periodMonth).padStart(2, '0')}`,
+        })),
+        pagination: {
+          page,
+          limit,
+          total,
+          total_pages: Math.ceil(total / limit),
         },
       });
     } catch (error) {
@@ -222,22 +207,19 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       const lastCollection = can.collections[0];
       const activeAssignment = can.assignments[0];
 
-      return reply.send({
-        success: true,
-        data: {
-          id: can.id,
-          qr_code: can.qrCode,
-          owner_name: can.ownerName,
-          owner_phone: can.ownerPhone,
-          owner_address: can.ownerAddress,
-          latitude: can.latitude,
-          longitude: can.longitude,
-          last_collection: lastCollection
-            ? { nominal: Number(lastCollection.nominal), date: lastCollection.collectedAt }
-            : null,
-          status: activeAssignment?.status || 'UNASSIGNED',
-          assignment_id: activeAssignment?.id,
-        },
+      return sendSuccess(reply, {
+        id: can.id,
+        qr_code: can.qrCode,
+        owner_name: can.ownerName,
+        owner_phone: can.ownerPhone,
+        owner_address: can.ownerAddress,
+        latitude: can.latitude,
+        longitude: can.longitude,
+        last_collection: lastCollection
+          ? { nominal: Number(lastCollection.nominal), date: lastCollection.collectedAt }
+          : null,
+        status: activeAssignment?.status || 'UNASSIGNED',
+        assignment_id: activeAssignment?.id,
       });
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);

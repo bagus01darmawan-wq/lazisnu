@@ -52,8 +52,30 @@ export async function syncRoutes(fastify: FastifyInstance) {
           results.push({ offline_id: item.offline_id, server_id: collection.id, status: 'COMPLETED' });
           succeeded++;
         } catch (err) {
-          results.push({ offline_id: item.offline_id, status: 'FAILED', error: (err as Error).message });
-          failed++;
+          const errorMessage = (err as Error).message;
+          const isValidationError =
+            errorMessage.includes('tidak valid') ||
+            errorMessage.includes('tidak sesuai') ||
+            errorMessage.includes('sudah selesai') ||
+            errorMessage.includes('bukan milik') ||
+            errorMessage.includes('tidak ditemukan') ||
+            errorMessage.includes('Tidak dapat') ||
+            errorMessage.includes('duplicate') ||
+            err instanceof z.ZodError;
+
+          results.push({
+            offline_id: item.offline_id,
+            status: 'FAILED',
+            error: errorMessage,
+            error_type: isValidationError ? 'VALIDATION' : 'SERVER',
+            can_retry: !isValidationError,
+          });
+
+          if (isValidationError) {
+            succeeded++;
+          } else {
+            failed++;
+          }
         }
       }
 

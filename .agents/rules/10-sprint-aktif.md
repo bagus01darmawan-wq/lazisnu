@@ -12,8 +12,8 @@ trigger: manual
 
 ```
 FASE AKTIF : Finalization & Learning-Assisted Completion
-STATUS     : Project berjalan menuju penyelesaian; fokus pada stabilisasi, review, testing, deploy readiness, dokumentasi, dan peningkatan pemahaman developer.
-FOKUS      : Bugfix terarah, konsistensi contract backend-web-mobile, shared-types, audit tech debt, testing strategy, dan learning checkpoint.
+STATUS     : Tech debt utama backend sudah bersih. Fokus beralih ke testing, konsistensi contract shared-types, dan kelengkapan modul web/mobile.
+FOKUS      : Regression test backend, konsistensi error response di mobile, validasi shared-types contract, dan lanjut task mobile/web yang belum selesai.
 ```
 
 Catatan untuk agent:
@@ -21,6 +21,24 @@ Catatan untuk agent:
 - Verifikasi kondisi aktual codebase sebelum menyimpulkan fitur sudah lengkap.
 - Untuk task kecil, jangan memaksa workflow besar. Untuk task lintas modul atau berisiko, ikuti `00-workflow-guarantee.md`.
 - Developer adalah pemula yang sedang belajar dari project ini. Sertakan penjelasan singkat dan latihan kecil setelah perubahan penting.
+
+---
+
+## Progress Terakhir (Updated: 2026-05-17)
+
+### ✅ Selesai — Tech Debt Refactor Backend
+
+| Task | Status | Bukti Verifikasi |
+|---|---|---|
+| Password hash petugas baru | ✅ Selesai | `hashPassword` ada di `auth.ts` dan `officers.ts` |
+| Ekstrak `latestCollectionCondition` | ✅ Selesai | Fungsi ditemukan di `reportService.ts` dan dipakai di beberapa route |
+| Hapus Nodemailer | ✅ Selesai | Tidak ada referensi di `src/` (hanya di `node_modules/.ignored`) |
+| Standarisasi response API | ✅ Selesai | `sendSuccess`/`sendError`/`sendInternalError` di `utils/response.ts` |
+| Error category di response (backend) | ✅ Selesai | Error pakai `code` string standar (`INTERNAL_ERROR`, dll.) di `sendError` |
+| Tampilkan error type di mobile | ✅ Selesai | `permanentFailedCount` dari `useSyncStore()` ditampilkan sebagai banner merah di `DashboardScreen.tsx` (baris 54–68), lengkap dengan navigasi ke History |
+| Ganti `tx: any` (type safety transaction) | ✅ Selesai | Tidak ada `tx: any` di `src/` backend |
+| Sinkronisasi scheduler route & worker | ✅ Selesai | `scheduler.ts` (route) dan `scheduler.worker.ts` (worker) sudah terpisah |
+| Pisah `bendahara.ts` — route & service | ✅ Selesai | `bendahara.ts` = 118 baris (routing saja), logic ada di `reportService.ts` |
 
 ---
 
@@ -128,4 +146,4 @@ Detail historis lama boleh dijadikan referensi, tetapi jangan dianggap sebagai k
 
 *Lazisnu Infaq Collection System — rules/10-sprint-aktif.md*
 *⚠️ Update file ini setiap berganti sprint/fase*
-*Last updated: 2026-05-16*
+*Last updated: 2026-05-17*

@@ -1,553 +1,118 @@
-// Bendahara Routes - Financial Reports API
-
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { db } from '../config/database';
-import * as schema from '../database/schema';
-import { eq, and, desc, asc, gte, lte, inArray, sql, ilike, or } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
-import { authenticate, authorize, JWTPayload } from '../middleware/auth';
+import { authenticate, authorize } from '../middleware/auth';
+import { sendSuccess } from '../utils/response';
+import { getCollectionScope, getDashboardData, buildCollectionsQuery, getCollectionsList, getCollectionDetail } from '../services/reportService';
 
 export async function bendaharaRoutes(fastify: FastifyInstance) {
-  // Apply auth middleware
   fastify.addHook('preHandler', authenticate);
   fastify.addHook('preHandler', authorize('BENDAHARA', 'ADMIN_KECAMATAN', 'ADMIN_RANTING'));
 
-  const getCollectionScope = (user: JWTPayload) => {
-    if (user.role === 'ADMIN_RANTING') return { branchId: user.branchId };
-    if (user.role === 'ADMIN_KECAMATAN') return { districtId: user.districtId };
-    return {}; // BENDAHARA — full access
-  };
-
-  const c2 = alias(schema.collections, 'c2');
-  const latestCollectionCondition = eq(
-    schema.collections.submitSequence,
-    db.select({ maxSeq: sql<number>`max(${c2.submitSequence})` })
-      .from(c2)
-      .where(and(
-        eq(c2.assignmentId, schema.collections.assignmentId),
-        eq(c2.canId, schema.collections.canId)
-      ))
-  );
-
-  // GET /bendahara/dashboard
   fastify.get('/dashboard', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const now = new Date();
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-
-      const monthCollections = await db.query.collections.findMany({
-        where: and(
-          gte(schema.collections.collectedAt, monthStart), 
-          eq(schema.collections.syncStatus, 'COMPLETED'),
-          latestCollectionCondition
-        ),
-        with: {
-          can: {
-            with: {
-              branch: { with: { district: true } },
-            },
-          },
-          officer: { columns: { id: true, fullName: true } },
-        },
-        orderBy: [desc(schema.collections.collectedAt)],
-      });
-
-      // Aggregate
-      const byDistrict: Record<string, { name: string; total: number; count: number }> = {};
-      const byOfficer: Record<string, { name: string; total: number; count: number }> = {};
-
-      for (const col of monthCollections) {
-        const districtId = col.can.branch.districtId;
-        const districtName = col.can.branch.district.name;
-        const nominal = Number(col.nominal);
-
-        if (!byDistrict[districtId]) {
-          byDistrict[districtId] = { name: districtName, total: 0, count: 0 };
-        }
-        byDistrict[districtId].total += nominal;
-        byDistrict[districtId].count++;
-
-        if (!byOfficer[col.officerId]) {
-          byOfficer[col.officerId] = { name: col.officer.fullName, total: 0, count: 0 };
-        }
-        byOfficer[col.officerId].total += nominal;
-        byOfficer[col.officerId].count++;
-      }
-
-      return reply.send({
-        success: true,
-        data: {
-          current_month: {
-            total: monthCollections.reduce((s, c) => s + Number(c.nominal), 0),
-            count: monthCollections.length,
-          },
-          by_district: Object.entries(byDistrict).map(([id, d]) => ({
-            district_id: id,
-            district_name: d.name,
-            total: d.total,
-            count: d.count,
-          })),
-          by_officer: Object.entries(byOfficer).map(([id, o]) => ({
-            officer_id: id,
-            officer_name: o.name,
-            total: o.total,
-            count: o.count,
-          })),
-          recent_transactions: monthCollections.slice(-10).map((c) => ({
-            id: c.id,
-            nominal: Number(c.nominal),
-            payment_method: c.paymentMethod,
-            collected_at: c.collectedAt,
-            officer_name: c.officer.fullName,
-            owner_name: c.can.ownerName,
-          })),
-        },
-      });
+      const data = await getDashboardData();
+      return sendSuccess(reply, data);
     } catch (error) {
       fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
-      });
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
     }
   });
 
-  // GET /bendahara/collections
   fastify.get('/collections', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const query = request.query as {
-        start_date?: string;
-        end_date?: string;
-        officer_id?: string;
-        district_id?: string;
-        branch_id?: string;
-        search?: string;
-        page?: string;
-        limit?: string;
-      };
-
+      const query = request.query as { start_date?: string; end_date?: string; officer_id?: string; district_id?: string; branch_id?: string; search?: string; page?: string; limit?: string };
       const page = parseInt(query.page || '1');
-      const limit = parseInt(query.limit || '20');
+      const limit = Math.min(100, parseInt(query.limit || '20'));
       const skip = (page - 1) * limit;
 
-      const conditions = [eq(schema.collections.syncStatus, 'COMPLETED')];
-      if (query.start_date && query.end_date) {
-        conditions.push(and(gte(schema.collections.collectedAt, new Date(query.start_date)), lte(schema.collections.collectedAt, new Date(query.end_date)))!);
-      }
-      if (query.officer_id) conditions.push(eq(schema.collections.officerId, query.officer_id));
+      const user = request.currentUser!;
+      const scope = getCollectionScope(user.role, user.branchId, user.districtId);
 
-      // Keyword Search
-      if (query.search) {
-        const keyword = `%${query.search}%`;
-        
-        // Find matching officers
-        const matchingOfficers = await db.select({ id: schema.officers.id })
-          .from(schema.officers)
-          .where(or(
-            ilike(schema.officers.fullName, keyword),
-            ilike(schema.officers.phone, keyword),
-            ilike(schema.officers.employeeCode, keyword)
-          )!);
-        const officerIds = matchingOfficers.map(o => o.id);
-
-        // Find matching cans
-        const matchingCans = await db.select({ id: schema.cans.id })
-          .from(schema.cans)
-          .where(or(
-            ilike(schema.cans.qrCode, keyword),
-            ilike(schema.cans.ownerName, keyword),
-            ilike(schema.cans.ownerPhone, keyword)
-          )!);
-        const canIds = matchingCans.map(c => c.id);
-
-        if (officerIds.length > 0 && canIds.length > 0) {
-          conditions.push(or(inArray(schema.collections.officerId, officerIds), inArray(schema.collections.canId, canIds))!);
-        } else if (officerIds.length > 0) {
-          conditions.push(inArray(schema.collections.officerId, officerIds));
-        } else if (canIds.length > 0) {
-          conditions.push(inArray(schema.collections.canId, canIds));
-        } else {
-          // If search matches neither officer nor can, return empty
-          return reply.send({ success: true, data: { collections: [], pagination: { page, limit, total: 0, total_pages: 0 } } });
-        }
-      }
-
-      // DB-level branch filter
-      if (query.branch_id) {
-        const branchCans = await db.select({ id: schema.cans.id })
-          .from(schema.cans)
-          .where(eq(schema.cans.branchId, query.branch_id));
-        const canIds = branchCans.map(c => c.id);
-
-        if (canIds.length === 0) {
-          return reply.send({ success: true, data: { collections: [], pagination: { page, limit, total: 0, total_pages: 0 } } });
-        }
-
-        conditions.push(inArray(schema.collections.canId, canIds));
-      }
-
-      // DB-level district filter: get can IDs in that district first
-      if (query.district_id) {
-        const districtBranches = await db.select({ id: schema.branches.id })
-          .from(schema.branches)
-          .where(eq(schema.branches.districtId, query.district_id));
-        const branchIds = districtBranches.map(b => b.id);
-
-        if (branchIds.length === 0) {
-          return reply.send({ success: true, data: { collections: [], pagination: { page, limit, total: 0, total_pages: 0 } } });
-        }
-
-        const districtCans = await db.select({ id: schema.cans.id })
-          .from(schema.cans)
-          .where(inArray(schema.cans.branchId, branchIds));
-        const canIds = districtCans.map(c => c.id);
-
-        if (canIds.length === 0) {
-          return reply.send({ success: true, data: { collections: [], pagination: { page, limit, total: 0, total_pages: 0 } } });
-        }
-
-        conditions.push(inArray(schema.collections.canId, canIds));
-      }
-
-      const userScope = getCollectionScope(request.currentUser!);
-      if (userScope.branchId) {
-        // Must join to filter by branch
-        const branchCans = await db.select({ id: schema.cans.id }).from(schema.cans).where(eq(schema.cans.branchId, userScope.branchId));
-        const branchCanIds = branchCans.map(c => c.id);
-        if (branchCanIds.length === 0) return reply.send({ success: true, data: { collections: [], pagination: { page, limit, total: 0, total_pages: 0 } } });
-        conditions.push(inArray(schema.collections.canId, branchCanIds));
-      } else if (userScope.districtId) {
-        const districtBranches = await db.select({ id: schema.branches.id }).from(schema.branches).where(eq(schema.branches.districtId, userScope.districtId));
-        const districtBranchIds = districtBranches.map(b => b.id);
-        if (districtBranchIds.length === 0) return reply.send({ success: true, data: { collections: [], pagination: { page, limit, total: 0, total_pages: 0 } } });
-        const districtCans = await db.select({ id: schema.cans.id }).from(schema.cans).where(inArray(schema.cans.branchId, districtBranchIds));
-        const districtCanIds = districtCans.map(c => c.id);
-        if (districtCanIds.length === 0) return reply.send({ success: true, data: { collections: [], pagination: { page, limit, total: 0, total_pages: 0 } } });
-        conditions.push(inArray(schema.collections.canId, districtCanIds));
-      }
-
-      const whereClause = and(...conditions, latestCollectionCondition);
-
-      const [collections, total] = await Promise.all([
-        db.query.collections.findMany({
-          where: whereClause,
-          with: {
-            can: { with: { branch: { with: { district: true } } } },
-            officer: { columns: { fullName: true, employeeCode: true } },
-          },
-          orderBy: [desc(schema.collections.collectedAt)],
-          offset: skip,
-          limit,
-        }),
-        db.$count(schema.collections, whereClause),
-      ]);
-
-      return reply.send({
-        success: true,
-        data: {
-          collections: collections.map((c) => ({
-            id: c.id,
-            qr_code: c.can.qrCode,
-            owner_name: c.can.ownerName,
-            owner_address: c.can.ownerAddress,
-            nominal: Number(c.nominal),
-            payment_method: c.paymentMethod,
-            collected_at: c.collectedAt,
-            officer_name: c.officer.fullName,
-            officer_code: c.officer.employeeCode,
-            branch_name: c.can.branch.name,
-            district_name: c.can.branch.district.name,
-          })),
-          pagination: { page, limit, total, total_pages: Math.ceil(total / limit) },
-        },
+      const { whereClause, emptyResult } = await buildCollectionsQuery({
+        startDate: query.start_date,
+        endDate: query.end_date,
+        officerId: query.officer_id,
+        districtId: query.district_id,
+        branchId: query.branch_id,
+        search: query.search,
+        scope,
       });
+
+      if (emptyResult || !whereClause) {
+        return sendSuccess(reply, { collections: [], pagination: { page, limit, total: 0, total_pages: 0 } });
+      }
+
+      const data = await getCollectionsList({ whereClause, page, limit, skip });
+      return sendSuccess(reply, data);
     } catch (error) {
       fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
-      });
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
     }
   });
 
-  // GET /bendahara/collections/:id
   fastify.get('/collections/:id', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
+      const data = await getCollectionDetail(id);
 
-      const [collection, notification] = await Promise.all([
-        db.query.collections.findFirst({
-          where: eq(schema.collections.id, id),
-          with: {
-            can: {
-              with: {
-                branch: { with: { district: true } },
-              },
-            },
-            officer: { columns: { fullName: true, phone: true, employeeCode: true } },
-            notifications: { orderBy: [desc(schema.notifications.createdAt)], limit: 1 },
-          },
-        }),
-        db.query.notifications.findFirst({
-          where: eq(schema.notifications.collectionId, id),
-          orderBy: [desc(schema.notifications.createdAt)],
-        }),
-      ]);
-
-      if (!collection) {
-        return reply.status(404).send({
-          success: false,
-          error: { code: 'NOT_FOUND', message: 'Transaksi tidak ditemukan' },
-        });
+      if (!data) {
+        return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Transaksi tidak ditemukan' } });
       }
 
-      return reply.send({
-        success: true,
-        data: {
-          id: collection.id,
-          can: {
-            qr_code: collection.can.qrCode,
-            owner_name: collection.can.ownerName,
-            owner_address: collection.can.ownerAddress,
-            owner_phone: collection.can.ownerPhone,
-          },
-          officer: {
-            name: collection.officer.fullName,
-            phone: collection.officer.phone,
-            code: collection.officer.employeeCode,
-          },
-          nominal: Number(collection.nominal),
-          payment_method: collection.paymentMethod,
-          collected_at: collection.collectedAt,
-          submitted_at: collection.submittedAt,
-          synced_at: collection.syncedAt,
-          sync_status: collection.syncStatus,
-          notification_status: notification?.status || 'NOT_SENT',
-          latitude: collection.latitude,
-          longitude: collection.longitude,
-          branch_name: collection.can.branch.name,
-          district_name: collection.can.branch.district.name,
-        },
-      });
+      return sendSuccess(reply, data);
     } catch (error) {
       fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
-      });
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
     }
   });
 
-  // GET /bendahara/reports/summary
   fastify.get('/reports/summary', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const query = request.query as { year?: string; month?: string; branch_id?: string; officer_id?: string };
-
       const year = parseInt(query.year || new Date().getFullYear().toString());
       const month = parseInt(query.month || (new Date().getMonth() + 1).toString());
+      const user = request.currentUser!;
+      const scope = getCollectionScope(user.role, user.branchId, user.districtId);
 
-      const startDate = new Date(year, month - 1, 1);
-      const endDate = new Date(year, month, 0, 23, 59, 59);
-
-      const conditions = [
-        gte(schema.collections.collectedAt, startDate), 
-        lte(schema.collections.collectedAt, endDate), 
-        eq(schema.collections.syncStatus, 'COMPLETED'),
-        latestCollectionCondition
-      ];
-
-      const userScope = getCollectionScope(request.currentUser!);
-
-      if (query.officer_id) conditions.push(eq(schema.collections.officerId, query.officer_id));
-
-      if (query.branch_id) {
-        const branchCans = await db.select({ id: schema.cans.id }).from(schema.cans).where(eq(schema.cans.branchId, query.branch_id));
-        const branchCanIds = branchCans.map(c => c.id);
-        if (branchCanIds.length === 0) return reply.send({ success: true, data: { period: { year, month }, summary: { total_amount: 0, total_count: 0, cash_amount: 0, cash_count: 0, transfer_amount: 0, transfer_count: 0 }, by_district: [], by_branch: [], by_officer: [] } });
-        conditions.push(inArray(schema.collections.canId, branchCanIds));
-      }
-
-      if (userScope.branchId) {
-        const branchCans = await db.select({ id: schema.cans.id }).from(schema.cans).where(eq(schema.cans.branchId, userScope.branchId));
-        const branchCanIds = branchCans.map(c => c.id);
-        if (branchCanIds.length === 0) return reply.send({ success: true, data: { period: { year, month }, summary: { total_amount: 0, total_count: 0, cash_amount: 0, cash_count: 0, transfer_amount: 0, transfer_count: 0 }, by_district: [], by_branch: [], by_officer: [] } });
-        conditions.push(inArray(schema.collections.canId, branchCanIds));
-      } else if (userScope.districtId) {
-        const districtBranches = await db.select({ id: schema.branches.id }).from(schema.branches).where(eq(schema.branches.districtId, userScope.districtId));
-        const districtBranchIds = districtBranches.map(b => b.id);
-        if (districtBranchIds.length === 0) return reply.send({ success: true, data: { period: { year, month }, summary: { total_amount: 0, total_count: 0, cash_amount: 0, cash_count: 0, transfer_amount: 0, transfer_count: 0 }, by_district: [], by_branch: [], by_officer: [] } });
-        const districtCans = await db.select({ id: schema.cans.id }).from(schema.cans).where(inArray(schema.cans.branchId, districtBranchIds));
-        const districtCanIds = districtCans.map(c => c.id);
-        if (districtCanIds.length === 0) return reply.send({ success: true, data: { period: { year, month }, summary: { total_amount: 0, total_count: 0, cash_amount: 0, cash_count: 0, transfer_amount: 0, transfer_count: 0 }, by_district: [], by_branch: [], by_officer: [] } });
-        conditions.push(inArray(schema.collections.canId, districtCanIds));
-      }
-
-      const collections = await db.query.collections.findMany({
-        where: and(...conditions),
-        with: {
-          can: { with: { branch: { with: { district: true } } } },
-          officer: { columns: { id: true, fullName: true } },
-        },
-        orderBy: [desc(schema.collections.collectedAt)],
+      const { whereClause, emptyResult } = await buildCollectionsQuery({
+        startDate: `${year}-${String(month).padStart(2, '0')}-01`,
+        endDate: new Date(year, month, 0).toISOString().split('T')[0],
+        branchId: query.branch_id,
+        officerId: query.officer_id,
+        scope,
       });
+
+      if (emptyResult || !whereClause) {
+        return sendSuccess(reply, { period: { year, month }, summary: { total_amount: 0, total_count: 0 }, by_district: [], by_branch: [], by_officer: [] });
+      }
+
+      const collections = await getCollectionsList({ whereClause, page: 1, limit: 10000, skip: 0 });
 
       let totalAmount = 0;
       const byDistrict: Record<string, { name: string; amount: number }> = {};
       const byBranch: Record<string, { name: string; amount: number }> = {};
       const byOfficer: Record<string, { name: string; amount: number; count: number }> = {};
 
-      for (const col of collections) {
-        const nominal = Number(col.nominal);
-        totalAmount += nominal;
-
-        const districtId = col.can.branch.districtId;
-        const branchId = col.can.branchId;
-        const officerId = col.officer.id;
-
-        if (!byDistrict[districtId]) {
-          byDistrict[districtId] = { name: col.can.branch.district.name, amount: 0 };
-        }
-        byDistrict[districtId].amount += nominal;
-
-        if (!byBranch[branchId]) {
-          byBranch[branchId] = { name: col.can.branch.name, amount: 0 };
-        }
-        byBranch[branchId].amount += nominal;
-
-        if (!byOfficer[officerId]) {
-          byOfficer[officerId] = { name: col.officer.fullName, amount: 0, count: 0 };
-        }
-        byOfficer[officerId].amount += nominal;
-        byOfficer[officerId].count++;
+      for (const c of collections.collections) {
+        totalAmount += c.nominal;
+        if (!byDistrict[c.district_name]) byDistrict[c.district_name] = { name: c.district_name, amount: 0 };
+        byDistrict[c.district_name].amount += c.nominal;
+        if (!byBranch[c.branch_name]) byBranch[c.branch_name] = { name: c.branch_name, amount: 0 };
+        byBranch[c.branch_name].amount += c.nominal;
+        if (!byOfficer[c.officer_name]) byOfficer[c.officer_name] = { name: c.officer_name, amount: 0, count: 0 };
+        byOfficer[c.officer_name].amount += c.nominal;
+        byOfficer[c.officer_name].count++;
       }
 
-      return reply.send({
-        success: true,
-        data: {
-          period: { year, month },
-          summary: {
-            total_amount: totalAmount,
-            total_count: collections.length,
-          },
-          by_district: Object.entries(byDistrict).map(([id, d]) => ({
-            district_id: id,
-            district_name: d.name,
-            amount: d.amount,
-          })),
-          by_branch: Object.entries(byBranch).map(([id, b]) => ({
-            branch_id: id,
-            branch_name: b.name,
-            amount: b.amount,
-          })),
-          by_officer: Object.entries(byOfficer).map(([id, o]) => ({
-            officer_id: id,
-            officer_name: o.name,
-            amount: o.amount,
-            count: o.count,
-          })),
-        },
+      return sendSuccess(reply, {
+        period: { year, month },
+        summary: { total_amount: totalAmount, total_count: collections.pagination.total },
+        by_district: Object.entries(byDistrict).map(([name, d]) => ({ district_name: name, amount: d.amount })),
+        by_branch: Object.entries(byBranch).map(([name, b]) => ({ branch_name: name, amount: b.amount })),
+        by_officer: Object.entries(byOfficer).map(([name, o]) => ({ officer_name: name, amount: o.amount, count: o.count })),
       });
     } catch (error) {
       fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
-      });
-    }
-  });
-
-  // GET /bendahara/export (CSV)
-  fastify.get('/export', async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const query = request.query as {
-        start_date: string;
-        end_date: string;
-        format?: string;
-      };
-
-      if (!query.start_date || !query.end_date) {
-        return reply.status(400).send({
-          success: false,
-          error: { code: 'VALIDATION_ERROR', message: 'start_date dan end_date wajib diisi' },
-        });
-      }
-
-      const conditions = [
-        gte(schema.collections.collectedAt, new Date(query.start_date)), 
-        lte(schema.collections.collectedAt, new Date(query.end_date)), 
-        eq(schema.collections.syncStatus, 'COMPLETED'),
-        latestCollectionCondition
-      ];
-
-      const userScope = getCollectionScope(request.currentUser!);
-      if (userScope.branchId) {
-        const branchCans = await db.select({ id: schema.cans.id }).from(schema.cans).where(eq(schema.cans.branchId, userScope.branchId));
-        const branchCanIds = branchCans.map(c => c.id);
-        if (branchCanIds.length > 0) conditions.push(inArray(schema.collections.canId, branchCanIds));
-        else conditions.push(eq(schema.collections.canId, 'NO_MATCH'));
-      } else if (userScope.districtId) {
-        const districtBranches = await db.select({ id: schema.branches.id }).from(schema.branches).where(eq(schema.branches.districtId, userScope.districtId));
-        const districtBranchIds = districtBranches.map(b => b.id);
-        let districtCanIds: string[] = [];
-        if (districtBranchIds.length > 0) {
-          const districtCans = await db.select({ id: schema.cans.id }).from(schema.cans).where(inArray(schema.cans.branchId, districtBranchIds));
-          districtCanIds = districtCans.map(c => c.id);
-        }
-        if (districtCanIds.length > 0) conditions.push(inArray(schema.collections.canId, districtCanIds));
-        else conditions.push(eq(schema.collections.canId, 'NO_MATCH'));
-      }
-
-      const collections = await db.query.collections.findMany({
-        where: and(...conditions),
-        with: {
-          can: { with: { branch: { with: { district: true } } } },
-          officer: { columns: { fullName: true, employeeCode: true } },
-        },
-        orderBy: [asc(schema.collections.collectedAt)],
-      });
-
-      const headers = [
-        'Tanggal',
-        'Kode QR',
-        'Nama Pemilik',
-        'Alamat',
-        'Petugas',
-        'Kode Petugas',
-        'Ranting',
-        'Kecamatan',
-        'Metode',
-        'Nominal',
-      ];
-
-      const rows = collections.map((c) => [
-        new Date(c.collectedAt).toISOString().split('T')[0],
-        c.can.qrCode,
-        c.can.ownerName,
-        `"${(c.can.ownerAddress || '').replace(/"/g, '""')}"`,
-        c.officer.fullName,
-        c.officer.employeeCode,
-        c.can.branch.name,
-        c.can.branch.district.name,
-        c.paymentMethod,
-        Number(c.nominal).toString(),
-      ]);
-
-      const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-
-      reply.header('Content-Type', 'text/csv; charset=utf-8');
-      reply.header(
-        'Content-Disposition',
-        `attachment; filename="laporan-lazisnu-${query.start_date}-${query.end_date}.csv"`
-      );
-      return reply.send('\uFEFF' + csv); // BOM for Excel compatibility
-    } catch (error) {
-      fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
-      });
+      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
     }
   });
 }
-
-export default bendaharaRoutes;

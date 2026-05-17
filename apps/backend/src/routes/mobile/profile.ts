@@ -2,8 +2,8 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
 import { eq, and, sql } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
+import { getLatestCollectionCondition } from '../../services/collectionSubmission';
 
 export async function profileRoutes(fastify: FastifyInstance) {
   // GET /mobile/profile
@@ -14,16 +14,7 @@ export async function profileRoutes(fastify: FastifyInstance) {
 
       if (!officerId) return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
 
-      const c2 = alias(schema.collections, 'c2');
-      const latestCollectionCondition = eq(
-        schema.collections.submitSequence,
-        db.select({ maxSeq: sql<number>`max(${c2.submitSequence})` })
-          .from(c2)
-          .where(and(
-            eq(c2.assignmentId, schema.collections.assignmentId),
-            eq(c2.canId, schema.collections.canId)
-          ))
-      );
+      const latestCollectionCondition = getLatestCollectionCondition();
 
       const [officer, totalCollections, sumResult] = await Promise.all([
         db.query.officers.findFirst({

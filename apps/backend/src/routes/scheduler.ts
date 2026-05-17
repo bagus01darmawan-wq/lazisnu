@@ -4,9 +4,10 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { eq, and, asc, gte, lte, inArray, notInArray, sql } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
+import { eq, and, asc, gte, lte, inArray, sql } from 'drizzle-orm';
 import { config } from '../config/env';
+import { getLatestCollectionCondition } from '../services/collectionSubmission';
+import { findCansWithoutAssignment, buildFirstOfficerAssignments, insertAssignments } from '../services/assignmentGenerator';
 
 const generateTasksSchema = z.object({
   year: z.number().min(2020).max(2100),
@@ -25,16 +26,7 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
     }
   });
 
-  const c2 = alias(schema.collections, 'c2');
-  const latestCollectionCondition = eq(
-    schema.collections.submitSequence,
-    db.select({ maxSeq: sql<number>`max(${c2.submitSequence})` })
-      .from(c2)
-      .where(and(
-        eq(c2.assignmentId, schema.collections.assignmentId),
-        eq(c2.canId, schema.collections.canId)
-      ))
-  );
+  const latestCollectionCondition = getLatestCollectionCondition();
 
   // POST /scheduler/generate-tasks
   // Generates monthly assignments for all active cans
@@ -43,64 +35,18 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
       const body = generateTasksSchema.parse(request.body);
       const { year, month } = body;
 
-      // Find cans that don't have assignments for this period yet
-      const existingAssignments = await db.query.assignments.findMany({
-        where: and(eq(schema.assignments.periodYear, year), eq(schema.assignments.periodMonth, month)),
-        columns: { canId: true },
-      });
-      const assignedCanIds = existingAssignments.map((a) => a.canId);
+      const { cansToAssign } = await findCansWithoutAssignment(year, month);
 
-      const cansToAssign = await db.query.cans.findMany({
-        where: and(
-          eq(schema.cans.isActive, true),
-          assignedCanIds.length > 0 ? notInArray(schema.cans.id, assignedCanIds) : undefined
-        ),
-        with: {
-          branch: {
-            with: {
-              officers: {
-                where: eq(schema.officers.isActive, true),
-                orderBy: [asc(schema.officers.createdAt)],
-              },
-            },
-          },
-        },
-      });
+      const assignmentItems = buildFirstOfficerAssignments(cansToAssign, year, month);
 
-      const assignmentData: any[] = [];
-
-      for (const can of cansToAssign) {
-        const officers = can.branch.officers;
-
-        if (officers.length === 0) {
-          fastify.log.warn(`No active officers for can ${can.qrCode} in branch ${can.branchId}`);
-          continue;
-        }
-
-        const primaryOfficer = officers[0];
-        const backupOfficer = officers.length > 1 ? officers[1] : null;
-
-        assignmentData.push({
-          canId: can.id,
-          officerId: primaryOfficer.id,
-          backupOfficerId: backupOfficer?.id || null,
-          periodYear: year,
-          periodMonth: month,
-          status: 'ACTIVE' as const,
-          assignedAt: new Date(),
-        });
-      }
-
-      if (assignmentData.length > 0) {
-        await db.insert(schema.assignments).values(assignmentData).onConflictDoNothing();
-      }
+      const { created } = await insertAssignments(assignmentItems, true);
 
       return reply.send({
         success: true,
         data: {
-          total_assignments: assignmentData.length,
-          assigned_to_officers: new Set(assignmentData.map((a) => a.officerId)).size,
-          skipped_no_officer: cansToAssign.length - assignmentData.length,
+          total_assignments: created,
+          assigned_to_officers: new Set(assignmentItems.map((a: any) => a.officerId)).size,
+          skipped_no_officer: cansToAssign.length - assignmentItems.length,
           period: `${year}-${String(month).padStart(2, '0')}`,
         },
       });

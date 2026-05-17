@@ -5,8 +5,9 @@ import { Queue, Worker, Job } from 'bullmq';
 import { redisConnection } from '../config/redis';
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { eq, and, asc, notInArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { sendAssignmentNotification } from '../services/fcm';
+import { findCansWithoutAssignment, buildRoundRobinAssignments, insertAssignments } from '../services/assignmentGenerator';
 
 const SCHEDULER_QUEUE_NAME = 'lazisnu-scheduler';
 
@@ -53,95 +54,45 @@ export async function registerMonthlyAssignmentCron() {
 async function generateMonthlyAssignments(year: number, month: number) {
   console.log(`[Scheduler] Memulai generate assignment untuk ${month}/${year}...`);
 
-  // 1. Cari kaleng yang belum punya assignment bulan ini
-  const existing = await db.query.assignments.findMany({
-    where: and(
-      eq(schema.assignments.periodYear, year),
-      eq(schema.assignments.periodMonth, month)
-    ),
-    columns: { canId: true },
-  });
-  const assignedCanIds = existing.map(a => a.canId);
-
-  const cansToAssign = await db.query.cans.findMany({
-    where: and(
-      eq(schema.cans.isActive, true),
-      assignedCanIds.length > 0 ? notInArray(schema.cans.id, assignedCanIds) : undefined
-    ),
-    with: {
-      branch: {
-        with: {
-          officers: {
-            where: eq(schema.officers.isActive, true),
-            orderBy: [asc(schema.officers.createdAt)],
-          },
-        },
-      },
-    },
-  });
+  const { cansToAssign } = await findCansWithoutAssignment(year, month);
 
   if (cansToAssign.length === 0) {
     console.log(`[Scheduler] Semua kaleng sudah punya assignment untuk ${month}/${year}.`);
     return { created: 0, skipped: 0 };
   }
 
-  // 2. Buat assignment menggunakan round-robin per ranting
-  const assignmentData: any[] = [];
-  const officerNotificationMap: Map<string, { officerName: string; canCount: number; fcmToken?: string }> = new Map();
+  const assignmentData = buildRoundRobinAssignments(cansToAssign, year, month);
+  const skipped = cansToAssign.length - assignmentData.length;
 
+  const { created } = await insertAssignments(assignmentData);
+  console.log(`[Scheduler] ✅ Berhasil membuat ${created} assignment untuk ${month}/${year}.`);
+
+  // Kirim FCM notification ke setiap petugas (best-effort)
+  const officerCanCount: Record<string, { officerName: string; canCount: number }> = {};
   for (const can of cansToAssign) {
     const officers = can.branch?.officers ?? [];
-    if (officers.length === 0) {
-      console.warn(`[Scheduler] Ranting ${can.branchId} tidak punya petugas aktif, kaleng ${can.qrCode} dilewati.`);
-      continue;
-    }
-
-    // Round-robin assignment
-    const idx = assignmentData.filter(a => officers.some(o => o.id === a.officerId)).length % officers.length;
+    if (officers.length === 0) continue;
+    const idx = assignmentData.filter((a: any) => officers.some((o: any) => o.id === a.officerId)).length % officers.length;
     const assignedOfficer = officers[idx] ?? officers[0];
-
-    assignmentData.push({
-      canId: can.id,
-      officerId: assignedOfficer.id,
-      periodYear: year,
-      periodMonth: month,
-      status: 'ACTIVE' as const,
-    });
-
-    // Track untuk notifikasi FCM
-    if (!officerNotificationMap.has(assignedOfficer.id)) {
-      officerNotificationMap.set(assignedOfficer.id, {
-        officerName: assignedOfficer.fullName,
-        canCount: 0,
-      });
+    if (!officerCanCount[assignedOfficer.id]) {
+      officerCanCount[assignedOfficer.id] = { officerName: assignedOfficer.fullName, canCount: 0 };
     }
-    officerNotificationMap.get(assignedOfficer.id)!.canCount++;
+    officerCanCount[assignedOfficer.id].canCount++;
   }
 
-  // 3. Insert assignments (batch)
-  if (assignmentData.length > 0) {
-    await db.insert(schema.assignments).values(assignmentData);
-    console.log(`[Scheduler] ✅ Berhasil membuat ${assignmentData.length} assignment untuk ${month}/${year}.`);
-  }
-
-  // 4. Kirim FCM notification ke setiap petugas (best-effort, tidak blokir)
-  for (const [officerId, info] of officerNotificationMap) {
+  for (const [officerId, info] of Object.entries(officerCanCount)) {
     try {
-      // Ambil FCM token dari DB jika ada (field fcmToken di tabel users/officers)
-      const officerUser = await db.query.officers.findFirst({
+      await db.query.officers.findFirst({
         where: eq(schema.officers.id, officerId),
         with: { user: { columns: { id: true } } },
       });
-
-      // Note: FCM token biasanya disimpan saat login di mobile.
-      // Untuk sekarang, log saja. Token management bisa ditambah nanti.
       console.log(`[FCM] Notifikasi untuk ${info.officerName}: ${info.canCount} tugas baru (FCM token belum diimplementasi di DB).`);
     } catch (e) {
       console.warn(`[FCM] Gagal kirim notifikasi ke officer ${officerId}:`, e);
     }
   }
 
-  return { created: assignmentData.length, skipped: cansToAssign.length - assignmentData.length };
+  return { created, skipped };
 }
 
 // ── Worker ─────────────────────────────────────────────────────────────────────

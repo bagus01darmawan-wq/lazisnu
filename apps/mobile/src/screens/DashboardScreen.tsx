@@ -17,7 +17,7 @@ const DashboardScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { todayStats, weekStats, pendingTasks, recentCollections, fetchDashboard, isLoading } =
     useDashboardStore();
-  const { pendingCount, checkStatus } = useSyncStore();
+  const { pendingCount, permanentFailedCount, checkStatus } = useSyncStore();
 
   useEffect(() => {
     fetchDashboard();
@@ -47,6 +47,23 @@ const DashboardScreen: React.FC = () => {
             <Text style={styles.offlineTitle}>Mode Trip Aktif</Text>
             <Text style={styles.offlineDesc}>{pendingCount} data infaq tersimpan offline dan akan sinkronisasi otomatis saat online.</Text>
           </View>
+        </View>
+      )}
+
+      {/* Banner Data Gagal Permanen */}
+      {permanentFailedCount > 0 && (
+        <View style={styles.errorBanner}>
+          <Icon name="alert-circle" size={24} color="#fff" style={styles.offlineIcon} />
+          <View style={styles.offlineContent}>
+            <Text style={styles.offlineTitle}>Data Gagal Dikirim</Text>
+            <Text style={styles.offlineDesc}>{permanentFailedCount} data tidak dapat dikirim dan perlu diperbaiki. Buka Riwayat untuk detail.</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.errorBannerButton}
+            onPress={() => navigation.navigate('History')}
+          >
+            <Text style={styles.errorBannerButtonText}>Lihat</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -247,6 +264,32 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     marginTop: 2,
+  },
+  errorBanner: {
+    backgroundColor: '#E53935',
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
+  },
+  errorBannerButton: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  errorBannerButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 13,
   },
   welcomeSection: {
     backgroundColor: '#1E88E5',

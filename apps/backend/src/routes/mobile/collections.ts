@@ -2,7 +2,6 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import { sendWhatsAppNotification } from '../../services/whatsapp';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
@@ -122,25 +121,22 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
         ),
       ]);
 
-      return reply.send({
-        success: true,
-        data: {
-          collections: collections.map((c) => ({
-            id: c.id,
-            qr_code: c.can.qrCode,
-            owner_name: c.can.ownerName,
-            owner_address: c.can.ownerAddress,
-            nominal: Number(c.nominal),
-            payment_method: c.paymentMethod,
-            collected_at: c.collectedAt,
-            sync_status: c.syncStatus,
-          })),
-          pagination: {
-            page,
-            limit,
-            total,
-            total_pages: Math.ceil(total / limit)
-          },
+      return sendSuccess(reply, {
+        collections: collections.map((c) => ({
+          id: c.id,
+          qr_code: c.can.qrCode,
+          owner_name: c.can.ownerName,
+          owner_address: c.can.ownerAddress,
+          nominal: Number(c.nominal),
+          payment_method: c.paymentMethod,
+          collected_at: c.collectedAt,
+          sync_status: c.syncStatus,
+        })),
+        pagination: {
+          page,
+          limit,
+          total,
+          total_pages: Math.ceil(total / limit)
         },
       });
     } catch (error) {

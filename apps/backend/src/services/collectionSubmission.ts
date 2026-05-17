@@ -1,7 +1,13 @@
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { eq, and, sql } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
+import { eq, and, sql, ExtractTablesWithRelations } from 'drizzle-orm';
+import { alias, PgTransaction } from 'drizzle-orm/pg-core';
+
+type Transaction = PgTransaction<
+  any,
+  typeof schema,
+  ExtractTablesWithRelations<typeof schema>
+>;
 
 /**
  * Mendapatkan subquery condition untuk mencari koleksi dengan submit_sequence tertinggi (is_latest=true)
@@ -23,7 +29,7 @@ export function getLatestCollectionCondition() {
  * Validasi apakah assignment aktif, valid, dan dimiliki oleh officer
  */
 export async function validateAssignmentForSubmit(
-  tx: any,
+  tx: Transaction,
   assignmentId: string,
   canId: string,
   officerId: string
@@ -50,7 +56,7 @@ export async function validateAssignmentForSubmit(
  * Melakukan submit koleksi infaq (insert collection + update assignment + update can)
  */
 export async function submitCollection(
-  tx: any,
+  tx: Transaction,
   data: {
     assignmentId: string;
     canId: string;

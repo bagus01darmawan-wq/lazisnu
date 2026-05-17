@@ -8,6 +8,8 @@ import { getPaginationParams, formatPaginatedResponse } from '../../utils/pagina
 import { getRoleScope } from '../../utils/role-scope';
 import { createOfficerSchema, updateOfficerSchema } from './schemas';
 import { z } from 'zod';
+import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 
 const rantingOrKec = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
 
@@ -86,9 +88,12 @@ export async function officersRoutes(fastify: FastifyInstance) {
         const count = Number(countRes[0].count);
         const employeeCode = `${branchRes.code || 'XX'}-${String(count + 1).padStart(4, '0')}`;
 
+        const randomPassword = crypto.randomBytes(16).toString('hex');
+        const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
         const [userRecord] = await tx.insert(schema.users).values({
           email: `${body.phone}@petugas.lazisnu.id`,
-          passwordHash: '',
+          passwordHash: hashedPassword,
           fullName: body.full_name,
           phone: body.phone,
           role: 'PETUGAS',
