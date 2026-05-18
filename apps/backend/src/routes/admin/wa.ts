@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { eq, desc, ilike, or, and, sql } from 'drizzle-orm';
+import { eq, desc, ilike, or, and, sql, inArray } from 'drizzle-orm';
 import { authorize } from '../../middleware/auth';
 import { UserRole } from '@lazisnu/shared-types';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
@@ -14,6 +14,7 @@ export async function waRoutes(fastify: FastifyInstance) {
   // GET /admin/wa/logs - Real Notification Logs from DB
   fastify.get('/wa/logs', { preHandler: [adminOnly] }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
+      const user = request.currentUser!;
       const query = request.query as any;
       const { page, limit, offset } = getPaginationParams(query);
 
@@ -24,6 +25,21 @@ export async function waRoutes(fastify: FastifyInstance) {
           ilike(schema.notifications.recipientPhone, `%${query.search}%`),
           ilike(schema.notifications.messageContent, `%${query.search}%`)
         ));
+      }
+
+      // Scope ADMIN_RANTING: only notifications for cans in their branch
+      if (user.role === 'ADMIN_RANTING' && user.branchId) {
+        const rantingCanIdsSubquery = db
+          .select({ canId: schema.cans.id })
+          .from(schema.cans)
+          .where(eq(schema.cans.branchId, user.branchId));
+
+        const rantingCollectionIdsSubquery = db
+          .select({ colId: schema.collections.id })
+          .from(schema.collections)
+          .where(inArray(schema.collections.canId, rantingCanIdsSubquery));
+
+        conditions.push(inArray(schema.notifications.collectionId, rantingCollectionIdsSubquery));
       }
 
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

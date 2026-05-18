@@ -44,17 +44,17 @@ export const useSyncStore = create<SyncState>((set) => ({
   triggerSync: async () => {
     set({ isSyncing: true, error: null, progress: 0 });
     try {
-      await syncService.autoSync();
+      const result = await syncService.autoSync();
 
       set({
         isSyncing: false,
-        progress: 100,
+        progress: result.success ? 100 : 0,
         lastSyncAt: new Date().toISOString(),
         pendingCount: offlineQueue.getQueueCount(),
         permanentFailedCount: offlineQueue.getFailedPermanentCount(),
       });
 
-      return { success: 1, failed: 0 };
+      return { success: result.synced, failed: result.failed };
     } catch (error: any) {
       set({ isSyncing: false, error: error.message, progress: 0 });
       return { success: 0, failed: 0 };

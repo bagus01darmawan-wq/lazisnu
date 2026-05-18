@@ -365,8 +365,45 @@ export async function authRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // 3. Generate new tokens
-      const tokens = generateTokens(decoded, request.server);
+      // 3. Check user active status
+      const userRes = await db.select().from(users).where(eq(users.id, decoded.userId)).limit(1);
+      const user = userRes[0];
+
+      if (!user) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'USER_NOT_FOUND', message: 'Pengguna tidak ditemukan' },
+        });
+      }
+
+      if (!user.isActive) {
+        return reply.status(403).send({
+          success: false,
+          error: { code: 'ACCOUNT_DISABLED', message: 'Akun Anda tidak aktif' },
+        });
+      }
+
+      if (decoded.officerId) {
+        const officerRes = await db.select().from(officers).where(eq(officers.id, decoded.officerId)).limit(1);
+        const officer = officerRes[0];
+        if (!officer || !officer.isActive) {
+           return reply.status(403).send({
+             success: false,
+             error: { code: 'OFFICER_DISABLED', message: 'Akun petugas Anda tidak aktif' },
+           });
+        }
+      }
+
+      const newPayload = {
+        userId: user.id,
+        role: user.role,
+        branchId: user.branchId || undefined,
+        districtId: user.districtId || undefined,
+        officerId: decoded.officerId,
+      };
+
+      // 4. Generate new tokens
+      const tokens = generateTokens(newPayload, request.server);
 
       return reply.send({
         success: true,

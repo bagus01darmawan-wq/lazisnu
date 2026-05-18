@@ -42,7 +42,7 @@ export const MENU_ITEMS: MenuItem[] = [
     title: 'Manajemen User',
     path: '/dashboard/users',
     icon: Users,
-    roles: ['ADMIN_KECAMATAN'],
+    roles: ['ADMIN_KECAMATAN', 'ADMIN_RANTING'],
   },
   {
     title: 'Laporan',
@@ -54,7 +54,7 @@ export const MENU_ITEMS: MenuItem[] = [
     title: 'Re-submit',
     path: '/dashboard/resubmit',
     icon: History,
-    roles: ['ADMIN_KECAMATAN', 'BENDAHARA'],
+    roles: ['ADMIN_KECAMATAN', 'ADMIN_RANTING', 'BENDAHARA'],
   },
   {
     title: 'Log Aktivitas',
@@ -66,7 +66,7 @@ export const MENU_ITEMS: MenuItem[] = [
     title: 'WA Monitor',
     path: '/dashboard/wa-monitor',
     icon: MessageSquare,
-    roles: ['ADMIN_KECAMATAN', 'BENDAHARA'],
+    roles: ['ADMIN_KECAMATAN', 'ADMIN_RANTING', 'BENDAHARA'],
   },
   {
     title: 'Data Master',

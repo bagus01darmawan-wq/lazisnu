@@ -140,6 +140,12 @@ export async function cansRoutes(fastify: FastifyInstance) {
         qrCode = `LAZ-${regionCode}-${String(count + 1).padStart(5, '0')}-${suffix}`;
       }
 
+      let dukuhName = '';
+      if (body.dukuh_id && body.dukuh_id !== '') {
+        const dukuhRecord = await db.query.dukuhs.findFirst({ where: eq(schema.dukuhs.id, body.dukuh_id) });
+        if (dukuhRecord) dukuhName = dukuhRecord.name;
+      }
+
       const inserted = await db.insert(schema.cans).values({
         branchId: branchId,
         dukuhId: (body.dukuh_id && body.dukuh_id !== '') ? body.dukuh_id : null,
@@ -150,7 +156,7 @@ export async function cansRoutes(fastify: FastifyInstance) {
         ownerAddress: body.owner_address || '', // Fix not-null constraint
         rt: (body.rt || '').substring(0, 10),
         rw: (body.rw || '').substring(0, 10),
-        dukuh: (body.owner_address || '').substring(0, 100),
+        dukuh: dukuhName || null,
         latitude: (body.latitude !== undefined && body.latitude !== null) ? body.latitude.toString() : null,
         longitude: (body.longitude !== undefined && body.longitude !== null) ? body.longitude.toString() : null,
       }).returning();
@@ -222,12 +228,26 @@ export async function cansRoutes(fastify: FastifyInstance) {
         }
       }
 
+      let newDukuhName = existing.dukuh;
+      let newDukuhId = existing.dukuhId;
+      if (body.dukuh_id !== undefined) {
+        if (body.dukuh_id === '') {
+          newDukuhId = null;
+          newDukuhName = null;
+        } else {
+          newDukuhId = body.dukuh_id;
+          const dukuhRecord = await db.query.dukuhs.findFirst({ where: eq(schema.dukuhs.id, body.dukuh_id as string) });
+          if (dukuhRecord) newDukuhName = dukuhRecord.name;
+        }
+      }
+
       const updated = await db.update(schema.cans).set({
         ownerName: body.owner_name ?? existing.ownerName,
         ownerPhone: body.owner_whatsapp || body.owner_phone || existing.ownerPhone,
         ownerAddress: body.owner_address ?? existing.ownerAddress,
         ownerWhatsapp: body.owner_whatsapp ?? existing.ownerWhatsapp,
-        dukuhId: body.dukuh_id !== undefined ? (body.dukuh_id === '' ? null : body.dukuh_id) : existing.dukuhId,
+        dukuhId: newDukuhId,
+        dukuh: newDukuhName,
         rt: body.rt !== undefined ? body.rt : existing.rt,
         rw: body.rw !== undefined ? body.rw : existing.rw,
         latitude: body.latitude !== undefined ? (body.latitude ? body.latitude.toString() : null) : existing.latitude,
@@ -271,6 +291,9 @@ export async function cansRoutes(fastify: FastifyInstance) {
       const { permanent } = request.query as { permanent?: string };
 
       if (permanent === 'true') {
+        if (existing.collectionCount > 0) {
+          return sendError(reply, 409, 'HAS_COLLECTION_HISTORY', 'Kaleng dengan riwayat penjemputan tidak dapat dihapus permanen. Gunakan fitur nonaktifkan (soft delete).');
+        }
         await db.delete(schema.cans).where(eq(schema.cans.id, id));
       } else {
         await db.update(schema.cans).set({ isActive: false }).where(eq(schema.cans.id, id));
@@ -432,6 +455,9 @@ export async function cansRoutes(fastify: FastifyInstance) {
         .where(eq(schema.cans.branchId, branch_id));
       let count = Number(initialCountRes[0]?.count || 0);
 
+      const dukuhRecords = await db.query.dukuhs.findMany({ where: eq(schema.dukuhs.branchId, branch_id) });
+      const dukuhMap = new Map(dukuhRecords.map(d => [d.id, d.name]));
+
       const toInsert = items.map((item, index) => {
         let qrCode = item.qr_code;
         if (!qrCode || qrCode === '') {
@@ -449,6 +475,7 @@ export async function cansRoutes(fastify: FastifyInstance) {
           rt: (item.rt || '').toString().substring(0, 10),
           rw: (item.rw || '').toString().substring(0, 10),
           ownerAddress: '',
+          dukuh: item.dukuh_id ? (dukuhMap.get(item.dukuh_id) || null) : null,
           isActive: true,
         };
       });
@@ -469,6 +496,16 @@ export async function cansRoutes(fastify: FastifyInstance) {
       }
 
       // Check access for all IDs (or simply filter by branch/district)
+      if (permanent) {
+        const cansWithHistory = await db.query.cans.findMany({
+          where: and(inArray(schema.cans.id, ids), sql`${schema.cans.collectionCount} > 0`),
+        });
+
+        if (cansWithHistory.length > 0) {
+          return sendError(reply, 409, 'HAS_COLLECTION_HISTORY', 'Beberapa kaleng memiliki riwayat penjemputan dan tidak dapat dihapus permanen. Gunakan fitur nonaktifkan (soft delete).');
+        }
+      }
+
       if (user.role === 'ADMIN_RANTING' && user.branchId) {
         if (permanent) {
           await db.delete(schema.cans)
@@ -533,6 +570,10 @@ export async function cansRoutes(fastify: FastifyInstance) {
 
       if (!ids || !Array.isArray(ids) || ids.length === 0) {
         return sendError(reply, 400, 'INVALID_IDS', 'Daftar ID kaleng tidak boleh kosong');
+      }
+
+      if (ids.length > 500) {
+        return sendError(reply, 400, 'PAYLOAD_TOO_LARGE', 'Maksimal 500 kaleng per request. Silakan batch request Anda agar tidak menyebabkan server timeout.');
       }
 
       // 1. Ambil data kaleng

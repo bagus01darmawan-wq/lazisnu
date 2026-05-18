@@ -7,10 +7,13 @@ import api from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
 import { PeriodPicker } from '@/components/ui/PeriodPicker';
+import { useAuthStore } from '@/store/useAuthStore';
 
 export default function FilterDropdown() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useAuthStore();
+  const isRanting = user?.role === 'ADMIN_RANTING';
 
   const currentMonth = searchParams.get('month') || (new Date().getMonth() + 1).toString();
   const currentYear = searchParams.get('year') || new Date().getFullYear().toString();
@@ -127,21 +130,23 @@ export default function FilterDropdown() {
 
       {/* Right: Filters & Actions */}
       <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-        {/* Branch Filter */}
-        <DropdownFilter
-          label="Pilih Ranting"
-          placeholder="Cari ranting..."
-          options={[
-            { label: 'RANTING: SEMUA', value: '' },
-            ...branches.map((b) => ({
-              label: b.name.replace(/ranting/gi, '').trim().toUpperCase(),
-              value: b.id
-            }))
-          ]}
-          value={currentBranch}
-          onChange={(val) => handleFilterChange('branch', val)}
-          className="h-[36px]"
-        />
+        {/* Branch Filter — hidden for ADMIN_RANTING (auto-scoped) */}
+        {!isRanting && (
+          <DropdownFilter
+            label="Pilih Ranting"
+            placeholder="Cari ranting..."
+            options={[
+              { label: 'RANTING: SEMUA', value: '' },
+              ...branches.map((b) => ({
+                label: b.name.replace(/ranting/gi, '').trim().toUpperCase(),
+                value: b.id
+              }))
+            ]}
+            value={currentBranch}
+            onChange={(val) => handleFilterChange('branch', val)}
+            className="h-[36px]"
+          />
+        )}
 
         {/* Officer Filter */}
         <DropdownFilter

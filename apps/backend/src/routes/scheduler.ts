@@ -8,6 +8,7 @@ import { eq, and, asc, gte, lte, inArray, sql } from 'drizzle-orm';
 import { config } from '../config/env';
 import { getLatestCollectionCondition } from '../services/collectionSubmission';
 import { findCansWithoutAssignment, buildFirstOfficerAssignments, insertAssignments } from '../services/assignmentGenerator';
+import { sendSuccess, sendError, sendInternalError } from '../utils/response';
 
 const generateTasksSchema = z.object({
   year: z.number().min(2020).max(2100),
@@ -19,10 +20,7 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', async (request, reply) => {
     const apiKey = request.headers['x-internal-api-key'];
     if (config.INTERNAL_API_KEY && apiKey !== config.INTERNAL_API_KEY) {
-      return reply.status(403).send({
-        success: false,
-        error: { code: 'FORBIDDEN', message: 'Internal API key tidak valid' },
-      });
+      return sendError(reply, 403, 'FORBIDDEN', 'Internal API key tidak valid');
     }
   });
 
@@ -41,27 +39,17 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
 
       const { created } = await insertAssignments(assignmentItems, true);
 
-      return reply.send({
-        success: true,
-        data: {
-          total_assignments: created,
-          assigned_to_officers: new Set(assignmentItems.map((a: any) => a.officerId)).size,
-          skipped_no_officer: cansToAssign.length - assignmentItems.length,
-          period: `${year}-${String(month).padStart(2, '0')}`,
-        },
+      return sendSuccess(reply, {
+        total_assignments: created,
+        assigned_to_officers: new Set(assignmentItems.map((a: any) => a.officerId)).size,
+        skipped_no_officer: cansToAssign.length - assignmentItems.length,
+        period: `${year}-${String(month).padStart(2, '0')}`,
       });
     } catch (error: any) {
       if (error instanceof z.ZodError) {
-        return reply.status(400).send({
-          success: false,
-          error: { code: 'VALIDATION_ERROR', message: 'Input tidak valid' },
-        });
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
       }
-      fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
-      });
+      return sendInternalError(reply, error, fastify.log);
     }
   });
 
@@ -92,10 +80,6 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
           officer: true,
         },
       });
-
-      // Delete existing summaries for this period
-      await db.delete(schema.collectionSummaries)
-        .where(and(eq(schema.collectionSummaries.periodYear, year), eq(schema.collectionSummaries.periodMonth, month)));
 
       type SummaryAcc = {
         total: number; count: number;
@@ -160,26 +144,22 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
       ];
 
       if (summaries.length > 0) {
-        // cast because periodYear etc requires numbers but typescript infers type arrays correctly
-        await db.insert(schema.collectionSummaries).values(summaries as any[]);
+        await db.transaction(async (tx) => {
+          await tx.delete(schema.collectionSummaries)
+            .where(and(eq(schema.collectionSummaries.periodYear, year), eq(schema.collectionSummaries.periodMonth, month)));
+          await tx.insert(schema.collectionSummaries).values(summaries as any[]);
+        });
       }
 
-      return reply.send({
-        success: true,
-        data: {
-          period: `${year}-${String(month).padStart(2, '0')}`,
-          districts_processed: Object.keys(byDistrict).length,
-          branches_processed: Object.keys(byBranch).length,
-          officers_processed: Object.keys(byOfficer).length,
-          total_summaries: summaries.length,
-        },
+      return sendSuccess(reply, {
+        period: `${year}-${String(month).padStart(2, '0')}`,
+        districts_processed: Object.keys(byDistrict).length,
+        branches_processed: Object.keys(byBranch).length,
+        officers_processed: Object.keys(byOfficer).length,
+        total_summaries: summaries.length,
       });
     } catch (error) {
-      fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
-      });
+      return sendInternalError(reply, error, fastify.log);
     }
   });
 
@@ -206,25 +186,18 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
       ]);
       const monthCollections = sumResultRows[0];
 
-      return reply.send({
-        success: true,
-        data: {
-          total_cans: totalCans,
-          total_officers: totalOfficers,
-          current_month: {
-            collections: Number(monthCollections.count) || 0,
-            nominal: Number(monthCollections.total_nominal) || 0,
-          },
-          pending_sync: pendingSync,
-          server_time: now.toISOString(),
+      return sendSuccess(reply, {
+        total_cans: totalCans,
+        total_officers: totalOfficers,
+        current_month: {
+          collections: Number(monthCollections.count) || 0,
+          nominal: Number(monthCollections.total_nominal) || 0,
         },
+        pending_sync: pendingSync,
+        server_time: now.toISOString(),
       });
     } catch (error) {
-      fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' },
-      });
+      return sendInternalError(reply, error, fastify.log);
     }
   });
 }

@@ -81,10 +81,26 @@ function TableSkeleton() {
 }
 
 export default async function ReportsPage(props: { searchParams: Promise<{ month?: string; year?: string; branch?: string; officer?: string; search?: string; page?: string; limit?: string }> }) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('lazisnu_token')?.value;
+
+  let userRole: string | undefined;
+  let userBranchId: string | undefined;
+
+  if (token) {
+    try {
+      const { payload }: any = decodeJwt(token);
+      userRole = payload.role;
+      userBranchId = payload.branchId;
+    } catch {}
+  }
+
+  const isRanting = userRole === 'ADMIN_RANTING';
+
   const searchParams = await props.searchParams;
   const month = searchParams.month || (new Date().getMonth() + 1).toString();
   const year = searchParams.year || new Date().getFullYear().toString();
-  const branch = searchParams.branch || '';
+  const branch = isRanting && userBranchId ? userBranchId : (searchParams.branch || '');
   const officer = searchParams.officer || '';
   const search = searchParams.search || '';
   const page = searchParams.page || '1';

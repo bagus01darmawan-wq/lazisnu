@@ -82,6 +82,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         },
         pending_tasks: pendingAssignments.map((a) => ({
           id: a.id,
+          can_id: a.can.id,
           qr_code: a.can.qrCode,
           owner_name: a.can.ownerName,
           address: a.can.ownerAddress,
@@ -145,6 +146,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       return sendSuccess(reply, {
         tasks: assignments.map((a) => ({
           id: a.id,
+          can_id: a.can.id,
           qr_code: a.can.qrCode,
           owner_name: a.can.ownerName,
           owner_phone: a.can.ownerPhone,
@@ -207,6 +209,14 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       const lastCollection = can.collections[0];
       const activeAssignment = can.assignments[0];
 
+      if (!activeAssignment) {
+        return sendSuccess(reply, {
+          id: can.id,
+          qr_code: can.qrCode,
+          status: 'UNASSIGNED',
+        });
+      }
+
       return sendSuccess(reply, {
         id: can.id,
         qr_code: can.qrCode,
@@ -218,8 +228,8 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         last_collection: lastCollection
           ? { nominal: Number(lastCollection.nominal), date: lastCollection.collectedAt }
           : null,
-        status: activeAssignment?.status || 'UNASSIGNED',
-        assignment_id: activeAssignment?.id,
+        status: activeAssignment.status,
+        assignment_id: activeAssignment.id,
       });
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);

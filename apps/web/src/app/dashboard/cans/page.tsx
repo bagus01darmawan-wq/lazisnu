@@ -664,6 +664,9 @@ export default function CansPage() {
               onClick={() => {
                 setEditingCan(null);
                 reset();
+                if (user?.role === 'ADMIN_RANTING' && user?.branch_id) {
+                  setValue('branch_id', user.branch_id);
+                }
                 setIsModalOpen(true);
               }}
               className="h-[35px] px-4 rounded-xl text-[11px] font-bold bg-[#EAD19B] text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 hover:bg-[#EAD19B]/90 transition-all active:scale-95 flex items-center gap-2 ml-1"
@@ -921,23 +924,27 @@ export default function CansPage() {
             {errors.owner_name && <p className="text-xs font-medium text-red-400">{errors.owner_name.message}</p>}
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih Ranting (Desa)</label>
-            <GlassSelect
-              value={watch('branch_id') || ''}
-              onChange={(val) => {
-                setValue('branch_id', val);
-                setValue('dukuh_id', '');
-              }}
-              placeholder="-- Pilih Ranting --"
-              options={branches.map((b: any) => ({
-                label: cleanBranchName(b.name).toUpperCase(),
-                value: b.id
-              }))}
-              error={errors.branch_id?.message}
-              searchable
-            />
-          </div>
+          {user?.role === 'ADMIN_KECAMATAN' ? (
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih Ranting (Desa)</label>
+              <GlassSelect
+                value={watch('branch_id') || ''}
+                onChange={(val) => {
+                  setValue('branch_id', val);
+                  setValue('dukuh_id', '');
+                }}
+                placeholder="-- Pilih Ranting --"
+                options={branches.map((b: any) => ({
+                  label: cleanBranchName(b.name).toUpperCase(),
+                  value: b.id
+                }))}
+                error={errors.branch_id?.message}
+                searchable
+              />
+            </div>
+          ) : (
+            <input type="hidden" {...register('branch_id')} />
+          )}
 
           <div className="space-y-1.5">
             <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih Dukuh</label>

@@ -94,27 +94,22 @@ const CollectionItem = memo(({
           </View>
           <View style={styles.statusContainer}>
             <Icon
-              name={item.whatsapp_sent ? 'check-circle' : 'clock-outline'}
+              name={item.whatsapp_status === 'ENQUEUED' || item.whatsapp_status === 'COMPLETED' ? 'check-circle' : 'clock-outline'}
               size={14}
-              color={item.whatsapp_sent ? Colors.status.success : Colors.status.warning}
+              color={item.whatsapp_status === 'ENQUEUED' || item.whatsapp_status === 'COMPLETED' ? Colors.status.success : Colors.status.warning}
             />
             <Text
               style={[
                 styles.statusText,
-                { color: item.whatsapp_sent ? Colors.status.success : Colors.status.warning },
+                { color: item.whatsapp_status === 'ENQUEUED' || item.whatsapp_status === 'COMPLETED' ? Colors.status.success : Colors.status.warning },
               ]}
             >
-              {item.whatsapp_sent ? 'Notifikasi Terkirim' : 'Menunggu'}
+              {item.whatsapp_status === 'ENQUEUED' || item.whatsapp_status === 'COMPLETED' ? 'Notifikasi Terkirim' : 'Menunggu'}
             </Text>
           </View>
         </View>
 
-        {item.notes && (
-          <View style={styles.notesContainer}>
-            <Icon name="note-text" size={14} color={Colors.text.muted} />
-            <Text style={styles.notesText}>{item.notes}</Text>
-          </View>
-        )}
+
 
         {isLatest && (
           <TouchableOpacity

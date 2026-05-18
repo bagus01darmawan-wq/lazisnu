@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, authorize } from '../middleware/auth';
 import { sendSuccess } from '../utils/response';
-import { getCollectionScope, getDashboardData, buildCollectionsQuery, getCollectionsList, getCollectionDetail } from '../services/reportService';
+import { getCollectionScope, getDashboardData, buildCollectionsQuery, getCollectionsList, getCollectionDetail, getReportSummary } from '../services/reportService';
 
 export async function bendaharaRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', authenticate);
@@ -85,30 +85,14 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
         return sendSuccess(reply, { period: { year, month }, summary: { total_amount: 0, total_count: 0 }, by_district: [], by_branch: [], by_officer: [] });
       }
 
-      const collections = await getCollectionsList({ whereClause, page: 1, limit: 10000, skip: 0 });
-
-      let totalAmount = 0;
-      const byDistrict: Record<string, { name: string; amount: number }> = {};
-      const byBranch: Record<string, { name: string; amount: number }> = {};
-      const byOfficer: Record<string, { name: string; amount: number; count: number }> = {};
-
-      for (const c of collections.collections) {
-        totalAmount += c.nominal;
-        if (!byDistrict[c.district_name]) byDistrict[c.district_name] = { name: c.district_name, amount: 0 };
-        byDistrict[c.district_name].amount += c.nominal;
-        if (!byBranch[c.branch_name]) byBranch[c.branch_name] = { name: c.branch_name, amount: 0 };
-        byBranch[c.branch_name].amount += c.nominal;
-        if (!byOfficer[c.officer_name]) byOfficer[c.officer_name] = { name: c.officer_name, amount: 0, count: 0 };
-        byOfficer[c.officer_name].amount += c.nominal;
-        byOfficer[c.officer_name].count++;
-      }
+      const summaryData = await getReportSummary(whereClause);
 
       return sendSuccess(reply, {
         period: { year, month },
-        summary: { total_amount: totalAmount, total_count: collections.pagination.total },
-        by_district: Object.entries(byDistrict).map(([name, d]) => ({ district_name: name, amount: d.amount })),
-        by_branch: Object.entries(byBranch).map(([name, b]) => ({ branch_name: name, amount: b.amount })),
-        by_officer: Object.entries(byOfficer).map(([name, o]) => ({ officer_name: name, amount: o.amount, count: o.count })),
+        summary: { total_amount: Number(summaryData.totalRes?.total || 0), total_count: Number(summaryData.totalRes?.count || 0) },
+        by_district: summaryData.districtRes.map(d => ({ district_name: d.districtName, amount: Number(d.total) })),
+        by_branch: summaryData.branchRes.map(b => ({ branch_name: b.branchName, amount: Number(b.total) })),
+        by_officer: summaryData.officerRes.map(o => ({ officer_name: o.officerName, amount: Number(o.total), count: Number(o.count) })),
       });
     } catch (error) {
       fastify.log.error(error);

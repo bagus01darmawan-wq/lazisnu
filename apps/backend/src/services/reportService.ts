@@ -19,44 +19,61 @@ export async function getDashboardData() {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const monthCollections = await db.query.collections.findMany({
-    where: and(
-      gte(schema.collections.collectedAt, monthStart),
-      eq(schema.collections.syncStatus, 'COMPLETED'),
-      latestCollectionCondition
-    ),
-    with: {
-      can: { with: { branch: { with: { district: true } } } },
-      officer: { columns: { id: true, fullName: true } },
-    },
-    orderBy: [desc(schema.collections.collectedAt)],
-  });
+  const baseWhere = and(
+    gte(schema.collections.collectedAt, monthStart),
+    eq(schema.collections.syncStatus, 'COMPLETED'),
+    latestCollectionCondition
+  );
 
-  const byDistrict: Record<string, { name: string; total: number; count: number }> = {};
-  const byOfficer: Record<string, { name: string; total: number; count: number }> = {};
+  const [totalRes, districtRes, officerRes, recent] = await Promise.all([
+    db.select({
+      total: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
+      count: sql<number>`count(*)::int`,
+    }).from(schema.collections).where(baseWhere),
 
-  for (const col of monthCollections) {
-    const districtId = col.can.branch.districtId;
-    const districtName = col.can.branch.district.name;
-    const nominal = Number(col.nominal);
+    db.select({
+      districtId: schema.branches.districtId,
+      districtName: schema.districts.name,
+      total: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(schema.collections)
+    .innerJoin(schema.cans, eq(schema.collections.canId, schema.cans.id))
+    .innerJoin(schema.branches, eq(schema.cans.branchId, schema.branches.id))
+    .innerJoin(schema.districts, eq(schema.branches.districtId, schema.districts.id))
+    .where(baseWhere)
+    .groupBy(schema.branches.districtId, schema.districts.name),
 
-    if (!byDistrict[districtId]) byDistrict[districtId] = { name: districtName, total: 0, count: 0 };
-    byDistrict[districtId].total += nominal;
-    byDistrict[districtId].count++;
+    db.select({
+      officerId: schema.collections.officerId,
+      officerName: schema.officers.fullName,
+      total: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(schema.collections)
+    .innerJoin(schema.officers, eq(schema.collections.officerId, schema.officers.id))
+    .where(baseWhere)
+    .groupBy(schema.collections.officerId, schema.officers.fullName),
 
-    if (!byOfficer[col.officerId]) byOfficer[col.officerId] = { name: col.officer.fullName, total: 0, count: 0 };
-    byOfficer[col.officerId].total += nominal;
-    byOfficer[col.officerId].count++;
-  }
+    db.query.collections.findMany({
+      where: baseWhere,
+      with: {
+        can: { columns: { ownerName: true } },
+        officer: { columns: { id: true, fullName: true } },
+      },
+      orderBy: [desc(schema.collections.collectedAt)],
+      limit: 10,
+    }),
+  ]);
 
   return {
     current_month: {
-      total: monthCollections.reduce((s, c) => s + Number(c.nominal), 0),
-      count: monthCollections.length,
+      total: Number(totalRes[0]?.total || 0),
+      count: Number(totalRes[0]?.count || 0),
     },
-    by_district: Object.entries(byDistrict).map(([id, d]) => ({ district_id: id, district_name: d.name, total: d.total, count: d.count })),
-    by_officer: Object.entries(byOfficer).map(([id, o]) => ({ officer_id: id, officer_name: o.name, total: o.total, count: o.count })),
-    recent_transactions: monthCollections.slice(-10).map((c) => ({
+    by_district: districtRes.map(d => ({ district_id: d.districtId, district_name: d.districtName, total: Number(d.total), count: Number(d.count) })),
+    by_officer: officerRes.map(o => ({ officer_id: o.officerId, officer_name: o.officerName, total: Number(o.total), count: Number(o.count) })),
+    recent_transactions: recent.map(c => ({
       id: c.id, nominal: Number(c.nominal), payment_method: c.paymentMethod,
       collected_at: c.collectedAt, officer_name: c.officer.fullName, owner_name: c.can.ownerName,
     })),
@@ -191,5 +208,52 @@ export async function getCollectionDetail(id: string) {
     notification_status: notification?.status || 'NOT_SENT',
     latitude: collection.latitude, longitude: collection.longitude,
     branch_name: collection.can.branch.name, district_name: collection.can.branch.district.name,
+  };
+}
+
+export async function getReportSummary(whereClause: any) {
+  const [totalRes, districtRes, branchRes, officerRes] = await Promise.all([
+    db.select({
+      total: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
+      count: sql<number>`count(*)::int`,
+    }).from(schema.collections).where(whereClause),
+
+    db.select({
+      districtName: schema.districts.name,
+      total: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
+    })
+    .from(schema.collections)
+    .innerJoin(schema.cans, eq(schema.collections.canId, schema.cans.id))
+    .innerJoin(schema.branches, eq(schema.cans.branchId, schema.branches.id))
+    .innerJoin(schema.districts, eq(schema.branches.districtId, schema.districts.id))
+    .where(whereClause)
+    .groupBy(schema.districts.name),
+
+    db.select({
+      branchName: schema.branches.name,
+      total: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
+    })
+    .from(schema.collections)
+    .innerJoin(schema.cans, eq(schema.collections.canId, schema.cans.id))
+    .innerJoin(schema.branches, eq(schema.cans.branchId, schema.branches.id))
+    .where(whereClause)
+    .groupBy(schema.branches.name),
+
+    db.select({
+      officerName: schema.officers.fullName,
+      total: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(schema.collections)
+    .innerJoin(schema.officers, eq(schema.collections.officerId, schema.officers.id))
+    .where(whereClause)
+    .groupBy(schema.officers.fullName),
+  ]);
+
+  return {
+    totalRes: totalRes[0],
+    districtRes,
+    branchRes,
+    officerRes,
   };
 }

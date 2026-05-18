@@ -35,25 +35,36 @@ export async function findCansWithoutAssignment(year: number, month: number) {
   return { cansToAssign, assignedCanIds };
 }
 
+type CanWithOfficers = typeof schema.cans.$inferSelect & {
+  branch: typeof schema.branches.$inferSelect & {
+    officers: (typeof schema.officers.$inferSelect)[];
+  } | null;
+};
+
+type AssignmentInsert = typeof schema.assignments.$inferInsert;
+
 /**
  * Generate assignment data menggunakan round-robin per ranting
  * Setiap kaleng di-round-robin ke petugas aktif di ranting yang sama
+ * O(N) dengan Map<branchId, counter>
  */
 export function buildRoundRobinAssignments(
-  cansToAssign: any[],
+  cansToAssign: CanWithOfficers[],
   year: number,
   month: number
-) {
-  const assignmentData: any[] = [];
+): AssignmentInsert[] {
+  const assignmentData: AssignmentInsert[] = [];
+  const branchCounter = new Map<string, number>();
 
   for (const can of cansToAssign) {
     const officers = can.branch?.officers ?? [];
     if (officers.length === 0) continue;
 
-    const idx = assignmentData.filter((a) =>
-      officers.some((o: any) => o.id === a.officerId)
-    ).length % officers.length;
+    const branchId = can.branchId;
+    const currentCount = branchCounter.get(branchId) ?? 0;
+    const idx = currentCount % officers.length;
     const assignedOfficer = officers[idx] ?? officers[0];
+    branchCounter.set(branchId, currentCount + 1);
 
     assignmentData.push({
       canId: can.id,
@@ -71,11 +82,11 @@ export function buildRoundRobinAssignments(
  * Generate assignment data menggunakan first-officer (ambil petugas pertama)
  */
 export function buildFirstOfficerAssignments(
-  cansToAssign: any[],
+  cansToAssign: CanWithOfficers[],
   year: number,
   month: number
-) {
-  const assignmentData: any[] = [];
+): AssignmentInsert[] {
+  const assignmentData: AssignmentInsert[] = [];
 
   for (const can of cansToAssign) {
     const officers = can.branch?.officers ?? [];
@@ -102,16 +113,26 @@ export function buildFirstOfficerAssignments(
  * Batch insert assignments ke database
  */
 export async function insertAssignments(
-  assignmentData: any[],
+  assignmentData: AssignmentInsert[],
   useOnConflictDoNothing = false
 ) {
   if (assignmentData.length === 0) return { created: 0 };
 
-  if (useOnConflictDoNothing) {
-    await db.insert(schema.assignments).values(assignmentData).onConflictDoNothing();
-  } else {
-    await db.insert(schema.assignments).values(assignmentData);
+  const chunkSize = 50;
+  const chunks: AssignmentInsert[][] = [];
+  for (let i = 0; i < assignmentData.length; i += chunkSize) {
+    chunks.push(assignmentData.slice(i, i + chunkSize));
   }
+
+  await Promise.all(
+    chunks.map((chunk) => {
+      if (useOnConflictDoNothing) {
+        return db.insert(schema.assignments).values(chunk as any).onConflictDoNothing();
+      } else {
+        return db.insert(schema.assignments).values(chunk as any);
+      }
+    })
+  );
 
   return { created: assignmentData.length };
 }

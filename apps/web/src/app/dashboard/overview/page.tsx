@@ -26,7 +26,8 @@ import {
   BarChart2,
   AlertTriangle,
   LogIn,
-  Calendar
+  Calendar,
+  Building2
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -131,6 +132,14 @@ export default function OverviewPage() {
   const currentRate = activeCans > 0 ? (currentCount / activeCans) * 100 : 0;
   const lastRate = activeCans > 0 ? (lastCount / activeCans) * 100 : 0;
   const rateTrend = currentRate - lastRate;
+
+  const dSummary = data?.district?.summary;
+  const dActiveCans = Number(dSummary?.active_cans || dSummary?.total_cans || 0);
+  const dCurrentCount = Number(dSummary?.month_count || 0);
+  const dLastCount = Number(dSummary?.last_month_count || 0);
+  const dCurrentRate = dActiveCans > 0 ? (dCurrentCount / dActiveCans) * 100 : 0;
+  const dLastRate = dActiveCans > 0 ? (dLastCount / dActiveCans) * 100 : 0;
+  const dRateTrend = dCurrentRate - dLastRate;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
@@ -322,6 +331,198 @@ export default function OverviewPage() {
           </div>
         </Card>
       </div>
+
+      {/* District Section — only for ADMIN_RANTING */}
+      {user?.role === 'ADMIN_RANTING' && data.district && (
+        <>
+          {/* District Divider */}
+          <div className="flex items-center gap-4 pt-4">
+            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#EAD19B]/30 to-transparent" />
+            <div className="flex items-center gap-2 px-4 py-1.5 bg-[#EAD19B]/10 rounded-full border border-[#EAD19B]/20">
+              <Building2 size={14} className="text-[#EAD19B]" />
+              <span className="text-xs font-bold text-[#EAD19B] uppercase tracking-wider">
+                {data.district.summary.total_branches} Ranting
+              </span>
+            </div>
+            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#EAD19B]/30 to-transparent" />
+          </div>
+
+          {/* District Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Card variant="glass" className="relative overflow-hidden group border-white/5">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Total Infaq Kecamatan</p>
+                  <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">
+                    Rp {Number(data.district.summary.month_collection).toLocaleString('id-ID')}
+                  </h3>
+                </div>
+                <div className="p-3 bg-[#1F8243]/10 text-[#1F8243] rounded-xl group-hover:bg-[#1F8243] group-hover:text-[#2C473E] transition-all duration-300">
+                  <Wallet size={20} />
+                </div>
+              </div>
+              <div className="mt-4 flex items-center gap-2">
+                <span className="text-xs text-[#EAD19B] font-bold">{data.district.summary.month_count} Penarikan</span>
+              </div>
+            </Card>
+
+            <Card variant="glass" className="relative overflow-hidden group border-white/5">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Kaleng Aktif</p>
+                  <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">{data.district.summary.active_cans}</h3>
+                </div>
+                <div className="p-3 bg-[#C959A0]/10 text-[#C959A0] rounded-xl group-hover:bg-[#C959A0] group-hover:text-[#2C473E] transition-all duration-300">
+                  <Box size={20} />
+                </div>
+              </div>
+              <div className="mt-4 flex items-center gap-2">
+                <span className="flex items-center text-xs font-bold text-[#C959A0] bg-[#C959A0]/10 px-2 py-1 rounded-lg">
+                  {Number(data.district.summary.total_cans || 0) - Number(data.district.summary.active_cans || 0)} Nonaktif
+                </span>
+                <span className="text-xs text-[#F4F1EA]/60 font-bold"> Total {data.district.summary.total_cans} </span>
+              </div>
+            </Card>
+
+            <Card variant="glass" className="relative overflow-hidden group border-white/5">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Petugas Lapangan</p>
+                  <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">{data.district.summary.total_officers}</h3>
+                </div>
+                <div className="p-3 bg-[#6B9E9F]/10 text-[#6B9E9F] rounded-xl group-hover:bg-[#6B9E9F] group-hover:text-[#2C473E] transition-all duration-300">
+                  <Users size={20} />
+                </div>
+              </div>
+              <div className="mt-4 flex items-center gap-2">
+                <Badge variant="sent" className="bg-[#6B9E9F]/10 text-[#6B9E9F] border-none">
+                  {data.district.summary.total_branches} Ranting
+                </Badge>
+              </div>
+            </Card>
+
+            <Card variant="glass" className="relative overflow-hidden group border-white/5">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Penjemputan</p>
+                  <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">{dCurrentRate.toFixed(1)}%</h3>
+                </div>
+                <div className="p-3 bg-[#DE6F4A]/10 text-[#DE6F4A] rounded-xl group-hover:bg-[#DE6F4A] group-hover:text-[#2C473E] transition-all duration-300">
+                  <TrendingUp size={20} />
+                </div>
+              </div>
+              <div className="mt-4 flex items-center gap-2">
+                <span className={`flex items-center text-xs font-bold px-2 py-1 rounded-lg ${dRateTrend >= 0 ? 'text-[#1F8243] bg-[#1F8243]/10' : 'text-red-600 bg-red-50'}`}>
+                  {dRateTrend >= 0 ? <ArrowUpRight size={12} className="mr-1" /> : <ArrowDownRight size={12} className="mr-1" />}
+                  {Math.abs(dRateTrend).toFixed(1)}%
+                </span>
+                <span className="text-xs text-[#F4F1EA]/40 font-medium">dari bulan lalu</span>
+              </div>
+            </Card>
+          </div>
+
+          {/* District Charts Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <Card variant="glass" className="h-[450px] flex flex-col border-white/5">
+              <div className="px-6 py-4 border-b border-white/5">
+                <h3 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
+                  <BarChart2 size={16} className="text-[#EAD19B]" />
+                  Perolehan per Ranting (Kecamatan)
+                </h3>
+              </div>
+              <div className="flex-1 w-full mt-4 px-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data.district.by_branch || []}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(244, 241, 234, 0.08)" />
+                    <XAxis
+                      dataKey="branch_name"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: '#F4F1EA', fontWeight: 600 }}
+                      dy={10}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: '#F4F1EA' }}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'rgba(244, 241, 234, 0.05)' }}
+                      contentStyle={{
+                        borderRadius: '12px',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        backgroundColor: '#2C473E',
+                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
+                        fontSize: '12px',
+                        color: '#F4F1EA'
+                      }}
+                      formatter={(value: any) => [`Rp ${value.toLocaleString('id-ID')}`, 'Nominal']}
+                    />
+                    <Bar
+                      dataKey="nominal"
+                      fill="#EAD19B"
+                      radius={[6, 6, 0, 0]}
+                      barSize={48}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+
+            <Card variant="glass" className="h-[450px] flex flex-col border-white/5">
+              <div className="px-6 py-4 border-b border-white/5">
+                <h3 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
+                  <TrendingUp size={16} className="text-[#EAD19B]" />
+                  Tren Infaq Harian (Kecamatan)
+                </h3>
+              </div>
+              <div className="flex-1 w-full mt-4 px-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={data.district.daily_trends || []}>
+                    <defs>
+                      <linearGradient id="colorDistrict" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#EAD19B" stopOpacity={0.2} />
+                        <stop offset="95%" stopColor="#EAD19B" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(244, 241, 234, 0.08)" />
+                    <XAxis
+                      dataKey="day"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: '#F4F1EA', fontWeight: 600 }}
+                      dy={10}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: '#F4F1EA' }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: '12px',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        backgroundColor: '#2C473E',
+                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
+                        fontSize: '12px',
+                        color: '#F4F1EA'
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="nominal"
+                      stroke="#EAD19B"
+                      strokeWidth={4}
+                      fillOpacity={1}
+                      fill="url(#colorDistrict)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+          </div>
+        </>
+      )}
     </div>
   );
 }

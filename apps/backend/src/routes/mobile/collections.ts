@@ -25,7 +25,13 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
         const existing = await db.query.collections.findFirst({
           where: eq(schema.collections.offlineId, body.offline_id),
         });
-        if (existing) return sendError(reply, 409, 'DUPLICATE', 'Data sudah pernah di-submit');
+        if (existing) {
+          return sendSuccess(reply, {
+            id: existing.id,
+            sync_status: 'ALREADY_SYNCED',
+            message: 'Data sudah pernah di-submit',
+          });
+        }
       }
 
       const result = await db.transaction(async (tx) => {
@@ -81,6 +87,12 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
       }, 201);
     } catch (error: any) {
       if (error.status) return sendError(reply, error.status, error.code, error.message);
+      if (error.code === '23505') {
+        return sendSuccess(reply, {
+          sync_status: 'ALREADY_SYNCED',
+          message: 'Data sudah pernah di-submit',
+        });
+      }
       if (error instanceof z.ZodError) return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
       return sendInternalError(reply, error, fastify.log);
     }

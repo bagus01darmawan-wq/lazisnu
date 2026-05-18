@@ -9,6 +9,7 @@ import { getPaginationParams, formatPaginatedResponse } from '../../utils/pagina
 import { getRoleScope } from '../../utils/role-scope';
 import { createAssignmentSchema } from './schemas';
 import { z } from 'zod';
+import { insertAssignments } from '../../services/assignmentGenerator';
 
 const rantingOrKec = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
 
@@ -165,14 +166,12 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       const currentYear = now.getFullYear();
       const currentMonth = now.getMonth() + 1;
 
-      // 1. Get all active cans in this branch, optionally filtered by dukuhs
-      const conditions = [
+      const conditions: any[] = [
         eq(schema.cans.branchId, body.branch_id),
         eq(schema.cans.isActive, true)
       ];
 
       if (body.dukuh_ids && body.dukuh_ids.length > 0) {
-        // Validation: Ensure all selected dukuhs belong to the branch
         const dukuhsInBranch = await db.query.dukuhs.findMany({
           where: and(
             inArray(schema.dukuhs.id, body.dukuh_ids),
@@ -187,40 +186,34 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
         conditions.push(inArray(schema.cans.dukuhId, body.dukuh_ids));
       }
 
-      const activeCans = await db.query.cans.findMany({
-        where: and(...conditions)
-      });
-
-      if (activeCans.length === 0) {
-        return sendError(reply, 404, 'NOT_FOUND', 'Tidak ada kaleng aktif yang sesuai kriteria di ranting ini');
-      }
-
-      // 2. Get already assigned can IDs for this month
-      const canIds = activeCans.map(c => c.id);
-      const existingAssignments = await db.query.assignments.findMany({
-        where: and(
-          inArray(schema.assignments.canId, canIds),
+      const assignedSubquery = db
+        .select({ canId: schema.assignments.canId })
+        .from(schema.assignments)
+        .where(and(
           eq(schema.assignments.periodYear, currentYear),
           eq(schema.assignments.periodMonth, currentMonth)
-        )
-      });
+        ));
 
-      const assignedCanIds = new Set(existingAssignments.map(a => a.canId));
-      const cansToAssign = activeCans.filter(c => !assignedCanIds.has(c.id));
+      conditions.push(sql`${schema.cans.id} NOT IN (${assignedSubquery})`);
+
+      const cansToAssign = await db.query.cans.findMany({
+        where: and(...conditions),
+        columns: { id: true },
+      });
 
       if (cansToAssign.length === 0) {
         return sendError(reply, 400, 'ALREADY_ASSIGNED', 'Semua kaleng di wilayah/dukuh yang dipilih sudah memiliki jadwal penugasan untuk bulan ini');
       }
 
-      // 3. Perform bulk insert
       const newAssignments = cansToAssign.map(can => ({
         canId: can.id,
         officerId: body.officer_id,
         periodYear: currentYear,
         periodMonth: currentMonth,
+        status: 'ACTIVE' as const,
       }));
 
-      await db.insert(schema.assignments).values(newAssignments);
+      await insertAssignments(newAssignments);
 
       return sendSuccess(reply, { 
         assigned_count: cansToAssign.length,

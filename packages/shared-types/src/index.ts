@@ -94,8 +94,8 @@ export interface Collection {
   synced_at?: string;
   sync_status: SyncStatus;
   whatsapp_status?: string;
-  whatsapp_sent?: boolean;
-  notes?: string;
+  submit_sequence?: number;
+  alasan_resubmit?: string | null;
   can?: {
     qr_code: string;
     owner_name: string;
@@ -117,6 +117,7 @@ export interface DeviceInfo {
 // Task (for mobile display)
 export interface Task {
   id: string;
+  can_id: string;
   qr_code: string;
   owner_name: string;
   owner_phone: string;
@@ -177,7 +178,12 @@ export interface OfflineCollection {
   latitude?: number;
   longitude?: number;
   device_info?: DeviceInfo;
-  synced: boolean;
+  submit_sequence?: number;
+  is_latest?: boolean;
+  error_type?: 'VALIDATION' | 'SERVER';
+  can_retry?: boolean;
+  error_message?: string;
+  synced?: boolean;
   sync_error?: string;
 }
 

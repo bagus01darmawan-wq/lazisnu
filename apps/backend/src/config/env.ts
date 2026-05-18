@@ -6,7 +6,7 @@ import { z } from 'zod';
 dotenv.config();
 
 const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'staging', 'production']).default('development'),
+  NODE_ENV: z.enum(['development', 'staging', 'production', 'test']).default('development'),
   PORT: z.string().default('3001'),
 
   // Database
@@ -52,7 +52,7 @@ const envSchema = z.object({
     .min(32, 'APP_SECRET minimal 32 karakter')
     .refine(
       (val) => {
-        if (process.env.NODE_ENV === 'development') return true;
+        if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') return true;
         return val !== 'development-secret-for-qr-signing';
       },
       { message: 'APP_SECRET wajib diganti dari nilai default di production/staging' }
