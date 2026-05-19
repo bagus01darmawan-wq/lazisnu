@@ -30,7 +30,7 @@ export const syncService = {
 
           for (const item of queue) {
             const result = results.find((r: any) => r.offline_id === item.offline_id);
-            if (!result) continue;
+            if (!result) {continue;}
 
             if (result.status === 'COMPLETED' || result.status === 'ALREADY_SYNCED') {
               syncedIds.push(item.offline_id);
@@ -74,7 +74,7 @@ export const syncService = {
         }
       }
     }
-    
+
     return { success: false, synced: 0, failed: 0, remaining: offlineQueue.getRetryableQueue().length, error: 'MAX_RETRIES_EXCEEDED' };
   },
 

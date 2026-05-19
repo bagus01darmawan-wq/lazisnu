@@ -9,6 +9,7 @@
     "start": "react-native start",
     "test": "jest",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "build:android": "cd android && ./gradlew assembleRelease",
     "build:debug": "cd android && ./gradlew assembleDebug"
   },

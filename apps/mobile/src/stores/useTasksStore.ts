@@ -31,6 +31,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
     const mockTasks: Task[] = [
       {
         id: '1',
+        can_id: 'c1',
         qr_code: 'PNG-01-001',
         owner_name: 'Bpk. Haji Ahmad',
         owner_phone: '08123456789',
@@ -41,6 +42,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
       },
       {
         id: '2',
+        can_id: 'c2',
         qr_code: 'PNG-01-002',
         owner_name: 'Ibu Fatimah',
         owner_phone: '08123456780',
@@ -51,6 +53,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
       },
       {
         id: '3',
+        can_id: 'c3',
         qr_code: 'PNG-01-003',
         owner_name: 'Warung Bu Siti',
         owner_phone: '08123456781',
@@ -61,6 +64,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
       },
       {
         id: '4',
+        can_id: 'c4',
         qr_code: 'PNG-01-004',
         owner_name: 'Mas Agus',
         owner_phone: '08123456782',
@@ -129,7 +133,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
   markTaskComplete: (taskId: string) => {
     const { tasks } = get();
     set({
-      tasks: tasks.map((t) => (t.id === taskId ? { ...t, status: 'COMPLETED' } : t)),
+      tasks: tasks.map((t) => (t.id === taskId ? { ...t, status: AssignmentStatus.COMPLETED } : t)) as Task[],
     });
   },
 }));

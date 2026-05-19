@@ -124,11 +124,31 @@ export default function OverviewPage() {
   };
 
   React.useEffect(() => {
-    if (user) {
-      void fetchStats();
-    } else {
-      setLoading(false);
+    if (!user) {
+      const timer = setTimeout(() => setLoading(false), 0);
+      return () => clearTimeout(timer);
     }
+
+    const loadStats = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const endpoint = user?.role === 'ADMIN_KECAMATAN' ? '/admin/district/dashboard' : '/admin/branch/dashboard';
+        const response = await api.get(endpoint) as unknown as ApiResponse<DashboardStatsData>;
+        if (response.success && response.data) {
+          setData(response.data);
+        } else {
+          setError(response.error?.message || 'Gagal memuat data statistik');
+        }
+      } catch (err) {
+        console.error('Fetch stats error:', err);
+        const errorResponse = err as ApiError;
+        setError(errorResponse.response?.data?.message || errorResponse.message || 'Terjadi kesalahan koneksi ke server');
+      } finally {
+        setLoading(false);
+      }
+    };
+    void loadStats();
   }, [user]);
 
   if (loading) {
@@ -396,14 +416,14 @@ export default function OverviewPage() {
         <>
           {/* District Divider */}
           <div className="flex items-center gap-4 pt-4">
-            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#EAD19B]/30 to-transparent" />
+            <div className="flex-1 h-px bg-linear-to-r from-transparent via-[#EAD19B]/30 to-transparent" />
             <div className="flex items-center gap-2 px-4 py-1.5 bg-[#EAD19B]/10 rounded-full border border-[#EAD19B]/20">
               <Building2 size={14} className="text-[#EAD19B]" />
               <span className="text-xs font-bold text-[#EAD19B] uppercase tracking-wider">
                 {data.district.summary.total_branches} Ranting
               </span>
             </div>
-            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#EAD19B]/30 to-transparent" />
+            <div className="flex-1 h-px bg-linear-to-r from-transparent via-[#EAD19B]/30 to-transparent" />
           </div>
 
           {/* District Summary Cards */}

@@ -50,10 +50,10 @@ export const useCollectionStore = create<CollectionState>((set) => ({
       if (isOnline) {
         const syncResult = await syncService.autoSync();
         if (!syncResult.success) {
-          set({ 
-            isSubmitting: false, 
+          set({
+            isSubmitting: false,
             lastSubmitted: data as unknown as Collection,
-            error: 'Gagal sinkronisasi. Data tersimpan offline.' 
+            error: 'Gagal sinkronisasi. Data tersimpan offline.',
           });
           return { success: true, synced: false };
         }
@@ -105,7 +105,7 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
         payment_method: 'CASH' as any,
         collected_at: new Date(Date.now() - 3600000).toISOString(),
         sync_status: 'COMPLETED' as any,
-        whatsapp_sent: true,
+        whatsapp_status: 'SENT',
         can: {
           qr_code: 'PNG-01-003',
           owner_name: 'Warung Bu Siti',
@@ -121,7 +121,7 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
         payment_method: 'TRANSFER' as any,
         collected_at: new Date(Date.now() - 86400000).toISOString(),
         sync_status: 'COMPLETED' as any,
-        whatsapp_sent: true,
+        whatsapp_status: 'SENT',
         can: {
           qr_code: 'PNG-01-010',
           owner_name: 'H. Mansur',
@@ -137,8 +137,7 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
         payment_method: 'CASH' as any,
         collected_at: new Date(Date.now() - 172800000).toISOString(),
         sync_status: 'COMPLETED' as any,
-        whatsapp_sent: false,
-        notes: 'Kaleng hampir penuh',
+        whatsapp_status: 'PENDING',
         can: {
           qr_code: 'PNG-02-005',
           owner_name: 'Ibu Ratna',

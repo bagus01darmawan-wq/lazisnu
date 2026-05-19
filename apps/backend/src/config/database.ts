@@ -26,4 +26,8 @@ export async function testConnection(): Promise<boolean> {
   }
 }
 
+export async function closeDbConnection() {
+  await client.end();
+}
+
 export default db;

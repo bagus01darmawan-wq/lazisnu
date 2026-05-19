@@ -79,7 +79,7 @@ const ProfileScreen: React.FC = () => {
             <Icon name="camera" size={20} color="#1E88E5" />
           </TouchableOpacity>
         </View>
-        <Text style={styles.userName}>{user?.name || officer?.name || 'Petugas'}</Text>
+        <Text style={styles.userName}>{user?.full_name || officer?.name || 'Petugas'}</Text>
         <Text style={styles.userRole}>
           {officer?.district?.name || 'Kecamatan'} - {officer?.branch?.name || 'Ranting'}
         </Text>

@@ -133,6 +133,7 @@ export default function CansPage() {
     resolver: zodResolver(canSchema as any),
   });
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const selectedBranchId = watch('branch_id');
 
   const fetchData = async () => {
@@ -188,7 +189,7 @@ export default function CansPage() {
 
   useEffect(() => {
     fetchData();
-  }, [search, branchFilter, statusFilter, currentPage, pageSize]);
+  }, [search, branchFilter, statusFilter, currentPage, pageSize]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchBranches();
@@ -894,7 +895,7 @@ export default function CansPage() {
           <div className="space-y-1.5">
             <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih File CSV</label>
             <div className="flex items-center justify-center w-full">
-              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-white/20 border-dashed rounded-2xl cursor-pointer bg-white/[0.03] hover:bg-white/5 transition-all">
+              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-white/20 border-dashed rounded-2xl cursor-pointer bg-white/3 hover:bg-white/5 transition-all">
                 <div className="flex flex-col items-center justify-center pt-5 pb-6">
                   <RefreshCcw className="w-8 h-8 mb-3 text-[#F4F1EA]/40" />
                   <p className="mb-2 text-sm text-[#F4F1EA]/60">
@@ -1019,7 +1020,7 @@ export default function CansPage() {
               <input
                 {...register('owner_whatsapp')}
                 placeholder="Contoh: 628123456789"
-                className="w-full h-11 pl-10 pr-3 bg-white/[0.03] border border-white/10 rounded-xl text-sm text-[#F4F1EA] font-medium focus:ring-2 focus:ring-[#EAD19B]/30 outline-none transition-all placeholder:text-[#F4F1EA]/30"
+                className="w-full h-11 pl-10 pr-3 bg-white/3 border border-white/10 rounded-xl text-sm text-[#F4F1EA] font-medium focus:ring-2 focus:ring-[#EAD19B]/30 outline-none transition-all placeholder:text-[#F4F1EA]/30"
               />
             </div>
             {errors.owner_whatsapp && <p className="text-xs font-medium text-red-400">{errors.owner_whatsapp.message}</p>}
@@ -1066,6 +1067,7 @@ export default function CansPage() {
             <>
               {!isBulkPrint && qrData.qr_image_url && (
                 <div className="bg-white p-4 rounded-2xl shadow-sm border border-white/10 flex flex-col items-center gap-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={qrData.qr_image_url} alt="QR Code" className="w-40 h-40 object-contain" />
                   <p className="text-xs font-bold text-[#F4F1EA]/40 uppercase tracking-widest">{qrData.qr_code}</p>
                 </div>

@@ -99,7 +99,20 @@ export default function MasterDataPage() {
   };
 
   useEffect(() => {
-    fetchBranches();
+    const loadBranches = async () => {
+      try {
+        setLoading(true);
+        const res = await api.get('/admin/branches') as unknown as ApiResponse<Branch[]>;
+        if (res.success && res.data) {
+          setBranches(res.data);
+        }
+      } catch {
+        toast.error('Gagal mengambil data ranting');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadBranches();
   }, []);
 
   const handleBranchSubmit = async (e: React.FormEvent) => {
@@ -207,10 +220,6 @@ export default function MasterDataPage() {
   const totalPages = Math.ceil(totalItems / pageSize);
   const pagedData = activeData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [search, selectedBranch]);
-
   const branchColumns: ColumnDef<Branch>[] = [
     {
       header: () => (
@@ -250,6 +259,7 @@ export default function MasterDataPage() {
             onClick={() => {
               setSelectedBranch(row);
               setSearch('');
+              setCurrentPage(1);
               void fetchDukuhs(row.id);
             }}
           >
@@ -351,6 +361,7 @@ export default function MasterDataPage() {
               onClick={() => {
                 setSelectedBranch(null);
                 setSearch('');
+                setCurrentPage(1);
               }}
               className="h-10 w-10 flex items-center justify-center rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-[#F4F1EA] hover:bg-white/20 transition-all shadow-lg active:scale-95"
             >
@@ -398,7 +409,10 @@ export default function MasterDataPage() {
                 type="text"
                 placeholder="Cari..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="bg-transparent w-full px-4 py-1 text-sm font-bold text-white placeholder-[#F4F1EA]/60 focus:outline-none"
               />
             </div>
@@ -523,7 +537,7 @@ export default function MasterDataPage() {
               type="text"
               value={formData.code}
               onChange={(e) => setFormData({...formData, code: e.target.value})}
-              className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl focus:ring-4 focus:ring-[#EAD19B]/20 focus:border-[#EAD19B]/50 outline-none transition-all font-medium text-[#F4F1EA] placeholder:text-[#F4F1EA]/30"
+              className="w-full px-4 py-3 bg-white/3 border border-white/10 rounded-xl focus:ring-4 focus:ring-[#EAD19B]/20 focus:border-[#EAD19B]/50 outline-none transition-all font-medium text-[#F4F1EA] placeholder:text-[#F4F1EA]/30"
               placeholder="Misal: RTG01"
               required
             />
@@ -534,7 +548,7 @@ export default function MasterDataPage() {
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({...formData, name: e.target.value})}
-              className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl focus:ring-4 focus:ring-[#EAD19B]/20 focus:border-[#EAD19B]/50 outline-none transition-all font-medium text-[#F4F1EA] placeholder:text-[#F4F1EA]/30"
+              className="w-full px-4 py-3 bg-white/3 border border-white/10 rounded-xl focus:ring-4 focus:ring-[#EAD19B]/20 focus:border-[#EAD19B]/50 outline-none transition-all font-medium text-[#F4F1EA] placeholder:text-[#F4F1EA]/30"
               placeholder="Nama Desa/Kelurahan"
               required
             />
@@ -577,7 +591,7 @@ export default function MasterDataPage() {
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({...formData, name: e.target.value})}
-              className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl focus:ring-4 focus:ring-[#EAD19B]/20 focus:border-[#EAD19B]/50 outline-none transition-all font-medium text-[#F4F1EA] placeholder:text-[#F4F1EA]/30"
+              className="w-full px-4 py-3 bg-white/3 border border-white/10 rounded-xl focus:ring-4 focus:ring-[#EAD19B]/20 focus:border-[#EAD19B]/50 outline-none transition-all font-medium text-[#F4F1EA] placeholder:text-[#F4F1EA]/30"
               placeholder="Misal: Dusun Krajan"
               required
             />

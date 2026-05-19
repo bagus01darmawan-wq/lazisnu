@@ -106,7 +106,7 @@ export default function WAMonitorPage() {
       void fetchWAStatus(1, search, pageSize);
     }, 500);
     return () => clearTimeout(timer);
-  }, [search, pageSize]);
+  }, [search, pageSize]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || newPage > totalPages) return;

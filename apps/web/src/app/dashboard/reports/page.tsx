@@ -4,6 +4,7 @@ import { FileSpreadsheet, Wallet, FileText } from 'lucide-react';
 import { cookies } from 'next/headers';
 import { decodeJwt } from 'jose';
 import ReportsClient from './ReportsClient';
+import { CollectionReport } from '@lazisnu/shared-types';
 import { Skeleton } from '@/components/ui/Skeleton';
 import FilterDropdown from './FilterDropdown';
 import ExportButton from './ExportButton';
@@ -42,6 +43,9 @@ async function TransactionList({ month, year, branch, officer, search, page, lim
 
   if (!token) return <ReportsClient data={[]} />;
 
+  let collectionsData: CollectionReport[] = [];
+  let paginationData: { page: number; limit: number; total: number; total_pages: number } | undefined;
+
   try {
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
     const startDate = new Date(Number(year), Number(month) - 1, 1).toISOString();
@@ -61,12 +65,16 @@ async function TransactionList({ month, year, branch, officer, search, page, lim
       cache: 'no-store',
     });
 
-    if (!res.ok) return <ReportsClient data={[]} pagination={{ page: 1, limit: parseInt(limit), total: 0, total_pages: 0 }} />;
-    const json = await res.json();
-    return <ReportsClient data={json.data?.collections || []} pagination={json.data?.pagination} />;
+    if (res.ok) {
+      const json = await res.json();
+      collectionsData = json.data?.collections || [];
+      paginationData = json.data?.pagination;
+    }
   } catch {
-    return <ReportsClient data={[]} />;
+    collectionsData = [];
   }
+
+  return <ReportsClient data={collectionsData} pagination={paginationData} />;
 }
 
 function TableSkeleton() {
@@ -130,7 +138,7 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card variant="glass" className="relative overflow-hidden group border-white/5">
-          <div className="bg-white/[0.03] -m-6 p-6">
+          <div className="bg-white/3 -m-6 p-6">
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Perolehan Total</p>
@@ -152,7 +160,7 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
         </Card>
 
         <Card variant="glass" className="relative overflow-hidden group border-white/5">
-          <div className="bg-white/[0.03] -m-6 p-6">
+          <div className="bg-white/3 -m-6 p-6">
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Rata-Rata Per Kaleng</p>

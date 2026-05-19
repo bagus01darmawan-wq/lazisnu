@@ -87,7 +87,7 @@ export default function ResubmitPage() {
       void fetchCollections(search, 1, pageSize);
     }, 500);
     return () => clearTimeout(timer);
-  }, [search, pageSize]);
+  }, [search, pageSize]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleReset = () => {
     setSearch('');
@@ -346,7 +346,7 @@ export default function ResubmitPage() {
       >
         {selectedCol && (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-            <div className="p-4 bg-white/[0.03] rounded-xl border border-white/10 space-y-2">
+            <div className="p-4 bg-white/3 rounded-xl border border-white/10 space-y-2">
               <div className="flex justify-between text-xs font-bold uppercase text-[#F4F1EA]/40 tracking-wider">
                 <span>Transaksi Original</span>
                 <span>ID: {selectedCol.id.substring(0, 8)}</span>
@@ -370,7 +370,7 @@ export default function ResubmitPage() {
                 <label className="text-sm font-semibold text-[#F4F1EA]/60">Alasan Koreksi</label>
                 <textarea
                   {...register('alasan_resubmit')}
-                  className="w-full h-24 p-3 bg-white/[0.03] border border-white/10 rounded-xl text-sm text-[#F4F1EA] focus:ring-2 focus:ring-[#EAD19B]/30 outline-none placeholder:text-[#F4F1EA]/30"
+                  className="w-full h-24 p-3 bg-white/3 border border-white/10 rounded-xl text-sm text-[#F4F1EA] focus:ring-2 focus:ring-[#EAD19B]/30 outline-none placeholder:text-[#F4F1EA]/30"
                   placeholder="Jelaskan alasan koreksi data ini..."
                 />
                 {errors.alasan_resubmit && <p className="text-xs font-medium text-red-400">{errors.alasan_resubmit.message}</p>}

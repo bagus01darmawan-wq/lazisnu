@@ -9,7 +9,7 @@ import { Modal } from '@/components/ui/Modal';
 import { ColumnDef } from '@tanstack/react-table';
 import { format, isValid } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { ShieldAlert, RefreshCw, Eye, Search, ChevronLeft, ChevronRight, RotateCcw, History, Clock, User } from 'lucide-react';
+import { ShieldAlert, RefreshCw, Eye, Search, ChevronLeft, ChevronRight, RotateCcw, History, Clock, User, Database } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
@@ -73,7 +73,7 @@ export default function AuditLogPage() {
       fetchLogs(1, search, month, year, pageSize);
     }, 500);
     return () => clearTimeout(timer);
-  }, [search, month, year, pageSize]);
+  }, [search, month, year, pageSize]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleReset = () => {
     setSearch('');

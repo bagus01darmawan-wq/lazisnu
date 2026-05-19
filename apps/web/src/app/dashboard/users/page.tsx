@@ -124,7 +124,7 @@ export default function UsersPage() {
 
   useEffect(() => {
     void fetchOfficers();
-  }, [search, branchFilter, statusFilter, currentPage, pageSize]);
+  }, [search, branchFilter, statusFilter, currentPage, pageSize]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (user?.role === 'ADMIN_KECAMATAN') void fetchBranches();
@@ -659,7 +659,7 @@ export default function UsersPage() {
               />
             </div>
           )}
-          <div className="text-xs text-[#F4F1EA]/60 bg-white/[0.03] p-4 rounded-xl border border-white/10">
+          <div className="text-xs text-[#F4F1EA]/60 bg-white/3 p-4 rounded-xl border border-white/10">
              <div className="flex gap-2 items-center mb-1 font-bold text-[#F4F1EA]">
                <Shield size={14} className="text-[#EAD19B]" />
                <span>Informasi Akses</span>

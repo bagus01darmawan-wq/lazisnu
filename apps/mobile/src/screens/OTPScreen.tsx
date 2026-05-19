@@ -125,7 +125,7 @@ const OTPScreen: React.FC = () => {
             <TextInput
               key={index}
               ref={(ref) => (inputRefs.current[index] = ref)}
-              style={[styles.otpInput, digit && styles.otpInputFilled]}
+              style={[styles.otpInput, digit ? styles.otpInputFilled : undefined]}
               value={digit}
               onChangeText={(value) => handleOtpChange(value, index)}
               onKeyPress={(e) => handleKeyPress(e, index)}

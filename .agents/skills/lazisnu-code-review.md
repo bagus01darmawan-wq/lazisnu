@@ -1,6 +1,6 @@
 ---
 name: lazisnu-code-review
-description: Review code changes, PRs, diffs, files, or implementation plans in the Lazisnu monorepo for correctness, security, performance, maintainability, type safety, and learning value.
+description: Review code changes, PRs, diffs, files, or implementation plans in the Lazisnu monorepo for correctness, security, performance, maintainability, type safety, learning value, monorepo contract consistency, database integrity, mobile offline-first, and testability.
 ---
 
 # Lazisnu Code Review Skill

@@ -13,6 +13,8 @@ interface GlassDatePickerProps {
   label?: string;
   placeholder?: string;
   className?: string;
+  min?: string;
+  max?: string;
 }
 
 export function GlassDatePicker({
@@ -21,12 +23,17 @@ export function GlassDatePicker({
   label,
   placeholder = 'Pilih tanggal...',
   className,
+  min,
+  max,
 }: GlassDatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
     value ? parse(value, 'yyyy-MM-dd', new Date()) : undefined
   );
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const minDate = min ? parse(min, 'yyyy-MM-dd', new Date()) : undefined;
+  const maxDate = max ? parse(max, 'yyyy-MM-dd', new Date()) : undefined;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -180,6 +187,11 @@ export function GlassDatePicker({
                 locale={id}
                 showOutsideDays
                 fixedWeeks
+                disabled={(date: Date) => {
+                  if (minDate && date < minDate) return true;
+                  if (maxDate && date > maxDate) return true;
+                  return false;
+                }}
               />
             </div>
           </div>

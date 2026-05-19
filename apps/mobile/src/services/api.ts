@@ -87,10 +87,10 @@ const apiRequest = async <T>(
 ): Promise<ApiResponse<T>> => {
   try {
     const token = await getToken();
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
-      ...options.headers,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers as Record<string, string> | undefined),
     };
 
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
