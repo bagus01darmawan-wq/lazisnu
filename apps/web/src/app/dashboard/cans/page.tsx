@@ -7,12 +7,11 @@ import { Table } from '@/components/ui/Table';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
-import { Badge } from '@/components/ui/Badge';
+/* import { Badge } from '@/components/ui/Badge'; */
 import { ColumnDef } from '@tanstack/react-table';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import { cleanBranchName } from '@/lib/formatters';
-import { cn } from '@/lib/utils';
 import { ConfirmToast } from '@/components/ui/ConfirmToast';
 import {
   Box,
@@ -42,6 +41,48 @@ import { FilterPills } from '@/components/ui/FilterPills';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
 import { GlassSelect } from '@/components/ui/GlassSelect';
 import { Card } from '@/components/ui/Card';
+import { Can as BaseCan, Branch, ApiResponse, PaginatedResponse } from '@lazisnu/shared-types';
+
+interface CanExtended extends BaseCan {
+  rt?: string;
+  rw?: string;
+  dukuh?: string;
+  dukuh_id?: string;
+  assignments?: unknown[];
+  branch?: {
+    name: string;
+  } | null;
+  dukuh_details?: {
+    name: string;
+  } | null;
+}
+
+interface Dukuh {
+  id: string;
+  branch_id?: string;
+  name: string;
+}
+
+interface QrResponseData {
+  qr_code?: string;
+  qr_image_url?: string;
+  print_url: string;
+  count?: number;
+}
+
+interface ApiError {
+  message?: string;
+  error?: {
+    message?: string;
+  };
+  response?: {
+    data?: {
+      error?: {
+        message?: string;
+      };
+    };
+  };
+}
 
 const canSchema = z.object({
   owner_name: z.string().min(1, 'Nama pemilik wajib diisi'),
@@ -57,12 +98,12 @@ type CanFormValues = z.infer<typeof canSchema>;
 export default function CansPage() {
   const router = useRouter();
   const { user } = useAuthStore();
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<CanExtended[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingCan, setEditingCan] = useState<any>(null);
-  const [branches, setBranches] = useState([]);
-  const [dukuhs, setDukuhs] = useState([]);
+  const [editingCan, setEditingCan] = useState<CanExtended | null>(null);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [dukuhs, setDukuhs] = useState<Dukuh[]>([]);
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -83,11 +124,12 @@ export default function CansPage() {
 
   // QR Print States
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
-  const [qrData, setQrData] = useState<any>(null);
+  const [qrData, setQrData] = useState<QrResponseData | null>(null);
   const [isGeneratingQr, setIsGeneratingQr] = useState(false);
   const [isBulkPrint, setIsBulkPrint] = useState(false);
 
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<CanFormValues>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(canSchema as any),
   });
 
@@ -96,7 +138,7 @@ export default function CansPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const response: any = await api.get('/admin/cans', {
+      const response = await api.get('/admin/cans', {
         params: {
           search,
           branch_id: branchFilter,
@@ -104,8 +146,8 @@ export default function CansPage() {
           page: currentPage,
           limit: pageSize
         }
-      });
-      if (response.success) {
+      }) as unknown as ApiResponse<PaginatedResponse<CanExtended>>;
+      if (response.success && response.data) {
         setData(response.data.items || []);
         setTotalItems(response.data.pagination?.total || 0);
         setSelectedIds([]); // Reset selection on data fetch
@@ -119,8 +161,8 @@ export default function CansPage() {
 
   const fetchBranches = async () => {
     try {
-      const response: any = await api.get('/admin/branches');
-      if (response.success) {
+      const response = await api.get('/admin/branches') as unknown as ApiResponse<Branch[]>;
+      if (response.success && response.data) {
         setBranches(response.data || []);
       }
     } catch (error) {
@@ -134,12 +176,13 @@ export default function CansPage() {
       return;
     }
     try {
-      const response: any = await api.get('/admin/dukuhs', { params: { branch_id: branchId } });
-      if (response.success) {
+      const response = await api.get('/admin/dukuhs', { params: { branch_id: branchId } }) as unknown as ApiResponse<Dukuh[]>;
+      if (response.success && response.data) {
         setDukuhs(response.data || []);
       }
-    } catch (error: any) {
-      console.error('Failed to fetch dukuhs:', error.response?.data || error.message || error);
+    } catch (error) {
+      const err = error as ApiError;
+      console.error('Failed to fetch dukuhs:', err.response?.data || err.message || err);
     }
   };
 
@@ -155,7 +198,7 @@ export default function CansPage() {
     fetchDukuhs(selectedBranchId);
   }, [selectedBranchId]);
 
-  const onSubmit = async (values: any) => {
+  const onSubmit = async (values: CanFormValues) => {
     try {
       const payload = {
         owner_name: values.owner_name,
@@ -164,11 +207,11 @@ export default function CansPage() {
         dukuh_id: values.dukuh_id,
         rt: values.rt,
         rw: values.rw,
-        owner_address: values.owner_address || '',
+        owner_address: '',
       };
 
       if (editingCan) {
-        const response: any = await api.put(`/admin/cans/${editingCan.id}`, payload);
+        const response = await api.put(`/admin/cans/${editingCan.id}`, payload) as unknown as ApiResponse<CanExtended>;
         if (response.success) {
           setIsModalOpen(false);
           setEditingCan(null);
@@ -176,7 +219,7 @@ export default function CansPage() {
           toast.success('Data kaleng berhasil diperbarui');
         }
       } else {
-        const response: any = await api.post('/admin/cans', payload);
+        const response = await api.post('/admin/cans', payload) as unknown as ApiResponse<CanExtended>;
         if (response.success) {
           setIsModalOpen(false);
           reset();
@@ -184,16 +227,17 @@ export default function CansPage() {
           toast.success('Kaleng baru berhasil ditambahkan');
         }
       }
-    } catch (error: any) {
-      toast.error(error.error?.message || error.message || 'Gagal menyimpan data');
+    } catch (error) {
+      const err = error as ApiError;
+      toast.error(err.error?.message || err.message || 'Gagal menyimpan data');
     }
   };
 
-  const handleEdit = (can: any) => {
+  const handleEdit = (can: CanExtended) => {
     setEditingCan(can);
     setValue('owner_name', can.owner_name);
     setValue('branch_id', can.branch_id);
-    setValue('dukuh_id', can.dukuh_id);
+    setValue('dukuh_id', can.dukuh_id || '');
     setValue('rt', can.rt || '');
     setValue('rw', can.rw || '');
     setValue('owner_whatsapp', can.owner_whatsapp || '');
@@ -202,28 +246,25 @@ export default function CansPage() {
 
   const handleDelete = async (id: string, isPermanentRow?: boolean) => {
     const isPermanent = isPermanentRow || statusFilter === 'NON_ACTIVE';
-    const message = isPermanent
-      ? 'Hapus PERMANEN kaleng ini? Data akan hilang selamanya.'
-      : 'Nonaktifkan kaleng ini?';
 
-    (toast as any).custom((t: any) => (
+    toast.custom((t: string | number) => (
       <ConfirmToast
         id={t}
         title={isPermanent ? "Hapus Permanen?" : "Nonaktifkan Kaleng?"}
         description={isPermanent
-          ? "Data akan hilang selamanya dan tidak dapat dikembalikan."
+          ? "Data akan hilang selamanya and tidak dapat dikembalikan."
           : "Kaleng tidak akan muncul di daftar penjemputan aktif."}
         confirmLabel={isPermanent ? "Hapus Permanen" : "Ya, Nonaktifkan"}
         onConfirm={() => {
           toast.promise(
             api.delete(`/admin/cans/${id}${isPermanent ? '?permanent=true' : ''}`).then((res) => {
-              fetchData();
+              void fetchData();
               return res;
             }),
             {
               loading: 'Memproses...',
               success: isPermanent ? 'Data kaleng berhasil dihapus permanen' : 'Data kaleng berhasil dinonaktifkan',
-              error: (err: any) => err.error?.message || err.message || 'Gagal memproses penghapusan',
+              error: (err: ApiError) => err.error?.message || err.message || 'Gagal memproses penghapusan',
             }
           )
         }}
@@ -236,7 +277,7 @@ export default function CansPage() {
     if (selectedIds.length === 0) return;
     const isNonActiveView = statusFilter === 'NON_ACTIVE';
 
-    (toast as any).custom((t: any) => (
+    toast.custom((t: string | number) => (
       <ConfirmToast
         id={t}
         title={isNonActiveView ? "Hapus Massal?" : "Nonaktifkan Massal?"}
@@ -250,7 +291,7 @@ export default function CansPage() {
               ids: selectedIds,
               permanent: isNonActiveView
             }).then((res) => {
-              fetchData();
+              void fetchData();
               setSelectedIds([]);
               return res;
             }),
@@ -259,31 +300,13 @@ export default function CansPage() {
               success: isNonActiveView
                 ? `Berhasil menghapus permanen ${selectedIds.length} kaleng`
                 : `Berhasil menonaktifkan ${selectedIds.length} kaleng`,
-              error: (err: any) => err.message || 'Gagal menghapus data masal',
+              error: (err: ApiError) => err.message || 'Gagal menghapus data masal',
             }
           )
         }}
         variant={isNonActiveView ? 'danger' : 'warning'}
       />
     ), { duration: 5000 });
-  };
-
-  const handleGenerateQr = async (id: string) => {
-    setIsGeneratingQr(true);
-    setIsQrModalOpen(true);
-    setIsBulkPrint(false);
-    setQrData(null);
-    try {
-      const response: any = await api.post(`/admin/cans/${id}/generate-qr`);
-      if (response.success) {
-        setQrData(response.data);
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Gagal membuat QR Code');
-      setIsQrModalOpen(false);
-    } finally {
-      setIsGeneratingQr(false);
-    }
   };
 
   const handleBulkGenerateQr = async () => {
@@ -293,12 +316,13 @@ export default function CansPage() {
     setIsBulkPrint(true);
     setQrData(null);
     try {
-      const response: any = await api.post(`/admin/cans/bulk-generate-qr`, { ids: selectedIds });
-      if (response.success) {
+      const response = await api.post(`/admin/cans/bulk-generate-qr`, { ids: selectedIds }) as unknown as ApiResponse<QrResponseData>;
+      if (response.success && response.data) {
         setQrData(response.data);
       }
-    } catch (error: any) {
-      toast.error(error.message || 'Gagal membuat QR Code masal');
+    } catch (error) {
+      const err = error as ApiError;
+      toast.error(err.message || 'Gagal membuat QR Code masal');
       setIsQrModalOpen(false);
     } finally {
       setIsGeneratingQr(false);
@@ -317,7 +341,7 @@ export default function CansPage() {
     }
   };
 
-  const toggleSelectId = (item: any) => {
+  const toggleSelectId = (item: CanExtended) => {
     const isAssigned = item.assignments && item.assignments.length > 0;
     if (isAssigned) return;
 
@@ -344,22 +368,22 @@ export default function CansPage() {
         const dataLines = hasHeader ? lines.slice(1) : lines;
 
         // Fetch dukuhs for mapping
-        const dukuhsRes: any = await api.get('/admin/dukuhs', { params: { branch_id: importBranchId } });
+        const dukuhsRes = await api.get('/admin/dukuhs', { params: { branch_id: importBranchId } }) as unknown as ApiResponse<Dukuh[]>;
         const branchDukuhs = dukuhsRes.data || [];
 
         const items = dataLines.map(line => {
           // Detect separator automatically (comma or semicolon)
           const separator = line.includes(';') ? ';' : ',';
-          const columns = line.split(separator).map(c => c.trim().replace(/^"|"$/g, ''));
+          const columnsData = line.split(separator).map(c => c.trim().replace(/^"|"$/g, ''));
 
-          const ownerName = columns[0];
-          const ownerWhatsapp = columns[1];
-          const dukuhName = columns[2];
-          const rt = columns[3] || '';
-          const rw = columns[4] || '';
+          const ownerName = columnsData[0];
+          const ownerWhatsapp = columnsData[1];
+          const dukuhName = columnsData[2];
+          const rt = columnsData[3] || '';
+          const rw = columnsData[4] || '';
 
           // Find dukuh ID by name
-          const dukuh = branchDukuhs.find((d: any) => d.name.toUpperCase() === dukuhName?.toUpperCase());
+          const dukuh = branchDukuhs.find((d: Dukuh) => d.name.toUpperCase() === dukuhName?.toUpperCase());
 
           return {
             owner_name: ownerName,
@@ -376,20 +400,21 @@ export default function CansPage() {
           throw new Error('Format file tidak sesuai atau data valid tidak ditemukan. Pastikan kolom Nama dan WhatsApp terisi.');
         }
 
-        const response: any = await api.post('/admin/cans/bulk', {
+        const response = await api.post('/admin/cans/bulk', {
           branch_id: importBranchId,
           items
-        });
+        }) as unknown as ApiResponse<{ count: number }>;
 
-        if (response.success) {
+        if (response.success && response.data) {
           toast.success(`Berhasil mengimpor ${response.data.count} data kaleng`);
           setIsImportModalOpen(false);
           setImportFile(null);
-          fetchData();
+          void fetchData();
         }
-      } catch (error: any) {
-        console.error('Import error:', error);
-        toast.error(error.message || 'Gagal memproses file impor');
+      } catch (error) {
+        const err = error as ApiError;
+        console.error('Import error:', err);
+        toast.error(err.message || 'Gagal memproses file impor');
       } finally {
         setImporting(false);
       }
@@ -398,7 +423,7 @@ export default function CansPage() {
   };
 
   const handleReactivate = async (id: string) => {
-    (toast as any).custom((t: any) => (
+    toast.custom((t: string | number) => (
       <ConfirmToast
         id={t}
         title="Aktifkan Kembali?"
@@ -407,13 +432,13 @@ export default function CansPage() {
         onConfirm={() => {
           toast.promise(
             api.put(`/admin/cans/${id}`, { is_active: true }).then((res) => {
-              fetchData();
+              void fetchData();
               return res;
             }),
             {
               loading: 'Mengaktifkan...',
               success: 'Data kaleng berhasil diaktifkan kembali',
-              error: (err: any) => err.error?.message || err.message || 'Gagal mengaktifkan data',
+              error: (err: ApiError) => err.error?.message || err.message || 'Gagal mengaktifkan data',
             }
           )
         }}
@@ -422,7 +447,7 @@ export default function CansPage() {
     ), { duration: 3000 });
   };
 
-  const columns: ColumnDef<any>[] = [
+  const columns: ColumnDef<CanExtended>[] = [
     {
       id: 'selection',
       header: () => {
@@ -721,7 +746,7 @@ export default function CansPage() {
               placeholder="Cari ranting..."
               options={[
                 { label: 'SEMUA RANTING', value: '' },
-                ...branches.map((b: any) => ({
+                ...branches.map((b: Branch) => ({
                   label: cleanBranchName(b.name).toUpperCase(),
                   value: b.id
                 }))
@@ -858,7 +883,7 @@ export default function CansPage() {
               value={importBranchId}
               onChange={(val) => setImportBranchId(val)}
               placeholder="-- Pilih Ranting --"
-              options={branches.map((b: any) => ({
+              options={branches.map((b: Branch) => ({
                 label: cleanBranchName(b.name).toUpperCase(),
                 value: b.id
               }))}
@@ -934,7 +959,7 @@ export default function CansPage() {
                   setValue('dukuh_id', '');
                 }}
                 placeholder="-- Pilih Ranting --"
-                options={branches.map((b: any) => ({
+                options={branches.map((b: Branch) => ({
                   label: cleanBranchName(b.name).toUpperCase(),
                   value: b.id
                 }))}
@@ -952,7 +977,7 @@ export default function CansPage() {
               value={watch('dukuh_id') || ''}
               onChange={(val) => setValue('dukuh_id', val)}
               placeholder="-- Pilih Dukuh --"
-              options={dukuhs.map((d: any) => ({
+              options={dukuhs.map((d: Dukuh) => ({
                 label: d.name,
                 value: d.id
               }))}

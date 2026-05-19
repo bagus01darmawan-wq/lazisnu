@@ -5,9 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { Table } from '@/components/ui/Table';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
-import { Badge } from '@/components/ui/Badge';
 import { ColumnDef } from '@tanstack/react-table';
 import api from '@/lib/api';
 import { toast } from 'sonner';
@@ -15,15 +13,10 @@ import {
   ClipboardList,
   Plus,
   Calendar,
-  User,
   Box,
-  ChevronRight,
-  MoreVertical,
   Search,
-  Filter,
   CheckCircle2,
   Clock,
-  AlertTriangle,
   Repeat,
   Trash2,
   MapPin,
@@ -36,10 +29,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuthStore } from '@/store/useAuthStore';
 import * as z from 'zod';
-import { FilterPills } from '@/components/ui/FilterPills';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
 import { GlassSelect } from '@/components/ui/GlassSelect';
-import { cn } from '@/lib/utils';
 import { PeriodPicker } from '@/components/ui/PeriodPicker';
 import { ConfirmToast } from '@/components/ui/ConfirmToast';
 
@@ -51,23 +42,92 @@ const assignmentSchema = z.object({
 
 type AssignmentFormValues = z.infer<typeof assignmentSchema>;
 
+interface Branch {
+  id: string;
+  name: string;
+}
+
+interface Officer {
+  id: string;
+  full_name: string;
+  employee_code?: string;
+  branch_id?: string;
+  branch_name?: string;
+}
+
+interface Dukuh {
+  id: string;
+  name: string;
+}
+
+interface AssignmentItem {
+  id: string;
+  can_id: string;
+  officer_id: string;
+  period_month: number;
+  period_year: number;
+  status: string;
+  assigned_at: string;
+  can: {
+    qr_code: string;
+    owner_name: string;
+    branch_name?: string;
+    dukuh_name?: string;
+    dukuh?: string;
+    rt?: string;
+    rw?: string;
+    branch_id: string;
+  };
+  officer: {
+    full_name: string;
+    employee_code?: string;
+    branch_name?: string;
+  };
+}
+
+interface TransferAssignment {
+  id: string;
+  officer_id: string;
+  newOfficerId?: string;
+  officer: { full_name: string };
+  can: { qr_code: string; branch_id: string };
+}
+
+interface ApiListResponse {
+  success: boolean;
+  data?: { items?: AssignmentItem[]; pagination?: { page: number; limit: number; total: number; total_pages: number } };
+  items?: AssignmentItem[];
+  pagination?: { page: number; limit: number; total: number; total_pages: number };
+  assigned_count?: number;
+  period?: string;
+}
+
+interface DropdownApiResponse {
+  success: boolean;
+  data?: Branch[] | { items?: Officer[] };
+  items?: Officer[];
+}
+
+interface DukuhListResponse {
+  success: boolean;
+  data?: Dukuh[];
+}
+
 export default function AssignmentsPage() {
   const { user } = useAuthStore();
-  const [data, setData] = useState([]);
+  const [data, setData] = useState<AssignmentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
-  const [transferringAssignment, setTransferringAssignment] = useState<any>(null);
+  const [transferringAssignment, setTransferringAssignment] = useState<TransferAssignment | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkReassignModalOpen, setIsBulkReassignModalOpen] = useState(false);
   const [bulkReassignOfficerId, setBulkReassignOfficerId] = useState('');
 
-  const [cans, setCans] = useState([]);
-  const [officers, setOfficers] = useState([]);
-  const [branches, setBranches] = useState([]);
-  const [modalDukuhs, setModalDukuhs] = useState<any[]>([]);
+  const [officers, setOfficers] = useState<Officer[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [modalDukuhs, setModalDukuhs] = useState<Dukuh[]>([]);
   const [fetchingDukuhs, setFetchingDukuhs] = useState(false);
 
   const currentYear = new Date().getFullYear();
@@ -84,18 +144,20 @@ export default function AssignmentsPage() {
   const [pageSize, setPageSize] = useState(10);
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<AssignmentFormValues>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(assignmentSchema as any),
     defaultValues: {
       dukuh_ids: []
     }
   });
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const selectedBranchId = watch('branch_id');
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const response: any = await api.get('/admin/assignments', {
+      const response = await api.get('/admin/assignments', {
         params: {
           ...filter,
           search,
@@ -103,13 +165,13 @@ export default function AssignmentsPage() {
           page: currentPage,
           limit: pageSize
         }
-      });
+      }) as unknown as ApiListResponse;
       if (response.success) {
-        setData(response.data.items || []);
-        setTotalItems(response.data.pagination?.total || 0);
+        setData(response.data?.items || response.items || []);
+        setTotalItems(response.data?.pagination?.total || response.pagination?.total || 0);
       }
-    } catch (error) {
-      console.error('Failed to fetch assignments:', error);
+    } catch (_error) {
+      console.error('Failed to fetch assignments:', _error);
     } finally {
       setLoading(false);
     }
@@ -117,14 +179,15 @@ export default function AssignmentsPage() {
 
   const fetchDropdowns = async () => {
     try {
-      const [branchesRes, officersRes]: any = await Promise.all([
-        api.get('/admin/branches'),
-        api.get('/admin/officers', { params: { limit: 300, is_active: true } })
-      ]);
-      if (branchesRes.success) setBranches(branchesRes.data || []);
-      if (officersRes.success) setOfficers(officersRes.data.items || []);
-    } catch (error: any) {
-      console.error('Failed to fetch dropdown data:', error.response?.data || error.message || error);
+      const branchesRes = await api.get('/admin/branches') as unknown as DropdownApiResponse;
+      if (branchesRes.success) setBranches(branchesRes.data as Branch[] || []);
+      const officersRes = await api.get('/admin/officers', { params: { limit: 300, is_active: true } }) as unknown as DropdownApiResponse;
+      if (officersRes.success) {
+        const officersData = officersRes.data as { items?: Officer[] } || {};
+        setOfficers(officersData.items || officersRes.items || []);
+      }
+    } catch (_error) {
+      console.error('Failed to fetch dropdown data:', _error);
     }
   };
 
@@ -134,24 +197,22 @@ export default function AssignmentsPage() {
       return;
     }
 
-    // Clear previous dukuhs immediately to avoid "sneaking" stale data
     setModalDukuhs([]);
     setFetchingDukuhs(true);
 
     try {
-      const response: any = await api.get('/admin/dukuhs', {
+      const response = await api.get('/admin/dukuhs', {
         params: {
           branch_id: branchId,
           filter_assigned: true
         }
-      });
+      }) as unknown as DukuhListResponse;
 
-      // Safety check: only update if the branch hasn't changed in the meantime
       if (response.success) {
         setModalDukuhs(response.data || []);
       }
-    } catch (error) {
-      console.error('Failed to fetch dukuhs for modal:', error);
+    } catch (_error) {
+      console.error('Failed to fetch dukuhs for modal:', _error);
     } finally {
       setFetchingDukuhs(false);
     }
@@ -159,11 +220,11 @@ export default function AssignmentsPage() {
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter, search, branchFilter, currentPage, pageSize]);
 
   useEffect(() => {
     fetchDropdowns();
-    setMounted(true);
   }, []);
 
   useEffect(() => {
@@ -176,33 +237,33 @@ export default function AssignmentsPage() {
 
   useEffect(() => {
     if (selectedOfficerId) {
-      const officer: any = officers.find((o: any) => o.id === selectedOfficerId);
+      const officer = officers.find((o: Officer) => o.id === selectedOfficerId);
       if (officer && officer.branch_id) {
         setValue('branch_id', officer.branch_id, { shouldValidate: true });
       }
     } else {
       setValue('branch_id', '', { shouldValidate: true });
     }
-  }, [selectedOfficerId, officers]);
+  }, [selectedOfficerId, officers, setValue]);
 
   useEffect(() => {
     setValue('dukuh_ids', []);
-  }, [selectedBranchId]);
+  }, [selectedBranchId, setValue]);
 
   const onSubmit = async (values: AssignmentFormValues) => {
     setSubmitting(true);
     try {
-      const response: any = await api.post('/admin/assignments/bulk-branch', values);
+      const response = await api.post('/admin/assignments/bulk-branch', values) as unknown as ApiListResponse;
       if (response.success) {
         reset();
         setIsModalOpen(false);
         fetchData();
-        toast.success(`Berhasil! ${response.data.assigned_count} kaleng telah ditugaskan untuk periode ${response.data.period}`);
+        toast.success(`Berhasil! ${response.assigned_count} kaleng telah ditugaskan untuk periode ${response.period}`);
       }
-    } catch (error: any) {
-      const errorData = error.response?.data || error;
-      console.error('Failed to create bulk assignment:', JSON.stringify(errorData, null, 2));
-      toast.error(errorData.error?.message || error.message || 'Gagal menyimpan penugasan massal');
+    } catch (_error) {
+      const err = _error as { response?: { data?: { error?: { message?: string } } }; message?: string };
+      console.error('Failed to create bulk assignment:', err.response?.data || _error);
+      toast.error(err.response?.data?.error?.message || err.message || 'Gagal menyimpan penugasan massal');
     } finally {
       setSubmitting(false);
     }
@@ -212,18 +273,18 @@ export default function AssignmentsPage() {
     if (!transferringAssignment) return;
     setSubmitting(true);
     try {
-      const response: any = await api.put(`/admin/assignments/${transferringAssignment.id}`, {
+      const response = await api.put(`/admin/assignments/${transferringAssignment.id}`, {
         officer_id: values.officer_id,
         status: 'REASSIGNED'
-      });
+      }) as unknown as { success: boolean };
       if (response.success) {
         setIsTransferModalOpen(false);
         setTransferringAssignment(null);
         fetchData();
         toast.success('Penugasan berhasil ditransfer!');
       }
-    } catch (error: any) {
-      console.error('Failed to transfer assignment:', error);
+    } catch (_error) {
+      console.error('Failed to transfer assignment:', _error);
       toast.error('Gagal mentransfer penugasan');
     } finally {
       setSubmitting(false);
@@ -235,11 +296,11 @@ export default function AssignmentsPage() {
     if (selectedIds.length === data.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(data.map((item: any) => item.id));
+      setSelectedIds(data.map((item: AssignmentItem) => item.id));
     }
   };
 
-  const toggleSelectId = (item: any) => {
+  const toggleSelectId = (item: AssignmentItem) => {
     setSelectedIds(prev =>
       prev.includes(item.id) ? prev.filter(i => i !== item.id) : [...prev, item.id]
     );
@@ -248,7 +309,8 @@ export default function AssignmentsPage() {
   const handleBulkDeleteAssignment = async () => {
     if (selectedIds.length === 0) return;
 
-    (toast as any).custom((t: any) => (
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (toast as any).custom((t: string | number) => (
       <ConfirmToast
         id={t}
         title="Hapus Massal?"
@@ -262,7 +324,7 @@ export default function AssignmentsPage() {
             toast.success(`Berhasil menghapus ${selectedIds.length} penugasan`);
             setSelectedIds([]);
             fetchData();
-          } catch (error: any) {
+          } catch {
             toast.dismiss();
             toast.error('Gagal menghapus beberapa penugasan');
           }
@@ -290,7 +352,7 @@ export default function AssignmentsPage() {
       setBulkReassignOfficerId('');
       setSelectedIds([]);
       fetchData();
-    } catch (error) {
+    } catch {
       toast.error('Gagal melakukan re-assign massal');
     } finally {
       setSubmitting(false);
@@ -298,7 +360,8 @@ export default function AssignmentsPage() {
   };
 
   const handleDeleteAssignment = (id: string) => {
-    (toast as any).custom((t: any) => (
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (toast as any).custom((t: string | number) => (
       <ConfirmToast
         id={t}
         title="Hapus Penugasan?"
@@ -306,13 +369,14 @@ export default function AssignmentsPage() {
         confirmLabel="Ya, Hapus"
         onConfirm={() => {
           toast.promise(
-            api.delete(`/admin/assignments/${id}`).then((res: any) => {
+            api.delete(`/admin/assignments/${id}`).then((_res) => {
               fetchData();
-              return res;
+              return _res;
             }),
             {
               loading: 'Sedang menghapus...',
               success: 'Berhasil dihapus',
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               error: (err: any) => err.response?.data?.error?.message || 'Gagal menghapus',
             }
           );
@@ -326,7 +390,7 @@ export default function AssignmentsPage() {
     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
   ];
 
-  const columns: ColumnDef<any>[] = [
+  const columns: ColumnDef<AssignmentItem>[] = [
     {
       id: 'selection',
       header: () => {
@@ -579,7 +643,7 @@ export default function AssignmentsPage() {
               placeholder="Cari ranting..."
               options={[
                 { label: 'SEMUA RANTING', value: '' },
-                ...branches.map((b: any) => ({
+                ...branches.map((b: Branch) => ({
                   label: b.name.replace(/ranting/gi, '').trim().toUpperCase(),
                   value: b.id
                 }))
@@ -714,7 +778,7 @@ export default function AssignmentsPage() {
               value={watch('officer_id') || ''}
               onChange={(val) => setValue('officer_id', val)}
               placeholder="-- Pilih Petugas --"
-              options={officers.map((o: any) => ({
+              options={officers.map((o: Officer) => ({
                 label: `${o.full_name} (${o.employee_code})`,
                 value: o.id
               }))}
@@ -729,7 +793,7 @@ export default function AssignmentsPage() {
               value={watch('branch_id') || ''}
               onChange={(val) => setValue('branch_id', val)}
               placeholder="-- Deteksi Ranting Otomatis --"
-              options={branches.map((b: any) => ({
+              options={branches.map((b: Branch) => ({
                 label: b.name.replace(/ranting/gi, '').trim().toUpperCase(),
                 value: b.id
               }))}
@@ -759,7 +823,7 @@ export default function AssignmentsPage() {
                     <label htmlFor="selectAllDukuh" className="text-xs font-bold text-[#F4F1EA]/60 cursor-pointer">PILIH SEMUA DUKUH</label>
                   </div>
                   <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
-                    {modalDukuhs.map((d: any) => (
+                    {modalDukuhs.map((d: Dukuh) => (
                       <div key={d.id} className="flex items-center gap-2">
                         <input
                           type="checkbox"
@@ -832,8 +896,8 @@ export default function AssignmentsPage() {
                   onChange={(val) => setTransferringAssignment({ ...transferringAssignment, newOfficerId: val })}
                   placeholder="-- Pilih Petugas Baru --"
                   options={officers
-                    .filter((o: any) => o.id !== transferringAssignment.officer_id && o.branch_id === transferringAssignment.can.branch_id)
-                    .map((o: any) => ({
+                    .filter((o: Officer) => o.id !== transferringAssignment.officer_id && o.branch_id === transferringAssignment.can.branch_id)
+                    .map((o: Officer) => ({
                       label: `${o.full_name} (${o.employee_code})`,
                       value: o.id
                     }))}
@@ -853,7 +917,7 @@ export default function AssignmentsPage() {
                   className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] font-bold rounded-xl h-11 shadow-lg shadow-[#EAD19B]/20"
                   isLoading={submitting}
                   disabled={!transferringAssignment.newOfficerId}
-                  onClick={() => handleTransfer({ officer_id: transferringAssignment.newOfficerId })}
+                  onClick={() => transferringAssignment.newOfficerId && handleTransfer({ officer_id: transferringAssignment.newOfficerId })}
                 >
                   Konfirmasi Transfer
                 </Button>
@@ -887,7 +951,7 @@ export default function AssignmentsPage() {
                 value={bulkReassignOfficerId}
                 onChange={(val) => setBulkReassignOfficerId(val)}
                 placeholder="-- Pilih Petugas Baru --"
-                options={officers.map((o: any) => ({
+                options={officers.map((o: Officer) => ({
                   label: `${o.full_name} (${o.employee_code})`,
                   value: o.id
                 }))}

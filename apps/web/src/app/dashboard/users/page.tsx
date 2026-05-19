@@ -6,7 +6,6 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
-import { Badge } from '@/components/ui/Badge';
 import { GlassSelect } from '@/components/ui/GlassSelect';
 import { ColumnDef } from '@tanstack/react-table';
 import api from '@/lib/api';
@@ -15,18 +14,18 @@ import { ConfirmToast } from '@/components/ui/ConfirmToast';
 import { 
   Users, 
   User,
-  Plus, 
+ 
   Search, 
   UserPlus, 
   Edit, 
-  MoreVertical,
+
   Phone,
-  Mail,
+
   Shield,
   Map,
   UserCheck,
   UserMinus,
-  Filter,
+
   RotateCcw,
   CheckSquare,
   Square,
@@ -39,7 +38,25 @@ import * as z from 'zod';
 import { useAuthStore } from '@/store/useAuthStore';
 import { FilterPills } from '@/components/ui/FilterPills';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
-import { cn } from '@/lib/utils';
+import { Officer as BaseOfficer, Branch, ApiResponse, PaginatedResponse } from '@lazisnu/shared-types';
+
+interface OfficerExtended extends BaseOfficer {
+  branch?: Pick<Branch, 'id' | 'name' | 'code' | 'district_id'> | null;
+}
+
+interface ApiError {
+  message?: string;
+  error?: {
+    message?: string;
+  };
+  response?: {
+    data?: {
+      error?: {
+        message?: string;
+      };
+    };
+  };
+}
 
 const officerSchema = z.object({
   full_name: z.string().min(1, 'Nama lengkap wajib diisi'),
@@ -50,7 +67,7 @@ const officerSchema = z.object({
 type OfficerFormValues = z.infer<typeof officerSchema>;
 
 export default function UsersPage() {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<OfficerExtended[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [branchFilter, setBranchFilter] = useState('');
@@ -59,27 +76,31 @@ export default function UsersPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingOfficer, setEditingOfficer] = useState<any>(null);
+  const [editingOfficer, setEditingOfficer] = useState<OfficerExtended | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [branches, setBranches] = useState([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const { user } = useAuthStore();
 
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<OfficerFormValues>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(officerSchema as any),
   });
 
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const watchBranchId = watch('branch_id');
+
   const fetchBranches = async () => {
     try {
-      const response: any = await api.get('/admin/branches');
-      if (response.success) setBranches(response.data);
-    } catch (err) {}
+      const response = await api.get('/admin/branches') as unknown as ApiResponse<Branch[]>;
+      if (response.success && response.data) setBranches(response.data);
+    } catch {}
   };
 
   const fetchOfficers = async () => {
     setLoading(true);
     try {
-      const response: any = await api.get('/admin/officers', { 
+      const response = await api.get('/admin/officers', { 
         params: { 
           search,
           branch_id: branchFilter,
@@ -87,14 +108,15 @@ export default function UsersPage() {
           page: currentPage,
           limit: pageSize
         } 
-      });
-      if (response.success) {
+      }) as unknown as ApiResponse<PaginatedResponse<OfficerExtended>>;
+      if (response.success && response.data) {
         setData(response.data.items || []);
         setTotalItems(response.data.pagination?.total || 0);
         setSelectedIds([]);
       }
-    } catch (error: any) {
-      console.error('Failed to fetch officers:', error.response?.data || error.message || error);
+    } catch (error) {
+      const err = error as ApiError;
+      console.error('Failed to fetch officers:', err.response?.data || err.message || err);
     } finally {
       setLoading(false);
     }
@@ -112,7 +134,7 @@ export default function UsersPage() {
     setSubmitting(true);
     try {
       if (editingOfficer) {
-        const response: any = await api.put(`/admin/officers/${editingOfficer.id}`, values);
+        const response = await api.put(`/admin/officers/${editingOfficer.id}`, values) as unknown as ApiResponse<OfficerExtended>;
         if (response.success) {
           setIsModalOpen(false);
           setEditingOfficer(null);
@@ -121,7 +143,7 @@ export default function UsersPage() {
           toast.success('Data petugas berhasil diperbarui', { duration: 3000 });
         }
       } else {
-        const response: any = await api.post('/admin/officers', values);
+        const response = await api.post('/admin/officers', values) as unknown as ApiResponse<OfficerExtended>;
         if (response && response.success) {
           reset();
           setIsModalOpen(false);
@@ -129,16 +151,17 @@ export default function UsersPage() {
           toast.success('Petugas berhasil ditambahkan', { duration: 3000 });
         }
       }
-    } catch (error: any) {
-      console.error('Submit Error:', error);
-      const errorMessage = error?.error?.message || error?.message || 'Gagal menyimpan data';
+    } catch (error) {
+      const err = error as ApiError;
+      console.error('Submit Error:', err);
+      const errorMessage = err?.error?.message || err?.message || 'Gagal menyimpan data';
       toast.error(errorMessage);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleEdit = (officer: any) => {
+  const handleEdit = (officer: OfficerExtended) => {
     setEditingOfficer(officer);
     setValue('full_name', officer.full_name);
     setValue('phone', officer.phone);
@@ -148,11 +171,8 @@ export default function UsersPage() {
 
   const handleDelete = async (id: string, isPermanentRow?: boolean) => {
     const isPermanent = isPermanentRow || statusFilter === 'NON_ACTIVE';
-    const message = isPermanent 
-      ? 'Hapus PERMANEN petugas ini? Data terkait akan hilang.'
-      : 'Nonaktifkan petugas ini?';
-      
-    (toast as any).custom((t: any) => (
+    
+    toast.custom((t: string | number) => (
       <ConfirmToast
         id={t}
         title={isPermanent ? "Hapus Permanen?" : "Nonaktifkan Petugas?"}
@@ -169,7 +189,7 @@ export default function UsersPage() {
             {
               loading: 'Memproses...',
               success: isPermanent ? 'Petugas berhasil dihapus permanen' : 'Petugas berhasil dinonaktifkan',
-              error: (err: any) => err.error?.message || err.message || 'Gagal memproses penghapusan',
+              error: (err: ApiError) => err.error?.message || err.message || 'Gagal memproses penghapusan',
             }
           );
         }}
@@ -182,11 +202,8 @@ export default function UsersPage() {
     if (selectedIds.length === 0) return;
     
     const isNonActiveView = statusFilter === 'NON_ACTIVE';
-    const message = isNonActiveView
-      ? `Hapus PERMANEN ${selectedIds.length} petugas?`
-      : `Nonaktifkan ${selectedIds.length} petugas?`;
-      
-    (toast as any).custom((t: any) => (
+    
+    toast.custom((t: string | number) => (
       <ConfirmToast
         id={t}
         title={isNonActiveView ? "Hapus Massal?" : "Nonaktifkan Massal?"}
@@ -208,7 +225,7 @@ export default function UsersPage() {
               success: isNonActiveView
                 ? `Berhasil menghapus permanen ${selectedIds.length} petugas`
                 : `Berhasil menonaktifkan ${selectedIds.length} petugas`,
-              error: (err: any) => err.message || 'Gagal menghapus data masal',
+              error: (err: ApiError) => err.message || 'Gagal menghapus data masal',
             }
           );
         }}
@@ -232,7 +249,7 @@ export default function UsersPage() {
   };
 
   const handleReactivate = async (id: string) => {
-    (toast as any).custom((t: any) => (
+    toast.custom((t: string | number) => (
       <ConfirmToast
         id={t}
         title="Aktifkan Kembali?"
@@ -247,7 +264,7 @@ export default function UsersPage() {
             {
               loading: 'Mengaktifkan...',
               success: 'Petugas berhasil diaktifkan kembali',
-              error: (err: any) => err.error?.message || err.message || 'Gagal mengaktifkan petugas',
+              error: (err: ApiError) => err.error?.message || err.message || 'Gagal mengaktifkan petugas',
             }
           );
         }}
@@ -256,7 +273,7 @@ export default function UsersPage() {
     ), { duration: 5000 });
   };
 
-  const columns: ColumnDef<any>[] = [
+  const columns: ColumnDef<OfficerExtended>[] = [
     {
       id: 'selection',
       header: () => (
@@ -486,7 +503,7 @@ export default function UsersPage() {
               placeholder="Cari ranting..."
               options={[
                 { label: 'SEMUA RANTING', value: '' },
-                ...branches.map((b: any) => ({
+                ...branches.map((b: Branch) => ({
                   label: b.name.replace(/ranting/gi, '').trim().toUpperCase(),
                   value: b.id
                 }))
@@ -630,10 +647,10 @@ export default function UsersPage() {
             <div className="space-y-1.5">
               <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih Ranting</label>
               <GlassSelect
-                value={watch('branch_id') || ''}
+                value={watchBranchId || ''}
                 onChange={(val) => setValue('branch_id', val)}
                 placeholder="-- Pilih Ranting --"
-                options={branches.map((b: any) => ({
+                options={branches.map((b: Branch) => ({
                   label: b.name,
                   value: b.id
                 }))}

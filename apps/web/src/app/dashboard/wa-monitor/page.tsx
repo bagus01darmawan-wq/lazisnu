@@ -3,14 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import { Table } from '@/components/ui/Table';
 import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ColumnDef } from '@tanstack/react-table';
 import api from '@/lib/api';
 import {
   MessageSquare,
   Search,
-  Send,
   Clock,
   XCircle,
   RefreshCw,
@@ -19,16 +17,48 @@ import {
   AlertCircle,
   CheckCircle2,
   User,
-  Phone
+
 } from 'lucide-react';
 import { format, isValid } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
 import { cn } from '@/lib/utils';
+import { ApiResponse } from '@lazisnu/shared-types';
+
+interface WaLogItem {
+  id: string;
+  recipient: string;
+  phone: string;
+  message: string;
+  status: string;
+  time: string;
+}
+
+interface RawWaLog {
+  id: string;
+  recipientName?: string;
+  recipientPhone: string;
+  messageContent: string;
+  status: string;
+  createdAt: string;
+}
+
+interface WaLogsResponse {
+  logs: RawWaLog[];
+  pagination: {
+    total: number;
+    total_pages: number;
+  };
+  stats: {
+    sent: number;
+    pending: number;
+    failed: number;
+  };
+}
 
 export default function WAMonitorPage() {
-  const [data, setData] = useState([]);
+  const [data, setData] = useState<WaLogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     sent: 0,
@@ -44,12 +74,12 @@ export default function WAMonitorPage() {
   const fetchWAStatus = async (currentPage = page, searchQuery = search, limit = pageSize) => {
     setLoading(true);
     try {
-      const response: any = await api.get('/admin/wa/logs', {
+      const response = await api.get('/admin/wa/logs', {
         params: { page: currentPage, limit: limit, search: searchQuery }
-      });
-      if (response.success) {
+      }) as unknown as ApiResponse<WaLogsResponse>;
+      if (response.success && response.data) {
         const items = response.data.logs || [];
-        setData(items.map((notif: any) => ({
+        setData(items.map((notif) => ({
           id: notif.id,
           recipient: notif.recipientName || 'Donatur',
           phone: notif.recipientPhone,
@@ -92,7 +122,7 @@ export default function WAMonitorPage() {
 
 
 
-  const columns: ColumnDef<any>[] = [
+  const columns: ColumnDef<WaLogItem>[] = [
     {
       accessorKey: 'time',
       header: () => (
@@ -348,12 +378,12 @@ export default function WAMonitorPage() {
         <button
           onClick={async () => {
             try {
-              const response: any = await api.post('/admin/wa/flush-failed');
+              const response = await api.post('/admin/wa/flush-failed') as unknown as ApiResponse<void>;
               if (response.success) {
                 toast.success('Antrean berhasil dibersihkan');
                 void fetchWAStatus();
               }
-            } catch (e) {
+            } catch {
               toast.error('Gagal membersihkan antrean');
             }
           }}

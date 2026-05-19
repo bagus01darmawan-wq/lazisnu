@@ -5,12 +5,10 @@ import {
   Database,
   Plus,
   Search,
-  Filter,
   Edit,
   ChevronRight,
   ArrowLeft,
   MapPin,
-  Loader2,
   Trash2,
   Hash,
   Building2
@@ -18,14 +16,13 @@ import {
 import { Button } from '@/components/ui/Button';
 import { Table } from '@/components/ui/Table';
 import { Card } from '@/components/ui/Card';
+import { ColumnDef } from '@tanstack/react-table';
 import api from '@/lib/api';
-import { useAuthStore } from '@/store/useAuthStore';
 import { toast } from 'sonner';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
-import { cn } from '@/lib/utils';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmToast } from '@/components/ui/ConfirmToast';
-import { AlertTriangle } from 'lucide-react';
+import { ApiResponse } from '@lazisnu/shared-types';
 
 interface Branch {
   id: string;
@@ -44,8 +41,21 @@ interface Dukuh {
   branchId: string;
 }
 
+interface ApiError {
+  message?: string;
+  error?: {
+    message?: string;
+  };
+  response?: {
+    data?: {
+      error?: {
+        message?: string;
+      };
+    };
+  };
+}
+
 export default function MasterDataPage() {
-  const { user } = useAuthStore();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [dukuhs, setDukuhs] = useState<Dukuh[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,17 +67,17 @@ export default function MasterDataPage() {
   // Modals state
   const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
   const [isDukuhModalOpen, setIsDukuhModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<any>(null);
+  const [editingItem, setEditingItem] = useState<Branch | Dukuh | null>(null);
   const [formData, setFormData] = useState({ name: '', code: '' });
 
   const fetchBranches = async () => {
     try {
       setLoading(true);
-      const res: any = await api.get('/admin/branches');
-      if (res.success) {
+      const res = await api.get('/admin/branches') as unknown as ApiResponse<Branch[]>;
+      if (res.success && res.data) {
         setBranches(res.data);
       }
-    } catch (error) {
+    } catch {
       toast.error('Gagal mengambil data ranting');
     } finally {
       setLoading(false);
@@ -77,11 +87,11 @@ export default function MasterDataPage() {
   const fetchDukuhs = async (branchId: string) => {
     try {
       setLoading(true);
-      const res: any = await api.get(`/admin/branches/${branchId}/dukuhs`);
-      if (res.success) {
+      const res = await api.get(`/admin/branches/${branchId}/dukuhs`) as unknown as ApiResponse<Dukuh[]>;
+      if (res.success && res.data) {
         setDukuhs(res.data);
       }
-    } catch (error) {
+    } catch {
       toast.error('Gagal mengambil data dukuh');
     } finally {
       setLoading(false);
@@ -105,9 +115,10 @@ export default function MasterDataPage() {
       setIsBranchModalOpen(false);
       setEditingItem(null);
       setFormData({ name: '', code: '' });
-      fetchBranches();
-    } catch (error: any) {
-      const msg = error.error?.message || error.message || 'Terjadi kesalahan';
+      void fetchBranches();
+    } catch (error) {
+      const err = error as ApiError;
+      const msg = err.error?.message || err.message || 'Terjadi kesalahan';
       toast.error(msg);
     }
   };
@@ -126,15 +137,16 @@ export default function MasterDataPage() {
       setIsDukuhModalOpen(false);
       setEditingItem(null);
       setFormData({ name: '', code: '' });
-      fetchDukuhs(selectedBranch.id);
-    } catch (error: any) {
-      const msg = error.error?.message || error.message || 'Terjadi kesalahan';
+      void fetchDukuhs(selectedBranch.id);
+    } catch (error) {
+      const err = error as ApiError;
+      const msg = err.error?.message || err.message || 'Terjadi kesalahan';
       toast.error(msg);
     }
   };
 
   const handleDeleteBranch = async (id: string, name: string) => {
-    (toast as any).custom((t: any) => (
+    toast.custom((t: string | number) => (
       <ConfirmToast
         id={t}
         title={`Hapus Ranting ${name}?`}
@@ -143,13 +155,13 @@ export default function MasterDataPage() {
         onConfirm={() => {
           toast.promise(
             api.delete(`/admin/branches/${id}`).then((res) => {
-              fetchBranches();
+              void fetchBranches();
               return res;
             }),
             {
               loading: 'Menghapus...',
               success: 'Ranting berhasil dihapus',
-              error: (err: any) => err.response?.data?.error?.message || 'Gagal menghapus ranting',
+              error: (err: ApiError) => err.response?.data?.error?.message || 'Gagal menghapus ranting',
             }
           );
         }}
@@ -158,7 +170,7 @@ export default function MasterDataPage() {
   };
 
   const handleDeleteDukuh = async (id: string, name: string) => {
-    (toast as any).custom((t: any) => (
+    toast.custom((t: string | number) => (
       <ConfirmToast
         id={t}
         title={`Hapus Dukuh ${name}?`}
@@ -167,13 +179,13 @@ export default function MasterDataPage() {
         onConfirm={() => {
           toast.promise(
             api.delete(`/admin/dukuhs/${id}`).then((res) => {
-              if (selectedBranch) fetchDukuhs(selectedBranch.id);
+              if (selectedBranch) void fetchDukuhs(selectedBranch.id);
               return res;
             }),
             {
               loading: 'Menghapus...',
               success: 'Dukuh berhasil dihapus',
-              error: (err: any) => err.response?.data?.error?.message || 'Gagal menghapus dukuh',
+              error: (err: ApiError) => err.response?.data?.error?.message || 'Gagal menghapus dukuh',
             }
           );
         }}
@@ -199,7 +211,7 @@ export default function MasterDataPage() {
     setCurrentPage(1);
   }, [search, selectedBranch]);
 
-  const branchColumns: any[] = [
+  const branchColumns: ColumnDef<Branch>[] = [
     {
       header: () => (
         <div className="flex items-center gap-1.5">
@@ -208,7 +220,7 @@ export default function MasterDataPage() {
         </div>
       ),
       accessorKey: 'code',
-      cell: (info: any) => <span className="text-[12px] font-bold text-[#F4F1EA]/40 tracking-tight">{info.getValue()}</span>
+      cell: (info) => <span className="text-[12px] font-bold text-[#F4F1EA]/40 tracking-tight">{info.getValue() as string}</span>
     },
     {
       header: () => (
@@ -218,7 +230,7 @@ export default function MasterDataPage() {
         </div>
       ),
       accessorKey: 'name',
-      cell: (info: any) => <span className="font-bold text-[#F4F1EA]">{info.getValue()}</span>
+      cell: (info) => <span className="font-bold text-[#F4F1EA]">{info.getValue() as string}</span>
     },
     {
       id: 'kelola_dukuh',
@@ -228,7 +240,7 @@ export default function MasterDataPage() {
           <span>Kelola Dukuh</span>
         </div>
       ),
-      cell: (info: any) => {
+      cell: (info) => {
         const row = info.row.original;
         return (
           <Button
@@ -238,7 +250,7 @@ export default function MasterDataPage() {
             onClick={() => {
               setSelectedBranch(row);
               setSearch('');
-              fetchDukuhs(row.id);
+              void fetchDukuhs(row.id);
             }}
           >
             <span className="text-[11px] font-bold uppercase tracking-tight">Kelola</span>
@@ -255,7 +267,7 @@ export default function MasterDataPage() {
         </div>
       ),
       id: 'actions',
-      cell: (info: any) => {
+      cell: (info) => {
         const row = info.row.original;
         return (
           <div className="flex items-center gap-2">
@@ -275,7 +287,7 @@ export default function MasterDataPage() {
               variant="outline"
               size="sm"
               className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#D97A76] hover:bg-red-500/10 hover:border-red-500/20 transition-all duration-300 group"
-              onClick={() => handleDeleteBranch(row.id, row.name)}
+              onClick={() => void handleDeleteBranch(row.id, row.name)}
             >
               <Trash2 size={14} className="text-[#F4F1EA]/40 group-hover:text-[#D97A76]" />
             </Button>
@@ -285,7 +297,7 @@ export default function MasterDataPage() {
     }
   ];
 
-  const dukuhColumns: any[] = [
+  const dukuhColumns: ColumnDef<Dukuh>[] = [
     {
       header: () => (
         <div className="flex items-center gap-1.5">
@@ -294,12 +306,12 @@ export default function MasterDataPage() {
         </div>
       ),
       accessorKey: 'name',
-      cell: (info: any) => <span className="text-[12px] font-bold text-[#F4F1EA]/40 tracking-tight">{info.getValue()}</span>
+      cell: (info) => <span className="text-[12px] font-bold text-[#F4F1EA]/40 tracking-tight">{info.getValue() as string}</span>
     },
     {
       header: 'Aksi',
       id: 'actions',
-      cell: (info: any) => {
+      cell: (info) => {
         const row = info.row.original;
         return (
           <div className="flex items-center gap-2">
@@ -319,7 +331,7 @@ export default function MasterDataPage() {
               variant="outline" 
               size="sm" 
               className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#D97A76] hover:bg-red-500/10 hover:border-red-500/20 transition-all duration-300 group"
-              onClick={() => handleDeleteDukuh(row.id, row.name)}
+              onClick={() => void handleDeleteDukuh(row.id, row.name)}
             >
               <Trash2 size={14} className="text-[#F4F1EA]/40 group-hover:text-[#D97A76]" />
             </Button>
@@ -416,14 +428,14 @@ export default function MasterDataPage() {
           {selectedBranch ? (
             <Table 
               columns={dukuhColumns} 
-              data={pagedData as any[]} 
+              data={pagedData as Dukuh[]} 
               loading={loading}
               variant="glass"
             />
           ) : (
             <Table 
               columns={branchColumns} 
-              data={pagedData as any[]} 
+              data={pagedData as Branch[]} 
               loading={loading}
               variant="glass"
             />

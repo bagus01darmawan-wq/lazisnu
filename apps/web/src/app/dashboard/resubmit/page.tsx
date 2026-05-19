@@ -6,10 +6,8 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
-import { Badge } from '@/components/ui/Badge';
 import { ColumnDef } from '@tanstack/react-table';
 import api from '@/lib/api';
-import { useAuthStore } from '@/store/useAuthStore';
 import { toast } from 'sonner';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
 import {
@@ -18,7 +16,6 @@ import {
   Search,
   AlertCircle,
   Clock,
-  CheckCircle2,
   User as UserIcon,
   QrCode,
   Wallet
@@ -28,6 +25,19 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
+import { Collection, ApiResponse } from '@lazisnu/shared-types';
+
+interface CollectionExtended extends Collection {
+  qr_code: string;
+  owner_name: string;
+}
+
+interface ApiError {
+  message?: string;
+  error?: {
+    message?: string;
+  };
+}
 
 const resubmitSchema = z.object({
   nominal: z.number().positive('Nominal harus positif'),
@@ -37,12 +47,11 @@ const resubmitSchema = z.object({
 type ResubmitFormValues = z.infer<typeof resubmitSchema>;
 
 export default function ResubmitPage() {
-  const { user } = useAuthStore();
-  const [data, setData] = useState([]);
+  const [data, setData] = useState<CollectionExtended[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedCol, setSelectedCol] = useState<any>(null);
+  const [selectedCol, setSelectedCol] = useState<CollectionExtended | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -50,16 +59,17 @@ export default function ResubmitPage() {
   const [totalPages, setTotalPages] = useState(1);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<ResubmitFormValues>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(resubmitSchema as any),
   });
 
   const fetchCollections = async (searchQuery = search, currentPage = page, limit = pageSize) => {
     setLoading(true);
     try {
-      const response: any = await api.get('/bendahara/collections', {
+      const response = await api.get('/bendahara/collections', {
         params: { page: currentPage, limit: limit, search: searchQuery },
-      });
-      if (response.success) {
+      }) as unknown as ApiResponse<{ collections: CollectionExtended[]; pagination: { total: number; total_pages: number } }>;
+      if (response.success && response.data) {
         setData(response.data.collections || []);
         setTotalItems(response.data.pagination?.total || 0);
         setTotalPages(response.data.pagination?.total_pages || 1);
@@ -95,21 +105,22 @@ export default function ResubmitPage() {
     if (!selectedCol) return;
     setSubmitting(true);
     try {
-      const response: any = await api.post(`/admin/collections/${selectedCol.id}/resubmit`, values);
+      const response = await api.post(`/admin/collections/${selectedCol.id}/resubmit`, values) as unknown as ApiResponse<CollectionExtended>;
       if (response.success) {
         reset();
         setIsModalOpen(false);
         void fetchCollections();
         toast.success('Data berhasil di-koreksi dan di-submit ulang');
       }
-    } catch (error: any) {
-      toast.error(error.error?.message || 'Gagal melakukan re-submit');
+    } catch (error) {
+      const err = error as ApiError;
+      toast.error(err.error?.message || 'Gagal melakukan re-submit');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const columns: ColumnDef<any>[] = [
+  const columns: ColumnDef<CollectionExtended>[] = [
     {
       accessorKey: 'collected_at',
       header: () => (

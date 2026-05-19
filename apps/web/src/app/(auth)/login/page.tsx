@@ -11,9 +11,22 @@ import { Card } from '@/components/ui/Card';
 import { authHelper } from '@/lib/auth';
 import { useAuthStore } from '@/store/useAuthStore';
 import api from '@/lib/api';
-import Cookies from 'js-cookie';
-import { LogIn, Phone, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { LogIn, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ApiResponse, User } from '@lazisnu/shared-types';
+
+interface LoginResponseData {
+  access_token: string;
+  refresh_token?: string;
+  user: User;
+}
+
+interface ApiError {
+  message?: string;
+  error?: {
+    message?: string;
+  };
+}
 
 const loginSchema = z.object({
   identifier: z.string().min(3, 'Email atau Nomor HP minimal 3 karakter'),
@@ -33,6 +46,7 @@ export default function LoginPage() {
     handleSubmit,
     formState: { errors },
   } = useForm<LoginFormValues>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(loginSchema as any),
   });
 
@@ -42,9 +56,9 @@ export default function LoginPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const response: any = await api.post('/auth/login', data);
+      const response = await api.post('/auth/login', data) as unknown as ApiResponse<LoginResponseData>;
 
-      if (response.success) {
+      if (response.success && response.data) {
         authHelper.setToken(response.data.access_token);
         if (response.data.refresh_token) {
           authHelper.setRefreshToken(response.data.refresh_token);
@@ -56,8 +70,9 @@ export default function LoginPage() {
       } else {
         setError(response.error?.message || 'Login gagal, silakan coba lagi');
       }
-    } catch (err: any) {
-      setError(err.error?.message || 'Terjadi kesalahan koneksi');
+    } catch (err) {
+      const errorResponse = err as ApiError;
+      setError(errorResponse.error?.message || 'Terjadi kesalahan koneksi');
     } finally {
       setIsLoading(false);
     }

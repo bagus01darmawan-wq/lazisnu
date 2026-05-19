@@ -7,7 +7,8 @@ import {
   History, 
   ShieldAlert, 
   MessageSquare,
-  Database
+  Database,
+  LucideIcon
 } from 'lucide-react';
 
 export type UserRole = 'ADMIN_KECAMATAN' | 'ADMIN_RANTING' | 'BENDAHARA' | 'PETUGAS';
@@ -15,7 +16,7 @@ export type UserRole = 'ADMIN_KECAMATAN' | 'ADMIN_RANTING' | 'BENDAHARA' | 'PETU
 export interface MenuItem {
   title: string;
   path: string;
-  icon: any;
+  icon: LucideIcon;
   roles: UserRole[];
 }
 

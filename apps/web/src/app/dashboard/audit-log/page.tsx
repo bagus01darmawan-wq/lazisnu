@@ -9,12 +9,12 @@ import { Modal } from '@/components/ui/Modal';
 import { ColumnDef } from '@tanstack/react-table';
 import { format, isValid } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { ShieldAlert, RefreshCw, Eye, Search, Calendar as CalendarIcon, ChevronLeft, ChevronRight, RotateCcw, History, Clock, User, Database } from 'lucide-react';
+import { ShieldAlert, RefreshCw, Eye, Search, ChevronLeft, ChevronRight, RotateCcw, History, Clock, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
-import { FilterPills } from '@/components/ui/FilterPills';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
 import { PeriodPicker } from '@/components/ui/PeriodPicker';
+import { ApiResponse } from '@lazisnu/shared-types';
 
 interface AuditLog {
   id: string;
@@ -23,8 +23,8 @@ interface AuditLog {
   createdAt: string;
   user?: { fullName: string; role: string };
   officer?: { fullName: string };
-  oldData: any;
-  newData: any;
+  oldData: unknown;
+  newData: unknown;
 }
 
 export default function AuditLogPage() {
@@ -46,7 +46,7 @@ export default function AuditLogPage() {
       const startOfMonth = new Date(Number(y), Number(m) - 1, 1).toISOString();
       const endOfMonth = new Date(Number(y), Number(m), 0, 23, 59, 59).toISOString();
 
-      const response: any = await api.get('/admin/audit-logs', {
+      const response = await api.get('/admin/audit-logs', {
         params: {
           page: currentPage,
           limit: limit,
@@ -54,8 +54,8 @@ export default function AuditLogPage() {
           start_date: startOfMonth,
           end_date: endOfMonth
         }
-      });
-      if (response.success) {
+      }) as unknown as ApiResponse<{ logs: AuditLog[]; pagination: { total: number; total_pages: number } }>;
+      if (response.success && response.data) {
         setLogs(response.data.logs);
         setTotalPages(response.data.pagination.total_pages);
         setTotalItems(response.data.pagination.total);

@@ -6,16 +6,14 @@ import {
   getCoreRowModel,
   flexRender,
   ColumnDef,
-  getPaginationRowModel,
   getSortedRowModel,
   SortingState,
 } from '@tanstack/react-table';
 import { cn } from '@/lib/utils';
-import { ChevronRight, ChevronLeft, ChevronsUpDown } from 'lucide-react';
-import { Button } from './Button';
+import { ChevronsUpDown } from 'lucide-react';
 
 interface TableProps<TData> {
-  columns: ColumnDef<TData, any>[];
+  columns: ColumnDef<TData, unknown>[];
   data: TData[];
   className?: string;
   loading?: boolean;
@@ -25,6 +23,7 @@ interface TableProps<TData> {
 const Table = <TData,>({ columns, data, className, loading, variant = 'default' }: TableProps<TData>) => {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,

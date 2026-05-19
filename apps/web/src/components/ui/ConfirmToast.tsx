@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { AlertTriangle, Info, X } from 'lucide-react';
+import { AlertTriangle, Info } from 'lucide-react';
 import { Button } from './Button';
 import { toast } from 'sonner';
 

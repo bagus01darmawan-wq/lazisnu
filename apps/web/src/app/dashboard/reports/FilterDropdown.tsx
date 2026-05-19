@@ -2,12 +2,17 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Search, Filter, RotateCcw, Calendar } from 'lucide-react';
+import { Search, RotateCcw } from 'lucide-react';
 import api from '@/lib/api';
-import { Button } from '@/components/ui/Button';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
 import { PeriodPicker } from '@/components/ui/PeriodPicker';
 import { useAuthStore } from '@/store/useAuthStore';
+import { Branch, Officer, ApiResponse } from '@lazisnu/shared-types';
+
+interface OfficerExtended extends Officer {
+  fullName?: string;
+  branchId?: string;
+}
 
 export default function FilterDropdown() {
   const router = useRouter();
@@ -21,8 +26,8 @@ export default function FilterDropdown() {
   const currentOfficer = searchParams.get('officer') || '';
   const initialSearch = searchParams.get('search') || '';
 
-  const [branches, setBranches] = useState<any[]>([]);
-  const [officers, setOfficers] = useState<any[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [officers, setOfficers] = useState<OfficerExtended[]>([]);
   const [searchTerm, setSearchTerm] = useState(initialSearch);
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(initialSearch);
 
@@ -31,19 +36,22 @@ export default function FilterDropdown() {
     const fetchDropdownData = async () => {
       try {
         const [branchesRes, officersRes] = await Promise.all([
-          api.get('/admin/branches'),
-          api.get('/admin/officers', { params: { is_active: true } })
+          api.get('/admin/branches') as unknown as ApiResponse<Branch[]>,
+          api.get('/admin/officers', { params: { is_active: true } }) as unknown as ApiResponse<{ items?: OfficerExtended[] } | OfficerExtended[]>
         ]);
-        if ((branchesRes as any).success) setBranches((branchesRes as any).data || []);
-        if ((officersRes as any).success) {
-          const rawOfficers = (officersRes as any).data.items || (officersRes as any).data || [];
+        if (branchesRes.success && branchesRes.data) {
+          setBranches(branchesRes.data);
+        }
+        if (officersRes.success && officersRes.data) {
+          const rawData = officersRes.data;
+          const rawOfficers = Array.isArray(rawData) ? rawData : (rawData.items || []);
           setOfficers(rawOfficers);
         }
       } catch (error) {
         console.error('Failed to fetch filter data:', error);
       }
     };
-    fetchDropdownData();
+    void fetchDropdownData();
   }, []);
 
   const updateUrl = useCallback(
@@ -155,7 +163,7 @@ export default function FilterDropdown() {
           options={[
             { label: 'PETUGAS: SEMUA', value: '' },
             ...filteredOfficers.map((o) => ({
-              label: (o.full_name || o.fullName).toUpperCase(),
+              label: (o.full_name || o.fullName || '').toUpperCase(),
               value: o.id
             }))
           ]}

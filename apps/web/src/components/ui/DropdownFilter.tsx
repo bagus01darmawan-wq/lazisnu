@@ -37,10 +37,6 @@ export function DropdownFilter({
 
   const selectedOption = options.find(opt => opt.value === value);
 
-  useEffect(() => {
-    setActiveIndex(-1);
-  }, [search, isOpen]);
-
   // Handle auto-scroll when activeIndex changes
   useEffect(() => {
     if (activeIndex >= 0 && listRef.current) {
@@ -109,7 +105,10 @@ export function DropdownFilter({
       onKeyDown={handleKeyDown}
     >
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+            if (!isOpen) setActiveIndex(-1);
+            setIsOpen(!isOpen);
+          }}
         className={cn(
           "flex items-center gap-2 px-4 h-full bg-[#F4F1EA]/10 border border-[#F4F1EA]/20 backdrop-blur-md rounded-2xl text-[11px] font-bold text-[#F4F1EA] hover:bg-[#F4F1EA]/20 transition-all min-w-[140px]",
           isOpen && "bg-[#F4F1EA]/20 ring-1 ring-[#EAD19B]/30"
@@ -133,13 +132,19 @@ export function DropdownFilter({
               <input
                 placeholder="Cari..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                    setSearch(e.target.value);
+                    setActiveIndex(-1);
+                  }}
                 className="w-full pl-9 pr-8 py-2 bg-black/5 border border-[#DE6F4A]/10 rounded-xl text-xs text-[#DE6F4A] placeholder:text-[#DE6F4A]/40 focus:ring-1 focus:ring-[#DE6F4A]/30 outline-none"
                 autoFocus
               />
               {search && (
                 <button
-                  onClick={() => setSearch('')}
+                  onClick={() => {
+                      setSearch('');
+                      setActiveIndex(-1);
+                    }}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-[#F4F1EA]/30 hover:text-[#F4F1EA]"
                 >
                   <X size={12} />
@@ -162,6 +167,7 @@ export function DropdownFilter({
                     onChange(option.value);
                     setIsOpen(false);
                     setSearch('');
+                    setActiveIndex(-1);
                   }}
                   className={cn(
                     "text-left px-3 py-2 rounded-lg text-xs transition-all font-semibold whitespace-nowrap flex items-center justify-between",

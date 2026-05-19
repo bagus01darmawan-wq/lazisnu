@@ -8,10 +8,10 @@ import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
-import { DropdownFilter } from '@/components/ui/DropdownFilter';
 import { Calendar, QrCode, User, UserCheck, Wallet } from 'lucide-react';
+import { CollectionReport } from '@lazisnu/shared-types';
 
-export default function ReportsClient({ data, pagination }: { data: any[], pagination?: { page: number, limit: number, total: number, total_pages: number } }) {
+export default function ReportsClient({ data, pagination }: { data: CollectionReport[], pagination?: { page: number, limit: number, total: number, total_pages: number } }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -20,7 +20,7 @@ export default function ReportsClient({ data, pagination }: { data: any[], pagin
     params.set('page', newPage.toString());
     router.push(`?${params.toString()}`);
   };
-  const columns: ColumnDef<any>[] = [
+  const columns: ColumnDef<CollectionReport>[] = [
     {
       accessorKey: 'collected_at',
       header: () => (
@@ -85,7 +85,6 @@ export default function ReportsClient({ data, pagination }: { data: any[], pagin
 
   const totalPages = pagination?.total_pages || 0;
   const currentPage = pagination?.page || 1;
-  const limit = pagination?.limit || 10;
   const total = pagination?.total || 0;
 
   return (

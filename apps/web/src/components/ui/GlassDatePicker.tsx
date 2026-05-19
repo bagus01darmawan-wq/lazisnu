@@ -13,8 +13,6 @@ interface GlassDatePickerProps {
   label?: string;
   placeholder?: string;
   className?: string;
-  max?: string;
-  min?: string;
 }
 
 export function GlassDatePicker({
@@ -23,8 +21,6 @@ export function GlassDatePicker({
   label,
   placeholder = 'Pilih tanggal...',
   className,
-  max,
-  min,
 }: GlassDatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
@@ -41,12 +37,6 @@ export function GlassDatePicker({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  useEffect(() => {
-    if (value && !selectedDate) {
-      setSelectedDate(parse(value, 'yyyy-MM-dd', new Date()));
-    }
-  }, [value]);
 
   const handleSelect = (date: Date | undefined) => {
     if (date) {

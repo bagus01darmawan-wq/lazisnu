@@ -39,10 +39,6 @@ export function GlassSelect({
   const selectedOption = options.find(opt => opt.value === value);
 
   useEffect(() => {
-    setActiveIndex(-1);
-  }, [isOpen]);
-
-  useEffect(() => {
     if (activeIndex >= 0 && listRef.current) {
       const activeElement = listRef.current.children[activeIndex] as HTMLElement;
       if (activeElement) {
@@ -67,6 +63,7 @@ export function GlassSelect({
     if (!isOpen) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
+        setActiveIndex(-1);
         setIsOpen(true);
       }
       return;
@@ -105,7 +102,11 @@ export function GlassSelect({
       <div className="relative" ref={containerRef} onKeyDown={handleKeyDown}>
         <button
           type="button"
-          onClick={() => !disabled && setIsOpen(!isOpen)}
+          onClick={() => {
+            if (disabled) return;
+            if (!isOpen) setActiveIndex(-1);
+            setIsOpen(!isOpen);
+          }}
           className={cn(
             'flex items-center gap-2 px-4 h-11 w-full rounded-2xl border text-[11px] font-bold transition-all outline-none bg-[#F4F1EA]/10 border-[#F4F1EA]/20 backdrop-blur-md text-[#F4F1EA] hover:bg-[#F4F1EA]/20',
             isOpen && !disabled && 'bg-[#F4F1EA]/20 ring-1 ring-[#EAD19B]/30',

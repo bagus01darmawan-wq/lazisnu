@@ -25,7 +25,7 @@ export const useAuthStore = create<AuthState>()(
               body: JSON.stringify({ refresh_token: refreshToken }),
             });
           }
-        } catch (e) {} // ignore network errors on logout
+        } catch {} // ignore network errors on logout
         
         set({ user: null });
         authHelper.removeToken();

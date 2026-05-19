@@ -1,7 +1,6 @@
 import React, { Suspense } from 'react';
 import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { Download, Filter, FileSpreadsheet, TrendingUp, Wallet, Calendar, FileText } from 'lucide-react';
+import { FileSpreadsheet, Wallet, FileText } from 'lucide-react';
 import { cookies } from 'next/headers';
 import { decodeJwt } from 'jose';
 import ReportsClient from './ReportsClient';
@@ -65,7 +64,7 @@ async function TransactionList({ month, year, branch, officer, search, page, lim
     if (!res.ok) return <ReportsClient data={[]} pagination={{ page: 1, limit: parseInt(limit), total: 0, total_pages: 0 }} />;
     const json = await res.json();
     return <ReportsClient data={json.data?.collections || []} pagination={json.data?.pagination} />;
-  } catch (error) {
+  } catch {
     return <ReportsClient data={[]} />;
   }
 }
@@ -89,9 +88,9 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
 
   if (token) {
     try {
-      const { payload }: any = decodeJwt(token);
-      userRole = payload.role;
-      userBranchId = payload.branchId;
+      const decoded = decodeJwt(token) as unknown as { payload?: { role?: string; branchId?: string }; role?: string; branchId?: string };
+      userRole = decoded.payload?.role || decoded.role;
+      userBranchId = decoded.payload?.branchId || decoded.branchId;
     } catch {}
   }
 

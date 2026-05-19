@@ -26,19 +26,78 @@ import {
   BarChart2,
   AlertTriangle,
   LogIn,
-  Calendar,
   Building2
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
-import { cn } from '@/lib/utils';
+import { ApiResponse } from '@lazisnu/shared-types';
+
+interface DashboardStatsData {
+  summary: {
+    month_collection: number;
+    last_month_collection: number;
+    active_cans: number;
+    total_cans: number;
+    total_officers: number;
+    total_branches: number;
+    month_count: number;
+    last_month_count: number;
+  };
+  recent_collections?: Array<{
+    id: string;
+    collected_at: string;
+    nominal: number;
+    owner_name: string;
+    qr_code: string;
+  }>;
+  by_branch?: Array<{
+    branch_name: string;
+    nominal: number;
+  }>;
+  by_officer?: Array<{
+    officer_name: string;
+    nominal: number;
+  }>;
+  daily_trends?: Array<{
+    day: string;
+    nominal: number;
+  }>;
+  district?: {
+    summary: {
+      total_branches: number;
+      month_collection: number;
+      month_count: number;
+      last_month_count: number;
+      active_cans: number;
+      total_cans: number;
+      total_officers: number;
+    };
+    by_branch?: Array<{
+      branch_name: string;
+      nominal: number;
+    }>;
+    daily_trends?: Array<{
+      day: string;
+      nominal: number;
+    }>;
+  };
+}
+
+interface ApiError {
+  message?: string;
+  response?: {
+    data?: {
+      message?: string;
+    };
+  };
+}
 
 
 
 
 export default function OverviewPage() {
   const { user } = useAuthStore();
-  const [data, setData] = React.useState<any>(null);
+  const [data, setData] = React.useState<DashboardStatsData | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -49,15 +108,16 @@ export default function OverviewPage() {
       setLoading(true);
       setError(null);
       const endpoint = user?.role === 'ADMIN_KECAMATAN' ? '/admin/district/dashboard' : '/admin/branch/dashboard';
-      const response: any = await api.get(endpoint);
-      if (response.success) {
+      const response = await api.get(endpoint) as unknown as ApiResponse<DashboardStatsData>;
+      if (response.success && response.data) {
         setData(response.data);
       } else {
-        setError(response.message || 'Gagal memuat data statistik');
+        setError(response.error?.message || 'Gagal memuat data statistik');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Fetch stats error:', err);
-      setError(err.response?.data?.message || err.message || 'Terjadi kesalahan koneksi ke server');
+      const errorResponse = err as ApiError;
+      setError(errorResponse.response?.data?.message || errorResponse.message || 'Terjadi kesalahan koneksi ke server');
     } finally {
       setLoading(false);
     }
@@ -111,7 +171,6 @@ export default function OverviewPage() {
   }
 
   const summary = data.summary || {};
-  const recentCollections = data.recent_collections || [];
 
   // 1. Kalkulasi Tren Infaq (Bulan ini vs Bulan lalu)
   const lastMonthColl = Number(summary.last_month_collection || 0);
@@ -242,7 +301,7 @@ export default function OverviewPage() {
           </div>
           <div className="flex-1 w-full mt-4 px-2">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={user?.role === 'ADMIN_KECAMATAN' ? data.by_branch : data.by_officer}>
+              <BarChart data={(user?.role === 'ADMIN_KECAMATAN' ? data.by_branch : data.by_officer) as Array<Record<string, unknown>>}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(244, 241, 234, 0.08)" />
                 <XAxis
                   dataKey={user?.role === 'ADMIN_KECAMATAN' ? "branch_name" : "officer_name"}
@@ -266,7 +325,7 @@ export default function OverviewPage() {
                     fontSize: '12px',
                     color: '#F4F1EA'
                   }}
-                  formatter={(value: any) => [`Rp ${value.toLocaleString('id-ID')}`, 'Nominal']}
+                  formatter={(value) => [`Rp ${Number(value || 0).toLocaleString('id-ID')}`, 'Nominal']}
                 />
                 <Bar
                   dataKey="nominal"
@@ -456,7 +515,7 @@ export default function OverviewPage() {
                         fontSize: '12px',
                         color: '#F4F1EA'
                       }}
-                      formatter={(value: any) => [`Rp ${value.toLocaleString('id-ID')}`, 'Nominal']}
+                      formatter={(value) => [`Rp ${Number(value || 0).toLocaleString('id-ID')}`, 'Nominal']}
                     />
                     <Bar
                       dataKey="nominal"
