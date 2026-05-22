@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, RotateCcw } from 'lucide-react';
 import api from '@/lib/api';
@@ -78,6 +78,15 @@ export default function FilterDropdown() {
     }
   }, [debouncedSearchTerm, updateUrl, searchParams]);
 
+  // Memoize officers map for O(1) lookup
+  const officersMap = useMemo(() => {
+    const map = new Map<string, OfficerExtended>();
+    officers.forEach(o => {
+      map.set(o.id, o);
+    });
+    return map;
+  }, [officers]);
+
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
   };
@@ -87,7 +96,8 @@ export default function FilterDropdown() {
 
     if (type === 'branch' && value) {
       updates['branch'] = value;
-      const currentOfficerData = officers.find(o => o.id === currentOfficer);
+      // Use O(1) lookup instead of Array.find()
+      const currentOfficerData = officersMap.get(currentOfficer);
       const officerBranchId = currentOfficerData?.branch_id || currentOfficerData?.branchId;
       if (officerBranchId !== value) {
         updates['officer'] = ''; // Clear officer if branch mismatch
@@ -95,7 +105,8 @@ export default function FilterDropdown() {
     }
 
     if (type === 'officer' && value) {
-      const selectedOfficer = officers.find(o => o.id === value);
+      // Use O(1) lookup instead of Array.find()
+      const selectedOfficer = officersMap.get(value);
       const officerBranchId = selectedOfficer?.branch_id || selectedOfficer?.branchId;
       if (officerBranchId) {
         updates['branch'] = officerBranchId; // Auto-select branch
