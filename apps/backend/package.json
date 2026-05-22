@@ -11,7 +11,7 @@
     "test:unit": "jest --testPathPattern='src/services/__tests__'",
     "test:integration": "NODE_ENV=test jest --testPathPattern='src/routes/__tests__' --runInBand",
     "test:all": "NODE_ENV=test jest --runInBand",
-    "lint": "eslint src",
+    "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
     "migrate": "drizzle-kit push",
     "generate": "drizzle-kit generate",
