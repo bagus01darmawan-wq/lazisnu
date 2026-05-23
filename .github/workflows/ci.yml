@@ -32,7 +32,7 @@ jobs:
       run: pnpm build:shared
 
     - name: Run lint
-      run: pnpm -r --no-bail run lint
+      run: pnpm -r run lint --no-bail
 
     - name: Run type check
       run: pnpm -r exec tsc --noEmit
