@@ -153,7 +153,7 @@ export async function cansRoutes(fastify: FastifyInstance) {
         ownerName: body.owner_name.substring(0, 100),
         ownerPhone: (body.owner_whatsapp || body.owner_phone || '').substring(0, 20),
         ownerWhatsapp: (body.owner_whatsapp || body.owner_phone || '0000000000').substring(0, 20),
-        ownerAddress: body.owner_address || '', // Fix not-null constraint
+        ownerAddress: body.owner_address,
         rt: (body.rt || '').substring(0, 10),
         rw: (body.rw || '').substring(0, 10),
         dukuh: dukuhName || null,
@@ -244,7 +244,7 @@ export async function cansRoutes(fastify: FastifyInstance) {
       const updated = await db.update(schema.cans).set({
         ownerName: body.owner_name ?? existing.ownerName,
         ownerPhone: body.owner_whatsapp || body.owner_phone || existing.ownerPhone,
-        ownerAddress: body.owner_address ?? existing.ownerAddress,
+        ownerAddress: body.owner_address !== undefined ? body.owner_address : existing.ownerAddress,
         ownerWhatsapp: body.owner_whatsapp ?? existing.ownerWhatsapp,
         dukuhId: newDukuhId,
         dukuh: newDukuhName,
