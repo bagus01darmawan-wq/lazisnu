@@ -80,14 +80,14 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
       });
 
       return sendSuccess(reply, result);
-    } catch (error: any) {
-      if (error.message === 'COLLECTION_NOT_FOUND') {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message === 'COLLECTION_NOT_FOUND') {
         return sendError(reply, 404, 'NOT_FOUND', 'Data tidak ditemukan');
       }
-      if (error.message === 'NOT_LATEST') {
+      if (error instanceof Error && error.message === 'NOT_LATEST') {
         return sendError(reply, 400, 'NOT_LATEST', 'Data sudah pernah di-resubmit (bukan record terbaru)');
       }
-      if (error.message === 'FORBIDDEN') {
+      if (error instanceof Error && error.message === 'FORBIDDEN') {
         return sendError(reply, 403, 'FORBIDDEN', 'Tidak memiliki akses ke data ini');
       }
       return sendInternalError(reply, error, fastify.log);

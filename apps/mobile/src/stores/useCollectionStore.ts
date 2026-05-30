@@ -189,7 +189,7 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
           isLoading: false,
         });
       }
-    } catch (error: any) {
+    } catch {
       set({ isLoading: false });
     }
   },

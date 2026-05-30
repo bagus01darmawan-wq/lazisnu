@@ -46,7 +46,7 @@ export function sendError(
 /**
  * Common internal server error response
  */
-export function sendInternalError(reply: FastifyReply, error?: any, logger?: any) {
+export function sendInternalError(reply: FastifyReply, error?: unknown, logger?: { error: (error: unknown) => void }) {
   if (logger && error) {
     logger.error(error);
   } else if (error) {

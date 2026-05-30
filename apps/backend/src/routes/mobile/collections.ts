@@ -8,6 +8,7 @@ import { sendSuccess, sendError, sendInternalError } from '../../utils/response'
 import { collectionSchema, resubmitSchema } from './schemas';
 
 import { validateAssignmentForSubmit, submitCollection, getLatestCollectionCondition } from '../../services/collectionSubmission';
+import { getErrorMessage, isHttpRouteError, isPostgresError } from '../../utils/error-guards';
 
 export async function collectionsRoutes(fastify: FastifyInstance) {
   const latestCollectionCondition = getLatestCollectionCondition();
@@ -37,11 +38,12 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
       const result = await db.transaction(async (tx) => {
         try {
           await validateAssignmentForSubmit(tx, body.assignment_id, body.can_id, officerId);
-        } catch (err: any) {
-          if (err.message.includes('can_id')) {
-            throw { status: 400, code: 'MISMATCH', message: err.message };
+        } catch (err: unknown) {
+          const message = getErrorMessage(err, 'Assignment tidak valid');
+          if (message.includes('can_id')) {
+            throw { status: 400, code: 'MISMATCH', message };
           }
-          throw { status: 403, code: 'FORBIDDEN', message: err.message };
+          throw { status: 403, code: 'FORBIDDEN', message };
         }
 
         return await submitCollection(tx, {
@@ -85,9 +87,9 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
         whatsapp_status: whatsappStatus,
         message: 'Penjemputan berhasil disimpan',
       }, 201);
-    } catch (error: any) {
-      if (error.status) return sendError(reply, error.status, error.code, error.message);
-      if (error.code === '23505') {
+    } catch (error: unknown) {
+      if (isHttpRouteError(error)) return sendError(reply, error.status, error.code, error.message);
+      if (isPostgresError(error) && error.code === '23505') {
         return sendSuccess(reply, {
           sync_status: 'ALREADY_SYNCED',
           message: 'Data sudah pernah di-submit',
@@ -238,7 +240,7 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
         whatsapp_status: whatsappStatus,
         message: 'Koreksi data berhasil disimpan',
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof z.ZodError) return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
       return sendInternalError(reply, error, fastify.log);
     }

@@ -153,7 +153,7 @@ export async function cansRoutes(fastify: FastifyInstance) {
         ownerName: body.owner_name.substring(0, 100),
         ownerPhone: (body.owner_whatsapp || body.owner_phone || '').substring(0, 20),
         ownerWhatsapp: (body.owner_whatsapp || body.owner_phone || '0000000000').substring(0, 20),
-        ownerAddress: body.owner_address || '', // Fix not-null constraint
+        ownerAddress: body.owner_address,
         rt: (body.rt || '').substring(0, 10),
         rw: (body.rw || '').substring(0, 10),
         dukuh: dukuhName || null,
@@ -162,8 +162,8 @@ export async function cansRoutes(fastify: FastifyInstance) {
       }).returning();
 
       return sendSuccess(reply, inserted[0], 201);
-    } catch (error: any) {
-      fastify.log.error('Can creation error:', error);
+    } catch (error: unknown) {
+      fastify.log.error({ err: error }, 'Can creation error');
       if (error instanceof z.ZodError) {
         return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
       }
@@ -244,7 +244,7 @@ export async function cansRoutes(fastify: FastifyInstance) {
       const updated = await db.update(schema.cans).set({
         ownerName: body.owner_name ?? existing.ownerName,
         ownerPhone: body.owner_whatsapp || body.owner_phone || existing.ownerPhone,
-        ownerAddress: body.owner_address ?? existing.ownerAddress,
+        ownerAddress: body.owner_address !== undefined ? body.owner_address : existing.ownerAddress,
         ownerWhatsapp: body.owner_whatsapp ?? existing.ownerWhatsapp,
         dukuhId: newDukuhId,
         dukuh: newDukuhName,

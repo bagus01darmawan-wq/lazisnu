@@ -80,7 +80,7 @@ export async function syncRoutes(fastify: FastifyInstance) {
       }
 
       return sendSuccess(reply, { total: body.collections.length, succeeded, failed, results });
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof z.ZodError) return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid');
       return sendInternalError(reply, error, fastify.log);
     }

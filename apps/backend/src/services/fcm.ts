@@ -2,6 +2,7 @@
 // Mengirim push notification ke device petugas
 
 import { config } from '../config/env';
+import { getErrorMessage } from '../utils/error-guards';
 
 let firebaseAdmin: any = null;
 
@@ -70,9 +71,10 @@ export async function sendFCMToDevice(params: {
 
     const messageId = await admin.messaging().send(message);
     return { success: true, messageId };
-  } catch (err: any) {
-    console.error('[FCM] Gagal kirim notifikasi:', err.message);
-    return { success: false, error: err.message };
+  } catch (err: unknown) {
+    const message = getErrorMessage(err, 'Gagal kirim notifikasi');
+    console.error('[FCM] Gagal kirim notifikasi:', message);
+    return { success: false, error: message };
   }
 }
 
