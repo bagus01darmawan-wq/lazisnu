@@ -162,8 +162,8 @@ export async function cansRoutes(fastify: FastifyInstance) {
       }).returning();
 
       return sendSuccess(reply, inserted[0], 201);
-    } catch (error: any) {
-      fastify.log.error('Can creation error:', error);
+    } catch (error: unknown) {
+      fastify.log.error({ err: error }, 'Can creation error');
       if (error instanceof z.ZodError) {
         return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
       }

@@ -9,6 +9,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { config } from '../config/env';
+import { getErrorMessage } from '../utils/error-guards';
 
 let r2Client: S3Client | null = null;
 
@@ -58,9 +59,10 @@ export async function uploadToR2(params: {
     }));
 
     return { success: true, key: params.key };
-  } catch (err: any) {
-    console.error('[R2] Gagal upload:', err.message);
-    return { success: false, error: err.message };
+  } catch (err: unknown) {
+    const message = getErrorMessage(err, 'Gagal upload file');
+    console.error('[R2] Gagal upload:', message);
+    return { success: false, error: message };
   }
 }
 
@@ -77,8 +79,9 @@ export async function getSignedDownloadUrl(key: string, expiresInSeconds = 3600)
       Key: key,
     });
     return await getSignedUrl(client, command, { expiresIn: expiresInSeconds });
-  } catch (err: any) {
-    console.error('[R2] Gagal generate signed URL:', err.message);
+  } catch (err: unknown) {
+    const message = getErrorMessage(err, 'Gagal generate signed URL');
+    console.error('[R2] Gagal generate signed URL:', message);
     return null;
   }
 }
@@ -96,8 +99,9 @@ export async function deleteFromR2(key: string): Promise<boolean> {
       Key: key,
     }));
     return true;
-  } catch (err: any) {
-    console.error('[R2] Gagal hapus file:', err.message);
+  } catch (err: unknown) {
+    const message = getErrorMessage(err, 'Gagal hapus file');
+    console.error('[R2] Gagal hapus file:', message);
     return false;
   }
 }

@@ -71,7 +71,7 @@ const ScanScreen: React.FC = () => {
           [{ text: 'SCAN ULANG', onPress: () => setIsLoading(false) }]
         );
       }
-    } catch (error: any) {
+    } catch {
       Vibration.vibrate([0, 100, 50, 100]);
       Alert.alert('Error', 'Gagal memproses QR code. Coba lagi.', [
         { text: 'SCAN ULANG', onPress: () => setIsLoading(false) },

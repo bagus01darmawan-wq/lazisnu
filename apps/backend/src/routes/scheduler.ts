@@ -45,7 +45,7 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
         skipped_no_officer: cansToAssign.length - assignmentItems.length,
         period: `${year}-${String(month).padStart(2, '0')}`,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof z.ZodError) {
         return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
       }

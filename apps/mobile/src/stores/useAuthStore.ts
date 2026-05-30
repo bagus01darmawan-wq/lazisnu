@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { authService, setToken, setRefreshToken, storage } from '../services/api';
 import { User } from '@lazisnu/shared-types';
+import { getErrorMessage } from '../utils/error';
 
 interface AuthState {
   user: User | null;
@@ -44,8 +45,8 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({ error: result.error?.message || 'Login gagal', isLoading: false });
         return false;
       }
-    } catch (error: any) {
-      set({ error: error.message || 'Terjadi kesalahan', isLoading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, 'Terjadi kesalahan'), isLoading: false });
       return false;
     }
   },
@@ -62,8 +63,8 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({ error: result.error?.message || 'Gagal kirim OTP', isLoading: false });
         return false;
       }
-    } catch (error: any) {
-      set({ error: error.message || 'Terjadi kesalahan', isLoading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, 'Terjadi kesalahan'), isLoading: false });
       return false;
     }
   },
@@ -88,8 +89,8 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({ error: result.error?.message || 'OTP tidak valid', isLoading: false });
         return false;
       }
-    } catch (error: any) {
-      set({ error: error.message || 'Terjadi kesalahan', isLoading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, 'Terjadi kesalahan'), isLoading: false });
       return false;
     }
   },

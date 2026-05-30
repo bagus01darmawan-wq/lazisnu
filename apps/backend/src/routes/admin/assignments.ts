@@ -141,7 +141,7 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       }).returning();
       
       return sendSuccess(reply, inserted[0], 201);
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof z.ZodError) {
         return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
       }
@@ -219,7 +219,7 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
         assigned_count: cansToAssign.length,
         period: `${currentMonth}/${currentYear}`
       }, 201);
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof z.ZodError) {
         return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
       }

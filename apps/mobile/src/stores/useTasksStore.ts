@@ -98,7 +98,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
           isLoading: false,
         });
       }
-    } catch (error: any) {
+    } catch {
       set({
         tasks: status === 'ALL' ? mockTasks : mockTasks.filter(t => t.status === status),
         isLoading: false,
@@ -123,7 +123,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
           isLoading: false,
         });
       }
-    } catch (error: any) {
+    } catch {
       set({ isLoading: false });
     }
   },

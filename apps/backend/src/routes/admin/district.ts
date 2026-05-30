@@ -5,6 +5,7 @@ import { eq, and, gte, lt, desc, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { authorize } from '../../middleware/auth';
 import { sendSuccess, sendInternalError } from '../../utils/response';
+import { isPostgresError } from '../../utils/error-guards';
 
 const kecamatan = { preHandler: [authorize('ADMIN_KECAMATAN')] };
 const rantingOrKec = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
@@ -46,8 +47,8 @@ export async function districtRoutes(fastify: FastifyInstance) {
       }).returning();
 
       return sendSuccess(reply, newBranch);
-    } catch (error: any) {
-      if (error.code === '23505') {
+    } catch (error: unknown) {
+      if (isPostgresError(error) && error.code === '23505') {
         return reply.status(400).send({
           success: false,
           error: { code: 'DUPLICATE_CODE', message: 'Kode ranting sudah digunakan' }
