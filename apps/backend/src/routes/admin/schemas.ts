@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+const optionalAddressSchema = z.string().optional().nullable().transform((value) => value?.trim() ?? '');
+
 export const createCanSchema = z.object({
   owner_name: z.string().min(1).max(100),
   owner_whatsapp: z.string().min(10).max(20),
@@ -9,7 +11,7 @@ export const createCanSchema = z.object({
   rw: z.string().max(10).optional().nullable(),
   qr_code: z.string().optional().nullable(),
   owner_phone: z.string().optional().nullable(),
-  owner_address: z.string().optional().nullable(),
+  owner_address: optionalAddressSchema,
   latitude: z.number().optional().nullable(),
   longitude: z.number().optional().nullable(),
   location_notes: z.string().optional().nullable(),

@@ -6,9 +6,9 @@ CREATE OR REPLACE RULE disable_delete_koleksi AS
 ON DELETE TO collections 
 DO INSTEAD NOTHING;
 
--- Rule 2: Prevent UPDATE on collections that change nominal/amount directly
--- (Only allows updates to is_latest to false, sync_status, etc)
+-- Rule 2: Prevent UPDATE on collections that change nominal directly
+-- Re-submit corrections must INSERT a new row; latest is MAX(submit_sequence).
 CREATE OR REPLACE RULE disable_update_nominal_koleksi AS 
 ON UPDATE TO collections 
-WHERE NEW.amount <> OLD.amount
+WHERE NEW.nominal <> OLD.nominal
 DO INSTEAD NOTHING;

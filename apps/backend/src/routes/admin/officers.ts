@@ -10,6 +10,7 @@ import { createOfficerSchema, updateOfficerSchema } from './schemas';
 import { z } from 'zod';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import { isPostgresError } from '../../utils/error-guards';
 
 const rantingOrKec = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
 
@@ -114,13 +115,13 @@ export async function officersRoutes(fastify: FastifyInstance) {
       });
       
       return sendSuccess(reply, insertedOfficer, 201);
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof z.ZodError) {
         return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
       }
       
       // Handle Unique Constraint Violations (Postgres 23505)
-      if (error.code === '23505') {
+      if (isPostgresError(error) && error.code === '23505') {
         const detail = error.detail || '';
         let message = 'Data petugas sudah terdaftar';
         

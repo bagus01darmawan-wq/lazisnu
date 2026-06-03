@@ -10,6 +10,7 @@ import { generateTokens } from '../middleware/auth';
 import { otpService } from '../services/otp';
 import { redisConnection } from '../config/redis';
 import { ApiResponse, User } from '@lazisnu/shared-types';
+import { isJwtErrorLike } from '../utils/error-guards';
 
 // Request schemas
 const loginSchema = z.object({
@@ -123,7 +124,7 @@ export async function authRoutes(fastify: FastifyInstance) {
           },
         },
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof z.ZodError) {
         return reply.status(400).send({
           success: false,
@@ -212,7 +213,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         message: 'OTP dikirim ke WhatsApp',
         expires_in: 300,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof z.ZodError) {
         return reply.status(400).send({
           success: false,
@@ -312,7 +313,7 @@ export async function authRoutes(fastify: FastifyInstance) {
           },
         },
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof z.ZodError) {
         return reply.status(400).send({
           success: false,
@@ -502,8 +503,8 @@ export async function authRoutes(fastify: FastifyInstance) {
       };
 
       return reply.send(responseData);
-    } catch (error: any) {
-      if (error.statusCode === 401 || error.code?.includes('JWT')) {
+    } catch (error: unknown) {
+      if (isJwtErrorLike(error) && (error.statusCode === 401 || error.code?.includes('JWT'))) {
         return reply.status(401).send({ success: false, error: { code: 'UNAUTHORIZED', message: 'Token tidak valid atau expired' } });
       }
       fastify.log.error(error);

@@ -1,4 +1,6 @@
 // Security Service - Lazisnu Collector App
+
+import { getErrorMessage } from '../utils/error';
 // Menangani fungsi keamanan Native seperti Google Play Integrity API
 
 /**
@@ -23,11 +25,11 @@ export const playIntegrityService = {
         success: true,
         token: `stub_integrity_token_${nonce}_${Date.now()}`,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[Security] Gagal meminta token integrity:', error);
       return {
         success: false,
-        error: error.message || 'Unknown error during integrity check',
+        error: getErrorMessage(error, 'Unknown error during integrity check'),
       };
     }
   },
