@@ -63,7 +63,7 @@ pnpm --filter lazisnu-backend migrate
 
 Perintah `migrate` menjalankan dua tahap:
 
-1. `migrate:baseline` mengecek apakah database sudah punya schema Lazisnu dari workflow lama (`drizzle-kit push` + SQL manual) tetapi belum punya row migration Drizzle. Jika iya, script ini hanya melakukan backfill metadata migration sampai `0003_collection_query_indexes` supaya `drizzle-kit migrate` tidak mencoba membuat ulang tabel yang sudah ada.
+1. `migrate:baseline` mengecek apakah database sudah punya schema Lazisnu lengkap setelah `0003_collection_query_indexes` dari workflow lama (`drizzle-kit push` + SQL manual) tetapi belum punya row migration Drizzle. Validasi ini mencakup tabel/kolom penting seperti `dukuhs`, `cans.dukuh_id`, `cans.owner_whatsapp`, `collections.nominal`, constraint, dan index query collection. Jika lengkap, script ini hanya melakukan backfill metadata migration sampai `0003_collection_query_indexes` supaya `drizzle-kit migrate` tidak mencoba membuat ulang tabel yang sudah ada.
 2. `drizzle-kit migrate` menjalankan migration journal yang lebih baru, termasuk repair forward-only seperti `0004_reapply_collection_immutable_rule`.
 
 Untuk database kosong, baseline tidak mengisi row apa pun sehingga semua migration `0000` dan seterusnya tetap berjalan normal. Untuk database yang bentuknya tidak dikenali, baseline akan berhenti daripada menebak dan berisiko melewati migration yang masih dibutuhkan.
