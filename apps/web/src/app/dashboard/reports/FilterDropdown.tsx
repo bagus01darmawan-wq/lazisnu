@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, RotateCcw } from 'lucide-react';
 import api from '@/lib/api';
@@ -82,12 +82,14 @@ export default function FilterDropdown() {
     setSearchTerm(e.target.value);
   };
 
+  const officersById = useMemo(() => new Map(officers.map((officer) => [officer.id, officer])), [officers]);
+
   const handleFilterChange = (type: string, value: string) => {
     const updates: Record<string, string> = { [type]: value };
 
     if (type === 'branch' && value) {
       updates['branch'] = value;
-      const currentOfficerData = officers.find(o => o.id === currentOfficer);
+      const currentOfficerData = officersById.get(currentOfficer);
       const officerBranchId = currentOfficerData?.branch_id || currentOfficerData?.branchId;
       if (officerBranchId !== value) {
         updates['officer'] = ''; // Clear officer if branch mismatch
@@ -95,7 +97,7 @@ export default function FilterDropdown() {
     }
 
     if (type === 'officer' && value) {
-      const selectedOfficer = officers.find(o => o.id === value);
+      const selectedOfficer = officersById.get(value);
       const officerBranchId = selectedOfficer?.branch_id || selectedOfficer?.branchId;
       if (officerBranchId) {
         updates['branch'] = officerBranchId; // Auto-select branch
