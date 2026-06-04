@@ -133,7 +133,9 @@ export const collections = pgTable('collections', {
   alasanResubmit: text('alasan_resubmit'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (t) => ({
+  collectionVersionUnq: uniqueIndex('collection_assignment_can_sequence_unq').on(t.assignmentId, t.canId, t.submitSequence),
+}));
 
 // Notifications
 export const notifications = pgTable('notifications', {
