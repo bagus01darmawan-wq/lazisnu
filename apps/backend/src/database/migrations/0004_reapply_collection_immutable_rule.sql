@@ -29,3 +29,10 @@ WHERE
   NEW.created_at IS DISTINCT FROM OLD.created_at OR
   NEW.updated_at IS DISTINCT FROM OLD.updated_at
 DO INSTEAD NOTHING;
+
+-- Re-apply delete immutability as a journaled forward migration too.
+-- Older manual workflows created this rule outside Drizzle, so journaled
+-- migrate must be able to repair databases where deletes are still allowed.
+CREATE OR REPLACE RULE disable_delete_koleksi AS
+ON DELETE TO collections
+DO INSTEAD NOTHING;

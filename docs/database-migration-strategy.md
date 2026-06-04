@@ -55,11 +55,18 @@ DO INSTEAD NOTHING;
 
 ### 4. Jalankan migration
 
-Production/staging harus memakai migration journal Drizzle agar file SQL custom yang sudah direview ikut dieksekusi dan tercatat di `__drizzle_migrations`:
+Production/staging harus memakai migration journal Drizzle agar file SQL custom yang sudah direview ikut dieksekusi dan tercatat di `drizzle.__drizzle_migrations`:
 
 ```bash
 pnpm --filter lazisnu-backend migrate
 ```
+
+Perintah `migrate` menjalankan dua tahap:
+
+1. `migrate:baseline` mengecek apakah database sudah punya schema Lazisnu dari workflow lama (`drizzle-kit push` + SQL manual) tetapi belum punya row migration Drizzle. Jika iya, script ini hanya melakukan backfill metadata migration sampai `0003_collection_query_indexes` supaya `drizzle-kit migrate` tidak mencoba membuat ulang tabel yang sudah ada.
+2. `drizzle-kit migrate` menjalankan migration journal yang lebih baru, termasuk repair forward-only seperti `0004_reapply_collection_immutable_rule`.
+
+Untuk database kosong, baseline tidak mengisi row apa pun sehingga semua migration `0000` dan seterusnya tetap berjalan normal. Untuk database yang bentuknya tidak dikenali, baseline akan berhenti daripada menebak dan berisiko melewati migration yang masih dibutuhkan.
 
 Untuk development lokal yang memang butuh sinkronisasi cepat dan sadar risikonya, gunakan Drizzle push secara eksplisit:
 
@@ -102,7 +109,8 @@ DO INSTEAD NOTHING;
 | `manual_migrate.ts` | Emergency/dev only | Untuk re-apply rule tertentu secara manual. Jangan jadi workflow utama production. |
 | `reset.ts` | Local development only | Melakukan `DROP SCHEMA public CASCADE`; dilarang untuk staging/production. |
 | `drizzle-kit generate` | Recommended | Membuat migration dari `schema.ts`. |
-| `drizzle-kit migrate` | Recommended production/staging | Membaca `meta/_journal.json`, menjalankan SQL migration berurutan, dan mencatatnya di `__drizzle_migrations`. |
+| `migrate:baseline` | One-time production/staging safety step | Backfill row migration Drizzle sampai `0003` hanya untuk database lama yang schema-nya sudah ada tetapi belum punya `drizzle.__drizzle_migrations`; tidak mengubah data transaksi `collections`. |
+| `drizzle-kit migrate` | Recommended production/staging | Membaca `meta/_journal.json`, menjalankan SQL migration berurutan, dan mencatatnya di `drizzle.__drizzle_migrations`. |
 | `drizzle-kit push` | Dev/local only | Sinkronisasi cepat tanpa review migration dan tidak menjalankan custom SQL migration journal; jangan dipakai di production untuk perubahan auditable. |
 
 ## Collections Immutability
