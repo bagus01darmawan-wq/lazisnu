@@ -30,6 +30,12 @@ const verifyOTPSchema = z.object({
 export async function authRoutes(fastify: FastifyInstance) {
   // POST /auth/login
   fastify.post('/login', {
+    config: {
+      rateLimit: {
+        max: 5,
+        timeWindow: '1 minute',
+      },
+    },
     schema: {
       tags: ['Auth'],
       summary: 'Login dengan nomor HP atau email dan password',

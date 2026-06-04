@@ -6,7 +6,15 @@ import { sendSuccess, sendError, sendInternalError } from '../../utils/response'
 import { resubmitCollectionSchema } from './schemas';
 import { resubmitCollection } from '../../services/collectionSubmission';
 
-const canResubmit = { preHandler: [authorize('BENDAHARA', 'ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
+const canResubmit = {
+  config: {
+    rateLimit: {
+      max: 10,
+      timeWindow: '1 minute',
+    },
+  },
+  preHandler: [authorize('BENDAHARA', 'ADMIN_RANTING', 'ADMIN_KECAMATAN')],
+};
 
 export async function collectionsRoutes(fastify: FastifyInstance) {
   fastify.post('/collections/:id/resubmit', canResubmit, async (request: FastifyRequest, reply: FastifyReply) => {

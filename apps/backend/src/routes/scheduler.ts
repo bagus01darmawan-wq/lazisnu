@@ -16,10 +16,17 @@ const generateTasksSchema = z.object({
 });
 
 export async function schedulerRoutes(fastify: FastifyInstance) {
-  // Internal API key guard
+  // Internal API key guard. Fail closed: if no key is configured, do not run internal jobs.
   fastify.addHook('preHandler', async (request, reply) => {
+    const expectedApiKey = config.INTERNAL_API_KEY;
     const apiKey = request.headers['x-internal-api-key'];
-    if (config.INTERNAL_API_KEY && apiKey !== config.INTERNAL_API_KEY) {
+
+    if (!expectedApiKey) {
+      request.log.error('INTERNAL_API_KEY is not configured; scheduler route is disabled');
+      return sendError(reply, 503, 'INTERNAL_API_KEY_NOT_CONFIGURED', 'Scheduler internal API key belum dikonfigurasi');
+    }
+
+    if (apiKey !== expectedApiKey) {
       return sendError(reply, 403, 'FORBIDDEN', 'Internal API key tidak valid');
     }
   });

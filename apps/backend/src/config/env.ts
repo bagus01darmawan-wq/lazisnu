@@ -48,7 +48,17 @@ const envSchema = z.object({
   PLAY_INTEGRITY_KEY: z.string().optional(),
 
   // Internal API Key (for scheduler/internal routes)
-  INTERNAL_API_KEY: z.string().optional(),
+  // Required outside development/test so scheduler endpoints fail closed in deployed environments.
+  INTERNAL_API_KEY: z.string()
+    .min(32, 'INTERNAL_API_KEY minimal 32 karakter')
+    .optional()
+    .refine(
+      (val) => {
+        if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') return true;
+        return Boolean(val);
+      },
+      { message: 'INTERNAL_API_KEY wajib diisi di production/staging' }
+    ),
 
   // APP Secret for QR Signing
   APP_SECRET: z.string()

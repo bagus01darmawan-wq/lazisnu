@@ -32,6 +32,12 @@ export async function buildApp() {
   await server.register(rateLimit, {
     max: 100,
     timeWindow: '1 minute',
+    errorResponseBuilder: (_request, context) => {
+      const error = new Error(`Terlalu banyak request. Coba lagi dalam ${context.after}.`);
+      (error as Error & { statusCode?: number; code?: string }).statusCode = context.ban ? 403 : 429;
+      (error as Error & { statusCode?: number; code?: string }).code = 'RATE_LIMITED';
+      return error;
+    },
   });
 
   if (config.NODE_ENV !== 'production' && config.NODE_ENV !== 'test') {
