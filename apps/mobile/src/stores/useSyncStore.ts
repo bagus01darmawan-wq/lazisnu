@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { offlineQueue } from '../services/offline/queue';
 import { syncService } from '../services/offline/sync';
+import { getErrorMessage } from '../utils/error';
 
 interface SyncState {
   pendingCount: number;
@@ -55,8 +56,8 @@ export const useSyncStore = create<SyncState>((set) => ({
       });
 
       return { success: result.synced, failed: result.failed };
-    } catch (error: any) {
-      set({ isSyncing: false, error: error.message, progress: 0 });
+    } catch (error: unknown) {
+      set({ isSyncing: false, error: getErrorMessage(error, 'Sinkronisasi gagal'), progress: 0 });
       return { success: 0, failed: 0 };
     }
   },

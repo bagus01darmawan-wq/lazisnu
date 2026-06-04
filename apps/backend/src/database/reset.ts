@@ -3,6 +3,11 @@ import { db } from '../config/database';
 import { sql } from 'drizzle-orm';
 
 async function resetDatabase() {
+  if (process.env.NODE_ENV === 'production' || process.env.CONFIRM_RESET_PUBLIC_SCHEMA !== 'YES') {
+    console.error('Refusing to reset database. Set CONFIRM_RESET_PUBLIC_SCHEMA=YES in a non-production environment.');
+    process.exit(1);
+  }
+
   console.log('Resetting public schema...');
   try {
     await db.execute(sql`DROP SCHEMA public CASCADE;`);

@@ -26,6 +26,27 @@ describe('createCanSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('menormalisasi owner_address kosong menjadi string kosong', () => {
+    const result = createCanSchema.safeParse(validBody);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.owner_address).toBe('');
+    }
+  });
+
+  it('menormalisasi owner_address null menjadi string kosong', () => {
+    const result = createCanSchema.safeParse({
+      ...validBody,
+      owner_address: null,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.owner_address).toBe('');
+    }
+  });
+
   it('menerima branch_id kosong (string kosong di-preprocess jadi undefined)', () => {
     const result = createCanSchema.safeParse({
       ...validBody,

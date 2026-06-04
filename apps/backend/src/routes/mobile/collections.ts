@@ -1,13 +1,14 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { z } from 'zod';
 import { sendWhatsAppNotification } from '../../services/whatsapp';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { collectionSchema, resubmitSchema } from './schemas';
 
-import { validateAssignmentForSubmit, submitCollection, getLatestCollectionCondition } from '../../services/collectionSubmission';
+import { validateAssignmentForSubmit, submitCollection, getLatestCollectionCondition, resubmitCollection } from '../../services/collectionSubmission';
+import { getErrorMessage, isHttpRouteError, isPostgresError } from '../../utils/error-guards';
 
 export async function collectionsRoutes(fastify: FastifyInstance) {
   const latestCollectionCondition = getLatestCollectionCondition();
@@ -37,11 +38,12 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
       const result = await db.transaction(async (tx) => {
         try {
           await validateAssignmentForSubmit(tx, body.assignment_id, body.can_id, officerId);
-        } catch (err: any) {
-          if (err.message.includes('can_id')) {
-            throw { status: 400, code: 'MISMATCH', message: err.message };
+        } catch (err: unknown) {
+          const message = getErrorMessage(err, 'Assignment tidak valid');
+          if (message.includes('can_id')) {
+            throw { status: 400, code: 'MISMATCH', message };
           }
-          throw { status: 403, code: 'FORBIDDEN', message: err.message };
+          throw { status: 403, code: 'FORBIDDEN', message };
         }
 
         return await submitCollection(tx, {
@@ -85,9 +87,12 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
         whatsapp_status: whatsappStatus,
         message: 'Penjemputan berhasil disimpan',
       }, 201);
-    } catch (error: any) {
-      if (error.status) return sendError(reply, error.status, error.code, error.message);
-      if (error.code === '23505') {
+    } catch (error: unknown) {
+      if (isHttpRouteError(error)) return sendError(reply, error.status, error.code, error.message);
+      if (error instanceof Error && error.message === 'QR_ALREADY_SUBMITTED') {
+        return sendError(reply, 409, 'QR_ALREADY_SUBMITTED', 'Kaleng ini sudah pernah di-submit untuk assignment ini');
+      }
+      if (isPostgresError(error) && error.code === '23505') {
         return sendSuccess(reply, {
           sync_status: 'ALREADY_SYNCED',
           message: 'Data sudah pernah di-submit',
@@ -166,52 +171,28 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
 
       if (!officerId) return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
 
-      const oldCollection = await db.query.collections.findFirst({
-        where: and(eq(schema.collections.id, id), eq(schema.collections.officerId, officerId)),
-        with: { can: true }
-      });
-
-      if (!oldCollection) return sendError(reply, 404, 'NOT_FOUND', 'Data perolehan tidak ditemukan');
-
-      // Check if this ID is indeed the latest version for this assignment
-      const [latestRecord] = await db.select({ maxSeq: sql<number>`max(${schema.collections.submitSequence})` })
-        .from(schema.collections)
-        .where(and(
-          eq(schema.collections.assignmentId, oldCollection.assignmentId),
-          eq(schema.collections.canId, oldCollection.canId)
-        ));
-
-      if (oldCollection.submitSequence !== Number(latestRecord?.maxSeq || 0)) {
-        return sendError(reply, 400, 'NOT_LATEST', 'Hanya record terbaru yang bisa di-resubmit');
-      }
-
-      const newCollection = await db.transaction(async (tx) => {
-        // NOTE: Table collections is STRICTLY IMMUTABLE. No UPDATE or DELETE allowed.
-
-        const inserted = await tx.insert(schema.collections).values({
-          assignmentId: oldCollection.assignmentId,
-          canId: oldCollection.canId,
-          officerId: oldCollection.officerId,
-          nominal: BigInt(body.nominal),
+      const { oldCollection, newCollection } = await db.transaction(async (tx) => {
+        const result = await resubmitCollection(tx, {
+          collectionId: id,
+          nominal: body.nominal,
           paymentMethod: body.payment_method,
-          collectedAt: oldCollection.collectedAt,
-          submittedAt: new Date(),
-          syncedAt: new Date(),
-          syncStatus: 'COMPLETED',
-          serverTimestamp: new Date(),
-          submitSequence: oldCollection.submitSequence + 1,
           alasanResubmit: body.alasan_resubmit,
-          deviceInfo: oldCollection.deviceInfo,
-          latitude: oldCollection.latitude,
-          longitude: oldCollection.longitude,
-        }).returning();
+          requiredOfficerId: officerId,
+        });
 
-        await tx.update(schema.cans).set({
-          totalCollected: sql`${schema.cans.totalCollected} - ${oldCollection.nominal} + ${BigInt(body.nominal)}`,
-          updatedAt: new Date()
-        }).where(eq(schema.cans.id, oldCollection.canId));
+        await tx.insert(schema.activityLogs).values({
+          userId: user.userId,
+          officerId,
+          actionType: 'RESUBMIT_COLLECTION',
+          entityType: 'collections',
+          entityId: result.newCollection.id,
+          oldData: result.oldCollection as any,
+          newData: result.newCollection as any,
+          ipAddress: request.ip,
+          userAgent: request.headers['user-agent'],
+        });
 
-        return inserted[0];
+        return result;
       });
 
       let whatsappStatus = 'SKIPPED';
@@ -238,8 +219,14 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
         whatsapp_status: whatsappStatus,
         message: 'Koreksi data berhasil disimpan',
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof z.ZodError) return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+      if (error instanceof Error && error.message === 'COLLECTION_NOT_FOUND') {
+        return sendError(reply, 404, 'NOT_FOUND', 'Data perolehan tidak ditemukan');
+      }
+      if (error instanceof Error && error.message === 'NOT_LATEST') {
+        return sendError(reply, 400, 'NOT_LATEST', 'Hanya record terbaru yang bisa di-resubmit');
+      }
       return sendInternalError(reply, error, fastify.log);
     }
   });

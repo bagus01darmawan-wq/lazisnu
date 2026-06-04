@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, boolean, decimal, integer, json, pgEnum, uniqueIndex, bigint } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, boolean, decimal, integer, json, pgEnum, uniqueIndex, index, bigint } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 
 // Enums
@@ -133,7 +133,10 @@ export const collections = pgTable('collections', {
   alasanResubmit: text('alasan_resubmit'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (t) => ({
+  collectionVersionUnq: uniqueIndex('collection_assignment_can_sequence_unq').on(t.assignmentId, t.canId, t.submitSequence),
+  collectionsOfficerStatusCollectedIdx: index('collections_officer_status_collected_idx').on(t.officerId, t.syncStatus, t.collectedAt),
+}));
 
 // Notifications
 export const notifications = pgTable('notifications', {

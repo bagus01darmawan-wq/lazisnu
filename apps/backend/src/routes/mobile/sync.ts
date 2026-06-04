@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { batchCollectionSchema } from './schemas';
 import { validateAssignmentForSubmit, submitCollection } from '../../services/collectionSubmission';
+import { getErrorMessage } from '../../utils/error-guards';
 
 export async function syncRoutes(fastify: FastifyInstance) {
   // POST /mobile/collections/batch (offline sync)
@@ -52,7 +53,7 @@ export async function syncRoutes(fastify: FastifyInstance) {
           results.push({ offline_id: item.offline_id, server_id: collection.id, status: 'COMPLETED' });
           succeeded++;
         } catch (err) {
-          const errorMessage = (err as Error).message;
+          const errorMessage = getErrorMessage(err, 'Gagal sinkronisasi koleksi');
           const isValidationError =
             errorMessage.includes('tidak valid') ||
             errorMessage.includes('tidak sesuai') ||
@@ -61,6 +62,7 @@ export async function syncRoutes(fastify: FastifyInstance) {
             errorMessage.includes('tidak ditemukan') ||
             errorMessage.includes('Tidak dapat') ||
             errorMessage.includes('duplicate') ||
+            errorMessage.includes('QR_ALREADY_SUBMITTED') ||
             err instanceof z.ZodError;
 
           results.push({
@@ -80,7 +82,7 @@ export async function syncRoutes(fastify: FastifyInstance) {
       }
 
       return sendSuccess(reply, { total: body.collections.length, succeeded, failed, results });
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof z.ZodError) return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid');
       return sendInternalError(reply, error, fastify.log);
     }

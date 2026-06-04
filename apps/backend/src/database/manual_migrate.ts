@@ -6,6 +6,7 @@ async function main() {
   const sql = postgres(connectionString);
 
   console.log('🚀 Starting manual migration...');
+  console.warn('⚠️ manual_migrate.ts is for emergency/dev-only rule repair. Prefer official migrations for normal schema changes.');
 
   try {
     // 1. Apply Immutability Rules

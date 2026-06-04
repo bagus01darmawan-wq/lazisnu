@@ -9,8 +9,23 @@ type Transaction = PgTransaction<
   ExtractTablesWithRelations<typeof schema>
 >;
 
+type PaymentMethod = 'CASH' | 'TRANSFER';
+
+type ResubmitCollectionInput = {
+  collectionId: string;
+  nominal: number;
+  alasanResubmit: string;
+  paymentMethod?: PaymentMethod;
+  requiredOfficerId?: string;
+  requiredBranchId?: string;
+};
+
 /**
- * Mendapatkan subquery condition untuk mencari koleksi dengan submit_sequence tertinggi (is_latest=true)
+ * Latest collection policy:
+ * - collections are immutable financial records;
+ * - correction/resubmit MUST INSERT a new row;
+ * - the current/latest row is the row with MAX(submit_sequence)
+ *   for the same assignment_id + can_id pair.
  */
 export function getLatestCollectionCondition() {
   const c2 = alias(schema.collections, 'c2');
@@ -26,7 +41,7 @@ export function getLatestCollectionCondition() {
 }
 
 /**
- * Validasi apakah assignment aktif, valid, dan dimiliki oleh officer
+ * Validasi apakah assignment aktif, valid, dan dimiliki oleh officer.
  */
 export async function validateAssignmentForSubmit(
   tx: Transaction,
@@ -48,12 +63,35 @@ export async function validateAssignmentForSubmit(
   if (assignment.canId !== canId) {
     throw new Error('can_id tidak sesuai dengan assignment');
   }
-  
+
   return assignment;
 }
 
+async function assertNoExistingFirstSubmit(
+  tx: Transaction,
+  assignmentId: string,
+  canId: string
+) {
+  const existing = await tx.query.collections.findFirst({
+    where: and(
+      eq(schema.collections.assignmentId, assignmentId),
+      eq(schema.collections.canId, canId),
+      eq(schema.collections.submitSequence, 1)
+    ),
+    columns: { id: true },
+  });
+
+  if (existing) {
+    throw new Error('QR_ALREADY_SUBMITTED');
+  }
+}
+
 /**
- * Melakukan submit koleksi infaq (insert collection + update assignment + update can)
+ * Melakukan submit koleksi pertama (insert collection + update assignment + update can).
+ *
+ * Catatan: submit pertama selalu submit_sequence = 1. Koreksi/resubmit tidak boleh
+ * memakai fungsi ini; gunakan resubmitCollection() agar sequence dan audit nominal
+ * tetap konsisten.
  */
 export async function submitCollection(
   tx: Transaction,
@@ -62,7 +100,7 @@ export async function submitCollection(
     canId: string;
     officerId: string;
     nominal: number;
-    paymentMethod: 'CASH' | 'TRANSFER';
+    paymentMethod: PaymentMethod;
     transferReceiptUrl?: string | null;
     collectedAt: Date;
     latitude?: string | null;
@@ -71,6 +109,8 @@ export async function submitCollection(
     deviceInfo?: any;
   }
 ) {
+  await assertNoExistingFirstSubmit(tx, data.assignmentId, data.canId);
+
   const [collection] = await tx.insert(schema.collections).values({
     assignmentId: data.assignmentId,
     canId: data.canId,
@@ -87,6 +127,7 @@ export async function submitCollection(
     latitude: data.latitude,
     longitude: data.longitude,
     offlineId: data.offlineId,
+    submitSequence: 1,
   }).returning();
 
   await tx.update(schema.assignments)
@@ -100,4 +141,71 @@ export async function submitCollection(
   }).where(eq(schema.cans.id, data.canId));
 
   return collection;
+}
+
+/**
+ * Melakukan koreksi koleksi secara immutable: insert versi baru dengan
+ * submit_sequence + 1 lalu update agregat kaleng berdasarkan selisih nominal.
+ */
+export async function resubmitCollection(
+  tx: Transaction,
+  input: ResubmitCollectionInput
+) {
+  const oldCollection = await tx.query.collections.findFirst({
+    where: eq(schema.collections.id, input.collectionId),
+    with: { can: true },
+  });
+
+  if (!oldCollection) {
+    throw new Error('COLLECTION_NOT_FOUND');
+  }
+
+  if (input.requiredOfficerId && oldCollection.officerId !== input.requiredOfficerId) {
+    throw new Error('COLLECTION_NOT_FOUND');
+  }
+
+  if (input.requiredBranchId && oldCollection.can?.branchId !== input.requiredBranchId) {
+    throw new Error('FORBIDDEN');
+  }
+
+  const [latestRecord] = await tx.select({ maxSeq: sql<number>`max(${schema.collections.submitSequence})` })
+    .from(schema.collections)
+    .where(and(
+      eq(schema.collections.assignmentId, oldCollection.assignmentId),
+      eq(schema.collections.canId, oldCollection.canId)
+    ));
+
+  const latestSequence = Number(latestRecord?.maxSeq || 0);
+  if (oldCollection.submitSequence !== latestSequence) {
+    throw new Error('NOT_LATEST');
+  }
+
+  const nextSequence = latestSequence + 1;
+  const newNominal = BigInt(input.nominal);
+  const [newCollection] = await tx.insert(schema.collections).values({
+    assignmentId: oldCollection.assignmentId,
+    canId: oldCollection.canId,
+    officerId: oldCollection.officerId,
+    nominal: newNominal,
+    paymentMethod: input.paymentMethod ?? oldCollection.paymentMethod,
+    collectedAt: oldCollection.collectedAt,
+    submittedAt: new Date(),
+    syncedAt: new Date(),
+    syncStatus: 'COMPLETED',
+    serverTimestamp: new Date(),
+    submitSequence: nextSequence,
+    alasanResubmit: input.alasanResubmit,
+    deviceInfo: oldCollection.deviceInfo,
+    latitude: oldCollection.latitude,
+    longitude: oldCollection.longitude,
+    offlineId: oldCollection.offlineId ? `${oldCollection.offlineId}-rev-${nextSequence}` : null,
+  }).returning();
+
+  const diff = newNominal - oldCollection.nominal;
+  await tx.update(schema.cans).set({
+    totalCollected: sql`${schema.cans.totalCollected} + ${diff}`,
+    updatedAt: new Date()
+  }).where(eq(schema.cans.id, oldCollection.canId));
+
+  return { oldCollection, newCollection };
 }
