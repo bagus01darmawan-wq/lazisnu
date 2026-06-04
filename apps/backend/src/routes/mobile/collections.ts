@@ -162,7 +162,14 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
   });
 
   // POST /mobile/collections/:id/resubmit
-  fastify.post('/collections/:id/resubmit', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/collections/:id/resubmit', {
+    config: {
+      rateLimit: {
+        max: 10,
+        timeWindow: '1 minute',
+      },
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
       const body = resubmitSchema.parse(request.body);
