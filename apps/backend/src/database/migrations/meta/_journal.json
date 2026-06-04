@@ -15,6 +15,27 @@
       "when": 1777651747595,
       "tag": "0001_long_blur",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777651747596,
+      "tag": "0002_collection_version_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1777651747597,
+      "tag": "0003_collection_query_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1780576615692,
+      "tag": "0004_reapply_collection_immutable_rule",
+      "breakpoints": true
     }
   ]
 }

@@ -55,17 +55,21 @@ DO INSTEAD NOTHING;
 
 ### 4. Jalankan migration
 
-Kondisi repo saat ini masih memiliki migration legacy/manual dengan penomoran yang belum sepenuhnya rapi. Karena itu, untuk production/staging, jalankan SQL migration yang sudah direview dari folder migrations sesuai urutan yang disepakati.
-
-Untuk development lokal yang memang butuh sinkronisasi cepat dan sadar risikonya, script saat ini masih memakai Drizzle push:
+Production/staging harus memakai migration journal Drizzle agar file SQL custom yang sudah direview ikut dieksekusi dan tercatat di `__drizzle_migrations`:
 
 ```bash
 pnpm --filter lazisnu-backend migrate
-# atau
-pnpm --filter lazisnu-backend db:push
 ```
 
-Target jangka menengah: rapikan legacy migration journal agar production bisa memakai `drizzle-kit migrate` sebagai workflow utama.
+Untuk development lokal yang memang butuh sinkronisasi cepat dan sadar risikonya, gunakan Drizzle push secara eksplisit:
+
+```bash
+pnpm --filter lazisnu-backend db:push
+# atau
+pnpm --filter lazisnu-backend migrate:push
+```
+
+Catatan penting: custom PostgreSQL SQL seperti `CREATE RULE` tidak berasal dari diff schema otomatis, jadi file tersebut harus terdaftar di `src/database/migrations/meta/_journal.json`. Tanpa entry journal, `drizzle-kit migrate` tidak akan membaca atau mencatat file SQL itu.
 
 ## Rollback Strategy
 
@@ -98,8 +102,8 @@ DO INSTEAD NOTHING;
 | `manual_migrate.ts` | Emergency/dev only | Untuk re-apply rule tertentu secara manual. Jangan jadi workflow utama production. |
 | `reset.ts` | Local development only | Melakukan `DROP SCHEMA public CASCADE`; dilarang untuk staging/production. |
 | `drizzle-kit generate` | Recommended | Membuat migration dari `schema.ts`. |
-| `drizzle-kit migrate` | Target recommended | Perlu perapihan legacy migration journal sebelum menjadi workflow utama production. |
-| `drizzle-kit push` | Dev/local only | Sinkronisasi cepat tanpa review migration; jangan dipakai sembarangan di production. |
+| `drizzle-kit migrate` | Recommended production/staging | Membaca `meta/_journal.json`, menjalankan SQL migration berurutan, dan mencatatnya di `__drizzle_migrations`. |
+| `drizzle-kit push` | Dev/local only | Sinkronisasi cepat tanpa review migration dan tidak menjalankan custom SQL migration journal; jangan dipakai di production untuk perubahan auditable. |
 
 ## Collections Immutability
 

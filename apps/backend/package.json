@@ -13,11 +13,12 @@
     "test:all": "NODE_ENV=test jest --runInBand",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "migrate": "drizzle-kit push",
+    "migrate": "drizzle-kit migrate",
     "generate": "drizzle-kit generate",
     "seed": "tsx src/database/seed.ts",
     "db:push": "drizzle-kit push",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "migrate:push": "drizzle-kit push"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1034.0",
