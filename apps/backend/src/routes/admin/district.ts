@@ -46,6 +46,7 @@ export async function districtRoutes(fastify: FastifyInstance) {
         districtId: user.districtId
       }).returning();
 
+      request.auditContext = { newData: newBranch };
       return sendSuccess(reply, newBranch);
     } catch (error: unknown) {
       if (isPostgresError(error) && error.code === '23505') {
@@ -115,6 +116,7 @@ export async function districtRoutes(fastify: FastifyInstance) {
         branchId
       }).returning();
 
+      request.auditContext = { newData: newDukuh };
       return sendSuccess(reply, newDukuh);
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);

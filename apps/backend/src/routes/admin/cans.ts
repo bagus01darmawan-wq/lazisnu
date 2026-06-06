@@ -161,6 +161,7 @@ export async function cansRoutes(fastify: FastifyInstance) {
         longitude: (body.longitude !== undefined && body.longitude !== null) ? body.longitude.toString() : null,
       }).returning();
 
+      request.auditContext = { newData: inserted[0] };
       return sendSuccess(reply, inserted[0], 201);
     } catch (error: unknown) {
       fastify.log.error({ err: error }, 'Can creation error');
@@ -481,6 +482,7 @@ export async function cansRoutes(fastify: FastifyInstance) {
       });
 
       const inserted = await db.insert(schema.cans).values(toInsert).returning();
+      request.auditContext = { newData: inserted };
       return sendSuccess(reply, { count: inserted.length });
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);

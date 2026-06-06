@@ -1,0 +1,89 @@
+Saya minta kamu melakukan code review menyeluruh dan mendalam pada project monorepo saya. Jangan terburu-buru — saya mengedepankan kualitas review, bukan kecepatan. Luangkan waktu untuk membaca setiap file dan memberikan analisis yang matang.
+
+## Konteks Project
+
+Nama: Lazisnu Infaq Collection System
+Tipe: Monorepo PNPM dengan 3 app + 1 package:
+- `apps/backend` — Fastify + TypeScript + Drizzle ORM + PostgreSQL + Redis/BullMQ + Zod
+- `apps/web` — Next.js 16 App Router + React 19 + TypeScript + Tailwind CSS 4
+- `apps/mobile` — React Native (Android-first) + MMKV + offline-first
+- `packages/shared-types` — kontrak data TypeScript lintas app
+
+## Aturan Domain yang Harus Dipatuhi
+
+1. Tabel `collections` bersifat IMMUTABLE untuk data finansial. Tidak boleh UPDATE/DELETE. Koreksi pakai INSERT baru + `submitSequence++`.
+2. Backend route pakai pola: route tipis, service gemuk.
+3. Mobile Android-first, offline-first dengan `react-native-mmkv`.
+4. Notifikasi WhatsApp wajib lewat antrean BullMQ async.
+5. API contract harus konsisten antara backend, web, dan mobile.
+6. Palet warna: Deep Green `#2C473E`, Warm Beige `#F4F1EA`, Emerald `#1F8243`, Muted Sand `#EAD19B`.
+
+## Format Review yang Saya Minta
+
+### 1. Ringkasan Keseluruhan (paragraf pendek)
+- Kondisi umum project
+- Skor kasar per area (Backend, Web, Mobile, Shared Types, Database)
+
+### 2. Must Fix — Masalah yang harus dibenerin
+Untuk setiap temuan, gunakan format tabel:
+| Area | File | Masalah | Kenapa Berbahaya | Saran Perbaikan |
+
+Minimal temukan 3, maksimal 7 issue agar fokus.
+
+### 3. Should Improve — Perbaikan yang disarankan
+Untuk setiap saran, format:
+| Area | File | Saran | Manfaat |
+
+### 4. What Looks Good — Hal yang sudah benar
+Sebutkan minimal 5 hal yang sudah baik. Ini penting agar saya tahu apa yang tidak perlu diubah.
+
+### 5. Analisis Per File Penting
+Pilih 3-5 file paling kritis dan beri catatan mendalam:
+- Fungsi file tersebut
+- Alur data di dalamnya
+- Ketergantungan (dependency) dengan file lain
+- Potensi bug atau edge case
+- Saran konkret
+
+### 6. Konsistensi Kontrak Data
+- Bandingkan shared types dengan schema database — apakah ada field yang hilang atau berlebih?
+- Apakah response API di semua endpoint konsisten formatnya (`{ success, data?, error? }`)?
+
+### 7. Security Checklist
+- Auth: apakah semua endpoint sudah diproteksi?
+- Role-based access: apakah scope filtering ada di setiap route yang perlu?
+- Input validation: apakah semua input dari client sudah divalidasi dengan Zod?
+- Credential: apakah ada hardcoded secret, API key, atau password di kode?
+
+### 8. Arsitektur & Tech Debt
+- Apakah ada duplikasi logika di dua tempat atau lebih?
+- Apakah ada file yang terlalu besar (>200 baris)?
+- Apakah ada dependency yang tidak terpakai di package.json?
+- Apakah ada tipe `any` yang seharusnya bisa diganti dengan tipe konkret?
+
+### 9. Mobile Offline-first Assessment
+- Apakah mekanisme sync sudah robust?
+- Apakah deduplikasi data antar device dan server sudah dihandle?
+- Apakah error handling di mobile membedakan error sementara vs permanen?
+
+### 10. Rekomendasi Prioritas
+Urutkan 5 hal yang harus dikerjakan terlebih dahulu. Untuk setiap item, sebutkan:
+- Estimasi effort (kecil / sedang / besar)
+- Risiko jika tidak dikerjakan
+- File-file yang terdampak
+
+### 11. Learning Checkpoint (untuk saya sebagai developer pemula)
+- 3 konsep engineering yang bisa saya pelajari dari review ini
+- 2 file yang paling penting untuk saya pahami sendiri
+- 1 latihan kecil yang bisa saya kerjakan setelah membaca review ini
+
+## Aturan Review
+
+- JANGAN memberikan komentar "terlihat baik" tanpa verifikasi. Baca kode aktual.
+- Prioritaskan correctness, security, dan konsistensi data flow backend→web→mobile.
+- JANGAN mengusulkan refactor besar tanpa alasan kuat.
+- Jika kamu ragu tentang maksud suatu kode, jangan mengarang — tandai sebagai "perlu klarifikasi".
+- Fokus pada 3-5 masalah terpenting, sisanya sebagai catatan tambahan.
+- Jelaskan setiap temuan dengan bahasa yang bisa dipahami developer pemula.
+
+Mulai review sekarang. Saya tunggu hasilnya selengkap mungkin.

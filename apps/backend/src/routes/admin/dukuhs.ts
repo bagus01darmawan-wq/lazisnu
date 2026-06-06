@@ -111,6 +111,7 @@ export async function dukuhsRoutes(fastify: FastifyInstance) {
         name: body.name.toUpperCase(),
       }).returning();
 
+      request.auditContext = { newData: inserted[0] };
       return sendSuccess(reply, inserted[0], 201);
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);

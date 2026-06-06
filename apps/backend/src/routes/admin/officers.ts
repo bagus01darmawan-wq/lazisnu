@@ -114,6 +114,7 @@ export async function officersRoutes(fastify: FastifyInstance) {
         return { insertedOfficer: newOfficer };
       });
       
+      request.auditContext = { newData: insertedOfficer };
       return sendSuccess(reply, insertedOfficer, 201);
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
