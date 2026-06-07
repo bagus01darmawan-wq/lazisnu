@@ -175,14 +175,17 @@ export async function getCollectionsList(params: {
     db.$count(schema.collections, params.whereClause),
   ]);
 
+  const items = collections.map((c) => ({
+    id: c.id, qr_code: c.can.qrCode, owner_name: c.can.ownerName,
+    owner_address: c.can.ownerAddress, nominal: Number(c.nominal),
+    payment_method: c.paymentMethod, collected_at: c.collectedAt,
+    officer_name: c.officer.fullName, officer_code: c.officer.employeeCode,
+    branch_name: c.can.branch.name, district_name: c.can.branch.district.name,
+  }));
+
   return {
-    collections: collections.map((c) => ({
-      id: c.id, qr_code: c.can.qrCode, owner_name: c.can.ownerName,
-      owner_address: c.can.ownerAddress, nominal: Number(c.nominal),
-      payment_method: c.paymentMethod, collected_at: c.collectedAt,
-      officer_name: c.officer.fullName, officer_code: c.officer.employeeCode,
-      branch_name: c.can.branch.name, district_name: c.can.branch.district.name,
-    })),
+    items,
+    collections: items,
     pagination: { page: params.page, limit: params.limit, total, total_pages: Math.ceil(total / params.limit) },
   };
 }

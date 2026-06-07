@@ -138,17 +138,21 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
         ),
       ]);
 
+      const items = collections.map((c) => ({
+        id: c.id,
+        qr_code: c.can.qrCode,
+        owner_name: c.can.ownerName,
+        owner_address: c.can.ownerAddress,
+        nominal: Number(c.nominal),
+        payment_method: c.paymentMethod,
+        collected_at: c.collectedAt,
+        sync_status: c.syncStatus,
+      }));
+
       return sendSuccess(reply, {
-        collections: collections.map((c) => ({
-          id: c.id,
-          qr_code: c.can.qrCode,
-          owner_name: c.can.ownerName,
-          owner_address: c.can.ownerAddress,
-          nominal: Number(c.nominal),
-          payment_method: c.paymentMethod,
-          collected_at: c.collectedAt,
-          sync_status: c.syncStatus,
-        })),
+        items,
+        collections: items,
+
         pagination: {
           page,
           limit,
@@ -162,7 +166,11 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
   });
 
   // POST /mobile/collections/:id/resubmit
-  fastify.post('/collections/:id/resubmit', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/collections/:id/resubmit', {
+    config: {
+      rateLimit: { max: 5, timeWindow: '1 minute' }
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
       const body = resubmitSchema.parse(request.body);

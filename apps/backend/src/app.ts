@@ -8,7 +8,6 @@ import { config } from './config/env';
 import { authRoutes } from './routes/auth';
 import { mobileRoutes } from './routes/mobile';
 import adminRoutes from './routes/admin';
-import auditRoutes from './routes/admin/audit';
 import { bendaharaRoutes } from './routes/bendahara';
 import { schedulerRoutes } from './routes/scheduler';
 import { auditLogger } from './middleware/audit-logger';
@@ -32,6 +31,15 @@ export async function buildApp() {
   await server.register(rateLimit, {
     max: 100,
     timeWindow: '1 minute',
+    errorResponseBuilder: (request, context) => {
+      return {
+        success: false,
+        error: {
+          code: 'TOO_MANY_REQUESTS',
+          message: 'Terlalu banyak permintaan, silakan coba lagi nanti',
+        }
+      };
+    }
   });
 
   if (config.NODE_ENV !== 'production' && config.NODE_ENV !== 'test') {
@@ -94,7 +102,6 @@ export async function buildApp() {
   await server.register(authRoutes, { prefix: '/v1/auth' });
   await server.register(mobileRoutes, { prefix: '/v1/mobile' });
   await server.register(adminRoutes, { prefix: '/v1/admin' });
-  await server.register(auditRoutes, { prefix: '/v1/admin' });
   await server.register(bendaharaRoutes, { prefix: '/v1/bendahara' });
   await server.register(schedulerRoutes, { prefix: '/v1/scheduler' });
 

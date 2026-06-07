@@ -32,6 +32,11 @@ jest.mock('../../config/database', () => {
     set: mockSet,
   }));
 
+  const mockValues = jest.fn().mockImplementation(async () => ({}));
+  const mockInsert = jest.fn().mockImplementation(() => ({
+    values: mockValues,
+  }));
+
   return {
     db: {
       query: {
@@ -44,6 +49,7 @@ jest.mock('../../config/database', () => {
       },
       select: mockSelect,
       update: mockUpdate,
+      insert: mockInsert,
     },
     closeDbConnection: jest.fn().mockResolvedValue(undefined),
     testConnection: jest.fn().mockResolvedValue(true),

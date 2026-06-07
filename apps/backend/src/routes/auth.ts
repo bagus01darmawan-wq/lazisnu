@@ -11,6 +11,8 @@ import { otpService } from '../services/otp';
 import { redisConnection } from '../config/redis';
 import { ApiResponse, User } from '@lazisnu/shared-types';
 import { isJwtErrorLike } from '../utils/error-guards';
+import { sendSuccess, sendError, sendInternalError } from '../utils/response';
+import { activityLogs } from '../database/schema';
 
 // Request schemas
 const loginSchema = z.object({
@@ -30,6 +32,9 @@ const verifyOTPSchema = z.object({
 export async function authRoutes(fastify: FastifyInstance) {
   // POST /auth/login
   fastify.post('/login', {
+    config: {
+      rateLimit: { max: 5, timeWindow: '1 minute' }
+    },
     schema: {
       tags: ['Auth'],
       summary: 'Login dengan nomor HP atau email dan password',
@@ -59,37 +64,33 @@ export async function authRoutes(fastify: FastifyInstance) {
       }
 
       if (!user) {
-        return reply.status(401).send({
-          success: false,
-          error: {
-            code: 'INVALID_CREDENTIALS',
-            message: 'Email/Nomor HP atau password salah',
-          },
+        await db.insert(activityLogs).values({
+          actionType: 'FAILED_LOGIN',
+          newData: { identifier: body.identifier, reason: 'USER_NOT_FOUND' },
         });
+        return sendError(reply, 401, 'INVALID_CREDENTIALS', 'Email/Nomor HP atau password salah');
       }
 
       // Verify password - Lazisnu uses Drizzle ORM (camelCase mapped)
       const isValidPassword = await bcrypt.compare(body.password, user.passwordHash);
 
       if (!isValidPassword) {
-        return reply.status(401).send({
-          success: false,
-          error: {
-            code: 'INVALID_CREDENTIALS',
-            message: 'Email/Nomor HP atau password salah',
-          },
+        await db.insert(activityLogs).values({
+          actionType: 'FAILED_LOGIN',
+          userId: user.id,
+          newData: { identifier: body.identifier, reason: 'INVALID_PASSWORD' },
         });
+        return sendError(reply, 401, 'INVALID_CREDENTIALS', 'Email/Nomor HP atau password salah');
       }
 
       // Check if user is active
       if (!user.isActive) {
-        return reply.status(403).send({
-          success: false,
-          error: {
-            code: 'ACCOUNT_DISABLED',
-            message: 'Akun Anda tidak aktif',
-          },
+        await db.insert(activityLogs).values({
+          actionType: 'FAILED_LOGIN',
+          userId: user.id,
+          newData: { identifier: body.identifier, reason: 'ACCOUNT_DISABLED' },
         });
+        return sendError(reply, 403, 'ACCOUNT_DISABLED', 'Akun Anda tidak aktif');
       }
 
       // Update last login
@@ -109,47 +110,43 @@ export async function authRoutes(fastify: FastifyInstance) {
 
       const tokens = generateTokens(payload, fastify);
 
-      return reply.send({
-        success: true,
-        data: {
-          access_token: tokens.accessToken,
-          refresh_token: tokens.refreshToken,
-          user: {
-            id: user.id,
-            email: user.email,
-            full_name: user.fullName,
-            role: user.role,
-            branch_id: user.branchId,
-            district_id: user.districtId,
-          },
+      await db.insert(activityLogs).values({
+        actionType: 'LOGIN_SUCCESS',
+        userId: user.id,
+        officerId: officer?.id || null,
+        entityType: 'auth',
+        newData: { method: 'password', identifier: body.identifier },
+        ipAddress: request.ip,
+        userAgent: request.headers['user-agent'] || null,
+      });
+
+      return sendSuccess(reply, {
+        access_token: tokens.accessToken,
+        refresh_token: tokens.refreshToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          full_name: user.fullName,
+          role: user.role,
+          branch_id: user.branchId,
+          district_id: user.districtId,
         },
       });
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return reply.status(400).send({
-          success: false,
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: 'Input tidak valid',
-            details: error.errors,
-          },
-        });
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
       }
 
-      fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: 'Terjadi kesalahan server',
-        },
-      });
+      return sendInternalError(reply, error, fastify.log);
     }
     }
   });
 
   // POST /auth/request-otp
   fastify.post('/request-otp', {
+    config: {
+      rateLimit: { max: 3, timeWindow: '1 minute' }
+    },
     schema: {
       tags: ['Auth'],
       summary: 'Request OTP via WhatsApp (untuk login petugas)',
@@ -171,8 +168,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
       if (!user) {
         // For security, don't reveal if user exists or not
-        return reply.send({
-          success: true,
+        return sendSuccess(reply, {
           message: 'OTP dikirim ke WhatsApp',
           expires_in: 300,
         });
@@ -181,26 +177,14 @@ export async function authRoutes(fastify: FastifyInstance) {
       // Check rate limit before generating
       const allowed = await otpService.checkRateLimit(body.phone);
       if (!allowed) {
-        return reply.status(429).send({
-          success: false,
-          error: {
-            code: 'RATE_LIMITED',
-            message: 'Terlalu banyak permintaan OTP. Coba lagi nanti.',
-          },
-        });
+        return sendError(reply, 429, 'RATE_LIMITED', 'Terlalu banyak permintaan OTP. Coba lagi nanti.');
       }
 
       // Generate and store OTP
       const result = await otpService.generateAndStore(body.phone);
 
       if (!result.success) {
-        return reply.status(500).send({
-          success: false,
-          error: {
-            code: 'OTP_ERROR',
-            message: 'Gagal membuat OTP',
-          },
-        });
+        return sendError(reply, 500, 'OTP_ERROR', 'Gagal membuat OTP');
       }
 
       // In production, send via WhatsApp Business API
@@ -208,35 +192,24 @@ export async function authRoutes(fastify: FastifyInstance) {
       const maskedPhone = body.phone.slice(0, 4) + '****' + body.phone.slice(-3);
       fastify.log.info({ phone: maskedPhone }, 'OTP generated and sent to WhatsApp');
 
-      return reply.send({
-        success: true,
+      return sendSuccess(reply, {
         message: 'OTP dikirim ke WhatsApp',
         expires_in: 300,
       });
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return reply.status(400).send({
-          success: false,
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: 'Input tidak valid',
-          },
-        });
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
       }
 
-      fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: 'Terjadi kesalahan server',
-        },
-      });
+      return sendInternalError(reply, error, fastify.log);
     }
   });
 
   // POST /auth/verify-otp
   fastify.post('/verify-otp', {
+    config: {
+      rateLimit: { max: 5, timeWindow: '1 minute' }
+    },
     schema: {
       tags: ['Auth'],
       summary: 'Verifikasi OTP untuk login petugas',
@@ -257,13 +230,11 @@ export async function authRoutes(fastify: FastifyInstance) {
       const isValid = await otpService.verify(body.phone, body.otp);
 
       if (!isValid) {
-        return reply.status(401).send({
-          success: false,
-          error: {
-            code: 'INVALID_OTP',
-            message: 'OTP tidak valid atau sudah expired',
-          },
+        await db.insert(activityLogs).values({
+          actionType: 'FAILED_OTP',
+          newData: { phone: body.phone, reason: 'INVALID_OTP' },
         });
+        return sendError(reply, 401, 'INVALID_OTP', 'OTP tidak valid atau sudah expired');
       }
 
       // Find officer and user (for petugas login with OTP)
@@ -273,13 +244,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       });
       
       if (!officer || !officer.user) {
-        return reply.status(404).send({
-          success: false,
-          error: {
-            code: 'USER_NOT_FOUND',
-            message: 'Pengguna tidak ditemukan',
-          },
-        });
+        return sendError(reply, 404, 'USER_NOT_FOUND', 'Pengguna tidak ditemukan');
       }
 
       // Delete used OTP
@@ -302,36 +267,30 @@ export async function authRoutes(fastify: FastifyInstance) {
 
       const tokens = generateTokens(payload, fastify);
 
-      return reply.send({
-        success: true,
-        data: {
-          access_token: tokens.accessToken,
-          user: {
-            id: officer.user.id,
-            full_name: officer.fullName,
-            role: 'PETUGAS',
-          },
+      await db.insert(activityLogs).values({
+        actionType: 'LOGIN_SUCCESS',
+        userId: officer.user.id,
+        officerId: officer.id,
+        entityType: 'auth',
+        newData: { method: 'otp', phone: body.phone },
+        ipAddress: request.ip,
+        userAgent: request.headers['user-agent'] || null,
+      });
+
+      return sendSuccess(reply, {
+        access_token: tokens.accessToken,
+        user: {
+          id: officer.user.id,
+          full_name: officer.fullName,
+          role: 'PETUGAS',
         },
       });
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return reply.status(400).send({
-          success: false,
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: 'Input tidak valid',
-          },
-        });
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
       }
 
-      fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: 'Terjadi kesalahan server',
-        },
-      });
+      return sendInternalError(reply, error, fastify.log);
     }
   });
 
@@ -341,29 +300,20 @@ export async function authRoutes(fastify: FastifyInstance) {
       const { refresh_token } = request.body as { refresh_token: string };
 
       if (!refresh_token) {
-        return reply.status(400).send({
-          success: false,
-          error: { code: 'MISSING_TOKEN', message: 'Refresh token diperlukan' },
-        });
+        return sendError(reply, 400, 'MISSING_TOKEN', 'Refresh token diperlukan');
       }
 
       // 1. Cek Redis blacklist
       const isBlacklisted = await redisConnection.get(`blacklist:rt:${refresh_token}`);
       if (isBlacklisted) {
-        return reply.status(401).send({
-          success: false,
-          error: { code: 'TOKEN_BLACKLISTED', message: 'Token telah dicabut (sudah logout)' },
-        });
+        return sendError(reply, 401, 'TOKEN_BLACKLISTED', 'Token telah dicabut (sudah logout)');
       }
 
       // 2. Verify refresh token
       const decoded = await request.server.jwt.verify<any>(refresh_token);
 
       if (decoded.tokenType !== 'refresh') {
-        return reply.status(401).send({
-          success: false,
-          error: { code: 'INVALID_TOKEN', message: 'Token yang diberikan bukan refresh token' },
-        });
+        return sendError(reply, 401, 'INVALID_TOKEN', 'Token yang diberikan bukan refresh token');
       }
 
       // 3. Check user active status
@@ -371,27 +321,18 @@ export async function authRoutes(fastify: FastifyInstance) {
       const user = userRes[0];
 
       if (!user) {
-        return reply.status(401).send({
-          success: false,
-          error: { code: 'USER_NOT_FOUND', message: 'Pengguna tidak ditemukan' },
-        });
+        return sendError(reply, 401, 'USER_NOT_FOUND', 'Pengguna tidak ditemukan');
       }
 
       if (!user.isActive) {
-        return reply.status(403).send({
-          success: false,
-          error: { code: 'ACCOUNT_DISABLED', message: 'Akun Anda tidak aktif' },
-        });
+        return sendError(reply, 403, 'ACCOUNT_DISABLED', 'Akun Anda tidak aktif');
       }
 
       if (decoded.officerId) {
         const officerRes = await db.select().from(officers).where(eq(officers.id, decoded.officerId)).limit(1);
         const officer = officerRes[0];
         if (!officer || !officer.isActive) {
-           return reply.status(403).send({
-             success: false,
-             error: { code: 'OFFICER_DISABLED', message: 'Akun petugas Anda tidak aktif' },
-           });
+           return sendError(reply, 403, 'OFFICER_DISABLED', 'Akun petugas Anda tidak aktif');
         }
       }
 
@@ -406,18 +347,12 @@ export async function authRoutes(fastify: FastifyInstance) {
       // 4. Generate new tokens
       const tokens = generateTokens(newPayload, request.server);
 
-      return reply.send({
-        success: true,
-        data: {
-          access_token: tokens.accessToken,
-          refresh_token: tokens.refreshToken,
-        },
+      return sendSuccess(reply, {
+        access_token: tokens.accessToken,
+        refresh_token: tokens.refreshToken,
       });
     } catch (error) {
-      return reply.status(401).send({
-        success: false,
-        error: { code: 'INVALID_TOKEN', message: 'Refresh token tidak valid' },
-      });
+      return sendError(reply, 401, 'INVALID_TOKEN', 'Refresh token tidak valid');
     }
   });
 
@@ -442,16 +377,9 @@ export async function authRoutes(fastify: FastifyInstance) {
         }
       }
 
-      return reply.send({
-        success: true,
-        message: 'Logout berhasil',
-      });
+      return sendSuccess(reply, { message: 'Logout berhasil' });
     } catch (error) {
-      fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan saat logout' },
-      });
+      return sendInternalError(reply, error, fastify.log);
     }
   });
 
@@ -465,10 +393,10 @@ export async function authRoutes(fastify: FastifyInstance) {
       const user = userRes[0];
 
       if (!user) {
-        return reply.status(404).send({ success: false, error: { code: 'USER_NOT_FOUND', message: 'User tidak ditemukan' } });
+        return sendError(reply, 404, 'USER_NOT_FOUND', 'User tidak ditemukan');
       }
       if (!user.isActive) {
-        return reply.status(403).send({ success: false, error: { code: 'ACCOUNT_DISABLED', message: 'Akun tidak aktif' } });
+        return sendError(reply, 403, 'ACCOUNT_DISABLED', 'Akun tidak aktif');
       }
 
       let officerData: any = null;
@@ -505,10 +433,9 @@ export async function authRoutes(fastify: FastifyInstance) {
       return reply.send(responseData);
     } catch (error: unknown) {
       if (isJwtErrorLike(error) && (error.statusCode === 401 || error.code?.includes('JWT'))) {
-        return reply.status(401).send({ success: false, error: { code: 'UNAUTHORIZED', message: 'Token tidak valid atau expired' } });
+        return sendError(reply, 401, 'UNAUTHORIZED', 'Token tidak valid atau expired');
       }
-      fastify.log.error(error);
-      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
+      return sendInternalError(reply, error, fastify.log);
     }
   });
 }

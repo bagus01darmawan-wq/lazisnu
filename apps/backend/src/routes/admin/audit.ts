@@ -3,6 +3,7 @@ import { db } from '../../config/database';
 import * as schema from '../../database/schema';
 import { eq, desc, and, ilike, or, gte, lte } from 'drizzle-orm';
 import { authenticate, authorize } from '../../middleware/auth';
+import { sendSuccess, sendInternalError } from '../../utils/response';
 
 export async function auditRoutes(fastify: FastifyInstance) {
   // Apply auth and admin-only middleware
@@ -76,24 +77,18 @@ export async function auditRoutes(fastify: FastifyInstance) {
         db.$count(schema.activityLogs, whereClause)
       ]);
 
-      return reply.send({
-        success: true,
-        data: {
-          logs,
-          pagination: {
-            page,
-            limit,
-            total,
-            total_pages: Math.ceil(total / limit)
-          }
+      return sendSuccess(reply, {
+        items: logs,
+        logs,
+        pagination: {
+          page,
+          limit,
+          total,
+          total_pages: Math.ceil(total / limit)
         }
       });
     } catch (error) {
-      fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Gagal mengambil log audit' }
-      });
+      return sendInternalError(reply, error, fastify.log);
     }
   });
 }

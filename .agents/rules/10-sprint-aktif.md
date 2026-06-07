@@ -111,6 +111,7 @@ Catatan untuk agent:
 - Pastikan project bisa dijalankan, dibuild, dan dilint untuk area yang sedang dikerjakan.
 - Perbaiki error yang memblokir login, dashboard, submit collection, sync mobile, laporan, atau build.
 - Jangan melakukan refactor besar tanpa alasan kuat dan tanpa rencana test.
+- **Jadwal Migrasi Pagination:** Backend akan menambahkan `items` tanpa menghapus key lama (`collections`, `tasks`, dll). Jadwalkan update web/mobile secara bertahap untuk membaca `items`. Hapus key lama hanya setelah semua client termigrasi.
 
 ### P1 — Contract Consistency
 

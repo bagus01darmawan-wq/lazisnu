@@ -20,6 +20,14 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', async (request, reply) => {
     const apiKey = request.headers['x-internal-api-key'];
     if (config.INTERNAL_API_KEY && apiKey !== config.INTERNAL_API_KEY) {
+      await db.insert(schema.activityLogs).values({
+        actionType: 'SCHEDULER_MISMATCH',
+        entityType: 'SYSTEM',
+        oldData: { providedKey: apiKey ? '***' : 'MISSING' },
+        newData: null,
+        ipAddress: request.ip,
+        userAgent: request.headers['user-agent'] || null,
+      });
       return sendError(reply, 403, 'FORBIDDEN', 'Internal API key tidak valid');
     }
   });

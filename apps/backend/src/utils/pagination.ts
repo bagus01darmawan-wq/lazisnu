@@ -20,9 +20,9 @@ export function getPaginationParams(query: any): PaginationParams {
 /**
  * Format data into standard paginated response
  */
-export function formatPaginatedResponse<T>(items: T[], total: any, page: number, limit: number) {
+export function formatPaginatedResponse<T>(items: T[], total: any, page: number, limit: number, legacyKey?: string) {
   const totalNum = Number(total);
-  return {
+  const response: any = {
     items,
     pagination: {
       page,
@@ -31,4 +31,10 @@ export function formatPaginatedResponse<T>(items: T[], total: any, page: number,
       total_pages: Math.ceil(totalNum / limit),
     },
   };
+  
+  if (legacyKey) {
+    response[legacyKey] = items;
+  }
+  
+  return response;
 }

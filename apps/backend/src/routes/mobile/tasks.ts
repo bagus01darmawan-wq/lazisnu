@@ -3,7 +3,7 @@ import { db } from '../../config/database';
 import * as schema from '../../database/schema';
 import { eq, and, desc, asc, gte, sql } from 'drizzle-orm';
 import { verifyQRCode } from '../../utils/qr';
-import { sendSuccess, sendInternalError } from '../../utils/response';
+import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { getLatestCollectionCondition } from '../../services/collectionSubmission';
 
 export async function tasksRoutes(fastify: FastifyInstance) {
@@ -14,10 +14,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       const officerId = user.officerId;
 
       if (!officerId) {
-        return reply.status(403).send({
-          success: false,
-          error: { code: 'FORBIDDEN', message: 'Bukan akun petugas' },
-        });
+        return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
       }
 
       const latestCollectionCondition = getLatestCollectionCondition();
@@ -111,10 +108,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       const query = request.query as { status?: string; page?: string; limit?: string };
 
       if (!officerId) {
-        return reply.status(403).send({
-          success: false,
-          error: { code: 'FORBIDDEN', message: 'Bukan akun petugas' },
-        });
+        return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
       }
 
       const page = parseInt(query.page || '1');
@@ -143,20 +137,23 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         db.$count(schema.assignments, whereClause),
       ]);
 
+      const items = assignments.map((a) => ({
+        id: a.id,
+        can_id: a.can.id,
+        qr_code: a.can.qrCode,
+        owner_name: a.can.ownerName,
+        owner_phone: a.can.ownerPhone,
+        owner_address: a.can.ownerAddress,
+        latitude: a.can.latitude,
+        longitude: a.can.longitude,
+        status: a.status,
+        assigned_at: a.assignedAt,
+        period: `${a.periodYear}-${String(a.periodMonth).padStart(2, '0')}`,
+      }));
+
       return sendSuccess(reply, {
-        tasks: assignments.map((a) => ({
-          id: a.id,
-          can_id: a.can.id,
-          qr_code: a.can.qrCode,
-          owner_name: a.can.ownerName,
-          owner_phone: a.can.ownerPhone,
-          owner_address: a.can.ownerAddress,
-          latitude: a.can.latitude,
-          longitude: a.can.longitude,
-          status: a.status,
-          assigned_at: a.assignedAt,
-          period: `${a.periodYear}-${String(a.periodMonth).padStart(2, '0')}`,
-        })),
+        items,
+        tasks: items,
         pagination: {
           page,
           limit,
@@ -178,10 +175,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
 
       const qrCode = verifyQRCode(qrToken);
       if (!qrCode) {
-        return reply.status(400).send({
-          success: false,
-          error: { code: 'INVALID_QR', message: 'QR Code tidak valid atau tanda tangan digital salah' },
-        });
+        return sendError(reply, 400, 'INVALID_QR', 'QR Code tidak valid atau tanda tangan digital salah');
       }
 
       const can = await db.query.cans.findFirst({
@@ -200,10 +194,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       });
 
       if (!can) {
-        return reply.status(404).send({
-          success: false,
-          error: { code: 'CAN_NOT_FOUND', message: 'Kaleng tidak ditemukan' },
-        });
+        return sendError(reply, 404, 'CAN_NOT_FOUND', 'Kaleng tidak ditemukan');
       }
 
       const lastCollection = can.collections[0];

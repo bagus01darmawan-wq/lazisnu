@@ -104,7 +104,7 @@ export async function cansRoutes(fastify: FastifyInstance) {
           .then(res => Number(res[0].count))
       ]);
 
-      return sendSuccess(reply, formatPaginatedResponse(cans, total, page, limit));
+      return sendSuccess(reply, formatPaginatedResponse(cans, total, page, limit, 'cans'));
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
     }
@@ -190,17 +190,17 @@ export async function cansRoutes(fastify: FastifyInstance) {
         },
       });
 
-      if (!can) return reply.status(404).send({ success: false, error: { message: 'Kaleng tidak ditemukan' } });
+      if (!can) return sendError(reply, 404, 'NOT_FOUND', 'Kaleng tidak ditemukan');
 
       // Access control
       if (user.role === 'ADMIN_RANTING' && can.branchId !== user.branchId) {
-        return reply.status(403).send({ success: false, error: { message: 'Bukan milik ranting ini' } });
+        return sendError(reply, 403, 'FORBIDDEN', 'Bukan milik ranting ini');
       }
       if (user.role === 'ADMIN_KECAMATAN') {
         const branch = await db.query.branches.findFirst({ where: eq(schema.branches.id, can.branchId) });
-        if (branch?.districtId !== user.districtId) return reply.status(403).send({ success: false, error: { message: 'Bukan milik kecamatan ini' } });
+        if (branch?.districtId !== user.districtId) return sendError(reply, 403, 'FORBIDDEN', 'Bukan milik kecamatan ini');
       }
-      return reply.send({ success: true, data: can });
+      return sendSuccess(reply, can);
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
     }
@@ -559,7 +559,7 @@ export async function cansRoutes(fastify: FastifyInstance) {
         }
       }
 
-      return sendSuccess(reply, { success: true });
+      return sendSuccess(reply, { deleted: ids.length });
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
     }
@@ -700,7 +700,6 @@ export async function cansRoutes(fastify: FastifyInstance) {
       }
 
       return sendSuccess(reply, {
-        success: true,
         count: cans.length,
         print_url: printUrl
       });

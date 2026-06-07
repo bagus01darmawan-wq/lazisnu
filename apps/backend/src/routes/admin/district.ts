@@ -4,8 +4,18 @@ import * as schema from '../../database/schema';
 import { eq, and, gte, lt, desc, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { authorize } from '../../middleware/auth';
-import { sendSuccess, sendInternalError } from '../../utils/response';
+import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { isPostgresError } from '../../utils/error-guards';
+import { z } from 'zod';
+
+const branchSchema = z.object({
+  name: z.string().min(1, 'Nama ranting wajib diisi'),
+  code: z.string().min(1, 'Kode ranting wajib diisi'),
+});
+
+const dukuhSchema = z.object({
+  name: z.string().min(1, 'Nama dukuh wajib diisi'),
+});
 
 const kecamatan = { preHandler: [authorize('ADMIN_KECAMATAN')] };
 const rantingOrKec = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
@@ -29,15 +39,11 @@ export async function districtRoutes(fastify: FastifyInstance) {
   fastify.post('/branches', kecamatan, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const user = request.currentUser!;
-      const { name, code } = request.body as { name: string; code: string };
-
-      if (!name || !code) return reply.status(400).send({ success: false, message: 'Nama dan kode ranting wajib diisi' });
+      const body = branchSchema.parse(request.body);
+      const { name, code } = body;
 
       if (!user.districtId) {
-        return reply.status(403).send({
-          success: false,
-          error: { code: 'FORBIDDEN', message: 'Admin tidak memiliki ID Kecamatan di profilnya' }
-        });
+        return sendError(reply, 403, 'FORBIDDEN', 'Admin tidak memiliki ID Kecamatan di profilnya');
       }
 
       const [newBranch] = await db.insert(schema.branches).values({
@@ -49,11 +55,11 @@ export async function districtRoutes(fastify: FastifyInstance) {
       request.auditContext = { newData: newBranch };
       return sendSuccess(reply, newBranch);
     } catch (error: unknown) {
+      if (error instanceof z.ZodError) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+      }
       if (isPostgresError(error) && error.code === '23505') {
-        return reply.status(400).send({
-          success: false,
-          error: { code: 'DUPLICATE_CODE', message: 'Kode ranting sudah digunakan' }
-        });
+        return sendError(reply, 400, 'DUPLICATE_CODE', 'Kode ranting sudah digunakan');
       }
       return sendInternalError(reply, error, fastify.log);
     }
@@ -63,7 +69,8 @@ export async function districtRoutes(fastify: FastifyInstance) {
     try {
       const user = request.currentUser!;
       const { id } = request.params as { id: string };
-      const { name, code } = request.body as { name: string; code: string };
+      const body = branchSchema.partial().parse(request.body);
+      const { name, code } = body;
 
       const [updatedBranch] = await db.update(schema.branches)
         .set({
@@ -77,7 +84,7 @@ export async function districtRoutes(fastify: FastifyInstance) {
         ))
         .returning();
 
-      if (!updatedBranch) return reply.status(404).send({ success: false, message: 'Ranting tidak ditemukan' });
+      if (!updatedBranch) return sendError(reply, 404, 'NOT_FOUND', 'Ranting tidak ditemukan');
       
       // Set audit context
       const existing = { name: updatedBranch.name, code: updatedBranch.code, districtId: updatedBranch.districtId }; // simplified since we don't fetch before update here to save query
@@ -87,7 +94,10 @@ export async function districtRoutes(fastify: FastifyInstance) {
       };
 
       return sendSuccess(reply, updatedBranch);
-    } catch (error) {
+    } catch (error: unknown) {
+      if (error instanceof z.ZodError) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+      }
       return sendInternalError(reply, error, fastify.log);
     }
   });
@@ -107,9 +117,8 @@ export async function districtRoutes(fastify: FastifyInstance) {
   fastify.post('/branches/:branchId/dukuhs', kecamatan, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { branchId } = request.params as { branchId: string };
-      const { name } = request.body as { name: string };
-
-      if (!name) return reply.status(400).send({ success: false, message: 'Nama dukuh wajib diisi' });
+      const body = dukuhSchema.parse(request.body);
+      const { name } = body;
 
       const [newDukuh] = await db.insert(schema.dukuhs).values({
         name: name.toUpperCase(),
@@ -118,7 +127,10 @@ export async function districtRoutes(fastify: FastifyInstance) {
 
       request.auditContext = { newData: newDukuh };
       return sendSuccess(reply, newDukuh);
-    } catch (error) {
+    } catch (error: unknown) {
+      if (error instanceof z.ZodError) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+      }
       return sendInternalError(reply, error, fastify.log);
     }
   });
@@ -126,17 +138,21 @@ export async function districtRoutes(fastify: FastifyInstance) {
   fastify.patch('/dukuhs/:id', kecamatan, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
-      const { name } = request.body as { name: string };
+      const body = dukuhSchema.partial().parse(request.body);
+      const { name } = body;
 
       const [updatedDukuh] = await db.update(schema.dukuhs)
         .set({ name: name?.toUpperCase(), updatedAt: new Date() })
         .where(eq(schema.dukuhs.id, id))
         .returning();
 
-      if (!updatedDukuh) return reply.status(404).send({ success: false, message: 'Dukuh tidak ditemukan' });
+      if (!updatedDukuh) return sendError(reply, 404, 'NOT_FOUND', 'Dukuh tidak ditemukan');
 
       return sendSuccess(reply, updatedDukuh);
-    } catch (error) {
+    } catch (error: unknown) {
+      if (error instanceof z.ZodError) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+      }
       return sendInternalError(reply, error, fastify.log);
     }
   });
@@ -146,7 +162,7 @@ export async function districtRoutes(fastify: FastifyInstance) {
       const user = request.currentUser!;
       const districtId = user.districtId;
       if (!districtId) {
-        return reply.status(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Bukan admin kecamatan' } });
+        return sendError(reply, 403, 'FORBIDDEN', 'Bukan admin kecamatan');
       }
 
       const c2 = alias(schema.collections, 'c2');
@@ -282,28 +298,19 @@ export async function districtRoutes(fastify: FastifyInstance) {
       // Check if branch has any dukuhs
       const dukuhsCount = await db.$count(schema.dukuhs, eq(schema.dukuhs.branchId, id));
       if (Number(dukuhsCount) > 0) {
-        return reply.status(400).send({
-          success: false,
-          message: 'Ranting tidak bisa dihapus karena masih memiliki data dukuh terkait'
-        });
+        return sendError(reply, 400, 'HAS_DEPENDENCY', 'Ranting tidak bisa dihapus karena masih memiliki data dukuh terkait');
       }
 
       // Check if branch has any cans
       const cansCount = await db.$count(schema.cans, eq(schema.cans.branchId, id));
       if (Number(cansCount) > 0) {
-        return reply.status(400).send({
-          success: false,
-          message: 'Ranting tidak bisa dihapus karena masih memiliki data kaleng terkait'
-        });
+        return sendError(reply, 400, 'HAS_DEPENDENCY', 'Ranting tidak bisa dihapus karena masih memiliki data kaleng terkait');
       }
 
       // Check if branch has any officers
       const officersCount = await db.$count(schema.officers, eq(schema.officers.branchId, id));
       if (Number(officersCount) > 0) {
-        return reply.status(400).send({
-          success: false,
-          message: 'Ranting tidak bisa dihapus karena masih memiliki data petugas terkait'
-        });
+        return sendError(reply, 400, 'HAS_DEPENDENCY', 'Ranting tidak bisa dihapus karena masih memiliki data petugas terkait');
       }
 
       const [branchToDelete] = await db.select().from(schema.branches).where(eq(schema.branches.id, id));
@@ -311,7 +318,7 @@ export async function districtRoutes(fastify: FastifyInstance) {
         .where(eq(schema.branches.id, id))
         .returning();
 
-      if (deleted.length === 0) return reply.status(404).send({ success: false, message: 'Ranting tidak ditemukan' });
+      if (deleted.length === 0) return sendError(reply, 404, 'NOT_FOUND', 'Ranting tidak ditemukan');
 
       request.auditContext = {
         oldData: branchToDelete,
