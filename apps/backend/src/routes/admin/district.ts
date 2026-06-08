@@ -4,6 +4,7 @@ import * as schema from '../../database/schema';
 import { eq, and, gte, lt, desc, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { authorize } from '../../middleware/auth';
+import { assertBranchAccess, assertDukuhAccess } from '../../middleware/ownership';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { isPostgresError } from '../../utils/error-guards';
 import { z } from 'zod';
@@ -104,7 +105,12 @@ export async function districtRoutes(fastify: FastifyInstance) {
 
   fastify.get('/branches/:branchId/dukuhs', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
+      const user = request.currentUser!;
       const { branchId } = request.params as { branchId: string };
+
+      // Ownership check
+      await assertBranchAccess(user, branchId);
+
       const dukuhs = await db.select().from(schema.dukuhs)
         .where(eq(schema.dukuhs.branchId, branchId))
         .orderBy(schema.dukuhs.name);
@@ -116,7 +122,12 @@ export async function districtRoutes(fastify: FastifyInstance) {
 
   fastify.post('/branches/:branchId/dukuhs', kecamatan, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
+      const user = request.currentUser!;
       const { branchId } = request.params as { branchId: string };
+
+      // Ownership check: pastikan branchId milik district user
+      await assertBranchAccess(user, branchId);
+
       const body = dukuhSchema.parse(request.body);
       const { name } = body;
 
@@ -137,7 +148,12 @@ export async function districtRoutes(fastify: FastifyInstance) {
 
   fastify.patch('/dukuhs/:id', kecamatan, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
+      const user = request.currentUser!;
       const { id } = request.params as { id: string };
+
+      // Ownership check
+      await assertDukuhAccess(user, id);
+
       const body = dukuhSchema.partial().parse(request.body);
       const { name } = body;
 
@@ -293,7 +309,11 @@ export async function districtRoutes(fastify: FastifyInstance) {
 
   fastify.delete('/branches/:id', kecamatan, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
+      const user = request.currentUser!;
       const { id } = request.params as { id: string };
+
+      // Ownership check
+      await assertBranchAccess(user, id);
 
       // Check if branch has any dukuhs
       const dukuhsCount = await db.$count(schema.dukuhs, eq(schema.dukuhs.branchId, id));

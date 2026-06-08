@@ -37,6 +37,8 @@ function mockRequest(overrides: Record<string, any> = {}) {
     params: {},
     headers: {},
     ip: '127.0.0.1',
+    id: 'req-123',
+    log: { error: jest.fn() },
     currentUser: {
       userId: 'user-123',
       role: 'ADMIN_KECAMATAN',
@@ -151,13 +153,19 @@ describe('auditLogger — skip GET', () => {
 // ============================================================================
 
 describe('auditLogger — skip response error', () => {
-  it('TIDAK mencatat saat response.statusCode >= 400 (403)', async () => {
+  it('MENCATAT response 403 sebagai AUTH_FAILED (security event)', async () => {
     const req = mockRequest({ method: 'POST', url: '/v1/admin/cans' });
     const rep = mockReply(403);
 
     await auditLogger(req as any, rep as any);
 
-    expect(mockedDb.insert).not.toHaveBeenCalled();
+    expect(mockedDb.insert).toHaveBeenCalledTimes(1);
+    expect(valuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionType: 'AUTH_FAILED',
+        entityType: 'cans',
+      })
+    );
   });
 
   it('TIDAK mencatat saat response.statusCode = 500', async () => {
@@ -351,19 +359,17 @@ describe('auditLogger — skip auth routes', () => {
 
 describe('auditLogger — graceful DB error handling', () => {
   it('TIDAK throw error saat db.insert gagal', async () => {
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     valuesMock.mockRejectedValueOnce(new Error('DB connection lost'));
 
     const req = mockRequest({ method: 'POST', url: '/v1/admin/cans' });
     const rep = mockReply(201);
+    const logErrorSpy = req.log.error;
 
     await expect(auditLogger(req as any, rep as any)).resolves.toBeUndefined();
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Audit Logger Error:',
-      expect.any(Error)
+    expect(logErrorSpy).toHaveBeenCalledWith(
+      { err: expect.any(Error) },
+      'Audit Logger Insert Failed'
     );
-
-    consoleErrorSpy.mockRestore();
   });
 });

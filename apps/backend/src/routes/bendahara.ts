@@ -1,7 +1,11 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, authorize } from '../middleware/auth';
+import { assertCollectionAccess } from '../middleware/ownership';
 import { sendSuccess, sendError, sendInternalError } from '../utils/response';
-import { getCollectionScope, getDashboardData, buildCollectionsQuery, getCollectionsList, getCollectionDetail, getReportSummary } from '../services/reportService';
+import { getRoleScope } from '../utils/scope';
+import { getCollectionScope, buildCollectionsQuery, getCollectionsList } from '../services/collectionQueryService';
+import { getCollectionDetail, getReportSummary } from '../services/collectionReportService';
+import { getBendaharaDashboard } from '../services/dashboardReportService';
 
 export async function bendaharaRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', authenticate);
@@ -9,7 +13,7 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
 
   fastify.get('/dashboard', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const data = await getDashboardData();
+      const data = await getBendaharaDashboard();
       return sendSuccess(reply, data);
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
@@ -50,6 +54,11 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
   fastify.get('/collections/:id', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
+      const user = request.currentUser!;
+
+      // Ownership check: pastikan collection milik branch/district user
+      await assertCollectionAccess(user, id);
+
       const data = await getCollectionDetail(id);
 
       if (!data) {

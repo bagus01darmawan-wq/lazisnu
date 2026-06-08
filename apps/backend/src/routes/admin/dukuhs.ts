@@ -3,7 +3,10 @@ import { db } from '../../config/database';
 import * as schema from '../../database/schema';
 import { eq, and } from 'drizzle-orm';
 import { authorize } from '../../middleware/auth';
-import { sendSuccess, sendInternalError } from '../../utils/response';
+import { assertBranchAccess } from '../../middleware/ownership';
+import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
+import { AppError, isAppError } from '../../utils/AppError';
+import { Errors } from '../../utils/errorCatalog';
 import { z } from 'zod';
 
 const rantingOrKec = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
@@ -25,8 +28,18 @@ export async function dukuhsRoutes(fastify: FastifyInstance) {
     }
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { branch_id, filter_assigned } = request.query as { branch_id?: string, filter_assigned?: boolean };
+      let { branch_id, filter_assigned } = request.query as { branch_id?: string, filter_assigned?: boolean };
+      const user = request.currentUser!;
       
+      // ADMIN_RANTING: paksa branch_id dari JWT
+      if (user.role === 'ADMIN_RANTING') {
+        branch_id = user.branchId;
+      }
+      // ADMIN_KECAMATAN: validasi akses
+      else if (branch_id) {
+        await assertBranchAccess(user, branch_id);
+      }
+
       // Jika branch_id tidak ada, kembalikan array kosong untuk keamanan
       if (!branch_id) {
         return sendSuccess(reply, []);
@@ -101,19 +114,32 @@ export async function dukuhsRoutes(fastify: FastifyInstance) {
     }
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
+      const user = request.currentUser!;
       const body = z.object({
         branch_id: z.string().uuid(),
         name: z.string().min(1),
       }).parse(request.body);
 
+      // Paksa branchId dari JWT untuk ADMIN_RANTING
+      const branchId = user.role === 'ADMIN_RANTING' ? user.branchId : body.branch_id;
+      if (!branchId) {
+        return sendError(reply, 400, 'MISSING_BRANCH', 'branchId tidak tersedia');
+      }
+
+      // ADMIN_KECAMATAN: validasi akses ke branch
+      if (user.role === 'ADMIN_KECAMATAN') {
+        await assertBranchAccess(user, branchId);
+      }
+
       const inserted = await db.insert(schema.dukuhs).values({
-        branchId: body.branch_id,
+        branchId,
         name: body.name.toUpperCase(),
       }).returning();
 
       request.auditContext = { newData: inserted[0] };
       return sendSuccess(reply, inserted[0], 201);
     } catch (error) {
+      if (isAppError(error)) return sendError(reply, error.statusCode, error.code, error.message);
       return sendInternalError(reply, error, fastify.log);
     }
   });
@@ -134,6 +160,14 @@ export async function dukuhsRoutes(fastify: FastifyInstance) {
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
+      const user = request.currentUser!;
+
+      // Ownership check: cari dukuh dulu, lalu validasi akses branch
+      const [dukuhToDelete] = await db.select().from(schema.dukuhs).where(eq(schema.dukuhs.id, id));
+      if (!dukuhToDelete) {
+        throw new AppError('NOT_FOUND', 'Dukuh tidak ditemukan', 404);
+      }
+      await assertBranchAccess(user, dukuhToDelete.branchId);
 
       // Check if dukuh is used in ACTIVE cans
       const activeCans = await db.query.cans.findFirst({
@@ -142,15 +176,9 @@ export async function dukuhsRoutes(fastify: FastifyInstance) {
           eq(schema.cans.isActive, true)
         )
       });
- 
+
       if (activeCans) {
-        return reply.status(400).send({
-          success: false,
-          error: {
-            code: 'DUKUH_IN_USE',
-            message: 'Dukuh tidak bisa dihapus karena masih digunakan oleh kaleng yang sedang AKTIF'
-          }
-        });
+        throw Errors.DUKUH_IN_USE();
       }
 
       // If there are only inactive cans, we allow deletion but must set their dukuhId to NULL
@@ -159,7 +187,6 @@ export async function dukuhsRoutes(fastify: FastifyInstance) {
         .set({ dukuhId: null })
         .where(eq(schema.cans.dukuhId, id));
  
-      const [dukuhToDelete] = await db.select().from(schema.dukuhs).where(eq(schema.dukuhs.id, id));
       await db.delete(schema.dukuhs).where(eq(schema.dukuhs.id, id));
 
       // Set audit context
@@ -170,6 +197,7 @@ export async function dukuhsRoutes(fastify: FastifyInstance) {
 
       return sendSuccess(reply, { message: 'Dukuh berhasil dihapus' });
     } catch (error) {
+      if (isAppError(error)) return sendError(reply, error.statusCode, error.code, error.message);
       return sendInternalError(reply, error, fastify.log);
     }
   });

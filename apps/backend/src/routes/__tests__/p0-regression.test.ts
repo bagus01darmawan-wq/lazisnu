@@ -169,131 +169,16 @@ describe('TC-AUTH-05: Role-based filtering — wilayah terisolasi', () => {
 });
 
 // ============================================================================
-// TC-DB-01: Collection Submit — INSERT + totalCollected increment
+// TC-DB-01 & TC-DB-02: Collection Submit & Resubmit
 // ============================================================================
-
-describe('TC-DB-01: Collection Submit — Immutability & totalCollected', () => {
-  it('submitCollection() menggunakan INSERT (bukan UPDATE) ke collections', () => {
-    // Verified from source: collectionSubmission.ts line ~74
-    //   const [collection] = await tx.insert(schema.collections).values({...}).returning();
-    // Tidak ada tx.update(schema.collections) di fungsi submitCollection
-    const isInsertNotUpdate = true;
-
-    expect(isInsertNotUpdate).toBe(true);
-  });
-
-  it('totalCollected di-update dengan sql increment (BUKAN replace nilai absolut)', () => {
-    // Verified from source: collectionSubmission.ts line ~90-92
-    //   totalCollected: sql`${schema.cans.totalCollected} + ${BigInt(data.nominal)}`,
-    //   collectionCount: sql`${schema.cans.collectionCount} + 1`
-    //
-    // Ini adalah pola INCREMENT — aman dari race condition di PostgreSQL
-    // BUKAN pola: set({ totalCollected: newValue }) yang rawan overwrite
-
-    const usesSqlIncrement = true;
-    const usesAbsoluteSet = false;
-
-    expect(usesSqlIncrement).toBe(true);
-    expect(usesAbsoluteSet).toBe(false);
-  });
-
-  it('Assignment status di-set ke COMPLETED setelah submit', () => {
-    // Verified from source: collectionSubmission.ts line ~87-88
-    //   await tx.update(schema.assignments)
-    //     .set({ status: 'COMPLETED', completedAt: new Date() })
-
-    const setsCompletedStatus = true;
-    expect(setsCompletedStatus).toBe(true);
-  });
-
-  it('Seluruh operasi submitCollection dibungkus dalam transaction', () => {
-    // Verified from source: mobile/collections.ts line ~38
-    //   const result = await db.transaction(async (tx) => {
-    //     ...validate + submitCollection(tx, ...)
-    //   });
-    //
-    // Dan sync.ts line ~45
-    //   const collection = await db.transaction(async (tx) => {
-    //     ...validate + submitCollection(tx, ...)
-    //   });
-
-    const wrappedInTransaction = true;
-    expect(wrappedInTransaction).toBe(true);
-  });
-});
-
+// Catatan: Test untuk proses Submit (INSERT), totalCollected increment, 
+// Assignment status, Immutability, Sequence++, dan pencegahan resubmit
+// pada record usang (NOT_LATEST) sebelumnya menggunakan placeholder tests
+// (expect(true) === true) di file ini karena mocking database global.
+//
+// Sekarang, 22 placeholder test tersebut telah digantikan sepenuhnya dengan
+// behavioral test nyata yang berinteraksi langsung dengan test database.
+//
+// Silakan merujuk ke:
+// 👉 src/services/__tests__/collectionSubmission.integration.test.ts
 // ============================================================================
-// TC-DB-02: Resubmit — INSERT baru + sequence++, bukan UPDATE
-// ============================================================================
-
-describe('TC-DB-02: Resubmit — INSERT + sequence + alasan', () => {
-  it('Resubmit menggunakan INSERT row baru (bukan UPDATE row lama)', () => {
-    // Verified from source: admin/collections.ts line ~53
-    //   // NOTE: Table collections is STRICTLY IMMUTABLE. No UPDATE or DELETE allowed.
-    //   const [newRecord] = await tx.insert(schema.collections).values({...}).returning();
-    //
-    // Dan mobile/collections.ts line ~195
-    //   // NOTE: Table collections is STRICTLY IMMUTABLE. No UPDATE or DELETE allowed.
-    //   const inserted = await tx.insert(schema.collections).values({...}).returning();
-
-    const rowLamaTetapAda = true;
-    const usesUpdate = false;
-
-    expect(rowLamaTetapAda).toBe(true);
-    expect(usesUpdate).toBe(false);
-  });
-
-  it('submitSequence naik +1 dari row sebelumnya', () => {
-    // Verified from source: admin/collections.ts line ~57
-    //   submitSequence: old.submitSequence + 1,
-    //
-    // Dan mobile/collections.ts line ~208
-    //   submitSequence: oldCollection.submitSequence + 1,
-
-    const oldSequence = 1;
-    const newSequence = oldSequence + 1;
-
-    expect(newSequence).toBe(2);
-  });
-
-  it('Hanya record terbaru (submitSequence tertinggi) yang bisa di-resubmit', () => {
-    // Verified from source: keduanya cek maxSeq sebelum resubmit
-    // Admin: if (old.submitSequence !== Number(latestRecord?.maxSeq || 0)) → NOT_LATEST
-    // Mobile: if (oldCollection.submitSequence !== Number(latestRecord?.maxSeq || 0)) → NOT_LATEST
-
-    const checksLatestBeforeResubmit = true;
-    expect(checksLatestBeforeResubmit).toBe(true);
-  });
-
-  it('totalCollected di can disesuaikan (diff = newNominal - oldNominal)', () => {
-    // Verified from source: admin/collections.ts line ~62-63
-    //   const diff = BigInt(body.nominal) - old.nominal;
-    //   await tx.update(schema.cans).set({
-    //     totalCollected: sql`${schema.cans.totalCollected} + ${diff}`,
-
-    const oldNominal = BigInt(50000);
-    const newNominal = BigInt(75000);
-    const diff = newNominal - oldNominal;
-
-    expect(diff).toBe(BigInt(25000));
-  });
-
-  it('alasan_resubmit tercatat di record baru', () => {
-    // Verified from source: admin/collections.ts
-    //   alasanResubmit: body.alasan_resubmit,
-    // Dan mobile/collections.ts
-    //   alasanResubmit: body.alasan_resubmit,
-
-    const recorded = true;
-    expect(recorded).toBe(true);
-  });
-
-  it('Activity log tercatat dengan type RESUBMIT_COLLECTION', () => {
-    // Verified from source: admin/collections.ts line ~68-74
-    //   actionType: 'RESUBMIT_COLLECTION'
-    //   oldData + newData + userId + ip + userAgent
-
-    const logged = true;
-    expect(logged).toBe(true);
-  });
-});

@@ -4,11 +4,12 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { eq } from 'drizzle-orm';
+import { v4 as uuidv4 } from 'uuid';
 
 // JWT Payload type
 export interface JWTPayload {
   userId: string;
-  role: 'ADMIN_KECAMATAN' | 'ADMIN_RANTING' | 'BENDAHARA' | 'PETUGAS';
+  role: 'ADMIN_PUSAT' | 'ADMIN_KABUPATEN' | 'ADMIN_KECAMATAN' | 'ADMIN_RANTING' | 'BENDAHARA' | 'PETUGAS';
   officerId?: string;
   branchId?: string;
   districtId?: string;
@@ -99,10 +100,17 @@ export function authorize(...allowedRoles: Array<JWTPayload['role']>) {
 }
 
 // Generate access + refresh tokens
-export function generateTokens(payload: JWTPayload, fastify: any) {
-  const accessToken = fastify.jwt.sign({ ...payload, tokenType: 'access' }, { expiresIn: '15m' });
-  const refreshToken = fastify.jwt.sign({ ...payload, tokenType: 'refresh' }, { expiresIn: '30d' }); // 30 hari + Redis blacklist di implementasi nanti
-  return { accessToken, refreshToken };
+export function generateTokens(payload: JWTPayload, fastify: any, jti?: string) {
+  const { config } = require('../config/env');
+  const accessTtl = config.JWT_ACCESS_TTL || '15m';
+  const refreshTtl = payload.role === 'PETUGAS'
+    ? (config.JWT_REFRESH_TTL_PETUGAS || '7d')
+    : (config.JWT_REFRESH_TTL || '7d');
+
+  const accessToken = fastify.jwt.sign({ ...payload, tokenType: 'access' }, { expiresIn: accessTtl });
+  const refreshJti = jti || uuidv4();
+  const refreshToken = fastify.jwt.sign({ ...payload, tokenType: 'refresh', jti: refreshJti }, { expiresIn: refreshTtl });
+  return { accessToken, refreshToken, refreshJti };
 }
 
 export default { authenticate, authorize, generateTokens };

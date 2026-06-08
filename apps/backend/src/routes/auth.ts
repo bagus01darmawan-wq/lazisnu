@@ -8,6 +8,8 @@ import { users, officers } from '../database/schema';
 import { eq, or } from 'drizzle-orm';
 import { generateTokens } from '../middleware/auth';
 import { otpService } from '../services/otp';
+import { storeRefreshJti, validateRefreshJti, revokeRefreshJti } from '../services/tokenService';
+import { createSession, getUserSessions, revokeSession, revokeAllUserSessions } from '../services/sessionService';
 import { redisConnection } from '../config/redis';
 import { ApiResponse, User } from '@lazisnu/shared-types';
 import { isJwtErrorLike } from '../utils/error-guards';
@@ -63,6 +65,13 @@ export async function authRoutes(fastify: FastifyInstance) {
         userOfficers = await db.select().from(officers).where(eq(officers.userId, user.id));
       }
 
+      // Cek account lockout
+      const lockoutKey = `login:lockout:${body.identifier}`;
+      const isLocked = await redisConnection.get(lockoutKey);
+      if (isLocked) {
+        return sendError(reply, 423, 'ACCOUNT_LOCKED', 'Akun terkunci sementara, coba lagi nanti');
+      }
+
       if (!user) {
         await db.insert(activityLogs).values({
           actionType: 'FAILED_LOGIN',
@@ -75,13 +84,30 @@ export async function authRoutes(fastify: FastifyInstance) {
       const isValidPassword = await bcrypt.compare(body.password, user.passwordHash);
 
       if (!isValidPassword) {
+        // Increment login attempt counter
+        const attemptKey = `login:attempts:${body.identifier}`;
+        const attemptCount = await redisConnection.incr(attemptKey);
+        if (attemptCount === 1) {
+          await redisConnection.expire(attemptKey, 3600); // 1 jam window
+        }
+
+        // Lock account jika >= 10 gagal
+        if (attemptCount >= 10) {
+          await redisConnection.set(lockoutKey, '1', 'EX', 3600); // Lock 1 jam
+          await redisConnection.del(attemptKey);
+        }
+
         await db.insert(activityLogs).values({
           actionType: 'FAILED_LOGIN',
           userId: user.id,
-          newData: { identifier: body.identifier, reason: 'INVALID_PASSWORD' },
+          newData: { identifier: body.identifier, reason: 'INVALID_PASSWORD', attempts: attemptCount },
         });
         return sendError(reply, 401, 'INVALID_CREDENTIALS', 'Email/Nomor HP atau password salah');
       }
+
+      // Reset login attempt counter on success
+      await redisConnection.del(`login:attempts:${body.identifier}`);
+      await redisConnection.del(lockoutKey);
 
       // Check if user is active
       if (!user.isActive) {
@@ -109,6 +135,17 @@ export async function authRoutes(fastify: FastifyInstance) {
       };
 
       const tokens = generateTokens(payload, fastify);
+
+      // Simpan jti refresh token ke Redis
+      await storeRefreshJti(tokens.refreshJti, user.id, 30 * 24 * 60 * 60);
+
+      // Simpan session ke DB
+      await createSession({
+        userId: user.id,
+        jti: tokens.refreshJti,
+        userAgent: request.headers['user-agent'] || undefined,
+        ipAddress: request.ip,
+      });
 
       await db.insert(activityLogs).values({
         actionType: 'LOGIN_SUCCESS',
@@ -226,16 +263,35 @@ export async function authRoutes(fastify: FastifyInstance) {
     try {
       const body = verifyOTPSchema.parse(request.body);
 
+      // Cek OTP attempt counter
+      const attemptKey = `otp:attempts:${body.phone}`;
+      const attemptCount = await redisConnection.get(attemptKey);
+      if (attemptCount && parseInt(attemptCount) >= 5) {
+        // Hapus OTP yang ada
+        await otpService.delete(body.phone);
+        await redisConnection.del(attemptKey);
+        return sendError(reply, 429, 'OTP_TOO_MANY_ATTEMPTS', 'Terlalu banyak percobaan, minta OTP baru');
+      }
+
       // Verify OTP first
       const isValid = await otpService.verify(body.phone, body.otp);
 
       if (!isValid) {
+        // Increment attempt counter
+        const newCount = await redisConnection.incr(attemptKey);
+        if (newCount === 1) {
+          await redisConnection.expire(attemptKey, 300); // 5 menit
+        }
+
         await db.insert(activityLogs).values({
           actionType: 'FAILED_OTP',
           newData: { phone: body.phone, reason: 'INVALID_OTP' },
         });
         return sendError(reply, 401, 'INVALID_OTP', 'OTP tidak valid atau sudah expired');
       }
+
+      // Reset attempt counter on success
+      await redisConnection.del(attemptKey);
 
       // Find officer and user (for petugas login with OTP)
       const officer = await db.query.officers.findFirst({
@@ -247,6 +303,12 @@ export async function authRoutes(fastify: FastifyInstance) {
         return sendError(reply, 404, 'USER_NOT_FOUND', 'Pengguna tidak ditemukan');
       }
 
+      // Cek status officer aktif
+      if (!officer.isActive) {
+        await otpService.delete(body.phone);
+        return sendError(reply, 403, 'OFFICER_DISABLED', 'Akun petugas Anda tidak aktif');
+      }
+
       // Delete used OTP
       await otpService.delete(body.phone);
 
@@ -255,6 +317,10 @@ export async function authRoutes(fastify: FastifyInstance) {
         .set({ lastLogin: new Date() })
         .where(eq(users.id, officer.user.id));
 
+      // Check if user account is active
+      if (!officer.user.isActive) {
+        return sendError(reply, 403, 'ACCOUNT_DISABLED', 'Akun Anda tidak aktif');
+      }
 
       // Generate tokens
       const payload = {
@@ -266,6 +332,17 @@ export async function authRoutes(fastify: FastifyInstance) {
       };
 
       const tokens = generateTokens(payload, fastify);
+
+      // Simpan jti refresh token ke Redis
+      await storeRefreshJti(tokens.refreshJti, officer.user.id, 30 * 24 * 60 * 60);
+
+      // Simpan session ke DB
+      await createSession({
+        userId: officer.user.id,
+        jti: tokens.refreshJti,
+        userAgent: request.headers['user-agent'] || undefined,
+        ipAddress: request.ip,
+      });
 
       await db.insert(activityLogs).values({
         actionType: 'LOGIN_SUCCESS',
@@ -279,6 +356,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
       return sendSuccess(reply, {
         access_token: tokens.accessToken,
+        refresh_token: tokens.refreshToken,
         user: {
           id: officer.user.id,
           full_name: officer.fullName,
@@ -295,7 +373,11 @@ export async function authRoutes(fastify: FastifyInstance) {
   });
 
   // POST /auth/refresh
-  fastify.post('/refresh', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/refresh', {
+    config: {
+      rateLimit: { max: 30, timeWindow: '5 minutes' }
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { refresh_token } = request.body as { refresh_token: string };
 
@@ -303,17 +385,21 @@ export async function authRoutes(fastify: FastifyInstance) {
         return sendError(reply, 400, 'MISSING_TOKEN', 'Refresh token diperlukan');
       }
 
-      // 1. Cek Redis blacklist
-      const isBlacklisted = await redisConnection.get(`blacklist:rt:${refresh_token}`);
-      if (isBlacklisted) {
-        return sendError(reply, 401, 'TOKEN_BLACKLISTED', 'Token telah dicabut (sudah logout)');
-      }
-
-      // 2. Verify refresh token
+      // 1. Verify refresh token
       const decoded = await request.server.jwt.verify<any>(refresh_token);
 
       if (decoded.tokenType !== 'refresh') {
         return sendError(reply, 401, 'INVALID_TOKEN', 'Token yang diberikan bukan refresh token');
+      }
+
+      // 2. Validasi jti — cek apakah masih valid (belum di-revoke)
+      if (decoded.jti) {
+        const jtiUserId = await validateRefreshJti(decoded.jti);
+        if (!jtiUserId) {
+          return sendError(reply, 401, 'REFRESH_REVOKED', 'Refresh token sudah tidak berlaku');
+        }
+        // Revoke jti lama (rotation)
+        await revokeRefreshJti(decoded.jti);
       }
 
       // 3. Check user active status
@@ -328,12 +414,15 @@ export async function authRoutes(fastify: FastifyInstance) {
         return sendError(reply, 403, 'ACCOUNT_DISABLED', 'Akun Anda tidak aktif');
       }
 
+      // Re-resolve scope untuk PETUGAS: query officer fresh dari DB
+      let freshOfficerId: string | undefined = decoded.officerId;
       if (decoded.officerId) {
         const officerRes = await db.select().from(officers).where(eq(officers.id, decoded.officerId)).limit(1);
         const officer = officerRes[0];
         if (!officer || !officer.isActive) {
            return sendError(reply, 403, 'OFFICER_DISABLED', 'Akun petugas Anda tidak aktif');
         }
+        freshOfficerId = officer.id;
       }
 
       const newPayload = {
@@ -341,11 +430,22 @@ export async function authRoutes(fastify: FastifyInstance) {
         role: user.role,
         branchId: user.branchId || undefined,
         districtId: user.districtId || undefined,
-        officerId: decoded.officerId,
+        officerId: freshOfficerId,
       };
 
-      // 4. Generate new tokens
+      // 4. Generate new tokens dengan jti baru
       const tokens = generateTokens(newPayload, request.server);
+
+      // 5. Simpan jti baru ke Redis dan update session activity
+      await storeRefreshJti(tokens.refreshJti, user.id, 30 * 24 * 60 * 60);
+
+      // Update session activity untuk jti lama (sudah di-revoke, buat session baru)
+      await createSession({
+        userId: user.id,
+        jti: tokens.refreshJti,
+        userAgent: request.headers['user-agent'] || undefined,
+        ipAddress: request.ip,
+      });
 
       return sendSuccess(reply, {
         access_token: tokens.accessToken,
@@ -357,20 +457,35 @@ export async function authRoutes(fastify: FastifyInstance) {
   });
 
   // POST /auth/logout
-  fastify.post('/logout', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/logout', {
+    config: {
+      rateLimit: { max: 10, timeWindow: '5 minutes' }
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { refresh_token } = request.body as { refresh_token: string };
+      const access_token = (request.headers.authorization || '').replace('Bearer ', '');
 
       if (refresh_token) {
         try {
-          // Decode untuk mendapatkan expiry
+          // Decode untuk mendapatkan jti
           const decoded = await request.server.jwt.verify<any>(refresh_token);
-          const now = Math.floor(Date.now() / 1000);
-          const ttl = decoded.exp - now;
+          if (decoded.jti) {
+            await revokeRefreshJti(decoded.jti);
+          }
 
-          if (ttl > 0) {
-            // Simpan ke Redis blacklist
-            await redisConnection.set(`blacklist:rt:${refresh_token}`, '1', 'EX', ttl);
+          // Blacklist access token juga (optional)
+          if (access_token) {
+            try {
+              const accessDecoded = await request.server.jwt.verify<any>(access_token);
+              const now = Math.floor(Date.now() / 1000);
+              const ttl = accessDecoded.exp - now;
+              if (ttl > 0) {
+                await redisConnection.set(`blacklist:at:${access_token}`, '1', 'EX', ttl);
+              }
+            } catch {
+              // Abaikan jika access token sudah expired
+            }
           }
         } catch (e) {
           // Jika token sudah tidak valid/expired, abaikan saja
@@ -431,6 +546,73 @@ export async function authRoutes(fastify: FastifyInstance) {
       };
 
       return reply.send(responseData);
+    } catch (error: unknown) {
+      if (isJwtErrorLike(error) && (error.statusCode === 401 || error.code?.includes('JWT'))) {
+        return sendError(reply, 401, 'UNAUTHORIZED', 'Token tidak valid atau expired');
+      }
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  // ============ Session Management ============
+
+  // GET /auth/sessions — daftar sesi aktif
+  fastify.get('/sessions', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      await request.jwtVerify();
+      const decoded = request.user as any;
+
+      const sessions = await getUserSessions(decoded.userId);
+
+      return sendSuccess(reply, sessions.map((s: any) => ({
+        id: s.id,
+        device_label: s.deviceLabel,
+        ip_address: s.ipAddress,
+        last_used_at: s.lastUsedAt,
+        created_at: s.createdAt,
+      })));
+    } catch (error: unknown) {
+      if (isJwtErrorLike(error) && (error.statusCode === 401 || error.code?.includes('JWT'))) {
+        return sendError(reply, 401, 'UNAUTHORIZED', 'Token tidak valid atau expired');
+      }
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  // DELETE /auth/sessions/:id — cabut 1 sesi
+  fastify.delete('/sessions/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      await request.jwtVerify();
+      const decoded = request.user as any;
+      const { id } = request.params as { id: string };
+
+      const revoked = await revokeSession(id, decoded.userId);
+
+      if (!revoked) {
+        return sendError(reply, 404, 'SESSION_NOT_FOUND', 'Sesi tidak ditemukan atau sudah dicabut');
+      }
+
+      return sendSuccess(reply, { message: 'Sesi berhasil dicabut' });
+    } catch (error: unknown) {
+      if (isJwtErrorLike(error) && (error.statusCode === 401 || error.code?.includes('JWT'))) {
+        return sendError(reply, 401, 'UNAUTHORIZED', 'Token tidak valid atau expired');
+      }
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  // DELETE /auth/sessions — cabut semua sesi lain (logout other devices)
+  fastify.delete('/sessions', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      await request.jwtVerify();
+      const decoded = request.user as any;
+
+      const count = await revokeAllUserSessions(decoded.userId);
+
+      return sendSuccess(reply, {
+        message: `${count} sesi lain berhasil dicabut`,
+        revoked_count: count,
+      });
     } catch (error: unknown) {
       if (isJwtErrorLike(error) && (error.statusCode === 401 || error.code?.includes('JWT'))) {
         return sendError(reply, 401, 'UNAUTHORIZED', 'Token tidak valid atau expired');

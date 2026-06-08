@@ -6,6 +6,7 @@ import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { config } from '../config/env';
 import { addWhatsAppJob } from './queues';
+import { Errors } from '../utils/errorCatalog';
 
 interface WhatsAppResponse {
   message_id: string;
@@ -138,7 +139,7 @@ export async function sendWhatsAppNotificationSync(
 
       if (!response.ok) {
         console.error('WhatsApp API Error:', data);
-        throw new Error(data.error?.message || 'WhatsApp API request failed');
+        throw Errors.WA_SEND_FAILED(data.error?.message || 'WhatsApp API request failed');
       }
 
       result = {
@@ -220,7 +221,7 @@ export async function sendTemplateMessage(
     const data = await response.json() as any;
 
     if (!response.ok) {
-      throw new Error(data.error?.message || 'Template API request failed');
+      throw Errors.WA_SEND_FAILED(data.error?.message || 'Template API request failed');
     }
 
     result = {

@@ -162,6 +162,7 @@ export const activityLogs = pgTable('activity_logs', {
   actionType: varchar('action_type', { length: 50 }).notNull(),
   entityType: varchar('entity_type', { length: 50 }),
   entityId: uuid('entity_id'),
+  requestId: varchar('request_id', { length: 100 }),
   oldData: json('old_data'),
   newData: json('new_data'),
   ipAddress: varchar('ip_address', { length: 45 }),
@@ -266,5 +267,22 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
 export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
   user: one(users, { fields: [activityLogs.userId], references: [users.id] }),
   officer: one(officers, { fields: [activityLogs.officerId], references: [officers.id] }),
+}));
+
+// User Sessions
+export const userSessions = pgTable('user_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  jti: varchar('jti', { length: 255 }).unique().notNull(),
+  deviceLabel: varchar('device_label', { length: 100 }),
+  userAgent: text('user_agent'),
+  ipAddress: varchar('ip_address', { length: 45 }),
+  lastUsedAt: timestamp('last_used_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  revokedAt: timestamp('revoked_at'),
+});
+
+export const userSessionsRelations = relations(userSessions, ({ one }) => ({
+  user: one(users, { fields: [userSessions.userId], references: [users.id] }),
 }));
 
