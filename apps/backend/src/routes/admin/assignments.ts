@@ -140,6 +140,7 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
           periodMonth: body.period_month,
       }).returning();
       
+      request.auditContext = { newData: inserted[0] };
       return sendSuccess(reply, inserted[0], 201);
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
@@ -215,6 +216,7 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
 
       await insertAssignments(newAssignments);
 
+      request.auditContext = { newData: newAssignments };
       return sendSuccess(reply, { 
         assigned_count: cansToAssign.length,
         period: `${currentMonth}/${currentYear}`

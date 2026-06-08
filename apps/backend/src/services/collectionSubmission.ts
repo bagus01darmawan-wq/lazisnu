@@ -2,6 +2,8 @@ import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { eq, and, sql, ExtractTablesWithRelations } from 'drizzle-orm';
 import { alias, PgTransaction } from 'drizzle-orm/pg-core';
+import { AppError } from '../utils/AppError';
+import { ErrorCode, Errors } from '../utils/errorCatalog';
 
 type Transaction = PgTransaction<
   any,
@@ -58,10 +60,10 @@ export async function validateAssignmentForSubmit(
   });
 
   if (!assignment) {
-    throw new Error('Assignment tidak valid, bukan milik Anda, atau sudah selesai');
+    throw Errors.ASSIGNMENT_INVALID();
   }
   if (assignment.canId !== canId) {
-    throw new Error('can_id tidak sesuai dengan assignment');
+    throw Errors.CAN_ID_MISMATCH();
   }
 
   return assignment;
@@ -82,7 +84,7 @@ async function assertNoExistingFirstSubmit(
   });
 
   if (existing) {
-    throw new Error('QR_ALREADY_SUBMITTED');
+    throw Errors.QR_ALREADY_SUBMITTED();
   }
 }
 
@@ -157,15 +159,15 @@ export async function resubmitCollection(
   });
 
   if (!oldCollection) {
-    throw new Error('COLLECTION_NOT_FOUND');
+    throw Errors.COLLECTION_NOT_FOUND();
   }
 
   if (input.requiredOfficerId && oldCollection.officerId !== input.requiredOfficerId) {
-    throw new Error('COLLECTION_NOT_FOUND');
+    throw Errors.COLLECTION_NOT_FOUND();
   }
 
   if (input.requiredBranchId && oldCollection.can?.branchId !== input.requiredBranchId) {
-    throw new Error('FORBIDDEN');
+    throw Errors.FORBIDDEN();
   }
 
   const [latestRecord] = await tx.select({ maxSeq: sql<number>`max(${schema.collections.submitSequence})` })
@@ -177,7 +179,7 @@ export async function resubmitCollection(
 
   const latestSequence = Number(latestRecord?.maxSeq || 0);
   if (oldCollection.submitSequence !== latestSequence) {
-    throw new Error('NOT_LATEST');
+    throw Errors.NOT_LATEST();
   }
 
   const nextSequence = latestSequence + 1;

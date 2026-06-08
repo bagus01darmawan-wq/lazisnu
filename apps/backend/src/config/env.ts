@@ -21,6 +21,11 @@ const envSchema = z.object({
   // JWT
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().default('7d'),
+  JWT_ACCESS_SECRET: z.string().optional(),
+  JWT_REFRESH_SECRET: z.string().optional(),
+  JWT_ACCESS_TTL: z.string().default('15m'),
+  JWT_REFRESH_TTL: z.string().default('7d'),
+  JWT_REFRESH_TTL_PETUGAS: z.string().default('7d'),
 
   // CORS
   CORS_ORIGINS: z.string().default('*'),
@@ -49,6 +54,9 @@ const envSchema = z.object({
 
   // Internal API Key (for scheduler/internal routes)
   INTERNAL_API_KEY: z.string().optional(),
+
+  // Sentry
+  SENTRY_DSN: z.string().optional(),
 
   // APP Secret for QR Signing
   APP_SECRET: z.string()

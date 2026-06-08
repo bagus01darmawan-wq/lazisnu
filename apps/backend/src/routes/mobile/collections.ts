@@ -6,8 +6,11 @@ import { z } from 'zod';
 import { sendWhatsAppNotification } from '../../services/whatsapp';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { collectionSchema, resubmitSchema } from './schemas';
+import { AppError, isAppError } from '../../utils/AppError';
+import { Errors } from '../../utils/errorCatalog';
+import { correctCollection } from '../../services/collectionCorrectionService';
 
-import { validateAssignmentForSubmit, submitCollection, getLatestCollectionCondition, resubmitCollection } from '../../services/collectionSubmission';
+import { validateAssignmentForSubmit, submitCollection, getLatestCollectionCondition } from '../../services/collectionSubmission';
 import { getErrorMessage, isHttpRouteError, isPostgresError } from '../../utils/error-guards';
 
 export async function collectionsRoutes(fastify: FastifyInstance) {
@@ -39,11 +42,11 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
         try {
           await validateAssignmentForSubmit(tx, body.assignment_id, body.can_id, officerId);
         } catch (err: unknown) {
-          const message = getErrorMessage(err, 'Assignment tidak valid');
-          if (message.includes('can_id')) {
-            throw { status: 400, code: 'MISMATCH', message };
+          const appErr = AppError.fromUnknown(err, 'Assignment tidak valid');
+          if (appErr.code === 'CAN_ID_MISMATCH') {
+            throw Errors.CAN_ID_MISMATCH(appErr.message);
           }
-          throw { status: 403, code: 'FORBIDDEN', message };
+          throw appErr;
         }
 
         return await submitCollection(tx, {
@@ -88,9 +91,8 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
         message: 'Penjemputan berhasil disimpan',
       }, 201);
     } catch (error: unknown) {
-      if (isHttpRouteError(error)) return sendError(reply, error.status, error.code, error.message);
-      if (error instanceof Error && error.message === 'QR_ALREADY_SUBMITTED') {
-        return sendError(reply, 409, 'QR_ALREADY_SUBMITTED', 'Kaleng ini sudah pernah di-submit untuk assignment ini');
+      if (isAppError(error)) {
+        return sendError(reply, error.statusCode, error.code, error.message);
       }
       if (isPostgresError(error) && error.code === '23505') {
         return sendSuccess(reply, {
@@ -138,17 +140,21 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
         ),
       ]);
 
+      const items = collections.map((c) => ({
+        id: c.id,
+        qr_code: c.can.qrCode,
+        owner_name: c.can.ownerName,
+        owner_address: c.can.ownerAddress,
+        nominal: Number(c.nominal),
+        payment_method: c.paymentMethod,
+        collected_at: c.collectedAt,
+        sync_status: c.syncStatus,
+      }));
+
       return sendSuccess(reply, {
-        collections: collections.map((c) => ({
-          id: c.id,
-          qr_code: c.can.qrCode,
-          owner_name: c.can.ownerName,
-          owner_address: c.can.ownerAddress,
-          nominal: Number(c.nominal),
-          payment_method: c.paymentMethod,
-          collected_at: c.collectedAt,
-          sync_status: c.syncStatus,
-        })),
+        items,
+        collections: items,
+
         pagination: {
           page,
           limit,
@@ -162,7 +168,11 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
   });
 
   // POST /mobile/collections/:id/resubmit
-  fastify.post('/collections/:id/resubmit', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/collections/:id/resubmit', {
+    config: {
+      rateLimit: { max: 5, timeWindow: '1 minute' }
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
       const body = resubmitSchema.parse(request.body);
@@ -171,29 +181,21 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
 
       if (!officerId) return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
 
-      const { oldCollection, newCollection } = await db.transaction(async (tx) => {
-        const result = await resubmitCollection(tx, {
+      const { oldCollection, newCollection } = await correctCollection(
+        {
           collectionId: id,
           nominal: body.nominal,
-          paymentMethod: body.payment_method,
           alasanResubmit: body.alasan_resubmit,
+          paymentMethod: body.payment_method as 'CASH' | 'TRANSFER',
           requiredOfficerId: officerId,
-        });
-
-        await tx.insert(schema.activityLogs).values({
+        },
+        {
           userId: user.userId,
           officerId,
-          actionType: 'RESUBMIT_COLLECTION',
-          entityType: 'collections',
-          entityId: result.newCollection.id,
-          oldData: result.oldCollection as any,
-          newData: result.newCollection as any,
           ipAddress: request.ip,
-          userAgent: request.headers['user-agent'],
-        });
-
-        return result;
-      });
+          userAgent: request.headers['user-agent'] as string,
+        },
+      );
 
       let whatsappStatus = 'SKIPPED';
       if (oldCollection.can?.ownerWhatsapp) {
@@ -221,11 +223,8 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
       });
     } catch (error: unknown) {
       if (error instanceof z.ZodError) return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
-      if (error instanceof Error && error.message === 'COLLECTION_NOT_FOUND') {
-        return sendError(reply, 404, 'NOT_FOUND', 'Data perolehan tidak ditemukan');
-      }
-      if (error instanceof Error && error.message === 'NOT_LATEST') {
-        return sendError(reply, 400, 'NOT_LATEST', 'Hanya record terbaru yang bisa di-resubmit');
+      if (isAppError(error)) {
+        return sendError(reply, error.statusCode, error.code, error.message);
       }
       return sendInternalError(reply, error, fastify.log);
     }

@@ -1,7 +1,11 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, authorize } from '../middleware/auth';
-import { sendSuccess } from '../utils/response';
-import { getCollectionScope, getDashboardData, buildCollectionsQuery, getCollectionsList, getCollectionDetail, getReportSummary } from '../services/reportService';
+import { assertCollectionAccess } from '../middleware/ownership';
+import { sendSuccess, sendError, sendInternalError } from '../utils/response';
+import { getRoleScope } from '../utils/scope';
+import { getCollectionScope, buildCollectionsQuery, getCollectionsList } from '../services/collectionQueryService';
+import { getCollectionDetail, getReportSummary } from '../services/collectionReportService';
+import { getBendaharaDashboard } from '../services/dashboardReportService';
 
 export async function bendaharaRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', authenticate);
@@ -9,11 +13,10 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
 
   fastify.get('/dashboard', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const data = await getDashboardData();
+      const data = await getBendaharaDashboard();
       return sendSuccess(reply, data);
     } catch (error) {
-      fastify.log.error(error);
-      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
+      return sendInternalError(reply, error, fastify.log);
     }
   });
 
@@ -38,30 +41,33 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
       });
 
       if (emptyResult || !whereClause) {
-        return sendSuccess(reply, { collections: [], pagination: { page, limit, total: 0, total_pages: 0 } });
+        return sendSuccess(reply, { items: [], collections: [], pagination: { page, limit, total: 0, total_pages: 0 } });
       }
 
       const data = await getCollectionsList({ whereClause, page, limit, skip });
       return sendSuccess(reply, data);
     } catch (error) {
-      fastify.log.error(error);
-      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
+      return sendInternalError(reply, error, fastify.log);
     }
   });
 
   fastify.get('/collections/:id', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
+      const user = request.currentUser!;
+
+      // Ownership check: pastikan collection milik branch/district user
+      await assertCollectionAccess(user, id);
+
       const data = await getCollectionDetail(id);
 
       if (!data) {
-        return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Transaksi tidak ditemukan' } });
+        return sendError(reply, 404, 'NOT_FOUND', 'Transaksi tidak ditemukan');
       }
 
       return sendSuccess(reply, data);
     } catch (error) {
-      fastify.log.error(error);
-      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
+      return sendInternalError(reply, error, fastify.log);
     }
   });
 
@@ -95,8 +101,7 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
         by_officer: summaryData.officerRes.map(o => ({ officer_name: o.officerName, amount: Number(o.total), count: Number(o.count) })),
       });
     } catch (error) {
-      fastify.log.error(error);
-      return reply.status(500).send({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan server' } });
+      return sendInternalError(reply, error, fastify.log);
     }
   });
 }

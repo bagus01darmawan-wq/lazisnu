@@ -1,4 +1,5 @@
 {
+  "type": "module",
   "name": "lazisnu-monorepo",
   "version": "1.0.0",
   "private": true,
@@ -18,5 +19,14 @@
   "dependencies": {
     "date-fns": "^4.1.0",
     "react-day-picker": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "ts-morph": "^28.0.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/react": "18.2.79"
+    }
   }
 }
