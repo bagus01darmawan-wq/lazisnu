@@ -3,12 +3,26 @@ import { collectionService } from '../services/api';
 import { offlineQueue } from '../services/offline/queue';
 import { syncService } from '../services/offline/sync';
 import NetInfo from '@react-native-community/netinfo';
-import { Platform } from 'react-native';
-import { Collection } from '@lazisnu/shared-types';
+import { getDeviceInfo } from '../utils/device';
+import { Collection, HistoryItem } from '@lazisnu/shared-types';
+
+// Tipe jujur untuk data yang disimpan setelah submit (sebelum sync ke server).
+// Tidak menggunakan `Collection` karena data belum punya field server-side
+// seperti `id`, `officer_id`, `sync_status`, atau nested `can`.
+interface SubmittedCollectionDraft {
+  assignment_id: string;
+  can_id: string;
+  nominal: number;
+  payment_method: 'CASH' | 'TRANSFER';
+  collected_at: string;
+  latitude?: number;
+  longitude?: number;
+  offline_id: string;
+}
 
 interface CollectionState {
   isSubmitting: boolean;
-  lastSubmitted: Collection | null;
+  lastSubmitted: SubmittedCollectionDraft | null;
   error: string | null;
 
   submitCollection: (data: {
@@ -36,11 +50,7 @@ export const useCollectionStore = create<CollectionState>((set) => ({
       // 1. Simpan ke Queue lokal (MMKV)
       offlineQueue.enqueue({
         ...data,
-        device_info: {
-          model: Platform.Version.toString(),
-          os_version: Platform.OS,
-          app_version: '1.0.0',
-        },
+        device_info: getDeviceInfo(),
       });
 
       // 2. Cek koneksi & trigger sync jika online
@@ -49,19 +59,25 @@ export const useCollectionStore = create<CollectionState>((set) => ({
 
       if (isOnline) {
         const syncResult = await syncService.autoSync();
+        // SYNC_IN_PROGRESS: data sudah di queue MMKV, akan tertangani oleh sync yang sedang berjalan.
+        // Jangan error — user tidak perlu tahu ada race condition internal.
+        if (syncResult.error === 'SYNC_IN_PROGRESS') {
+          set({ isSubmitting: false, lastSubmitted: data });
+          return { success: true, synced: false };
+        }
         if (!syncResult.success) {
           set({
             isSubmitting: false,
-            lastSubmitted: data as unknown as Collection,
+            lastSubmitted: data,
             error: 'Gagal sinkronisasi. Data tersimpan offline.',
           });
           return { success: true, synced: false };
         }
-        set({ isSubmitting: false, lastSubmitted: data as unknown as Collection });
+        set({ isSubmitting: false, lastSubmitted: data });
         return { success: true, synced: true };
       }
 
-      set({ isSubmitting: false, lastSubmitted: data as unknown as Collection });
+      set({ isSubmitting: false, lastSubmitted: data });
       return { success: true, synced: false };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Gagal menyimpan data';
@@ -84,6 +100,29 @@ interface CollectionsHistoryState {
   loadMore: () => Promise<void>;
 }
 
+/**
+ * Map HistoryItem (denormalized dari backend) → Collection (nested can, dengan
+ * field opsional dikosongkan). UI HistoryScreen membaca `can.qr_code`,
+ * `can.owner_name` — sedangkan backend mengirim field flat.
+ */
+function mapHistoryToCollection(item: HistoryItem): Collection {
+  return {
+    id: item.id,
+    assignment_id: '',
+    can_id: '',
+    officer_id: '',
+    nominal: item.nominal,
+    payment_method: item.payment_method,
+    collected_at: item.collected_at,
+    sync_status: item.sync_status,
+    can: {
+      qr_code: item.qr_code,
+      owner_name: item.owner_name,
+      owner_address: item.owner_address,
+    },
+  };
+}
+
 export const useCollectionsStore = create<CollectionsHistoryState>((set, get) => ({
   collections: [],
   isLoading: false,
@@ -94,79 +133,32 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
   fetchCollections: async () => {
     set({ isLoading: true, error: null });
 
-    // DATA SIMULASI UNTUK RIWAYAT
-    const mockCollections: Collection[] = [
-      {
-        id: 'hist-1',
-        assignment_id: 'a1',
-        can_id: 'c1',
-        officer_id: 'p1',
-        nominal: 50000,
-        payment_method: 'CASH' as any,
-        collected_at: new Date(Date.now() - 3600000).toISOString(),
-        sync_status: 'COMPLETED' as any,
-        whatsapp_status: 'SENT',
-        can: {
-          qr_code: 'PNG-01-003',
-          owner_name: 'Warung Bu Siti',
-          owner_address: 'Pasar Paninggaran Blok A',
-        },
-      },
-      {
-        id: 'hist-2',
-        assignment_id: 'a2',
-        can_id: 'c2',
-        officer_id: 'p1',
-        nominal: 100000,
-        payment_method: 'TRANSFER' as any,
-        collected_at: new Date(Date.now() - 86400000).toISOString(),
-        sync_status: 'COMPLETED' as any,
-        whatsapp_status: 'SENT',
-        can: {
-          qr_code: 'PNG-01-010',
-          owner_name: 'H. Mansur',
-          owner_address: 'Depan Masjid Jami',
-        },
-      },
-      {
-        id: 'hist-3',
-        assignment_id: 'a3',
-        can_id: 'c3',
-        officer_id: 'p1',
-        nominal: 25000,
-        payment_method: 'CASH' as any,
-        collected_at: new Date(Date.now() - 172800000).toISOString(),
-        sync_status: 'COMPLETED' as any,
-        whatsapp_status: 'PENDING',
-        can: {
-          qr_code: 'PNG-02-005',
-          owner_name: 'Ibu Ratna',
-          owner_address: 'Perumahan Indah Gg. 4',
-        },
-      },
-    ];
-
     try {
       const result = await collectionService.getHistory({ page: 1, limit: 20 });
 
       if (result.success && result.data) {
-        const data = result.data as any;
-        const realCollections = data.collections || [];
+        // result.data bertipe HistoryResponse — backend mengirim items (denormalized).
+        // UI membutuhkan shape Collection (nested can). Mapping eksplisit di sini.
+        const items: HistoryItem[] = result.data.items || [];
+        const mapped = items.map(mapHistoryToCollection);
         set({
-          collections: realCollections.length > 0 ? realCollections : mockCollections,
-          page: data.pagination?.page || 1,
-          totalPages: data.pagination?.total_pages || 1,
+          collections: mapped,
+          page: result.data.pagination.page || 1,
+          totalPages: result.data.pagination.total_pages || 1,
           isLoading: false,
         });
       } else {
         set({
-          collections: mockCollections,
+          collections: [],
+          error: result.error?.message || 'Gagal memuat riwayat koleksi',
           isLoading: false,
         });
       }
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Terjadi kesalahan jaringan';
       set({
-        collections: mockCollections,
+        collections: [],
+        error: message,
         isLoading: false,
       });
     }
@@ -181,11 +173,12 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
       const result = await collectionService.getHistory({ page: page + 1, limit: 20 });
 
       if (result.success && result.data) {
-        const data = result.data as any;
+        const items: HistoryItem[] = result.data.items || [];
+        const mapped = items.map(mapHistoryToCollection);
         set({
-          collections: [...collections, ...(data.collections || [])],
-          page: data.pagination?.page || page + 1,
-          totalPages: data.pagination?.total_pages || totalPages,
+          collections: [...collections, ...mapped],
+          page: result.data.pagination.page || page + 1,
+          totalPages: result.data.pagination.total_pages || totalPages,
           isLoading: false,
         });
       }

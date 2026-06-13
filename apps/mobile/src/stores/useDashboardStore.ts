@@ -1,12 +1,12 @@
 import { create } from 'zustand';
 import { dashboardService } from '../services/api';
-import { Task, Collection, TodayStats, WeekStats } from '@lazisnu/shared-types';
+import { TodayStats, WeekStats, DashboardTaskItem, RecentCollectionSummary } from '@lazisnu/shared-types';
 
 interface DashboardState {
   todayStats: TodayStats | null;
   weekStats: WeekStats | null;
-  pendingTasks: Task[];
-  recentCollections: Collection[];
+  pendingTasks: DashboardTaskItem[];
+  recentCollections: RecentCollectionSummary[];
   isLoading: boolean;
   error: string | null;
 
@@ -28,12 +28,13 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const result = await dashboardService.getDashboard();
 
       if (result.success && result.data) {
-        const data = result.data as any;
+        // result.data bertipe DashboardResponse — akses snake_case langsung
+        const { today_stats, week_stats, pending_tasks, recent_collections } = result.data;
         set({
-          todayStats: data.today_stats,
-          weekStats: data.week_stats,
-          pendingTasks: data.pending_tasks || [],
-          recentCollections: data.recent_collections || [],
+          todayStats: today_stats,
+          weekStats: week_stats,
+          pendingTasks: pending_tasks || [],
+          recentCollections: recent_collections || [],
           isLoading: false,
         });
       } else {
@@ -46,15 +47,10 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   refreshStats: async () => {
-    const { todayStats } = get();
-    if (todayStats) {
-      set({
-        todayStats: {
-          ...todayStats,
-          collected: todayStats.collected + 1,
-          remaining: Math.max(0, todayStats.remaining - 1),
-        },
-      });
-    }
+    // Re-fetch dari server agar data pasti sinkron.
+    // Optimistic update sebelumnya (collected+1, remaining-1) rentan drift
+    // karena tidak ada reconciliation dengan angka server.
+    const { fetchDashboard } = get();
+    await fetchDashboard();
   },
 }));

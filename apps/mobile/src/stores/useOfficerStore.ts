@@ -1,4 +1,9 @@
 import { create } from 'zustand';
+// Officer dari shared-types (SSOT) diimpor sebagai referensi tipe. Tipe lokal
+// OfficerWithStats adalah versi "display-ready" dengan relasi district/branch
+// yang sudah ter-resolve sebagai objek + stats computed. Hindari shadowing nama
+// `Officer` agar tidak membingungkan antara tipe DB dan tipe UI.
+import type { Officer } from '@lazisnu/shared-types';
 
 interface OfficerStats {
   totalCollections: number;
@@ -6,7 +11,7 @@ interface OfficerStats {
   totalAmount: number;
 }
 
-interface Officer {
+interface OfficerWithStats {
   id: string;
   name: string;
   code: string;
@@ -22,7 +27,7 @@ interface Officer {
 }
 
 interface OfficerState {
-  officer: Officer | null;
+  officer: OfficerWithStats | null;
   isLoading: boolean;
   error: string | null;
   fetchOfficer: () => Promise<void>;

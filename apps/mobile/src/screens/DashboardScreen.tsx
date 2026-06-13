@@ -8,6 +8,7 @@ import {
   ScrollView,
   RefreshControl,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -17,7 +18,7 @@ const DashboardScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { todayStats, weekStats, pendingTasks, recentCollections, fetchDashboard, isLoading } =
     useDashboardStore();
-  const { pendingCount, permanentFailedCount, checkStatus } = useSyncStore();
+  const { pendingCount, permanentFailedCount, checkStatus, clearFailed } = useSyncStore();
 
   useEffect(() => {
     fetchDashboard();
@@ -63,6 +64,25 @@ const DashboardScreen: React.FC = () => {
             onPress={() => navigation.navigate('History')}
           >
             <Text style={styles.errorBannerButtonText}>Lihat</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.errorBannerDeleteButton}
+            onPress={() => {
+              Alert.alert(
+                'Hapus Data Gagal?',
+                `${permanentFailedCount} data gagal akan dihapus permanen dari perangkat. Data ini tidak bisa dikembalikan.`,
+                [
+                  { text: 'Batal', style: 'cancel' },
+                  {
+                    text: 'Hapus',
+                    style: 'destructive',
+                    onPress: () => clearFailed(),
+                  },
+                ],
+              );
+            }}
+          >
+            <Text style={styles.errorBannerButtonText}>Hapus</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -179,7 +199,7 @@ const DashboardScreen: React.FC = () => {
               <View style={styles.taskContent}>
                 <Text style={styles.taskOwner}>{task.owner_name}</Text>
                 <Text style={styles.taskAddress} numberOfLines={1}>
-                  {task.owner_address}
+                  {task.address}
                 </Text>
               </View>
               <Icon name="chevron-right" size={20} color="#999" />
@@ -209,7 +229,7 @@ const DashboardScreen: React.FC = () => {
                 <Icon name="cash" size={20} color="#4CAF50" />
               </View>
               <View style={styles.collectionContent}>
-                <Text style={styles.collectionOwner}>{(collection as any).owner_name}</Text>
+                <Text style={styles.collectionOwner}>{collection.owner_name}</Text>
                 <Text style={styles.collectionDate}>
                   {new Date(collection.collected_at).toLocaleDateString('id-ID')}
                 </Text>
@@ -285,6 +305,13 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 4,
     marginLeft: 8,
+  },
+  errorBannerDeleteButton: {
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+    marginLeft: 6,
   },
   errorBannerButtonText: {
     color: '#fff',

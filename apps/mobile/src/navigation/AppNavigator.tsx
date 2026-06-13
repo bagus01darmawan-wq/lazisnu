@@ -29,6 +29,14 @@ const PlaceholderScreen = () => (
   </View>
 );
 
+// Splash ringan selama initializeAuth() berjalan. Tanpa ini, UI akan
+// flash ke LoginScreen lalu ke MainTabs pada cold start dengan token valid.
+const SplashScreen = () => (
+  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F4F1EA' }}>
+    <Text style={{ color: '#2C473E', fontSize: 18, fontWeight: '600' }}>Lazisnu</Text>
+  </View>
+);
+
 // Tab Navigator
 const MainTabs = () => {
   return (
@@ -107,7 +115,17 @@ const AuthStack = () => {
 
 // Main App Navigator
 const AppNavigator = () => {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, isInitializing } = useAuthStore();
+
+  // Selama initializeAuth() berjalan, tampilkan splash agar UI tidak
+  // flash ke LoginScreen saat ternyata token masih valid.
+  if (isInitializing) {
+    return (
+      <NavigationContainer>
+        <SplashScreen />
+      </NavigationContainer>
+    );
+  }
 
   return (
     <NavigationContainer>

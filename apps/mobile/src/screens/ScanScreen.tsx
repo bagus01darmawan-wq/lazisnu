@@ -11,23 +11,52 @@ import {
   Vibration,
   ActivityIndicator,
   TextInput,
+  PermissionsAndroid,
+  Linking,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { tasksService } from '../services/api';
 import { Task } from '@lazisnu/shared-types';
-import { useTasksStore } from '../stores/useTasksStore';
 
 import { Camera, CameraType } from 'react-native-camera-kit';
 
 const ScanScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { tasks } = useTasksStore();
   const [scannedData, setScannedData] = useState<Task | null>(null);
   const [isScanning, setIsScanning] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [isManualInput, setIsManualInput] = useState(false);
   const [manualCode, setManualCode] = useState('');
+  const [cameraPermission, setCameraPermission] = useState<'checking' | 'granted' | 'denied' | 'blocked'>('checking');
+
+  const checkCameraPermission = async () => {
+    try {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.CAMERA,
+        {
+          title: 'Izin Kamera',
+          message: 'Aplikasi membutuhkan akses kamera untuk memindai QR code kaleng infaq.',
+          buttonPositive: 'Izinkan',
+          buttonNegative: 'Jangan',
+        }
+      );
+      if (granted === 'granted') {
+        setCameraPermission('granted');
+      } else if (granted === 'never_ask_again') {
+        setCameraPermission('blocked');
+      } else {
+        setCameraPermission('denied');
+      }
+    } catch {
+      setCameraPermission('denied');
+    }
+  };
+
+  // Periksa izin kamera saat mount
+  useEffect(() => {
+    checkCameraPermission();
+  }, []);
 
   // Prevent back navigation
   useEffect(() => {
@@ -83,19 +112,10 @@ const ScanScreen: React.FC = () => {
 
   const handleManualSubmit = () => {
     if (!manualCode.trim()) {return;}
-
-    const normalizedCode = manualCode.trim().toUpperCase();
-    const task = tasks.find(t => t.qr_code.toUpperCase() === normalizedCode);
-
-    if (task) {
-      setIsManualInput(false);
-      setManualCode('');
-      Vibration.vibrate(70);
-      handleQRCodeScanned(task.qr_code);
-    } else {
-      Vibration.vibrate([0, 100, 50, 100]);
-      Alert.alert('Gagal', 'Kode QR tidak ditemukan di daftar tugas Anda.');
-    }
+    setIsManualInput(false);
+    const code = manualCode.trim().toUpperCase();
+    setManualCode('');
+    handleQRCodeScanned(code); // Samakan flow dengan scan QR — validasi via backend
   };
 
   const simulateScan = () => {
@@ -117,6 +137,63 @@ const ScanScreen: React.FC = () => {
 
   // Scanning View
   if (isScanning) {
+    // Permission not yet checked — spinner
+    if (cameraPermission === 'checking') {
+      return (
+        <View style={styles.container}>
+          <View style={styles.permissionContainer}>
+            <ActivityIndicator size="large" color="#10B981" />
+            <Text style={styles.permissionText}>Memeriksa izin kamera...</Text>
+          </View>
+        </View>
+      );
+    }
+
+    // Permission denied or blocked — fallback UI
+    if (cameraPermission === 'denied' || cameraPermission === 'blocked') {
+      const isBlocked = cameraPermission === 'blocked';
+      return (
+        <View style={styles.container}>
+          <View style={styles.permissionContainer}>
+            <Icon name="camera-off" size={64} color="#9CA3AF" />
+            <Text style={styles.permissionTitle}>Izin Kamera Diperlukan</Text>
+            <Text style={styles.permissionDesc}>
+              {isBlocked
+                ? 'Izin kamera telah ditolak permanen. Buka Pengaturan untuk mengaktifkan.'
+                : 'Izinkan akses kamera untuk memindai QR code kaleng infaq.'}
+            </Text>
+            <TouchableOpacity
+              style={styles.permissionButton}
+              onPress={() => {
+                if (isBlocked) {
+                  Linking.openSettings();
+                } else {
+                  checkCameraPermission();
+                }
+              }}
+            >
+              <Icon
+                name={isBlocked ? 'cog' : 'camera'}
+                size={20}
+                color="#fff"
+                style={{ marginRight: 8 }}
+              />
+              <Text style={styles.permissionButtonText}>
+                {isBlocked ? 'Buka Pengaturan' : 'Coba Lagi'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.permissionBackButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Text style={styles.permissionBackText}>Kembali</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
+    // Permission granted — render camera
     return (
       <View style={styles.container}>
         {/* Camera Component */}
@@ -159,9 +236,11 @@ const ScanScreen: React.FC = () => {
               <Text style={styles.manualButtonText}>Input Manual</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.mockScanButton} onPress={simulateScan}>
-              <Text style={styles.mockScanText}>Tap to Simulate Scan (Demo)</Text>
-            </TouchableOpacity>
+            {__DEV__ && (
+              <TouchableOpacity style={styles.mockScanButton} onPress={simulateScan}>
+                <Text style={styles.mockScanText}>Tap to Simulate Scan (Dev Only)</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -312,6 +391,56 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
+  // ── Permission UI ──────────────────────────────────────────────────────
+  permissionContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#111827',
+    paddingHorizontal: 32,
+  },
+  permissionText: {
+    color: '#9CA3AF',
+    fontSize: 16,
+    marginTop: 16,
+  },
+  permissionTitle: {
+    color: '#F9FAFB',
+    fontSize: 20,
+    fontWeight: '700',
+    marginTop: 20,
+    textAlign: 'center',
+  },
+  permissionDesc: {
+    color: '#9CA3AF',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 10,
+    lineHeight: 20,
+  },
+  permissionButton: {
+    flexDirection: 'row',
+    backgroundColor: '#10B981',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 10,
+    marginTop: 24,
+    alignItems: 'center',
+  },
+  permissionButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  permissionBackButton: {
+    marginTop: 16,
+    padding: 12,
+  },
+  permissionBackText: {
+    color: '#6B7280',
+    fontSize: 14,
+  },
+  // ── Header ──────────────────────────────────────────────────────────────
   header: {
     flexDirection: 'row',
     alignItems: 'center',

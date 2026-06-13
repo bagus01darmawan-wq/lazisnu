@@ -65,9 +65,12 @@ const LoginScreen: React.FC = () => {
     }
 
     clearError();
-    const success = await login(phone.trim(), password);
-    if (!success && error) {
-      Alert.alert('Login Gagal', error);
+    const success = await login(phone.trim(), password.trim());
+    if (!success) {
+      const latestError = useAuthStore.getState().error;
+      if (latestError) {
+        Alert.alert('Login Gagal', latestError);
+      }
     }
   };
 

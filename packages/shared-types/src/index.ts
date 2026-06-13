@@ -285,3 +285,130 @@ export interface CollectionReport {
   owner_address: string;
   qr_code: string;
 }
+
+// ─── API Response Shapes (snake_case — match backend) ─────────────────────────
+// Digunakan sebagai type parameter <T> di api.ts. Store melakukan mapping
+// snake_case → camelCase di level consumed, bukan di level tipe.
+
+export interface AuthLoginResponse {
+  access_token: string;
+  refresh_token: string;
+  user: {
+    id: string;
+    email?: string;
+    full_name: string;
+    role: string;
+    branch_id?: string;
+    district_id?: string;
+  };
+}
+
+export interface MeResponse {
+  id: string;
+  email?: string;
+  full_name: string;
+  phone: string;
+  role: string;
+  branch_id?: string;
+  district_id?: string;
+  is_active: boolean;
+  last_login?: string;
+  officer?: {
+    id: string;
+    employee_code: string;
+    photo_url?: string;
+    assigned_zone?: string;
+    is_active: boolean;
+  };
+}
+
+// Dashboard response dari GET /mobile/dashboard
+export interface DashboardResponse {
+  today_stats: TodayStats;
+  week_stats: WeekStats;
+  pending_tasks: DashboardTaskItem[];
+  recent_collections: RecentCollectionSummary[];
+}
+
+export interface DashboardTaskItem {
+  id: string;
+  can_id: string;
+  qr_code: string;
+  owner_name: string;
+  address: string;
+  latitude?: number;
+  longitude?: number;
+  assigned_at: string;
+}
+
+export interface RecentCollectionSummary {
+  id: string;
+  qr_code: string;
+  owner_name: string;
+  nominal: number;
+  collected_at: string;
+}
+
+// GET /mobile/tasks — paginated
+export interface TaskListResponse {
+  tasks: Task[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    total_pages: number;
+  };
+}
+
+// GET /mobile/profile
+export interface ProfileResponse {
+  id: string;
+  employee_code: string;
+  full_name: string;
+  phone: string;
+  photo_url?: string;
+  branch: { id: string; name: string };
+  district: { id: string; name: string };
+  assigned_zone?: string;
+  stats: { total_collections: number; total_amount: number };
+}
+
+// GET /mobile/collections (history) — paginated
+export interface HistoryItem {
+  id: string;
+  qr_code: string;
+  owner_name: string;
+  owner_address: string;
+  nominal: number;
+  payment_method: PaymentMethod;
+  collected_at: string;
+  sync_status: SyncStatus;
+}
+
+export interface HistoryResponse {
+  items: HistoryItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    total_pages: number;
+  };
+}
+
+// POST /mobile/collections/batch — batch sync
+export interface BatchItemResult {
+  offline_id: string;
+  server_id?: string;
+  status: 'COMPLETED' | 'ALREADY_SYNCED' | 'FAILED';
+  error?: string;
+  error_code?: string;
+  error_type?: 'VALIDATION' | 'SERVER';
+  can_retry?: boolean;
+}
+
+export interface BatchSyncResponse {
+  total: number;
+  succeeded: number;
+  failed: number;
+  results: BatchItemResult[];
+}
