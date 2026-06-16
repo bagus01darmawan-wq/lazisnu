@@ -12,13 +12,8 @@ export default withSentryConfig(nextConfig, {
   project: "lazisnu-web",
   silent: !process.env.CI,
   widenClientFileUpload: true,
-  reactComponentAnnotation: {
-    enabled: true,
-  },
   tunnelRoute: "/monitoring",
   sourcemaps: {
     disable: true,
   },
-  disableLogger: true,
-  automaticVercelMonitors: true,
 });
