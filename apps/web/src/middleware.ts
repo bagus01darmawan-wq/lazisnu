@@ -41,9 +41,11 @@ export async function middleware(request: NextRequest) {
       if (path.includes('/reports') && userRole === 'PETUGAS') {
         return NextResponse.redirect(new URL('/dashboard/overview', request.url));
       }
-    } catch {
-      // Invalid token format
-      return NextResponse.redirect(new URL('/login', request.url));
+    } catch (error) {
+      // Invalid token or missing JWT_SECRET
+      const response = NextResponse.redirect(new URL('/login', request.url));
+      response.cookies.delete('lazisnu_token');
+      return response;
     }
   }
 
