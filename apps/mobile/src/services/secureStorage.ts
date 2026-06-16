@@ -36,7 +36,7 @@ export type EncryptedStorageStatus = {
    * - 'wiped'          : Keychain gagal; keduanya di-wipe (forceLogout path)
    */
   fallback: 'none' | 'ephemeral_default' | 'wiped';
-  /** Untuk Sentry tag. */
+  /** Untuk Crashlytics attribute. */
   reason?: string;
 };
 

@@ -1,4 +1,5 @@
 // apps/mobile/jest.setup.js
+/* global jest */
 //
 // Setup global untuk semua test. Dipanggil sekali sebelum test modules loaded.
 
@@ -18,3 +19,18 @@ global.crypto = {
     return array;
   },
 };
+
+jest.mock('@react-native-firebase/crashlytics', () => {
+  const reporter = {
+    log: jest.fn(),
+    recordError: jest.fn(),
+    setAttribute: jest.fn(),
+    setAttributes: jest.fn(),
+    setCrashlyticsCollectionEnabled: jest.fn(),
+    setUserId: jest.fn(),
+    crash: jest.fn(),
+    isCrashlyticsCollectionEnabled: false,
+  };
+
+  return jest.fn(() => reporter);
+});

@@ -13,7 +13,6 @@ import TasksScreen from '../screens/TasksScreen';
 import ScanScreen from '../screens/ScanScreen';
 import CollectionScreen from '../screens/CollectionScreen';
 import ProfileScreen from '../screens/ProfileScreen';
-import HistoryScreen from '../screens/HistoryScreen';
 
 // Types
 import { RootStackParamList, MainTabParamList } from './types';
@@ -21,13 +20,6 @@ import { useAuthStore } from '../stores';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
-
-// Placeholder components for navigation structure
-const PlaceholderScreen = () => (
-  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-    <Text>Screen</Text>
-  </View>
-);
 
 // Splash ringan selama initializeAuth() berjalan. Tanpa ini, UI akan
 // flash ke LoginScreen lalu ke MainTabs pada cold start dengan token valid.
@@ -37,39 +29,39 @@ const SplashScreen = () => (
   </View>
 );
 
+const getScreenOptions = ({ route }: { route: any }) => ({
+  tabBarIcon: ({ focused, color, size }: { focused: boolean; color: string; size: number }) => {
+    let iconName = 'home';
+
+    if (route.name === 'Dashboard') {
+      iconName = focused ? 'home-variant' : 'home-variant-outline';
+    } else if (route.name === 'Tasks') {
+      iconName = focused ? 'clipboard-text-clock' : 'clipboard-text-clock-outline';
+    } else if (route.name === 'Scan') {
+      iconName = 'qrcode';
+    } else if (route.name === 'Collection') {
+      iconName = 'history';
+    } else if (route.name === 'Profile') {
+      iconName = focused ? 'account-circle' : 'account-circle-outline';
+    }
+
+    return <Icon name={iconName} size={size} color={color} />;
+  },
+  tabBarActiveTintColor: '#10B981',
+  tabBarInactiveTintColor: 'gray',
+  headerStyle: {
+    backgroundColor: '#1E88E5',
+  },
+  headerTintColor: '#fff',
+  headerTitleStyle: {
+    fontWeight: 'bold' as const,
+  },
+});
+
 // Tab Navigator
 const MainTabs = () => {
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        tabBarIcon: ({ focused, color, size }) => {
-          let iconName = 'home';
-
-          if (route.name === 'Dashboard') {
-            iconName = focused ? 'home-variant' : 'home-variant-outline';
-          } else if (route.name === 'Tasks') {
-            iconName = focused ? 'clipboard-text-clock' : 'clipboard-text-clock-outline';
-          } else if (route.name === 'Scan') {
-            iconName = 'qrcode';
-          } else if (route.name === 'Collection') {
-            iconName = 'history';
-          } else if (route.name === 'Profile') {
-            iconName = focused ? 'account-circle' : 'account-circle-outline';
-          }
-
-          return <Icon name={iconName} size={size} color={color} />;
-        },
-        tabBarActiveTintColor: '#10B981',
-        tabBarInactiveTintColor: 'gray',
-        headerStyle: {
-          backgroundColor: '#1E88E5',
-        },
-        headerTintColor: '#fff',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
-      })}
-    >
+    <Tab.Navigator screenOptions={getScreenOptions}>
       <Tab.Screen
         name="Dashboard"
         component={DashboardScreen}

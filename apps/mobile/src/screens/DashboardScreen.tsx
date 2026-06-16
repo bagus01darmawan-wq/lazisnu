@@ -23,7 +23,7 @@ const DashboardScreen: React.FC = () => {
   useEffect(() => {
     fetchDashboard();
     checkStatus();
-  }, []);
+  }, [fetchDashboard, checkStatus]);
 
   const formatCurrency = (nominal: number) => {
     return new Intl.NumberFormat('id-ID', {

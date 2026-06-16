@@ -8,7 +8,7 @@ import { useCollectionsStore } from './useCollectionStore';
 import { useSyncStore } from './useSyncStore';
 import { User } from '@lazisnu/shared-types';
 import { getErrorMessage } from '../utils/error';
-import { setAuthTag, captureAuthEvent, clearAuthenticatedUser } from '../config/sentry';
+import { setAuthTag, captureAuthEvent, clearAuthenticatedUser, setAuthenticatedUser } from '../config/crashlytics';
 
 interface AuthState {
   user: User | null;
@@ -141,6 +141,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           isAuthenticated: true,
           isInitializing: false,
         });
+        setAuthenticatedUser(id);
       } else {
         // Token ditolak backend — bersihkan semuanya
         await clearToken();
@@ -199,6 +200,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           isAuthenticated: true,
           isLoading: false,
         });
+        setAuthenticatedUser(user.id);
         return true;
       } else {
         set({ error: result.error?.message || 'Login gagal', isLoading: false });
@@ -261,6 +263,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           isAuthenticated: true,
           isLoading: false,
         });
+        setAuthenticatedUser(user.id);
         return true;
       } else {
         set({ error: result.error?.message || 'OTP tidak valid', isLoading: false });
@@ -278,13 +281,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     // 2. Bersihkan token + seluruh state klien
     await clearToken();
     resetAllClientState();
+    clearAuthenticatedUser();
     set({ user: null, token: null, isAuthenticated: false, error: null });
   },
 
   forceLogout: (reason) => {
     // Dipanggil saat SESSION_EXPIRED dari api.ts (refresh gagal).
     // Tidak panggil backend — token sudah tidak valid.
-    // Sentry: telemetri untuk monitoring post-rollout
+    // Crashlytics: telemetri untuk monitoring post-rollout
     setAuthTag('force_logout', 'true');
     captureAuthEvent('force_logout', { reason: reason || 'unknown' });
     clearAuthenticatedUser();

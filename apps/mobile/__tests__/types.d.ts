@@ -4,9 +4,8 @@
 // AUGMENT (tambah), bukan REPLACE. Kuncinya: import module dulu, baru
 // `declare module` — supaya TypeScript tahu kita menambah ke type yang sudah ada.
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+
 import type * as _Keychain from 'react-native-keychain';
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import type * as _Mmkv from 'react-native-mmkv';
 
 declare module 'react-native-keychain' {

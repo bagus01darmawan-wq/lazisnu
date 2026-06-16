@@ -22,9 +22,6 @@ module.exports = {
     // karena crypto.getRandomValues sudah di-setup di jest.setup.js
     '^react-native-get-random-values$':
       '<rootDir>/__mocks__/react-native-get-random-values.ts',
-    // @sentry/react-native butuh native module — mock kosong untuk unit test
-    '^@sentry/react-native$':
-      '<rootDir>/__mocks__/sentry-mock.ts',
   },
   // Clear mocks otomatis sebelum tiap test
   clearMocks: true,

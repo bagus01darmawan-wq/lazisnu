@@ -12,8 +12,6 @@ import {
   Platform,
   ActivityIndicator,
   Animated,
-  Dimensions,
-  ImageBackground,
   StatusBar,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -21,8 +19,6 @@ import { useAuthStore } from '../stores';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
 import { BlurView } from '@react-native-community/blur';
-
-const { width, height } = Dimensions.get('window');
 
 const LoginScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -51,7 +47,7 @@ const LoginScreen: React.FC = () => {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [fadeAnim, slideAnim]);
 
   const handleLogin = async () => {
     if (!phone.trim()) {

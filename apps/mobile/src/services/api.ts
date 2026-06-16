@@ -2,7 +2,7 @@
 
 import { MMKV } from 'react-native-mmkv';
 import { ApiResponse, Task, AuthLoginResponse, MeResponse, DashboardResponse, TaskListResponse, ProfileResponse, HistoryResponse, BatchSyncResponse } from '@lazisnu/shared-types';
-import { captureAuthEvent } from '../config/sentry';
+import { captureAuthEvent } from '../config/crashlytics';
 
 // Instance MMKV untuk menyimpan token autentikasi (access + refresh).
 // ID eksplisit mencegah collision accidental jika ada module lain yang

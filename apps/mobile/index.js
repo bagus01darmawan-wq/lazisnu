@@ -11,11 +11,11 @@ import 'react-native-get-random-values';
 import {AppRegistry} from 'react-native';
 import App from './App';
 import {name as appName} from './app.json';
-import {initSentry} from './src/config/sentry';
+import {initCrashlytics} from './src/config/crashlytics';
 
-// Sentry HARUS di-init SEBELUM app code lain, agar error di module
-// initialization bisa ter-capture. Init ada di awal pipeline (P4.5).
-initSentry();
+// Crashlytics di-init di awal agar JS/native crash reporter siap sebelum
+// bootstrap app. Pengiriman event tetap disabled saat __DEV__.
+initCrashlytics();
 
 AppRegistry.registerComponent(appName, () => App);
 

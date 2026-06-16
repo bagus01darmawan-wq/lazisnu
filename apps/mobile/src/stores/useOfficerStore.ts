@@ -3,7 +3,6 @@ import { create } from 'zustand';
 // OfficerWithStats adalah versi "display-ready" dengan relasi district/branch
 // yang sudah ter-resolve sebagai objek + stats computed. Hindari shadowing nama
 // `Officer` agar tidak membingungkan antara tipe DB dan tipe UI.
-import type { Officer } from '@lazisnu/shared-types';
 
 interface OfficerStats {
   totalCollections: number;

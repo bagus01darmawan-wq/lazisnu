@@ -1,6 +1,6 @@
 // OTP Verification Screen - Mobile App
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -28,6 +28,22 @@ const OTPScreen: React.FC = () => {
   const [countdown, setCountdown] = useState(300); // 5 minutes
   const inputRefs = useRef<(TextInput | null)[]>([]);
 
+  const handleVerify = useCallback(async (otpValue?: string) => {
+    const otpString = otpValue || otp.join('');
+    if (otpString.length !== 6) {
+      Alert.alert('Error', 'OTP harus 6 digit');
+      return;
+    }
+
+    clearError();
+    const success = await verifyOTP(phone, otpString);
+    if (!success && error) {
+      Alert.alert('Verifikasi Gagal', error);
+      setOtp(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
+    }
+  }, [phone, otp, clearError, verifyOTP, error]);
+
   // Countdown timer
   useEffect(() => {
     const timer = setInterval(() => {
@@ -49,7 +65,7 @@ const OTPScreen: React.FC = () => {
     if (otpString.length === 6) {
       handleVerify(otpString);
     }
-  }, [otp]);
+  }, [otp, handleVerify]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -74,24 +90,8 @@ const OTPScreen: React.FC = () => {
     }
   };
 
-  const handleVerify = async (otpValue?: string) => {
-    const otpString = otpValue || otp.join('');
-    if (otpString.length !== 6) {
-      Alert.alert('Error', 'OTP harus 6 digit');
-      return;
-    }
-
-    clearError();
-    const success = await verifyOTP(phone, otpString);
-    if (!success && error) {
-      Alert.alert('Verifikasi Gagal', error);
-      setOtp(['', '', '', '', '', '']);
-      inputRefs.current[0]?.focus();
-    }
-  };
-
   const handleResend = async () => {
-    if (countdown > 0) {return;}
+    if (countdown > 0) { return; }
 
     // Navigate back to login to request new OTP
     navigation.goBack();
