@@ -7,8 +7,9 @@ export default defineConfig({
   schema: './src/database/schema.ts',
   out: './src/database/migrations',
   dbCredentials: {
-    url: process.env.DATABASE_URL as string,
+    url: (process.env.DIRECT_URL || process.env.DATABASE_URL) as string,
   },
+  schemaFilter: ['public'],
   strict: true,
   verbose: true,
 });

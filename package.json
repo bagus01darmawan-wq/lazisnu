@@ -26,7 +26,11 @@
   },
   "pnpm": {
     "overrides": {
-      "@types/react": "18.2.79"
+      "@types/react": "18.2.79",
+      "shell-quote": "1.8.4",
+      "@typescript-eslint/typescript-estree>minimatch": "9.0.7",
+      "joi": "17.13.4",
+      "@babel/plugin-transform-modules-systemjs": "7.29.7"
     }
   }
 }

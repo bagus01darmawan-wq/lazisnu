@@ -1,0 +1,29 @@
+{
+    "project_info": {
+        "project_number": "819020800042",
+        "project_id": "project-e577d073-0bba-47ae-a89",
+        "storage_bucket": "project-e577d073-0bba-47ae-a89.firebasestorage.app"
+    },
+    "client": [
+        {
+            "client_info": {
+                "mobilesdk_app_id": "1:819020800042:android:dddb29889ef63f2532a353",
+                "android_client_info": {
+                    "package_name": "com.lazisnucollectorapp"
+                }
+            },
+            "oauth_client": [],
+            "api_key": [
+                {
+                    "current_key": "AIzaSyCunb82ZUm065w7THUW0xOxJT_Ue5gcqwY"
+                }
+            ],
+            "services": {
+                "appinvite_service": {
+                    "other_platform_oauth_client": []
+                }
+            }
+        }
+    ],
+    "configuration_version": "1"
+}

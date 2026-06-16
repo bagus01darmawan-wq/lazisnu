@@ -15,6 +15,7 @@ interface SyncState {
   checkStatus: () => Promise<void>;
   triggerSync: () => Promise<{ success: number; failed: number }>;
   setProgress: (progress: number) => void;
+  clearFailed: () => void;
 }
 
 export const useSyncStore = create<SyncState>((set) => ({
@@ -47,6 +48,18 @@ export const useSyncStore = create<SyncState>((set) => ({
     try {
       const result = await syncService.autoSync();
 
+      // SYNC_IN_PROGRESS: jangan anggap gagal — sync lain sedang berjalan.
+      // Update counts dari MMKV (yang mungkin sudah berubah oleh sync lain).
+      if (result.error === 'SYNC_IN_PROGRESS') {
+        set({
+          isSyncing: false,
+          progress: 50,
+          pendingCount: offlineQueue.getQueueCount(),
+          permanentFailedCount: offlineQueue.getFailedPermanentCount(),
+        });
+        return { success: 0, failed: 0 };
+      }
+
       set({
         isSyncing: false,
         progress: result.success ? 100 : 0,
@@ -63,4 +76,9 @@ export const useSyncStore = create<SyncState>((set) => ({
   },
 
   setProgress: (progress: number) => set({ progress }),
+
+  clearFailed: () => {
+    offlineQueue.clearFailedPermanent();
+    set({ permanentFailedCount: 0 });
+  },
 }));

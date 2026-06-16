@@ -19,6 +19,7 @@ export interface QueuedCollection {
   error_type?: 'VALIDATION' | 'SERVER';
   can_retry?: boolean;
   error_message?: string;
+  retry_attempts?: number; // P2: counter persisten per-item, bertahan antar panggilan autoSync
 }
 
 export const offlineQueue = {
@@ -50,6 +51,19 @@ export const offlineQueue = {
   getRetryableQueue: (): QueuedCollection[] => {
     const queue = offlineQueue.getQueue();
     return queue.filter((item) => item.can_retry !== false);
+  },
+
+  // P2: Increment retry_attempts pada item-item tertentu (dipanggil saat batchSubmit gagal).
+  // Counter ini persisten di MMKV — bertahan antar panggilan autoSync.
+  incrementRetryAttempts: (items: QueuedCollection[]): void => {
+    const queue = offlineQueue.getQueue();
+    const idsToUpdate = new Set(items.map((i) => i.offline_id));
+    for (const item of queue) {
+      if (idsToUpdate.has(item.offline_id)) {
+        item.retry_attempts = (item.retry_attempts || 0) + 1;
+      }
+    }
+    storage.set(QUEUE_KEY, JSON.stringify(queue));
   },
 
   getFailedPermanent: (): QueuedCollection[] => {

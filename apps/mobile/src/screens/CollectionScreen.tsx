@@ -24,7 +24,7 @@ const CollectionScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<CollectionRouteProp>();
   const { task } = route.params;
-  const { submitCollection, isSubmitting, error, reset } = useCollectionStore();
+  const { submitCollection, isSubmitting, reset } = useCollectionStore();
 
   const [nominal, setNominal] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'TRANSFER'>('CASH');
@@ -50,6 +50,15 @@ const CollectionScreen: React.FC = () => {
       return;
     }
 
+    const MAX_NOMINAL = 10_000_000;
+    if (numericNominal > MAX_NOMINAL) {
+      Alert.alert(
+        'Nominal Terlalu Besar',
+        'Maksimal nominal per penjemputan adalah Rp10.000.000. Hubungi admin untuk penjemputan khusus.'
+      );
+      return;
+    }
+
     reset();
 
     const result = await submitCollection({
@@ -58,13 +67,17 @@ const CollectionScreen: React.FC = () => {
       nominal: numericNominal,
       payment_method: paymentMethod,
       collected_at: new Date().toISOString(),
-      offline_id: `local-${Date.now()}`,
+      offline_id: `local-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`,
     });
 
-    if (result) {
+    if (result.success) {
       setShowSuccess(true);
+      if (!result.synced) {
+        Alert.alert('Tersimpan Offline', 'Data akan otomatis dikirim saat ada koneksi internet.');
+      }
     } else {
-      Alert.alert('Error', error || 'Gagal menyimpan data penjemputan');
+      const latestError = useCollectionStore.getState().error;
+      Alert.alert('Gagal', latestError || 'Gagal menyimpan data penjemputan');
     }
   };
 

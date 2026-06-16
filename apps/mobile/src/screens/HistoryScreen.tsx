@@ -18,6 +18,11 @@ import { Colors, Spacing, Typography, Shadows } from '../theme';
 import Animated, { FadeInUp, Layout } from 'react-native-reanimated';
 import api from '../services/api';
 
+// Collection dengan flag `isLatest` dari backend (atau computed client-side).
+// Field ini belum ada di shared-types `Collection` — digunakan sebagai penanda
+// versi setoran paling baru untuk fitur resubmit/koreksi.
+type CollectionWithLatest = Collection & { isLatest?: boolean };
+
 const formatCurrency = (nominal: number) => {
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
@@ -42,7 +47,7 @@ const CollectionItem = memo(({
   index,
   onResubmit,
 }: {
-  item: Collection;
+  item: CollectionWithLatest;
   index: number;
   onResubmit: (id: string, currentNominal: number, method: 'CASH' | 'TRANSFER') => void
 }) => {
@@ -50,8 +55,9 @@ const CollectionItem = memo(({
     return method === 'CASH' ? 'cash' : 'bank-transfer';
   };
 
-  // Asumsikan isLatest jika tidak ada prop isLatest atau prop isLatest true
-  const isLatest = (item as any).isLatest !== false;
+  // isLatest ditentukan dari field opsional di response (jika dikirim backend),
+  // atau dari computed client-side (resubmit menghasilkan isLatest=true)
+  const isLatest = item.isLatest !== false;
 
   return (
     <Animated.View
@@ -130,6 +136,7 @@ const HistoryScreen: React.FC = () => {
     collections,
     fetchCollections,
     isLoading,
+    error,
     page,
     totalPages,
     loadMore,
@@ -182,14 +189,14 @@ const HistoryScreen: React.FC = () => {
       } else {
         Alert.alert('Gagal', response.error?.message || 'Terjadi kesalahan');
       }
-    } catch (error) {
+    } catch (_err) {
       Alert.alert('Gagal', 'Terjadi kesalahan sistem');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const renderCollectionItem = useCallback(({ item, index }: { item: Collection; index: number }) => (
+  const renderCollectionItem = useCallback(({ item, index }: { item: CollectionWithLatest; index: number }) => (
     <CollectionItem item={item} index={index} onResubmit={handleOpenResubmit} />
   ), [handleOpenResubmit]);
 
@@ -248,6 +255,20 @@ const HistoryScreen: React.FC = () => {
           <Text style={styles.summaryLabel}>Total Nominal</Text>
         </View>
       </View>
+
+      {/* Error Banner — tampil saat API gagal memuat data */}
+      {error && !isLoading && (
+        <View style={styles.errorBanner}>
+          <Icon name="alert-circle-outline" size={20} color="#FCA5A5" />
+          <Text style={styles.errorBannerText} numberOfLines={2}>{error}</Text>
+          <TouchableOpacity
+            style={styles.errorBannerButton}
+            onPress={() => fetchCollections(filter)}
+          >
+            <Text style={styles.errorBannerButtonText}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <FlatList
         data={collections}
@@ -602,6 +623,34 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     color: Colors.text.white,
+    fontWeight: '600',
+  },
+  // ── Error Banner ───────────────────────────────────────────────────────
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#7F1D1D',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 8,
+  },
+  errorBannerText: {
+    flex: 1,
+    color: '#FCA5A5',
+    fontSize: 13,
+    marginLeft: 10,
+    marginRight: 10,
+  },
+  errorBannerButton: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+  },
+  errorBannerButtonText: {
+    color: '#FCA5A5',
+    fontSize: 13,
     fontWeight: '600',
   },
 });
