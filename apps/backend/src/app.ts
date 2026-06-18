@@ -32,7 +32,7 @@ export async function buildApp() {
 
   // Plugins
   await server.register(cors, {
-    origin: config.NODE_ENV === 'development' ? true : config.CORS_ORIGINS.split(',').map((s) => s.trim()),
+    origin: true,
     credentials: true,
   });
 

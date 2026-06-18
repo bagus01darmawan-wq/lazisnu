@@ -18,8 +18,16 @@ export async function middleware(request: NextRequest) {
 
   // 3. Proper Role Check using JWT decoding
   if (token && !isAuthPage) {
+    const jwtSecretRaw = process.env.JWT_SECRET;
+    if (!jwtSecretRaw || jwtSecretRaw.length < 32) {
+      console.error('[SECURITY] JWT_SECRET tidak terkonfigurasi atau kurang dari 32 karakter!');
+      const response = NextResponse.redirect(new URL('/login', request.url));
+      response.cookies.delete('lazisnu_token');
+      return response;
+    }
+
     try {
-      const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+      const secret = new TextEncoder().encode(jwtSecretRaw);
       const { payload } = await jwtVerify(token, secret);
       const userRole = payload.role as string;
 
@@ -41,7 +49,13 @@ export async function middleware(request: NextRequest) {
       if (path.includes('/reports') && userRole === 'PETUGAS') {
         return NextResponse.redirect(new URL('/dashboard/overview', request.url));
       }
-    } catch (error) {
+
+      // Restricted routes for Resubmit (only Kecamatan + Ranting)
+      if (path.includes('/resubmit') && 
+          userRole !== 'ADMIN_KECAMATAN' && userRole !== 'ADMIN_RANTING') {
+        return NextResponse.redirect(new URL('/dashboard/overview', request.url));
+      }
+    } catch {
       // Invalid token or missing JWT_SECRET
       const response = NextResponse.redirect(new URL('/login', request.url));
       response.cookies.delete('lazisnu_token');

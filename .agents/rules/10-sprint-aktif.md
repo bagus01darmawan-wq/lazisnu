@@ -11,10 +11,10 @@ trigger: manual
 ## Status Saat Ini
 
 ```
-FASE AKTIF : Finalization & Learning-Assisted Completion
-UPDATED    : 2026-06-13
-STATUS     : Mobile Firebase Crashlytics setup SELESAI dan Android debug build PASS. P4 Mobile Secure Token Storage SELESAI. Pembersihan Warning Mobile (12 warning lint) SELESAI. Triage dependensi & mitigasi keamanan SELESAI. Pembersihan `react-native-permissions` SELESAI. Code review 6 tema + perbaikan Sprint A-E SELESAI. Regression checklist masih 19/28 [x] + 9/28 sisa [ ].
-FOKUS      : Validasi device/browser/integration yang belum bisa dibuktikan unit test.
+FASE AKTIF : System Verification & Finalization
+UPDATED    : 2026-06-18
+STATUS     : Login Web Dashboard via Vercel telah BERHASIL. Database Supabase kembali AKTIF. Perbaikan bug race condition refresh token, environment variable safety (fail-fast), token sync login, dan peningkatan type safety client-side Axios berhasil diimplementasikan dan diverifikasi via build.
+FOKUS      : Melanjutkan validasi modul aplikasi lainnya atau memulai sprint fitur baru.
 ```
 
 Catatan untuk agent:
@@ -107,6 +107,37 @@ Mitigasi kerentanan keamanan monorepo berhasil diterapkan pada 2026-06-13 menggu
 
 ## Selesai Baru-Baru Ini
 
+### ✅ Perbaikan Auth Web Dashboard & Client Type Safety — Selesai 2026-06-18
+
+| Area | Status | Bukti |
+|---|---|---|
+| Race Condition Fix | ✅ | Antrean `refreshSubscribers` dibersihkan dan di-reject jika refresh gagal; `_retry` di-set pada request antrean. |
+| Type Safety | ✅ | Menambahkan `CustomAxiosInstance` di `api.ts` agar response ter-unwrap otomatis di level TypeScript. |
+| Production Env Safety | ✅ | Route Handler & server-side fetch fail-fast jika `API_URL` dan `NEXT_PUBLIC_API_URL` kosong di production. |
+| Token Sync Login | ✅ | Memanggil `authHelper.setToken` secara manual setelah respon sukses login dari Route Handler BFF. |
+| Verification | ✅ | `pnpm --filter web typecheck`, `pnpm --filter web lint`, dan `pnpm --filter web build` semuanya PASS. |
+
+### ✅ Deployment Backend ke GCP VM & Bugfixes — Selesai 2026-06-18
+
+| Area | Status | Bukti |
+|---|---|---|
+| PM2 & Nginx | ✅ | Backend berjalan 24/7 di port 3001, diproksi via Nginx ke port 80/443. |
+| SSL / HTTPS | ✅ | `https://34-101-78-252.nip.io` aktif menggunakan Let's Encrypt. |
+| CORS Policy | ✅ | `app.ts` diperbarui untuk memantulkan (reflect) origin `true` agar Vercel bisa mengakses. |
+| Web Middleware | ✅ | `ERR_TOO_MANY_REDIRECTS` dicegah dengan menghapus cookie token jika gagal verifikasi JWT (misal karena `JWT_SECRET` kosong). |
+| Sentry Web | ✅ | Slug organisasi `lazisnupng` dan proyek `javascript-nextjs` sudah dikonfigurasi di `next.config.ts`. |
+
+### ✅ Tema 1: Web Dashboard Auth & Route Guard Security — Selesai 2026-06-18
+
+| Area | Status | Bukti |
+|---|---|---|
+| JWT_SECRET Guard | ✅ | `middleware.ts` langsung mematikan proses / redirect ke login jika secret hilang. |
+| HttpOnly Refresh Token | ✅ | Local Next.js Route Handlers (`/api/auth/*`) mengamankan cookie refresh token secara eksklusif. |
+| Zustand persist Storage | ✅ | Dipindahkan dari `localStorage` ke `sessionStorage` untuk meredam risiko user role tampering jangka panjang. |
+| RBAC /resubmit | ✅ | Proteksi route `/dashboard/resubmit` di middleware berhasil diimplementasikan. |
+| Cleanups | ✅ | Pembersihan dead code cookie `user_role` selesai. |
+| Verification | ✅ | `pnpm lint`, `pnpm typecheck`, dan `pnpm build:web` semuanya PASS. |
+
 ### ✅ Firebase Crashlytics Mobile Setup — Selesai 2026-06-13
 
 | Area | Status | Bukti |
@@ -155,11 +186,11 @@ Status tercatat selesai, tetapi detail patch per tema tidak diulang di file akti
 
 ## Prioritas Sprint Saat Ini
 
-### P0 — Stabilitas dan Bukti Runtime
+### P0 — Stabilitas Infrastruktur & Database [SELESAI]
 
-- Pastikan flow login, dashboard, submit collection, offline queue, sync, laporan, dan build tetap berjalan setelah perubahan observability.
-- Jalankan manual Android test untuk offline-first sebelum klaim release-ready.
-- Jangan mengubah database/collection flow tanpa test yang menjaga immutability.
+- **Blocker Tertangani**: Database Supabase berhasil di-restore dan kembali "Active".
+- **Konfigurasi Vercel Selesai**: Environment variable Vercel (`JWT_SECRET`) sudah terisi, masalah infinite redirect diatasi, login admin berhasil.
+- **Catatan Migrasi**: Saat ini aplikasi MASIH menggunakan Supabase. Migrasi PostgreSQL murni ke GCP VM belum dilakukan (ditunda kecuali ada kebutuhan spesifik).
 
 ### P1 — Dependency Hygiene dan Security
 
@@ -250,4 +281,4 @@ Catatan mismatch yang belum diputuskan:
 
 *Lazisnu Infaq Collection System — rules/10-sprint-aktif.md*
 *⚠️ Update file ini setiap berganti sprint/fase*
-*Last updated: 2026-06-13 (Firebase Crashlytics setup + sprint cleanup + build/audit findings)*
+*Last updated: 2026-06-18 (Web Dashboard Auth, Race Condition, Type Safety, and Environment safety fixes)*

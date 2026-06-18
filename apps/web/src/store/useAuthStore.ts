@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import Cookies from 'js-cookie';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { authHelper } from '@/lib/auth';
 import { User } from '@lazisnu/shared-types';
 
@@ -17,24 +16,19 @@ export const useAuthStore = create<AuthState>()(
       setUser: (user) => set({ user }),
       logout: async () => {
         try {
-          const refreshToken = authHelper.getRefreshToken();
-          if (refreshToken) {
-            await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/v1/auth/logout`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ refresh_token: refreshToken }),
-            });
-          }
+          await fetch('/api/auth/logout', {
+            method: 'POST',
+          });
         } catch {} // ignore network errors on logout
         
         set({ user: null });
         authHelper.removeToken();
-        Cookies.remove('user_role');
         window.location.href = '/login';
       },
     }),
     {
       name: 'lazisnu-auth-storage',
+      storage: createJSONStorage(() => sessionStorage),
     }
   )
 );

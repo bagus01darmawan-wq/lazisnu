@@ -359,7 +359,7 @@ importers:
         specifier: ^19
         version: 19.2.3(@types/react@18.2.79)
       eslint:
-        specifier: ^9.39.4
+        specifier: ^9.14.0
         version: 9.39.4(jiti@2.6.1)
       eslint-config-next:
         specifier: 16.2.4
