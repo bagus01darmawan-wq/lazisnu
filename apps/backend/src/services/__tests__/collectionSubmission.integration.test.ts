@@ -95,7 +95,6 @@ describe('Collection Submission Integration Test', () => {
         canId,
         officerId,
         nominal: 50000,
-        paymentMethod: 'CASH',
         collectedAt: new Date(),
       });
 

@@ -37,11 +37,11 @@ interface WaLogItem {
 
 interface RawWaLog {
   id: string;
-  recipientName?: string;
-  recipientPhone: string;
-  messageContent: string;
+  recipient_name?: string | null;
+  recipient_phone: string;
+  message_content: string;
   status: string;
-  createdAt: string;
+  created_at: string;
 }
 
 interface WaLogsResponse {
@@ -81,11 +81,11 @@ export default function WAMonitorPage() {
         const items = response.data.logs || [];
         setData(items.map((notif) => ({
           id: notif.id,
-          recipient: notif.recipientName || 'Donatur',
-          phone: notif.recipientPhone,
-          message: notif.messageContent,
+          recipient: notif.recipient_name || 'Donatur',
+          phone: notif.recipient_phone,
+          message: notif.message_content,
           status: notif.status,
-          time: notif.createdAt
+          time: notif.created_at
         })));
         setTotalItems(response.data.pagination?.total || 0);
         setTotalPages(response.data.pagination?.total_pages || 1);
@@ -94,7 +94,16 @@ export default function WAMonitorPage() {
         }
       }
     } catch (error) {
+      const getApiErrorMessage = (err: unknown) => {
+        if (err && typeof err === 'object') {
+          const record = err as { error?: { message?: string }, message?: string };
+          return record.error?.message || record.message;
+        }
+        return undefined;
+      };
+      const message = getApiErrorMessage(error) || 'Gagal mengambil status WhatsApp';
       console.error('Failed to fetch WA status:', error);
+      toast.error(message);
     } finally {
       setLoading(false);
     }

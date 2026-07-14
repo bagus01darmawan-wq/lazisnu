@@ -3,9 +3,12 @@ import { authenticate, authorize } from '../middleware/auth';
 import { assertCollectionAccess } from '../middleware/ownership';
 import { sendSuccess, sendError, sendInternalError } from '../utils/response';
 import { getRoleScope } from '../utils/scope';
-import { getCollectionScope, buildCollectionsQuery, getCollectionsList } from '../services/collectionQueryService';
+import { getCollectionScope, buildCollectionsQuery, getCollectionsList, getCollectionsExportRows } from '../services/collectionQueryService';
 import { getCollectionDetail, getReportSummary } from '../services/collectionReportService';
 import { getBendaharaDashboard } from '../services/dashboardReportService';
+import { db } from '../config/database';
+import * as schema from '../database/schema';
+import { insertActivityLog } from '../services/auditLogService';
 
 export async function bendaharaRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', authenticate);
@@ -66,6 +69,82 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
       }
 
       return sendSuccess(reply, data);
+    } catch (error) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  fastify.get('/export', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const query = request.query as { start_date?: string; end_date?: string; officer_id?: string; district_id?: string; branch_id?: string; search?: string };
+      const user = request.currentUser!;
+      const scope = getCollectionScope(user.role, user.branchId, user.districtId);
+
+      const { whereClause, emptyResult } = await buildCollectionsQuery({
+        startDate: query.start_date,
+        endDate: query.end_date,
+        officerId: query.officer_id,
+        districtId: query.district_id,
+        branchId: query.branch_id,
+        search: query.search,
+        scope,
+      });
+
+      const headers = [
+        'id',
+        'tanggal',
+        'petugas_nama',
+        'petugas_kode',
+        'kaleng_kode',
+        'kaleng_nama_pemilik',
+        'nominal',
+        'metode_bayar',
+        'submit_sequence',
+        'is_latest',
+        'alasan_resubmit',
+        'wa_status',
+        'wa_sent_at',
+      ];
+
+      const escapeCsv = (value: unknown) => {
+        const raw = value instanceof Date ? value.toISOString() : String(value ?? '');
+        return /[",\r\n]/.test(raw) ? `"${raw.replace(/"/g, '""')}"` : raw;
+      };
+
+      const rows = emptyResult || !whereClause ? [] : await getCollectionsExportRows(whereClause);
+      const csvRows = [
+        headers.join(','),
+        ...rows.map((row) => headers.map((header) => escapeCsv(row[header as keyof typeof row])).join(',')),
+      ];
+      const csv = `\uFEFF${csvRows.join('\n')}`;
+
+      // Catat log export CSV secara manual secara aman
+      try {
+        await insertActivityLog({
+          userId: user.userId,
+          officerId: user.officerId || null,
+          actionType: 'EXPORT_CSV',
+          entityType: 'reports',
+          entityId: null,
+          newData: {
+            start_date: query.start_date || null,
+            end_date: query.end_date || null,
+            branch_id: query.branch_id || null,
+            officer_id: query.officer_id || null,
+            search: query.search || null,
+          },
+          ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+          userAgent: request.headers['user-agent'] || null,
+        });
+      } catch (err) {
+        request.log.error({ err }, 'Manual export CSV audit log insertion failed');
+      }
+
+      reply
+        .header('Content-Type', 'text/csv; charset=utf-8')
+        .header('Content-Disposition', `attachment; filename="laporan-lazisnu-${new Date().toISOString().slice(0, 10)}.csv"`);
+
+      return reply.send(csv);
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
     }

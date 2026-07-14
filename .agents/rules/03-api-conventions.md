@@ -66,7 +66,7 @@ If refresh token expired or blacklisted → force re-login
 | `FORBIDDEN` | 403 | Role has no access to this resource |
 | `NOT_FOUND` | 404 | Resource not found |
 | `VALIDATION_ERROR` | 400 | Invalid input (from Zod) |
-| `QR_INVALID` | 400 | Invalid QR token or signature mismatch |
+| `QR_INVALID` | 400 | Invalid raw QR code format or inactive can |
 | `QR_ALREADY_SUBMITTED` | 400 | Can already submitted this period |
 | `QR_NOT_ASSIGNED` | 403 | Can is not assigned to this officer |
 | `RESUBMIT_REASON_REQUIRED` | 400 | Re-submit without reason |

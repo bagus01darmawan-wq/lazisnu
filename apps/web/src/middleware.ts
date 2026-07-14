@@ -39,9 +39,15 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/dashboard/overview', request.url));
       }
 
-      // Restricted routes: users & wa-monitor only for Kecamatan + Ranting
-      if ((path.includes('/users') || path.includes('/wa-monitor')) && 
+      // Restricted routes: users only for Kecamatan + Ranting
+      if (path.includes('/users') && 
           userRole !== 'ADMIN_KECAMATAN' && userRole !== 'ADMIN_RANTING') {
+        return NextResponse.redirect(new URL('/dashboard/overview', request.url));
+      }
+
+      // Restricted routes: wa-monitor only for Kecamatan, Ranting, and Bendahara
+      if (path.includes('/wa-monitor') && 
+          userRole !== 'ADMIN_KECAMATAN' && userRole !== 'ADMIN_RANTING' && userRole !== 'BENDAHARA') {
         return NextResponse.redirect(new URL('/dashboard/overview', request.url));
       }
       

@@ -13,6 +13,36 @@ import { correctCollection } from '../../services/collectionCorrectionService';
 import { validateAssignmentForSubmit, submitCollection, getLatestCollectionCondition } from '../../services/collectionSubmission';
 import { getErrorMessage, isHttpRouteError, isPostgresError } from '../../utils/error-guards';
 
+type MobileHistoryCollection = {
+  id: string;
+  offlineId: string | null;
+  assignmentId: string;
+  canId: string;
+  nominal: string | number | bigint;
+  collectedAt: Date;
+  syncStatus: string;
+  can: {
+    qrCode: string | null;
+    ownerName: string;
+    ownerAddress: string | null;
+  };
+};
+
+export function toMobileHistoryItem(collection: MobileHistoryCollection) {
+  return {
+    id: collection.id,
+    offline_id: collection.offlineId,
+    assignment_id: collection.assignmentId,
+    can_id: collection.canId,
+    qr_code: collection.can.qrCode || '',
+    owner_name: collection.can.ownerName,
+    owner_address: collection.can.ownerAddress || '',
+    nominal: Number(collection.nominal),
+    collected_at: collection.collectedAt,
+    sync_status: collection.syncStatus,
+  };
+}
+
 export async function collectionsRoutes(fastify: FastifyInstance) {
   const latestCollectionCondition = getLatestCollectionCondition();
 
@@ -54,8 +84,6 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
           canId: body.can_id,
           officerId,
           nominal: body.nominal,
-          paymentMethod: body.payment_method as any,
-          transferReceiptUrl: body.transfer_receipt_url,
           collectedAt: new Date(body.collected_at),
           latitude: body.latitude?.toString(),
           longitude: body.longitude?.toString(),
@@ -140,16 +168,7 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
         ),
       ]);
 
-      const items = collections.map((c) => ({
-        id: c.id,
-        qr_code: c.can.qrCode,
-        owner_name: c.can.ownerName,
-        owner_address: c.can.ownerAddress,
-        nominal: Number(c.nominal),
-        payment_method: c.paymentMethod,
-        collected_at: c.collectedAt,
-        sync_status: c.syncStatus,
-      }));
+      const items = collections.map(toMobileHistoryItem);
 
       return sendSuccess(reply, {
         items,
@@ -186,7 +205,6 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
           collectionId: id,
           nominal: body.nominal,
           alasanResubmit: body.alasan_resubmit,
-          paymentMethod: body.payment_method as 'CASH' | 'TRANSFER',
           requiredOfficerId: officerId,
         },
         {
@@ -196,6 +214,11 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
           userAgent: request.headers['user-agent'] as string,
         },
       );
+
+      request.auditContext = {
+        oldData: oldCollection,
+        newData: newCollection,
+      };
 
       let whatsappStatus = 'SKIPPED';
       if (oldCollection.can?.ownerWhatsapp) {

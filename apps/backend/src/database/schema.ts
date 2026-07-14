@@ -4,7 +4,6 @@ import { relations, sql } from 'drizzle-orm';
 // Enums
 export const userRoleEnum = pgEnum('user_role', ['ADMIN_KECAMATAN', 'ADMIN_RANTING', 'BENDAHARA', 'PETUGAS']);
 export const collectionStatusEnum = pgEnum('collection_status', ['PENDING', 'COMPLETED', 'FAILED', 'CANCELLED']);
-export const paymentMethodEnum = pgEnum('payment_method', ['CASH', 'TRANSFER']);
 export const assignmentStatusEnum = pgEnum('assignment_status', ['ACTIVE', 'COMPLETED', 'POSTPONED', 'REASSIGNED']);
 
 // Districts
@@ -117,8 +116,6 @@ export const collections = pgTable('collections', {
   canId: uuid('can_id').references(() => cans.id).notNull(),
   officerId: uuid('officer_id').references(() => officers.id).notNull(),
   nominal: bigint('nominal', { mode: 'bigint' }).notNull(),
-  paymentMethod: paymentMethodEnum('payment_method').default('CASH').notNull(),
-  transferReceiptUrl: varchar('transfer_receipt_url', { length: 500 }),
   collectedAt: timestamp('collected_at').notNull(),
   submittedAt: timestamp('submitted_at'),
   syncedAt: timestamp('synced_at'),
@@ -194,10 +191,6 @@ export const collectionSummaries = pgTable('collection_summaries', {
   officerId: uuid('officer_id').references(() => officers.id),
   totalAmount: bigint('total_amount', { mode: 'bigint' }).default(sql`0`).notNull(),
   collectionCount: integer('collection_count').default(0).notNull(),
-  cashCount: integer('cash_count').default(0).notNull(),
-  cashAmount: bigint('cash_amount', { mode: 'bigint' }).default(sql`0`).notNull(),
-  transferCount: integer('transfer_count').default(0).notNull(),
-  transferAmount: bigint('transfer_amount', { mode: 'bigint' }).default(sql`0`).notNull(),
   calculatedAt: timestamp('calculated_at').defaultNow().notNull(),
 }, (t) => ({
   unq: uniqueIndex('summary_period_dist_br_off_unq').on(t.periodYear, t.periodMonth, t.districtId, t.branchId, t.officerId),

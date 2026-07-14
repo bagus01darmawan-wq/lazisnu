@@ -41,7 +41,7 @@ Officer opens app
   → Tap can task from list
   → Scan QR code on the can
   → System validates QR (valid can? active assignment? not submitted this period?)
-  → Input nominal received (Cash or Transfer)
+  → Input nominal received (Cash or Transfer - Note: offline sync only supports CASH)
   → Review & confirm (cannot be cancelled after this)
   → Submit → WA sent automatically to can owner
   → Task marked as completed

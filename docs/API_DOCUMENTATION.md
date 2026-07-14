@@ -194,12 +194,17 @@
 
 **Endpoint:** `GET /mobile/scan/{qr_code}`
 
+`qr_code` harus dikirim persis seperti tersimpan di database. Backend tidak
+melakukan trim atau perubahan kapitalisasi. Endpoint dilindungi JWT dan hanya
+mengembalikan detail ketika assignment aktif dimiliki petugas pada periode berjalan.
+
 **Response (200):**
 ```json
 {
   "success": true,
   "data": {
-    "id": "uuid",
+    "id": "assignment-uuid",
+    "can_id": "can-uuid",
     "qr_code": "LZNU-KC01-00001",
     "owner_name": "Bapak Ahmad",
     "owner_phone": "081234567890",
@@ -210,7 +215,18 @@
       "amount": 75000,
       "date": "2026-03-15"
     },
-    "status": "PENDING"
+    "status": "ACTIVE"
+  }
+}
+```
+
+**Response (403 - bukan assignment petugas):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "QR_NOT_ASSIGNED",
+    "message": "Kaleng ini bukan tugas Anda pada periode berjalan"
   }
 }
 ```
@@ -281,7 +297,7 @@
 
 **Endpoint:** `POST /mobile/collections/batch`
 
-**Request:**
+**Request (Note: payment_method and transfer_receipt_url are rejected/excluded from batch sync):**
 ```json
 {
   "collections": [
@@ -290,7 +306,6 @@
       "assignment_id": "uuid",
       "can_id": "uuid",
       "amount": 50000,
-      "payment_method": "CASH",
       "collected_at": "2026-04-09T10:30:00Z",
       "latitude": -6.200000,
       "longitude": 106.820000
@@ -300,8 +315,6 @@
       "assignment_id": "uuid",
       "can_id": "uuid",
       "amount": 75000,
-      "payment_method": "TRANSFER",
-      "transfer_receipt_url": "https://r2.lazisnu.id/receipts/abc123.jpg",
       "collected_at": "2026-04-09T10:45:00Z",
       "latitude": -6.201000,
       "longitude": 106.821000

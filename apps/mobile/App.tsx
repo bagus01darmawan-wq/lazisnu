@@ -1,58 +1,70 @@
-import React, { useEffect } from 'react';
+import React, {useEffect, useState} from 'react';
 import AppNavigator from './src/navigation/AppNavigator';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { syncService } from './src/services/offline/sync';
-import { useAuthStore } from './src/stores/useAuthStore';
-import { initEncryptedStorage } from './src/services/secureStorage';
-import { setAuthTag } from './src/config/crashlytics';
+import {SafeAreaProvider} from 'react-native-safe-area-context';
+import {GestureHandlerRootView} from 'react-native-gesture-handler';
+import {syncService} from './src/services/offline/sync';
+import {useAuthStore} from './src/stores/useAuthStore';
+import {useDashboardStore} from './src/stores/useDashboardStore';
+import {useTasksStore} from './src/stores/useTasksStore';
+import {useCollectionsStore} from './src/stores/useCollectionStore';
+import {initEncryptedStorage} from './src/services/secureStorage';
+import {offlineQueue} from './src/services/offline/queue';
+import {setAuthTag} from './src/config/crashlytics';
+import {ActivityIndicator, StatusBar, View} from 'react-native';
+import {Colors} from './src/theme';
 
-// Module-level: simpan NetInfo unsubscribe agar bisa di-cleanup saat
-// App unmount (mis. hot reload). Null = belum di-start.
 let networkUnsubscribe: (() => void) | null = null;
 
 const App = () => {
+  const [isStorageReady, setIsStorageReady] = useState(false);
+
   useEffect(() => {
-    // ── Boot sequence (strictly sequential) ────────────────────────────────
-    // Urutan PENTING: encrypted storage harus siap SEBELUM ada yang baca
-    // token dari MMKV. Kalau initializeAuth() jalan duluan, ia akan baca
-    // data plain dari MMKV yang akan di-recrypt kemudian — inconsistent.
+    let isMounted = true;
+
     (async () => {
-      // 1. Init encrypted storage. Recrypt MMKV atomic, tapi Keychain call
-      //    async (~100-300ms). Setelah ini, MMKV final state (encrypted).
-      const status = await initEncryptedStorage();
+      try {
+        const status = await initEncryptedStorage();
 
-      // 2. Observability: catat status encryption ke Crashlytics.
-      //    Helper aman dipanggil sebelum native module siap.
-      setAuthTag('encryption_status', status.fallback);
-      if (status.reason) {
-        setAuthTag('encryption_reason', status.reason);
-      }
+        setAuthTag('encryption_status', status.fallback);
+        if (status.reason) {
+          setAuthTag('encryption_reason', status.reason);
+        }
 
-      // 3. Jika Keychain gagal total → paksa logout SEBELUM initializeAuth.
-      //    Dengan begini, initializeAuth akan lihat token kosong → AuthStack.
-      if (status.fallback === 'wiped') {
+        if (status.fallback === 'wiped') {
+          useAuthStore.getState().forceLogout(
+            'Tidak dapat membuka penyimpanan aman device. Silakan login kembali.',
+          );
+        }
+
+        useDashboardStore.getState().hydrateFromCache();
+        useTasksStore.getState().hydrateFromCache();
+        useCollectionsStore.getState().hydrateFromCache();
+
+        await useAuthStore.getState().initializeAuth();
+
+        // Migrasi antrean setelah user terhidrasi agar key MMKV memakai officerId yang benar.
+        offlineQueue.runMigration();
+
+        if (status.fallback === 'ephemeral_default') {
+          useAuthStore.getState().setEncryptionWarning(
+            'Mode tidak aman: data antrian offline dihapus. Hubungkan ke internet dan login ulang untuk memulihkan.',
+          );
+        }
+
+        networkUnsubscribe = syncService.startNetworkListener();
+      } catch {
         useAuthStore.getState().forceLogout(
-          'Tidak dapat membuka penyimpanan aman device. Silakan login kembali.',
+          'Aplikasi gagal membuka penyimpanan lokal. Silakan login kembali.',
         );
+      } finally {
+        if (isMounted) {
+          setIsStorageReady(true);
+        }
       }
-
-      // 4. Sekarang aman baca token dari MMKV (sudah ter-recrypt).
-      await useAuthStore.getState().initializeAuth();
-
-      // 5. Banner untuk ephemeral_default — sesi tetap aktif tapi
-      //    offline queue di-wipe. Diset di store agar UI bisa render.
-      if (status.fallback === 'ephemeral_default') {
-        useAuthStore.getState().setEncryptionWarning(
-          'Mode tidak aman: data antrian offline dihapus. Hubungkan ke internet dan login ulang untuk memulihkan.',
-        );
-      }
-
-      // 6. Network listener untuk auto-sync. Simpan unsub untuk cleanup.
-      networkUnsubscribe = syncService.startNetworkListener();
     })();
 
     return () => {
+      isMounted = false;
       if (networkUnsubscribe) {
         networkUnsubscribe();
         networkUnsubscribe = null;
@@ -60,8 +72,20 @@ const App = () => {
     };
   }, []);
 
+  if (!isStorageReady) {
+    return (
+      <GestureHandlerRootView style={{flex: 1}}>
+        <StatusBar backgroundColor={Colors.brand.heroStart} barStyle={'light-content'} />
+        <View style={{flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.surface.page}}>
+          <ActivityIndicator color={Colors.brand.emerald} />
+        </View>
+      </GestureHandlerRootView>
+    );
+  }
+
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{flex: 1}}>
+      <StatusBar backgroundColor={Colors.brand.heroStart} barStyle={'light-content'} />
       <SafeAreaProvider>
         <AppNavigator />
       </SafeAreaProvider>

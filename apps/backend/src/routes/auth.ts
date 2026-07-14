@@ -14,7 +14,7 @@ import { redisConnection } from '../config/redis';
 import { ApiResponse, User } from '@lazisnu/shared-types';
 import { isJwtErrorLike } from '../utils/error-guards';
 import { sendSuccess, sendError, sendInternalError } from '../utils/response';
-import { activityLogs } from '../database/schema';
+import { insertActivityLog } from '../services/auditLogService';
 
 // Request schemas
 const loginSchema = z.object({
@@ -73,10 +73,20 @@ export async function authRoutes(fastify: FastifyInstance) {
       }
 
       if (!user) {
-        await db.insert(activityLogs).values({
-          actionType: 'FAILED_LOGIN',
-          newData: { identifier: body.identifier, reason: 'USER_NOT_FOUND' },
-        });
+        try {
+          await insertActivityLog({
+            actionType: 'FAILED_LOGIN',
+            userId: null,
+            officerId: null,
+            entityType: 'auth',
+            entityId: null,
+            newData: { identifier: body.identifier, reason: 'USER_NOT_FOUND' },
+            ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+            userAgent: request.headers['user-agent'] || null,
+          });
+        } catch (err) {
+          request.log.error({ err }, 'FAILED_LOGIN audit log failed');
+        }
         return sendError(reply, 401, 'INVALID_CREDENTIALS', 'Email/Nomor HP atau password salah');
       }
 
@@ -97,11 +107,20 @@ export async function authRoutes(fastify: FastifyInstance) {
           await redisConnection.del(attemptKey);
         }
 
-        await db.insert(activityLogs).values({
-          actionType: 'FAILED_LOGIN',
-          userId: user.id,
-          newData: { identifier: body.identifier, reason: 'INVALID_PASSWORD', attempts: attemptCount },
-        });
+        try {
+          await insertActivityLog({
+            actionType: 'FAILED_LOGIN',
+            userId: user.id,
+            officerId: null,
+            entityType: 'auth',
+            entityId: null,
+            newData: { identifier: body.identifier, reason: 'INVALID_PASSWORD', attempts: attemptCount },
+            ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+            userAgent: request.headers['user-agent'] || null,
+          });
+        } catch (err) {
+          request.log.error({ err }, 'FAILED_LOGIN audit log failed');
+        }
         return sendError(reply, 401, 'INVALID_CREDENTIALS', 'Email/Nomor HP atau password salah');
       }
 
@@ -111,11 +130,20 @@ export async function authRoutes(fastify: FastifyInstance) {
 
       // Check if user is active
       if (!user.isActive) {
-        await db.insert(activityLogs).values({
-          actionType: 'FAILED_LOGIN',
-          userId: user.id,
-          newData: { identifier: body.identifier, reason: 'ACCOUNT_DISABLED' },
-        });
+        try {
+          await insertActivityLog({
+            actionType: 'FAILED_LOGIN',
+            userId: user.id,
+            officerId: null,
+            entityType: 'auth',
+            entityId: null,
+            newData: { identifier: body.identifier, reason: 'ACCOUNT_DISABLED' },
+            ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+            userAgent: request.headers['user-agent'] || null,
+          });
+        } catch (err) {
+          request.log.error({ err }, 'FAILED_LOGIN audit log failed');
+        }
         return sendError(reply, 403, 'ACCOUNT_DISABLED', 'Akun Anda tidak aktif');
       }
 
@@ -147,15 +175,20 @@ export async function authRoutes(fastify: FastifyInstance) {
         ipAddress: request.ip,
       });
 
-      await db.insert(activityLogs).values({
-        actionType: 'LOGIN_SUCCESS',
-        userId: user.id,
-        officerId: officer?.id || null,
-        entityType: 'auth',
-        newData: { method: 'password', identifier: body.identifier },
-        ipAddress: request.ip,
-        userAgent: request.headers['user-agent'] || null,
-      });
+      try {
+        await insertActivityLog({
+          actionType: 'LOGIN_SUCCESS',
+          userId: user.id,
+          officerId: officer?.id || null,
+          entityType: 'auth',
+          entityId: null,
+          newData: { method: 'password', identifier: body.identifier },
+          ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+          userAgent: request.headers['user-agent'] || null,
+        });
+      } catch (err) {
+        request.log.error({ err }, 'LOGIN_SUCCESS audit log failed');
+      }
 
       return sendSuccess(reply, {
         access_token: tokens.accessToken,
@@ -283,10 +316,20 @@ export async function authRoutes(fastify: FastifyInstance) {
           await redisConnection.expire(attemptKey, 300); // 5 menit
         }
 
-        await db.insert(activityLogs).values({
-          actionType: 'FAILED_OTP',
-          newData: { phone: body.phone, reason: 'INVALID_OTP' },
-        });
+        try {
+          await insertActivityLog({
+            actionType: 'FAILED_OTP',
+            userId: null,
+            officerId: null,
+            entityType: 'auth',
+            entityId: null,
+            newData: { phone: body.phone, reason: 'INVALID_OTP' },
+            ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+            userAgent: request.headers['user-agent'] || null,
+          });
+        } catch (err) {
+          request.log.error({ err }, 'FAILED_OTP audit log failed');
+        }
         return sendError(reply, 401, 'INVALID_OTP', 'OTP tidak valid atau sudah expired');
       }
 
@@ -344,15 +387,20 @@ export async function authRoutes(fastify: FastifyInstance) {
         ipAddress: request.ip,
       });
 
-      await db.insert(activityLogs).values({
-        actionType: 'LOGIN_SUCCESS',
-        userId: officer.user.id,
-        officerId: officer.id,
-        entityType: 'auth',
-        newData: { method: 'otp', phone: body.phone },
-        ipAddress: request.ip,
-        userAgent: request.headers['user-agent'] || null,
-      });
+      try {
+        await insertActivityLog({
+          actionType: 'LOGIN_SUCCESS',
+          userId: officer.user.id,
+          officerId: officer.id,
+          entityType: 'auth',
+          entityId: null,
+          newData: { method: 'otp', phone: body.phone },
+          ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+          userAgent: request.headers['user-agent'] || null,
+        });
+      } catch (err) {
+        request.log.error({ err }, 'LOGIN_SUCCESS audit log failed');
+      }
 
       return sendSuccess(reply, {
         access_token: tokens.accessToken,
@@ -466,10 +514,15 @@ export async function authRoutes(fastify: FastifyInstance) {
       const { refresh_token } = request.body as { refresh_token: string };
       const access_token = (request.headers.authorization || '').replace('Bearer ', '');
 
+      let userId: string | null = null;
+      let officerId: string | null = null;
+
       if (refresh_token) {
         try {
           // Decode untuk mendapatkan jti
           const decoded = await request.server.jwt.verify<any>(refresh_token);
+          userId = decoded.userId || null;
+          officerId = decoded.officerId || null;
           if (decoded.jti) {
             await revokeRefreshJti(decoded.jti);
           }
@@ -489,6 +542,35 @@ export async function authRoutes(fastify: FastifyInstance) {
           }
         } catch (e) {
           // Jika token sudah tidak valid/expired, abaikan saja
+        }
+      }
+
+      // Jika userId belum didapat dari refresh_token, coba dari access_token
+      if (!userId && access_token) {
+        try {
+          const decodedAccess = await request.server.jwt.verify<any>(access_token);
+          userId = decodedAccess.userId || null;
+          officerId = decodedAccess.officerId || null;
+        } catch {
+          // Abaikan error decoding
+        }
+      }
+
+      // Catat log logout menggunakan service terpusat secara aman
+      if (userId) {
+        try {
+          await insertActivityLog({
+            actionType: 'LOGOUT',
+            userId,
+            officerId,
+            entityType: 'auth',
+            newData: { reason: 'USER_LOGOUT' },
+            ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+            userAgent: request.headers['user-agent'] || null,
+            entityId: null,
+          });
+        } catch (err) {
+          request.log.error({ err }, 'Manual logout audit log insertion failed');
         }
       }
 

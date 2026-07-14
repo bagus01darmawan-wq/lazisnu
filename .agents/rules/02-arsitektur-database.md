@@ -111,14 +111,14 @@ assignment_id      UUID NOT NULL REFERENCES assignments(id)
 can_id             UUID NOT NULL REFERENCES cans(id)
 officer_id         UUID NOT NULL REFERENCES officers(id)
 nominal            BIGINT NOT NULL CHECK (nominal > 0)
-payment_method     ENUM('CASH','TRANSFER') NOT NULL DEFAULT 'CASH'
+payment_method     ENUM('CASH','TRANSFER') NOT NULL DEFAULT 'CASH' -- Note: Offline batch payload only accepts CASH
 is_latest          BOOLEAN NOT NULL DEFAULT true
 submit_sequence    INTEGER NOT NULL DEFAULT 1
 alasan_resubmit    TEXT                             -- Mandatory if submit_sequence > 1
 collected_at       TIMESTAMP NOT NULL
 submitted_at       TIMESTAMP
 synced_at          TIMESTAMP
-sync_status        ENUM('PENDING', 'COMPLETED', 'FAILED') NOT NULL DEFAULT 'PENDING'
+sync_status        ENUM('PENDING', 'COMPLETED', 'FAILED') NOT NULL DEFAULT 'PENDING' -- Note: Local MMKV queue has more granular client-side states
 offline_id         VARCHAR(100)                     -- Local UUID from mobile
 created_at         TIMESTAMP NOT NULL DEFAULT NOW()
 updated_at         TIMESTAMP NOT NULL DEFAULT NOW()

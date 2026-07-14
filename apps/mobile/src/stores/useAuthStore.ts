@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import { authService, setToken, setRefreshToken, getToken, clearToken, setSessionExpiredHandler } from '../services/api';
-import { offlineQueue } from '../services/offline/queue';
+import { authService, setToken, setRefreshToken, getToken, clearToken, setSessionExpiredHandler, getAuthStorage } from '../services/api';
 import { taskCache } from '../services/offline/tasks';
+import { clearAllCache } from '../services/offline/cache';
 import { useDashboardStore } from './useDashboardStore';
 import { useTasksStore } from './useTasksStore';
 import { useCollectionsStore } from './useCollectionStore';
@@ -48,13 +48,35 @@ interface AuthState {
  * Reset semua Zustand store + bersihkan MMKV instance kedua
  * (offline queue + task cache). Dipakai oleh logout/forceLogout.
  */
+const CACHED_USER_KEY = 'cached_user_profile';
+
+function saveCachedUser(user: User): void {
+  getAuthStorage().set(CACHED_USER_KEY, JSON.stringify(user));
+}
+
+function getCachedUser(): User | null {
+  const raw = getAuthStorage().getString(CACHED_USER_KEY);
+  if (!raw) {return null;}
+  try {
+    const parsed = JSON.parse(raw) as User;
+    return parsed?.id ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearCachedUser(): void {
+  getAuthStorage().delete(CACHED_USER_KEY);
+}
+
 function resetAllClientState() {
-  // 1. Bersihkan antrean offline koleksi finansial
-  offlineQueue.clearQueue();
-  offlineQueue.clearFailedPermanent();
-  // 2. Bersihkan cache task
+  // 1. Bersihkan cache task
   taskCache.clearTasks();
-  // 3. Reset Zustand stores (kecuali auth sendiri — di-handle pemanggil)
+  clearCachedUser();
+  // 3. Bersihkan cache MMKV tampilan (dashboard, tasks stats, collections)
+  //    WAJIB dipanggil saat logout/ganti akun agar data petugas lama tidak bocor.
+  clearAllCache();
+  // 4. Reset Zustand stores (kecuali auth sendiri — di-handle pemanggil)
   useDashboardStore.setState({
     todayStats: null,
     weekStats: null,
@@ -70,6 +92,9 @@ function resetAllClientState() {
     error: null,
     page: 1,
     totalPages: 1,
+    activeCount: 0,
+    completedCount: 0,
+    totalCount: 0,
   });
   useCollectionsStore.setState({
     collections: [],
@@ -77,6 +102,7 @@ function resetAllClientState() {
     error: null,
     page: 1,
     totalPages: 1,
+    total: 0,
   });
   useSyncStore.setState({
     pendingCount: 0,
@@ -141,6 +167,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           isAuthenticated: true,
           isInitializing: false,
         });
+        saveCachedUser({ id, full_name, email: email || '', phone: phone || '', role: role as User['role'], branch_id, district_id, is_active });
         setAuthenticatedUser(id);
       } else {
         // Token ditolak backend — bersihkan semuanya
@@ -160,7 +187,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       console.warn('[Auth] initializeAuth network error:', getErrorMessage(error, ''));
       const cachedToken = await getToken();
       if (cachedToken) {
-        set({ token: cachedToken, isAuthenticated: true, isInitializing: false });
+        const cachedUser = getCachedUser();
+        set({ user: cachedUser, token: cachedToken, isAuthenticated: true, isInitializing: false });
+        if (cachedUser) {setAuthenticatedUser(cachedUser.id);}
       } else {
         set({ isInitializing: false });
       }
@@ -200,7 +229,10 @@ export const useAuthStore = create<AuthState>((set) => ({
           isAuthenticated: true,
           isLoading: false,
         });
+        saveCachedUser({ id: user.id, full_name: user.full_name, email: user.email || '', phone, role: user.role as User['role'], branch_id: user.branch_id, district_id: user.district_id, is_active: true });
         setAuthenticatedUser(user.id);
+        // Setelah login, ulangi migrasi agar legacy queue memakai key officerId.
+        require('../services/offline/queue').offlineQueue.runMigration();
         return true;
       } else {
         set({ error: result.error?.message || 'Login gagal', isLoading: false });
@@ -263,7 +295,10 @@ export const useAuthStore = create<AuthState>((set) => ({
           isAuthenticated: true,
           isLoading: false,
         });
+        saveCachedUser({ id: user.id, full_name: user.full_name, email: user.email || '', phone, role: user.role as User['role'], branch_id: user.branch_id, district_id: user.district_id, is_active: true });
         setAuthenticatedUser(user.id);
+        // Setelah login, ulangi migrasi agar legacy queue memakai key officerId.
+        require('../services/offline/queue').offlineQueue.runMigration();
         return true;
       } else {
         set({ error: result.error?.message || 'OTP tidak valid', isLoading: false });

@@ -71,21 +71,37 @@ export async function getCans(
     conditions.push(eq(schema.cans.isActive, false));
   } else if (params.status === 'ASSIGNED') {
     conditions.push(eq(schema.cans.isActive, true));
-    
+
     const assignedSubquery = db
       .select({ id: schema.assignments.canId })
       .from(schema.assignments)
       .where(
         and(
           eq(schema.assignments.periodYear, currentYear),
-          eq(schema.assignments.periodMonth, currentMonth)
+          eq(schema.assignments.periodMonth, currentMonth),
+          eq(schema.assignments.status, 'ACTIVE')
         )
       );
-      
+
     conditions.push(inArray(schema.cans.id, assignedSubquery));
+  } else if (params.status === 'COMPLETED') {
+    conditions.push(eq(schema.cans.isActive, true));
+
+    const completedSubquery = db
+      .select({ id: schema.assignments.canId })
+      .from(schema.assignments)
+      .where(
+        and(
+          eq(schema.assignments.periodYear, currentYear),
+          eq(schema.assignments.periodMonth, currentMonth),
+          eq(schema.assignments.status, 'COMPLETED')
+        )
+      );
+
+    conditions.push(inArray(schema.cans.id, completedSubquery));
   } else if (params.status === 'ACTIVE') {
     conditions.push(eq(schema.cans.isActive, true));
-    
+
     const assignedSubquery = db
       .select({ id: schema.assignments.canId })
       .from(schema.assignments)
@@ -95,7 +111,7 @@ export async function getCans(
           eq(schema.assignments.periodMonth, currentMonth)
         )
       );
-      
+
     conditions.push(sql`${schema.cans.id} NOT IN (${assignedSubquery})`);
   }
 
@@ -116,7 +132,7 @@ export async function getCans(
             eq(schema.assignments.periodMonth, currentMonth)
           ),
           limit: 1,
-          columns: { id: true }
+          columns: { id: true, status: true }
         }
       }
     }),

@@ -11,10 +11,10 @@ trigger: manual
 ## Status Saat Ini
 
 ```
-FASE AKTIF : System Verification & Finalization
-UPDATED    : 2026-06-18
-STATUS     : Login Web Dashboard via Vercel telah BERHASIL. Database Supabase kembali AKTIF. Perbaikan bug race condition refresh token, environment variable safety (fail-fast), token sync login, dan peningkatan type safety client-side Axios berhasil diimplementasikan dan diverifikasi via build.
-FOKUS      : Melanjutkan validasi modul aplikasi lainnya atau memulai sprint fitur baru.
+FASE AKTIF : Local Environment Setup & Mobile Verification
+UPDATED    : 2026-07-02
+STATUS     : Android Emulator API 34 (medium_phone) berhasil dikonfigurasi dari nol dan dinyalakan dengan akselerasi CPU (AEHD) AMD. Kamera emulator berhasil diarahkan ke webcam fisik host (webcam0) untuk scan QR. Backend Fastify berhasil menyala dengan Redis mock (ioredis-mock) dan terhubung ke database Supabase yang telah diaktifkan kembali. Bug interceptor login 401 di mobile berhasil ditambal, dan login petugas sukses diverifikasi.
+FOKUS      : Melakukan simulasi transaksi end-to-end (Scan QR kaleng, input nominal, offline sync) dan pengujian dashboard web.
 ```
 
 Catatan untuk agent:
@@ -50,6 +50,22 @@ Catatan untuk agent:
 ---
 
 ## Sprint Aktif — Pekerjaan Tersisa
+
+### P0 — Crash Mobile pada Tab Riwayat / Collection [TERDIAGNOSIS 2026-07-02]
+
+**Gejala runtime:** Hermes menampilkan `TypeError: Cannot read property 'task' of undefined` saat `CollectionScreen` dirender dari `BottomTabNavigator`.
+
+**Akar masalah terverifikasi:**
+- `apps/mobile/src/navigation/AppNavigator.tsx:80-84` mendaftarkan `CollectionScreen` sebagai tab `Collection` berjudul **Riwayat**. Tab dapat dibuka langsung tanpa parameter navigasi.
+- `apps/mobile/src/screens/CollectionScreen.tsx:26` langsung menjalankan `const { task } = route.params`, sehingga crash ketika `route.params` bernilai `undefined`.
+- `apps/mobile/src/navigation/types.ts` mendefinisikan `Collection: undefined`, tetapi `apps/mobile/src/screens/ScanScreen.tsx:129` memanggil `navigation.navigate('Collection', { task: scannedData })`. Kontrak tipe navigasi dan penggunaan runtime tidak konsisten.
+- `apps/mobile/src/screens/HistoryScreen.tsx` sudah tersedia, tetapi tidak digunakan oleh tab **Riwayat**.
+
+**Dampak:** alur verifikasi scan QR → input nominal terblokir, dan pengguna dapat memicu crash hanya dengan membuka tab Riwayat.
+
+**Arah perbaikan yang direkomendasikan:** gunakan `HistoryScreen` sebagai komponen tab Riwayat; pindahkan `CollectionScreen` ke stack flow yang hanya dapat dibuka dengan parameter `{ task }`; lalu selaraskan `RootStackParamList`/`MainTabParamList` dan hilangkan penggunaan `useNavigation<any>()` agar mismatch terdeteksi TypeScript.
+
+**Status verifikasi:** diagnosis source selesai; patch, typecheck, lint, test, dan uji emulator belum dilakukan.
 
 ### P0 — Bukti Manual / Integration yang Belum Selesai
 
@@ -106,6 +122,19 @@ Mitigasi kerentanan keamanan monorepo berhasil diterapkan pada 2026-06-13 menggu
 ---
 
 ## Selesai Baru-Baru Ini
+
+### ✅ Setup Emulator Android, Fix API Interceptor & Verifikasi Login — Selesai 2026-07-02
+
+| Area | Status | Bukti |
+|---|---|---|
+| Android Emulator Setup | ✅ | Android CLI helper, SDK Platform API 34, dan System Image x86_64 terpasang. Emulator `medium_phone` berhasil dibuat dan dijalankan. |
+| CPU Acceleration (AMD) | ✅ | Driver Android Emulator Hypervisor (AEHD) berhasil dipasang sebagai layanan sistem (RUNNING) untuk performa optimal di CPU AMD. |
+| Webcam Redirection | ✅ | Konfigurasi AVD `config.ini` diperbarui (`hw.camera.back=webcam0`) agar secara otomatis mengarahkan kamera belakang emulator ke webcam fisik host. |
+| pnpm Command Shortcut | ✅ | Menambahkan shortcut `"android:mobile"` di root `package.json` untuk menyingkat dan mempermudah kompilasi dan deploy mobile app. |
+| Local Backend Configuration | ✅ | Menyesuaikan `.env` backend ke `NODE_ENV=development` dan menonaktifkan `REDIS_URL` agar otomatis beralih menggunakan `ioredis-mock` yang aman saat dijalankan tanpa Redis fisik. |
+| Supabase Restoration | ✅ | Database online Supabase kembali diaktifkan (unpaused) dan koneksi backend terverifikasi aktif dengan status "ready" pada endpoint `/health/ready`. |
+| API Interceptor Fix | ✅ | Memperbaiki bug 401 di `apps/mobile/src/services/api.ts` agar endpoint autentikasi (`/auth/login` dsb) tidak diintersep secara salah, mencegah pesan "Sesi telah berakhir" saat gagal kredensial. |
+| Login Verification | ✅ | Kata sandi user petugas `082134536151` di-reset menjadi `admin123` dan login terverifikasi berhasil sampai masuk ke dasbor. |
 
 ### ✅ Perbaikan Auth Web Dashboard & Client Type Safety — Selesai 2026-06-18
 
@@ -281,4 +310,4 @@ Catatan mismatch yang belum diputuskan:
 
 *Lazisnu Infaq Collection System — rules/10-sprint-aktif.md*
 *⚠️ Update file ini setiap berganti sprint/fase*
-*Last updated: 2026-06-18 (Web Dashboard Auth, Race Condition, Type Safety, and Environment safety fixes)*
+*Last updated: 2026-07-02 (Android Emulator, AEHD, Webcam Config, local backend settings, and mobile API interceptor fix)*

@@ -9,6 +9,7 @@ import { config } from '../config/env';
 import { getLatestCollectionCondition } from '../services/collectionSubmission';
 import { findCansWithoutAssignment, buildFirstOfficerAssignments, insertAssignments } from '../services/assignmentGenerator';
 import { sendSuccess, sendError, sendInternalError } from '../utils/response';
+import { insertActivityLog } from '../services/auditLogService';
 
 const generateTasksSchema = z.object({
   year: z.number().min(2020).max(2100),
@@ -20,14 +21,21 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', async (request, reply) => {
     const apiKey = request.headers['x-internal-api-key'];
     if (config.INTERNAL_API_KEY && apiKey !== config.INTERNAL_API_KEY) {
-      await db.insert(schema.activityLogs).values({
-        actionType: 'SCHEDULER_MISMATCH',
-        entityType: 'SYSTEM',
-        oldData: { providedKey: apiKey ? '***' : 'MISSING' },
-        newData: null,
-        ipAddress: request.ip,
-        userAgent: request.headers['user-agent'] || null,
-      });
+      try {
+        await insertActivityLog({
+          userId: null,
+          officerId: null,
+          actionType: 'SCHEDULER_MISMATCH',
+          entityType: 'system',
+          entityId: null,
+          oldData: { providedKey: apiKey ? '[REDACTED]' : 'MISSING' },
+          newData: null,
+          ipAddress: request.ip,
+          userAgent: request.headers['user-agent'] || null,
+        });
+      } catch (err) {
+        request.log.error({ err }, 'SCHEDULER_MISMATCH audit log failed');
+      }
       return sendError(reply, 403, 'FORBIDDEN', 'Internal API key tidak valid');
     }
   });
@@ -89,41 +97,29 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
         },
       });
 
-      type SummaryAcc = {
-        total: number; count: number;
-        cash: number; cashCount: number;
-        transfer: number; transferCount: number;
-      };
+      type SummaryAcc = { total: number; count: number };
       const byDistrict: Record<string, SummaryAcc> = {};
       const byBranch: Record<string, SummaryAcc> = {};
       const byOfficer: Record<string, SummaryAcc> = {};
 
-      const initAcc = (): SummaryAcc => ({
-        total: 0, count: 0, cash: 0, cashCount: 0, transfer: 0, transferCount: 0,
-      });
+      const initAcc = (): SummaryAcc => ({ total: 0, count: 0 });
 
-      const addToAcc = (acc: SummaryAcc, amount: number, method: string) => {
-        acc.total += amount;
-        acc.count++;
-        if (method === 'CASH') { acc.cash += amount; acc.cashCount++; }
-        else { acc.transfer += amount; acc.transferCount++; }
-      };
+      const addToAcc = (acc: SummaryAcc, amount: number) => { acc.total += amount; acc.count++; };
 
       for (const col of collections) {
         const nominal = Number(col.nominal);
         const districtId = col.can.branch.districtId;
         const branchId = col.can.branchId;
         const officerId = col.officerId;
-        const method = col.paymentMethod;
 
         if (!byDistrict[districtId]) byDistrict[districtId] = initAcc();
-        addToAcc(byDistrict[districtId], nominal, method);
+        addToAcc(byDistrict[districtId], nominal);
 
         if (!byBranch[branchId]) byBranch[branchId] = initAcc();
-        addToAcc(byBranch[branchId], nominal, method);
+        addToAcc(byBranch[branchId], nominal);
 
         if (!byOfficer[officerId]) byOfficer[officerId] = initAcc();
-        addToAcc(byOfficer[officerId], nominal, method);
+        addToAcc(byOfficer[officerId], nominal);
       }
 
       const summaries = [
@@ -132,22 +128,16 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
           periodYear: year, periodMonth: month,
           districtId, branchId: null, officerId: null,
           totalAmount: BigInt(d.total), collectionCount: d.count,
-          cashAmount: BigInt(d.cash), cashCount: d.cashCount,
-          transferAmount: BigInt(d.transfer), transferCount: d.transferCount,
         })),
         ...Object.entries(byBranch).map(([branchId, d]) => ({
           periodYear: year, periodMonth: month,
           districtId: null, branchId, officerId: null,
           totalAmount: BigInt(d.total), collectionCount: d.count,
-          cashAmount: BigInt(d.cash), cashCount: d.cashCount,
-          transferAmount: BigInt(d.transfer), transferCount: d.transferCount,
         })),
         ...Object.entries(byOfficer).map(([officerId, d]) => ({
           periodYear: year, periodMonth: month,
           districtId: null, branchId: null, officerId,
           totalAmount: BigInt(d.total), collectionCount: d.count,
-          cashAmount: BigInt(d.cash), cashCount: d.cashCount,
-          transferAmount: BigInt(d.transfer), transferCount: d.transferCount,
         })),
       ];
 

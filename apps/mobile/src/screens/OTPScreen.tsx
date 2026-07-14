@@ -1,271 +1,264 @@
-// OTP Verification Screen - Mobile App
-
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
   Alert,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { useAuthStore } from '../stores';
+import {RouteProp, useNavigation, useRoute} from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import {useAuthStore} from '../stores';
+import {AppButton, AppCard, AppHeader} from '../components/ui';
+import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
 
-type OTPScreenRouteProp = RouteProp<{ OTP: { phone: string } }, 'OTP'>;
+type OTPRoute = RouteProp<{OTP: {phone: string}}, 'OTP'>;
+
+const EMPTY_OTP = ['', '', '', '', '', ''];
 
 const OTPScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const route = useRoute<OTPScreenRouteProp>();
-  const { phone } = route.params;
-  const { verifyOTP, isLoading, error, clearError } = useAuthStore();
+  const {phone} = useRoute<OTPRoute>().params;
+  const {verifyOTP, requestOTP, isLoading, error, clearError} = useAuthStore();
+  const [digits, setDigits] = useState([...EMPTY_OTP]);
+  const [countdown, setCountdown] = useState(300);
+  const inputs = useRef<(TextInput | null)[]>([]);
 
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [countdown, setCountdown] = useState(300); // 5 minutes
-  const inputRefs = useRef<(TextInput | null)[]>([]);
-
-  const handleVerify = useCallback(async (otpValue?: string) => {
-    const otpString = otpValue || otp.join('');
-    if (otpString.length !== 6) {
-      Alert.alert('Error', 'OTP harus 6 digit');
+  useEffect(() => {
+    if (!countdown) {
       return;
     }
+    const timer = setTimeout(() => setCountdown(value => Math.max(0, value - 1)), 1000);
+    return () => clearTimeout(timer);
+  }, [countdown]);
 
+  const verifyCode = useCallback(
+    async (code: string) => {
+      if (code.length !== 6 || isLoading) {
+        return;
+      }
+      clearError();
+      const success = await verifyOTP(phone, code);
+      if (!success) {
+        const message = useAuthStore.getState().error;
+        Alert.alert('Verifikasi Gagal', message || 'Kode OTP tidak dapat diverifikasi.');
+        setDigits([...EMPTY_OTP]);
+        inputs.current[0]?.focus();
+      }
+    },
+    [clearError, isLoading, phone, verifyOTP],
+  );
+
+  useEffect(() => {
+    const code = digits.join('');
+    if (code.length === 6) {
+      verifyCode(code);
+    }
+  }, [digits, verifyCode]);
+
+  const updateDigit = (value: string, index: number) => {
+    const numeric = value.replace(/\D/g, '');
+    if (index === 0 && numeric.length >= 6) {
+      const pasted = numeric.slice(0, 6).split('');
+      setDigits(pasted);
+      inputs.current[5]?.focus();
+      return;
+    }
+    const next = [...digits];
+    next[index] = numeric.slice(-1);
+    setDigits(next);
+    if (numeric && index < 5) {
+      inputs.current[index + 1]?.focus();
+    }
+  };
+
+  const resendOTP = async () => {
+    if (countdown || isLoading) {
+      return;
+    }
     clearError();
-    const success = await verifyOTP(phone, otpString);
-    if (!success && error) {
-      Alert.alert('Verifikasi Gagal', error);
-      setOtp(['', '', '', '', '', '']);
-      inputRefs.current[0]?.focus();
+    const success = await requestOTP(phone);
+    if (!success) {
+      Alert.alert(
+        'OTP Tidak Terkirim',
+        useAuthStore.getState().error || 'Coba kembali beberapa saat lagi.',
+      );
+      return;
     }
-  }, [phone, otp, clearError, verifyOTP, error]);
-
-  // Countdown timer
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  // Auto-submit when all digits filled
-  useEffect(() => {
-    const otpString = otp.join('');
-    if (otpString.length === 6) {
-      handleVerify(otpString);
-    }
-  }, [otp, handleVerify]);
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    setDigits([...EMPTY_OTP]);
+    setCountdown(300);
+    inputs.current[0]?.focus();
+    Alert.alert('OTP Dikirim', 'Kode OTP baru telah dikirim melalui WhatsApp.');
   };
 
-  const handleOtpChange = (value: string, index: number) => {
-    const newOtp = [...otp];
-    newOtp[index] = value.slice(-1);
-    setOtp(newOtp);
-
-    // Auto-focus next input
-    if (value && index < 5) {
-      inputRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleKeyPress = (e: any, index: number) => {
-    if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-    }
-  };
-
-  const handleResend = async () => {
-    if (countdown > 0) { return; }
-
-    // Navigate back to login to request new OTP
-    navigation.goBack();
-  };
+  const minutes = Math.floor(countdown / 60);
+  const seconds = String(countdown % 60).padStart(2, '0');
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <View style={styles.content}>
-        {/* Header */}
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
-          <Icon name="arrow-left" size={24} color="#333" />
-        </TouchableOpacity>
-
-        <View style={styles.header}>
-          <Text style={styles.title}>Verifikasi OTP</Text>
+    <View style={styles.container}>
+      <AppHeader
+        variant={'stack'}
+        title={'Verifikasi OTP'}
+        onBack={() => navigation.goBack()}
+      />
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.content}>
+          <View style={styles.messageIcon}>
+            <Icon name={'whatsapp'} size={38} color={Colors.brand.whatsapp} />
+          </View>
+          <Text style={styles.title}>Masukkan kode OTP</Text>
           <Text style={styles.subtitle}>
-            Masukkan kode OTP yang dikirim ke{'\n'}
-            <Text style={styles.phoneNumber}>{phone}</Text>
+            Kode 6 digit telah dikirim melalui WhatsApp ke
+          </Text>
+          <Text style={styles.phone}>{phone}</Text>
+
+          <AppCard variant={'elevated'} style={styles.otpCard}>
+            <View style={styles.otpRow}>
+              {digits.map((digit, index) => (
+                <TextInput
+                  key={index}
+                  ref={reference => {
+                    inputs.current[index] = reference;
+                  }}
+                  style={[styles.otpInput, !!digit && styles.otpInputFilled]}
+                  value={digit}
+                  onChangeText={value => updateDigit(value, index)}
+                  onKeyPress={event => {
+                    if (event.nativeEvent.key === 'Backspace' && !digit && index > 0) {
+                      inputs.current[index - 1]?.focus();
+                    }
+                  }}
+                  keyboardType={'number-pad'}
+                  maxLength={index === 0 ? 6 : 1}
+                  textAlign={'center'}
+                  autoFocus={index === 0}
+                  selectTextOnFocus
+                  selectionColor={Colors.brand.emerald}
+                  accessibilityLabel={`Digit OTP ${index + 1}`}
+                />
+              ))}
+            </View>
+
+            {!!error && (
+              <View style={styles.errorBanner}>
+                <Icon name={'alert-circle-outline'} size={18} color={Colors.status.error} />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            )}
+
+            <View style={styles.timerRow}>
+              <Icon name={'clock-outline'} size={18} color={Colors.text.secondary} />
+              <Text style={styles.timerText}>
+                {countdown ? `Kode berlaku ${minutes}:${seconds}` : 'Kode telah kedaluwarsa'}
+              </Text>
+            </View>
+
+            <AppButton
+              label={'Verifikasi'}
+              icon={'shield-check-outline'}
+              onPress={() => verifyCode(digits.join(''))}
+              loading={isLoading}
+              disabled={digits.join('').length !== 6}
+              fullWidth
+            />
+
+            {!countdown && (
+              <View style={styles.resendButton}>
+                <AppButton
+                  label={'Kirim Ulang OTP'}
+                  variant={'outline'}
+                  onPress={resendOTP}
+                  loading={isLoading}
+                  fullWidth
+                />
+              </View>
+            )}
+          </AppCard>
+
+          <Text style={styles.helpText}>
+            Jangan berikan kode OTP kepada siapa pun.
           </Text>
         </View>
-
-        {/* OTP Input */}
-        <View style={styles.otpContainer}>
-          {otp.map((digit, index) => (
-            <TextInput
-              key={index}
-              ref={(ref) => (inputRefs.current[index] = ref)}
-              style={[styles.otpInput, digit ? styles.otpInputFilled : undefined]}
-              value={digit}
-              onChangeText={(value) => handleOtpChange(value, index)}
-              onKeyPress={(e) => handleKeyPress(e, index)}
-              keyboardType="number-pad"
-              maxLength={1}
-              textAlign="center"
-              autoFocus={index === 0}
-            />
-          ))}
-        </View>
-
-        {/* Timer */}
-        <View style={styles.timerContainer}>
-          {countdown > 0 ? (
-            <Text style={styles.timerText}>
-              Kode expires dalam{' '}
-              <Text style={styles.timerValue}>{formatTime(countdown)}</Text>
-            </Text>
-          ) : (
-            <TouchableOpacity onPress={handleResend}>
-              <Text style={styles.resendText}>Kirim Ulang OTP</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Verify Button */}
-        <TouchableOpacity
-          style={[styles.verifyButton, isLoading && styles.verifyButtonDisabled]}
-          onPress={() => handleVerify()}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.verifyButtonText}>Verifikasi</Text>
-          )}
-        </TouchableOpacity>
-
-        {/* Help Text */}
-        <Text style={styles.helpText}>
-          Tidak menerima kode?{'\n'}
-          Pastikan nomor HP aktif dan dapat menerima WhatsApp
-        </Text>
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
+  container: {flex: 1, backgroundColor: Colors.surface.page},
+  keyboardView: {flex: 1},
   content: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 20,
-  },
-  backButton: {
-    marginBottom: 20,
-  },
-  header: {
     alignItems: 'center',
-    marginBottom: 40,
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: Spacing.xl,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  phoneNumber: {
-    fontWeight: '600',
-    color: '#1E88E5',
-  },
-  otpContainer: {
-    flexDirection: 'row',
+  messageIcon: {
+    width: 76,
+    height: 76,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.surface.successSoft,
+    alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 24,
   },
+  title: {...Typography.heading1, color: Colors.brand.deepGreen, marginTop: Spacing.md},
+  subtitle: {
+    ...Typography.bodySmall,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+    marginTop: Spacing.xs,
+  },
+  phone: {...Typography.body, fontWeight: '700', color: Colors.text.primary, marginTop: 3},
+  otpCard: {width: '100%', padding: Spacing.lg, marginTop: Spacing.lg},
+  otpRow: {flexDirection: 'row', justifyContent: 'space-between', gap: 5},
   otpInput: {
-    width: 48,
+    flex: 1,
+    maxWidth: 48,
     height: 56,
-    borderWidth: 2,
-    borderColor: '#ddd',
-    borderRadius: 12,
-    marginHorizontal: 6,
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: Colors.border.warm,
+    borderRadius: Radius.md,
+    fontSize: 23,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    backgroundColor: Colors.surface.card,
   },
   otpInputFilled: {
-    borderColor: '#1E88E5',
-    backgroundColor: '#e3f2fd',
+    borderColor: Colors.brand.emerald,
+    backgroundColor: Colors.surface.successSubtle,
   },
-  timerContainer: {
+  timerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 32,
-  },
-  timerText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  timerValue: {
-    fontWeight: '600',
-    color: '#1E88E5',
-  },
-  resendText: {
-    fontSize: 14,
-    color: '#1E88E5',
-    fontWeight: '600',
-  },
-  verifyButton: {
-    backgroundColor: '#1E88E5',
-    borderRadius: 12,
-    height: 56,
     justifyContent: 'center',
-    alignItems: 'center',
+    gap: 6,
+    marginVertical: Spacing.lg,
   },
-  verifyButtonDisabled: {
-    opacity: 0.7,
+  timerText: {...Typography.bodySmall, color: Colors.text.secondary},
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: Colors.surface.errorSoft,
+    borderRadius: Radius.md,
+    padding: Spacing.sm,
+    marginTop: Spacing.md,
   },
-  verifyButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+  errorText: {
+    flex: 1,
+    ...Typography.caption,
+    color: Colors.status.error,
+    marginLeft: Spacing.xs,
   },
+  resendButton: {marginTop: Spacing.sm},
   helpText: {
+    ...Typography.caption,
+    color: Colors.text.muted,
     textAlign: 'center',
-    color: '#999',
-    fontSize: 12,
-    marginTop: 24,
-    lineHeight: 18,
+    marginTop: Spacing.lg,
   },
 });
 

@@ -1,51 +1,25 @@
-// apps/mobile/src/services/secureStorage.ts
-//
-// Orchestrator untuk enkripsi 2 instance MMKV (default + offline-queue).
-// Dipanggil SEKALI di App.tsx SEBELUM navigator mount (lihat P4.4).
-//
-// Strategi migrasi (existing user dari P0–P3 dengan MMKV plain):
-//   Pakai `MMKV.recrypt(key)` yang atomic re-encrypt existing data.
-//   Tidak perlu clear data; tidak ada downtime; transparan untuk caller.
-//
-// Strategi fallback (saat Keychain unavailable):
-//   - Default MMKV (token): pakai ephemeral key (Opsi B dari Design Decision)
-//   - Offline-queue MMKV (data finansial): TIDAK ada fallback — caller
-//     HARUS panggil forceLogout() untuk wipe + relogin.
+// Orchestrator untuk membuka dua MMKV hanya setelah encryption key tersedia.
+// Urutan ini mencegah file terenkripsi dibuka tanpa key pada cold start.
 
-import { storage as defaultStorage } from './api';
-import { storage as offlineStorage } from './offline/mmkv';
+import {getAuthStorage, initializeAuthStorage} from './api';
 import {
-  getOrCreateEncryptionKey,
-  generateEphemeralKey,
+  getOfflineStorage,
+  initializeOfflineStorage,
+} from './offline/mmkv';
+import {
   clearEncryptionKey,
+  generateEphemeralKey,
+  getOrCreateEncryptionKey,
   type GetKeyResult,
 } from './secureKey';
 
-// ── Init Result ──────────────────────────────────────────────────────────────
-
 export type EncryptedStorageStatus = {
-  /** Default MMKV (token) — apakah pakai persistent key dari Keychain? */
   defaultSecure: boolean;
-  /** Offline-queue MMKV (data finansial) — apakah pakai persistent key? */
   offlineSecure: boolean;
-  /**
-   * Mode fallback apa yang aktif.
-   * - 'none'           : Keychain OK, semua encrypted dengan persistent key
-   * - 'ephemeral_default' : Keychain gagal; default pakai ephemeral key,
-   *                       offline-queue di-wipe (caller harus forceLogout)
-   * - 'wiped'          : Keychain gagal; keduanya di-wipe (forceLogout path)
-   */
   fallback: 'none' | 'ephemeral_default' | 'wiped';
-  /** Untuk Crashlytics attribute. */
   reason?: string;
 };
 
-// ── Init ─────────────────────────────────────────────────────────────────────
-
-/**
- * Idempotent: aman dipanggil berulang. Subsequent calls return status
- * yang sama tanpa re-init.
- */
 let initialized = false;
 let initStatus: EncryptedStorageStatus | null = null;
 
@@ -57,35 +31,32 @@ export async function initEncryptedStorage(): Promise<EncryptedStorageStatus> {
   const result: GetKeyResult = await getOrCreateEncryptionKey();
 
   if (result.ok) {
-    // Happy path: re-encrypt kedua instance dengan persistent key.
-    // recrypt() aman dipanggil di existing data (atomic, no data loss).
     try {
-      defaultStorage.recrypt(result.key);
-      offlineStorage.recrypt(result.key);
+      // Key baru berarti file berasal dari versi lama yang belum terenkripsi.
+      // Key yang sudah ada harus diberikan langsung saat constructor membuka file.
+      const migrateUnencrypted = result.source === 'generated';
+      initializeAuthStorage(result.key, migrateUnencrypted);
+      initializeOfflineStorage(result.key, migrateUnencrypted);
       initStatus = {
         defaultSecure: true,
         offlineSecure: true,
         fallback: 'none',
       };
     } catch (error) {
-      // recrypt() bisa throw jika existing data corrupt (jarang).
-      // Fallback: wipe + relogin. Caller akan handle via forceLogout.
-      console.warn('[secureStorage] recrypt failed, forcing wipe:', error);
-      wipeBothInstances();
+      console.warn('[secureStorage] initialization failed, forcing wipe:', error);
+      initializeFallbackAndWipe();
       initStatus = {
         defaultSecure: false,
         offlineSecure: false,
         fallback: 'wiped',
-        reason: 'recrypt_failed',
+        reason: 'storage_initialization_failed',
       };
     }
   } else {
-    // Keychain unavailable (Design Decision: beda perlakuan).
-    // Default: ephemeral key (token aman walau short-lived).
-    // Offline-queue: WIPE (data finansial tidak boleh pakai weak key).
     try {
       const ephemeral = generateEphemeralKey();
-      defaultStorage.recrypt(ephemeral);
+      initializeAuthStorage(ephemeral);
+      initializeOfflineStorage(ephemeral);
       wipeOfflineInstance();
       initStatus = {
         defaultSecure: false,
@@ -94,9 +65,8 @@ export async function initEncryptedStorage(): Promise<EncryptedStorageStatus> {
         reason: result.reason,
       };
     } catch (error) {
-      // Bahkan ephemeral generation gagal — wipe total.
       console.warn('[secureStorage] ephemeral fallback failed:', error);
-      wipeBothInstances();
+      initializeFallbackAndWipe();
       initStatus = {
         defaultSecure: false,
         offlineSecure: false,
@@ -110,40 +80,49 @@ export async function initEncryptedStorage(): Promise<EncryptedStorageStatus> {
   return initStatus;
 }
 
-// ── Teardown (untuk logout) ──────────────────────────────────────────────────
-
-/**
- * Hapus encryption key dari Keychain + wipe kedua instance MMKV.
- * Dipanggil saat forceLogout / uninstall-prep.
- *
- * Setelah teardown, `initEncryptedStorage()` bisa dipanggil ulang
- * (mis. user login lagi di device yang sama).
- */
 export async function teardownEncryptedStorage(): Promise<void> {
-  await clearEncryptionKey();
   wipeBothInstances();
+  await clearEncryptionKey();
   initialized = false;
   initStatus = null;
 }
 
-// ── Internal helpers ─────────────────────────────────────────────────────────
+function initializeFallbackAndWipe(): void {
+  try {
+    const fallbackKey = generateEphemeralKey();
+    initializeAuthStorage(fallbackKey);
+    initializeOfflineStorage(fallbackKey);
+  } catch {
+    // Getter-based wipe below remains best-effort if native init also fails.
+  }
+  wipeBothInstances();
+}
 
 function wipeBothInstances(): void {
-  try { defaultStorage.clearAll(); } catch (e) { /* ignore */ }
-  try { offlineStorage.clearAll(); } catch (e) { /* ignore */ }
+  try {
+    getAuthStorage().clearAll();
+  } catch {
+    /* storage belum tersedia */
+  }
+  try {
+    getOfflineStorage().clearAll();
+  } catch {
+    /* storage belum tersedia */
+  }
 }
 
 function wipeOfflineInstance(): void {
-  try { offlineStorage.clearAll(); } catch (e) { /* ignore */ }
+  try {
+    getOfflineStorage().clearAll();
+  } catch {
+    /* storage belum tersedia */
+  }
 }
-
-// ── Status getter ────────────────────────────────────────────────────────────
 
 export function getEncryptionStatus(): EncryptedStorageStatus | null {
   return initStatus;
 }
 
-// Untuk test only
 export function __resetForTest(): void {
   initialized = false;
   initStatus = null;

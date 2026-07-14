@@ -1,6 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { db } from '../config/database';
-import * as schema from '../database/schema';
+import { insertActivityLog } from '../services/auditLogService';
 
 /**
  * Global Audit Logger Middleware
@@ -55,8 +54,8 @@ export async function auditLogger(request: FastifyRequest, reply: FastifyReply) 
     return;
   }
 
-  // Skip auth routes (except logout and sessions)
-  if (request.url.startsWith('/v1/auth') && !request.url.includes('logout') && !request.url.includes('sessions')) {
+  // Skip auth routes (except sessions; logout is manually logged inside the route)
+  if (request.url.startsWith('/v1/auth') && !request.url.includes('sessions')) {
     return;
   }
 
@@ -97,15 +96,15 @@ interface AuditLogInput {
 
 async function insertAuditLog(input: AuditLogInput) {
   try {
-    await db.insert(schema.activityLogs).values({
+    await insertActivityLog({
       userId: input.userId,
       officerId: input.officerId,
       actionType: input.actionType,
       entityType: input.entityType,
       entityId: input.entityId,
       requestId: input.request.id?.toString() || null,
-      oldData: input.oldData || null,
-      newData: input.newData || null,
+      oldData: input.oldData,
+      newData: input.newData,
       ipAddress: input.ipAddress,
       userAgent: input.userAgent,
     });

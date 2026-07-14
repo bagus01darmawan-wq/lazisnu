@@ -18,10 +18,14 @@ export interface BatchCollectionItem {
   assignment_id: string;
   can_id: string;
   nominal: number;
-  payment_method: 'CASH' | 'TRANSFER';
   collected_at: string;
   latitude?: number;
   longitude?: number;
+  device_info?: {
+    model: string;
+    os_version: string;
+    app_version: string;
+  };
 }
 
 /** Hasil per item dalam batch */
@@ -90,11 +94,11 @@ async function processSyncItem(
       canId: item.can_id,
       officerId,
       nominal: item.nominal,
-      paymentMethod: item.payment_method,
       collectedAt: new Date(item.collected_at),
       latitude: item.latitude?.toString(),
       longitude: item.longitude?.toString(),
       offlineId: item.offline_id,
+      deviceInfo: item.device_info,
     });
   });
 
@@ -124,7 +128,6 @@ export async function syncCollectionsBatch(
       succeeded++;
     } catch (err) {
       const classification = classifySyncError(err);
-      const isValidation = classification.error_type === 'VALIDATION';
 
       results.push({
         offline_id: item.offline_id,
@@ -132,11 +135,8 @@ export async function syncCollectionsBatch(
         ...classification,
       });
 
-      if (isValidation) {
-        succeeded++; // validation error dihitung selesai (tidak perlu retry)
-      } else {
-        failed++;
-      }
+      // Validation error tetap gagal: client memasukkannya ke quarantine untuk ditinjau.
+      failed++;
     }
   }
 

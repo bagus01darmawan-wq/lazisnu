@@ -32,7 +32,7 @@ describe('secureKey', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.source).toBe('keychain');
+        expect(result.source).toBe('generated');
         expect(result.key).toBeTruthy();
         // 12 bytes → base64 = 16 chars (MMKV limit)
         expect(result.key.length).toBe(16);

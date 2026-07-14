@@ -25,15 +25,16 @@ REASON: Collection data is financial proof that must be fully auditable.
 
 ---
 
-## BR-02: QR Token — HMAC-SHA256
+## BR-02: QR Code — Authenticated Exact Match
 
 ```typescript
 // VALIDATION (when officer scans QR — GET /v1/mobile/scan/:qrCode):
-1. Verify HMAC signature token (if implemented) → if failed: QR_INVALID
-2. Check can.is_active = true                   → if false: QR_INVALID
-3. Check active assignment for this officer     → if none: QR_NOT_ASSIGNED
-4. Check no collection with isLatest=true       → if exists: QR_ALREADY_SUBMITTED
-5. All pass → return can details
+1. Validate raw qr_code without trim/case conversion       → if failed: QR_INVALID
+2. Authenticate officer via JWT                            → if failed: UNAUTHORIZED
+3. Check can.is_active = true                              → if false: QR_INVALID
+4. Check active assignment for this officer/current period → if none: QR_NOT_ASSIGNED
+5. Check no collection with isLatest=true                  → if exists: QR_ALREADY_SUBMITTED
+6. All pass → return assignment-shaped task details
 ```
 
 ---
@@ -59,17 +60,35 @@ FLOW:
 
 ---
 
-## BR-04: Offline Queue in Mobile
+## BR-04: Offline Queue & Sync Batch Contract
 
 ```typescript
-// Structure for offline record (stored in MMKV):
-interface OfflineRecord {
-  offline_id       : string   // Local UUID for tracking/dedup
-  can_id           : string
-  assignment_id    : string
-  nominal          : number
-  payment_method   : 'CASH' | 'TRANSFER'
-  collected_at     : string   // ISO 8601 timestamp
+// 1. Local Queue item (stored in MMKV):
+interface QueuedCollection {
+  offline_id: string;
+  assignment_id: string;
+  can_id: string;
+  nominal: number;
+  collected_at: string;
+  latitude?: number;
+  longitude?: number;
+  // Local metadata:
+  retry_attempts: number;
+  error_type?: string;
+  error_message?: string;
+}
+
+// 2. Batch Sync Request payload item (sent to API - strict validation):
+interface BatchCollectionRequestItem {
+  offline_id: string;
+  assignment_id: string;
+  can_id: string;
+  nominal: number;
+  collected_at: string;
+  latitude?: number;
+  longitude?: number;
+  device_info?: DeviceInfo;
+  // Note: payment_method and transfer_receipt_url are rejected in batch sync!
 }
 ```
 

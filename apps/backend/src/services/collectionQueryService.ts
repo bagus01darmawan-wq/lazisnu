@@ -1,5 +1,5 @@
 /**
- * Collection Query Service — query builder & list untuk collections.
+ * Collection Query Service Ã¢â‚¬â€ query builder & list untuk collections.
  *
  * Diekstrak dari reportService.ts (sebelumnya mencampur 6 concern).
  * Fokus: query building dengan scope, search, pagination.
@@ -117,9 +117,9 @@ export async function getCollectionsList(params: {
   ]);
 
   const items = collections.map((c) => ({
-    id: c.id, qr_code: c.can.qrCode, owner_name: c.can.ownerName,
+    id: c.id, offline_id: c.offlineId, can_id: c.canId, qr_code: c.can.qrCode, owner_name: c.can.ownerName,
     owner_address: c.can.ownerAddress, nominal: Number(c.nominal),
-    payment_method: c.paymentMethod, collected_at: c.collectedAt,
+    collected_at: c.collectedAt,
     officer_name: c.officer.fullName, officer_code: c.officer.employeeCode,
     branch_name: c.can.branch.name, district_name: c.can.branch.district.name,
   }));
@@ -129,4 +129,30 @@ export async function getCollectionsList(params: {
     collections: items,
     pagination: { page: params.page, limit: params.limit, total, total_pages: Math.ceil(total / params.limit) },
   };
+}
+export async function getCollectionsExportRows(whereClause: any) {
+  const collections = await db.query.collections.findMany({
+    where: whereClause,
+    with: {
+      can: true,
+      officer: { columns: { fullName: true, employeeCode: true } },
+      notifications: { orderBy: [desc(schema.notifications.createdAt)], limit: 1 },
+    },
+    orderBy: [desc(schema.collections.collectedAt)],
+  });
+
+  return collections.map((c) => ({
+    id: c.id,
+    tanggal: c.collectedAt,
+    petugas_nama: c.officer.fullName,
+    petugas_kode: c.officer.employeeCode,
+    kaleng_kode: c.can.qrCode,
+    kaleng_nama_pemilik: c.can.ownerName,
+    nominal: Number(c.nominal),
+    submit_sequence: c.submitSequence,
+    is_latest: true,
+    alasan_resubmit: c.alasanResubmit || '',
+    wa_status: c.notifications[0]?.status || 'NOT_SENT',
+    wa_sent_at: c.notifications[0]?.sentAt || '',
+  }));
 }

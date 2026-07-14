@@ -2,6 +2,13 @@ import { create } from 'zustand';
 import { offlineQueue } from '../services/offline/queue';
 import { syncService } from '../services/offline/sync';
 import { getErrorMessage } from '../utils/error';
+import { useDashboardStore } from './useDashboardStore';
+import { useTasksStore } from './useTasksStore';
+import { useCollectionsStore } from './useCollectionStore';
+
+export function getTotalSyncIssueCount(): number {
+  return offlineQueue.getQueueCount() + offlineQueue.getFailedPermanentCount();
+}
 
 interface SyncState {
   pendingCount: number;
@@ -12,10 +19,30 @@ interface SyncState {
   oldestPending: string | null;
   error: string | null;
 
-  checkStatus: () => Promise<void>;
+  checkStatus: () => void;
   triggerSync: () => Promise<{ success: number; failed: number }>;
   setProgress: (progress: number) => void;
-  clearFailed: () => void;
+}
+
+/**
+ * Baca count terbaru dari MMKV (synchronous) dan update state.
+ * Dipanggil secara defensif dari modul lain (submitCollection, sync listener, dll.)
+ * agar badge selalu akurat tanpa perlu menunggu checkStatus() di useEffect.
+ */
+export function refreshSyncCounts(): void {
+  try {
+    const count = offlineQueue.getQueueCount();
+    const permanentCount = offlineQueue.getFailedPermanentCount();
+    const queue = offlineQueue.getQueue();
+
+    useSyncStore.setState({
+      pendingCount: count,
+      permanentFailedCount: permanentCount,
+      oldestPending: queue.length > 0 ? queue[0].collected_at : null,
+    });
+  } catch (error) {
+    console.error('Failed to refresh sync counts:', error);
+  }
 }
 
 export const useSyncStore = create<SyncState>((set) => ({
@@ -27,20 +54,8 @@ export const useSyncStore = create<SyncState>((set) => ({
   oldestPending: null,
   error: null,
 
-  checkStatus: async () => {
-    try {
-      const count = offlineQueue.getQueueCount();
-      const permanentCount = offlineQueue.getFailedPermanentCount();
-      const queue = offlineQueue.getQueue();
-
-      set({
-        pendingCount: count,
-        permanentFailedCount: permanentCount,
-        oldestPending: queue.length > 0 ? queue[0].collected_at : null,
-      });
-    } catch (error) {
-      console.error('Failed to check sync status:', error);
-    }
+  checkStatus: () => {
+    refreshSyncCounts();
   },
 
   triggerSync: async () => {
@@ -68,17 +83,32 @@ export const useSyncStore = create<SyncState>((set) => ({
         permanentFailedCount: offlineQueue.getFailedPermanentCount(),
       });
 
+      if (result.synced > 0) {
+        useDashboardStore.getState().fetchDashboard();
+        useTasksStore.getState().fetchTasks('ACTIVE');
+        useTasksStore.getState().fetchStats();
+        useCollectionsStore.getState().fetchCollections();
+      }
+
       return { success: result.synced, failed: result.failed };
     } catch (error: unknown) {
-      set({ isSyncing: false, error: getErrorMessage(error, 'Sinkronisasi gagal'), progress: 0 });
+      // Tetap refresh counts dari MMKV meskipun sync gagal
+      const currentPending = offlineQueue.getQueueCount();
+      const currentFailed = offlineQueue.getFailedPermanentCount();
+      set({
+        isSyncing: false,
+        error: getErrorMessage(error, 'Sinkronisasi gagal'),
+        progress: 0,
+        pendingCount: currentPending,
+        permanentFailedCount: currentFailed,
+      });
       return { success: 0, failed: 0 };
     }
   },
 
   setProgress: (progress: number) => set({ progress }),
-
-  clearFailed: () => {
-    offlineQueue.clearFailedPermanent();
-    set({ permanentFailedCount: 0 });
-  },
 }));
+
+// Queue adalah source of truth. Setiap mutasi queue/quarantine langsung
+// menyegarkan state badge, termasuk mutasi dari auto-sync dan layar Riwayat.
+offlineQueue.subscribe(refreshSyncCounts);

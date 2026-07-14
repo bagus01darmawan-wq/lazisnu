@@ -338,18 +338,13 @@ describe('auditLogger — skip auth routes', () => {
     expect(mockedDb.insert).not.toHaveBeenCalled();
   });
 
-  it('TETAP mencatat route /v1/auth/logout', async () => {
+  it('TIDAK mencatat route /v1/auth/logout secara otomatis', async () => {
     const req = mockRequest({ method: 'POST', url: '/v1/auth/logout' });
     const rep = mockReply(200);
 
     await auditLogger(req as any, rep as any);
 
-    expect(mockedDb.insert).toHaveBeenCalledTimes(1);
-    expect(valuesMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        entityType: 'auth',
-      })
-    );
+    expect(mockedDb.insert).not.toHaveBeenCalled();
   });
 });
 

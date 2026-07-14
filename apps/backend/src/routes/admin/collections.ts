@@ -32,6 +32,11 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
         },
       );
 
+      request.auditContext = {
+        oldData: result.oldCollection,
+        newData: result.newCollection,
+      };
+
       return sendSuccess(reply, result.newCollection);
     } catch (error: unknown) {
       if (isAppError(error)) {

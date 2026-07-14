@@ -8,6 +8,32 @@ import { sendSuccess, sendError, sendInternalError } from '../../utils/response'
 import { getWhatsAppQueue } from '../../services/whatsapp';
 import { getPaginationParams, formatPaginatedResponse } from '../../utils/pagination';
 
+export async function getSafeWhatsAppQueueStats(request: FastifyRequest) {
+  try {
+    const queue = getWhatsAppQueue();
+    const [waiting, active, completed, failed, delayed] = await Promise.all([
+      queue.getWaitingCount(),
+      queue.getActiveCount(),
+      queue.getCompletedCount(),
+      queue.getFailedCount(),
+      queue.getDelayedCount(),
+    ]);
+
+    return {
+      sent: completed,
+      pending: waiting + active + delayed,
+      failed
+    };
+  } catch (error) {
+    request.log.warn({ err: error }, 'Failed to fetch WhatsApp queue stats');
+    return {
+      sent: 0,
+      pending: 0,
+      failed: 0
+    };
+  }
+}
+
 export async function waRoutes(fastify: FastifyInstance) {
   const adminOnly = authorize('ADMIN_KECAMATAN', 'ADMIN_RANTING', 'BENDAHARA');
 
@@ -57,24 +83,11 @@ export async function waRoutes(fastify: FastifyInstance) {
           .then(res => Number(res[0].count))
       ]);
 
-      // Get real BullMQ stats for the dashboard header
-      const queue = getWhatsAppQueue();
-      const [waiting, active, completed, failed, delayed] = await Promise.all([
-        queue.getWaitingCount(),
-        queue.getActiveCount(),
-        queue.getCompletedCount(),
-        queue.getFailedCount(),
-        queue.getDelayedCount(),
-      ]);
-
-      const stats = {
-        sent: completed,
-        pending: waiting + active + delayed,
-        failed: failed
-      };
+      // Get safe BullMQ stats for the dashboard header
+      const stats = await getSafeWhatsAppQueueStats(request);
 
       return sendSuccess(reply, {
-        ...formatPaginatedResponse(logs, total, page, limit),
+        ...formatPaginatedResponse(logs, total, page, limit, 'logs'),
         stats
       });
     } catch (error) {
@@ -120,6 +133,11 @@ export async function waRoutes(fastify: FastifyInstance) {
 
       await job.retry();
 
+      request.auditContext = {
+        oldData: { jobId: id, state: 'failed' },
+        newData: { jobId: id, state: 'retried' },
+      };
+
       return sendSuccess(reply, {
         message: 'Job berhasil dijadwalkan ulang',
         jobId: id,
@@ -134,6 +152,11 @@ export async function waRoutes(fastify: FastifyInstance) {
     try {
       const queue = getWhatsAppQueue();
       await queue.clean(0, 1000, 'failed'); // Clean failed jobs older than 0ms, limit 1000
+
+      request.auditContext = {
+        oldData: null,
+        newData: { action: 'flush_failed' },
+      };
 
       return sendSuccess(reply, {
         message: 'Antrean job gagal berhasil dibersihkan',

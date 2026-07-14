@@ -38,8 +38,6 @@ JWT_REFRESH_EXPIRY=30d
 # JANGAN gunakan secret yang sama untuk access dan refresh
 
 # ── QR Token ─────────────────────────────────────────────────────
-APP_SECRET=ganti_dengan_random_string_untuk_hmac_qr
-# JANGAN sama dengan JWT_ACCESS_SECRET
 
 # ── WhatsApp Business API ─────────────────────────────────────────
 WA_API_URL=https://graph.facebook.com/v18.0
@@ -137,7 +135,7 @@ SENTRY_PROJECT=lazisnu-web
 node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 
 # Gunakan output berbeda untuk setiap secret:
-# JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, APP_SECRET
+# JWT_ACCESS_SECRET, JWT_REFRESH_SECRET
 # JANGAN pakai string pendek atau mudah ditebak
 ```
 

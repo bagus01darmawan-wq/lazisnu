@@ -1,310 +1,208 @@
-// Profile Screen - Mobile App
-
 import React from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Alert,
-} from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import {Alert, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useAuthStore } from '../stores';
-import { useOfficerStore } from '../stores';
+import {useAuthStore} from '../stores';
+import {AppButton, AppCard, StatusBadge} from '../components/ui';
+import {Colors, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
+
+const roleLabels: Record<string, string> = {
+  PETUGAS: 'Petugas Penjemputan',
+  ADMIN_RANTING: 'Admin Ranting',
+  ADMIN_KECAMATAN: 'Admin Kecamatan',
+  BENDAHARA: 'Bendahara',
+};
 
 const ProfileScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
-  const { user, logout } = useAuthStore();
-  const { officer } = useOfficerStore();
+  const insets = useSafeAreaInsets();
+  const {user, logout} = useAuthStore();
+  const role = user?.role ? roleLabels[user.role] || user.role : 'Petugas';
 
   const handleLogout = () => {
     Alert.alert(
-      'Konfirmasi Logout',
+      'Konfirmasi Keluar',
       'Apakah Anda yakin ingin keluar dari aplikasi?',
       [
-        { text: 'Batal', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: () => logout(),
-        },
-      ]
+        {text: 'Batal', style: 'cancel'},
+        {text: 'Keluar', style: 'destructive', onPress: logout},
+      ],
     );
   };
 
-  const menuItems = [
-    {
-      icon: 'account-circle',
-      title: 'Edit Profil',
-      subtitle: 'Ubah informasi akun Anda',
-      onPress: () => navigation.navigate('EditProfile'),
-    },
-    {
-      icon: 'bell-outline',
-      title: 'Notifikasi',
-      subtitle: 'Pengaturan notifikasi',
-      onPress: () => navigation.navigate('NotificationSettings'),
-    },
-    {
-      icon: 'shield-lock-outline',
-      title: 'Keamanan',
-      subtitle: 'Ubah PIN atau password',
-      onPress: () => navigation.navigate('SecuritySettings'),
-    },
-    {
-      icon: 'help-circle-outline',
-      title: 'Bantuan',
-      subtitle: 'FAQ dan panduan penggunaan',
-      onPress: () => navigation.navigate('Help'),
-    },
-    {
-      icon: 'information-outline',
-      title: 'Tentang Aplikasi',
-      subtitle: 'Versi 1.0.0',
-      onPress: () => {},
-    },
-  ];
-
   return (
-    <ScrollView style={styles.container}>
-      {/* Profile Header */}
-      <View style={styles.header}>
-        <View style={styles.avatarContainer}>
-          <View style={styles.avatar}>
-            <Icon name="account" size={60} color="#fff" />
-          </View>
-          <TouchableOpacity style={styles.editAvatarButton}>
-            <Icon name="camera" size={20} color="#1E88E5" />
-          </TouchableOpacity>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}>
+      <View style={[styles.header, {paddingTop: insets.top + Spacing.lg}]}>
+        <Text style={styles.headerLabel}>Profil Petugas</Text>
+        <View style={styles.avatar}>
+          <Icon name={'account'} size={52} color={Colors.brand.deepGreen} />
         </View>
-        <Text style={styles.userName}>{user?.full_name || officer?.name || 'Petugas'}</Text>
-        <Text style={styles.userRole}>
-          {officer?.district?.name || 'Kecamatan'} - {officer?.branch?.name || 'Ranting'}
+        <Text style={styles.userName}>{user?.full_name || 'Petugas'}</Text>
+        <Text style={styles.userRole}>{role}</Text>
+        <StatusBadge
+          status={user?.is_active === false ? 'error' : 'success'}
+          label={user?.is_active === false ? 'Tidak Aktif' : 'Aktif'}
+        />
+      </View>
+
+      <Text style={styles.sectionTitle}>Informasi akun</Text>
+      <AppCard variant={'elevated'} style={styles.infoCard}>
+        <InfoRow
+          icon={'account-outline'}
+          label={'Nama lengkap'}
+          value={user?.full_name || 'Belum tersedia'}
+        />
+        <InfoRow
+          icon={'phone-outline'}
+          label={'Nomor handphone'}
+          value={user?.phone || 'Belum tersedia'}
+        />
+        <InfoRow
+          icon={'badge-account-outline'}
+          label={'Peran akun'}
+          value={role}
+          last
+        />
+      </AppCard>
+
+      <View style={styles.securityNotice}>
+        <Icon name={'shield-check-outline'} size={22} color={Colors.brand.deepGreen} />
+        <Text style={styles.securityText}>
+          Akun ini digunakan untuk mencatat penjemputan. Jangan berikan akses kepada orang lain.
         </Text>
-        <View style={styles.statusBadge}>
-          <Icon name="check-circle" size={14} color="#4CAF50" />
-          <Text style={styles.statusText}>Aktif</Text>
-        </View>
       </View>
 
-      {/* Stats Card */}
-      <View style={styles.statsCard}>
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>
-            {officer?.stats?.totalCollections || 0}
-          </Text>
-          <Text style={styles.statLabel}>Total Jemput</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>
-            {officer?.stats?.thisMonth || 0}
-          </Text>
-          <Text style={styles.statLabel}>Bulan Ini</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>
-            Rp {(officer?.stats?.totalAmount || 0).toLocaleString('id-ID')}
-          </Text>
-          <Text style={styles.statLabel}>Total Nominal</Text>
-        </View>
+      <View style={styles.logoutWrapper}>
+        <AppButton
+          label={'Keluar dari Akun'}
+          icon={'logout'}
+          variant={'outline'}
+          onPress={handleLogout}
+          fullWidth
+        />
       </View>
 
-      {/* Menu List */}
-      <View style={styles.menuContainer}>
-        {menuItems.map((item, index) => (
-          <TouchableOpacity
-            key={index}
-            style={styles.menuItem}
-            onPress={item.onPress}
-          >
-            <View style={styles.menuIcon}>
-              <Icon name={item.icon} size={24} color="#1E88E5" />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuTitle}>{item.title}</Text>
-              <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
-            </View>
-            <Icon name="chevron-right" size={24} color="#ccc" />
-          </TouchableOpacity>
-        ))}
+      <View style={styles.versionRow}>
+        <Icon name={'information-outline'} size={17} color={Colors.text.muted} />
+        <Text style={styles.versionText}>Lazisnu Collector • Versi 1.0.0</Text>
       </View>
-
-      {/* Logout Button */}
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Icon name="logout" size={20} color="#f44336" />
-        <Text style={styles.logoutText}>Keluar</Text>
-      </TouchableOpacity>
-
-      {/* App Version */}
-      <Text style={styles.versionText}>Lazisnu Collector v1.0.0</Text>
     </ScrollView>
   );
 };
 
+const InfoRow = ({
+  icon,
+  label,
+  value,
+  last = false,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  last?: boolean;
+}) => (
+  <View style={[styles.infoRow, last && styles.infoRowLast]}>
+    <View style={styles.infoIcon}>
+      <Icon name={icon} size={22} color={Colors.brand.deepGreen} />
+    </View>
+    <View style={styles.infoContent}>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue}>{value}</Text>
+    </View>
+  </View>
+);
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
+  container: {flex: 1, backgroundColor: Colors.surface.page},
+  content: {paddingBottom: Spacing.xl},
   header: {
     alignItems: 'center',
-    paddingVertical: 30,
-    paddingHorizontal: 20,
-    backgroundColor: '#fff',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    paddingHorizontal: Layout.screenPadding,
+    paddingBottom: Spacing.xl,
+    backgroundColor: Colors.brand.deepGreen,
+    borderBottomLeftRadius: Radius.panel,
+    borderBottomRightRadius: Radius.panel,
+    ...Shadows.soft,
   },
-  avatarContainer: {
-    position: 'relative',
-    marginBottom: 16,
+  headerLabel: {
+    ...Typography.heading2,
+    color: Colors.text.white,
+    alignSelf: 'flex-start',
+    marginBottom: Spacing.lg,
   },
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#1E88E5',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  editAvatarButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 92,
+    height: 92,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.surface.avatar,
     borderWidth: 2,
-    borderColor: '#1E88E5',
+    borderColor: Colors.text.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
   },
-  userName: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 4,
-  },
+  userName: {...Typography.heading2, color: Colors.text.white, marginBottom: 3},
   userRole: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 12,
+    ...Typography.bodySmall,
+    color: Colors.text.white,
+    opacity: 0.78,
+    marginBottom: Spacing.sm,
   },
-  statusBadge: {
+  sectionTitle: {
+    ...Typography.heading3,
+    color: Colors.brand.deepGreen,
+    marginHorizontal: Layout.screenPadding,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.sm,
+  },
+  infoCard: {marginHorizontal: Layout.screenPadding, padding: 0},
+  infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#e8f5e9',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  statusText: {
-    fontSize: 12,
-    color: '#4CAF50',
-    fontWeight: '600',
-    marginLeft: 4,
-  },
-  statsCard: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1E88E5',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 11,
-    color: '#666',
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: '#e0e0e0',
-    marginVertical: 4,
-  },
-  menuContainer: {
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
+    padding: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: Colors.border.warm,
   },
-  menuIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: '#e3f2fd',
+  infoRowLast: {borderBottomWidth: 0},
+  infoIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.surface.successSubtle,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: Spacing.sm,
   },
-  menuContent: {
+  infoContent: {flex: 1},
+  infoLabel: {...Typography.caption, color: Colors.text.secondary, marginBottom: 2},
+  infoValue: {...Typography.body, color: Colors.text.primary, fontWeight: '600'},
+  securityNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: Colors.brand.mutedSand,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    marginHorizontal: Layout.screenPadding,
+    marginTop: Spacing.md,
+  },
+  securityText: {
     flex: 1,
+    ...Typography.bodySmall,
+    color: Colors.brand.deepGreen,
+    lineHeight: 20,
+    marginLeft: Spacing.sm,
   },
-  menuTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 2,
-  },
-  menuSubtitle: {
-    fontSize: 12,
-    color: '#999',
-  },
-  logoutButton: {
+  logoutWrapper: {marginHorizontal: Layout.screenPadding, marginTop: Spacing.lg},
+  versionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#f44336',
+    alignSelf: 'center',
+    gap: Spacing.xs,
+    marginTop: Spacing.xl,
   },
-  logoutText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#f44336',
-    marginLeft: 8,
-  },
-  versionText: {
-    textAlign: 'center',
-    fontSize: 12,
-    color: '#999',
-    marginVertical: 24,
-  },
+  versionText: {...Typography.caption, color: Colors.text.muted},
 });
 
 export default ProfileScreen;

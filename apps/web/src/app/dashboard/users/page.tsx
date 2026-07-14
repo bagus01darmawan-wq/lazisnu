@@ -36,7 +36,6 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useAuthStore } from '@/store/useAuthStore';
-import { FilterPills } from '@/components/ui/FilterPills';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
 import { Officer as BaseOfficer, Branch, ApiResponse, PaginatedResponse } from '@lazisnu/shared-types';
 
@@ -483,9 +482,11 @@ export default function UsersPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-          <FilterPills 
+          <DropdownFilter
+            label="Pilih Status"
+            showSearch={false}
             options={[
-              { label: 'SEMUA', value: 'ALL' },
+              { label: 'SEMUA STATUS', value: 'ALL' },
               { label: 'AKTIF', value: 'ACTIVE' },
               { label: 'NON-AKTIF', value: 'NON_ACTIVE' }
             ]}
@@ -494,7 +495,7 @@ export default function UsersPage() {
               setStatusFilter(val);
               setCurrentPage(1);
             }}
-            className="h-[36px] p-1"
+            className="h-[36px]"
           />
 
           {user?.role === 'ADMIN_KECAMATAN' && (

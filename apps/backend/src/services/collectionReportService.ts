@@ -22,7 +22,7 @@ export async function getCollectionDetail(id: string) {
     id: collection.id,
     can: { qr_code: collection.can.qrCode, owner_name: collection.can.ownerName, owner_address: collection.can.ownerAddress, owner_phone: collection.can.ownerPhone },
     officer: { name: collection.officer.fullName, phone: collection.officer.phone, code: collection.officer.employeeCode },
-    nominal: Number(collection.nominal), payment_method: collection.paymentMethod,
+    nominal: Number(collection.nominal),
     collected_at: collection.collectedAt, submitted_at: collection.submittedAt,
     synced_at: collection.syncedAt, sync_status: collection.syncStatus,
     notification_status: notification?.status || 'NOT_SENT',

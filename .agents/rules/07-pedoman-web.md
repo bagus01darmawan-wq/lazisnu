@@ -111,7 +111,7 @@ export const MENU_CONFIG = {
 // - Periode (bulan + tahun)
 // - Ranting (admin kecamatan saja)
 // - Petugas
-// - Metode bayar (cash/transfer)
+// - Metode bayar (cash/transfer - Note: offline sync only supports CASH)
 // - Status WA (sent/failed/pending)
 ```
 

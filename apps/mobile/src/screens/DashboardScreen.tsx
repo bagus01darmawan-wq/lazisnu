@@ -1,526 +1,394 @@
-// Dashboard Screen - Mobile App
-
 import React, { useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  TouchableOpacity,
   Alert,
+  Image,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useDashboardStore, useSyncStore } from '../stores';
+import { useAuthStore, useDashboardStore, useSyncStore } from '../stores';
+import { Colors, DashboardLayout, Layout, Radius, Shadows, Spacing, Typography } from '../theme';
+
+const logo = require('../assets/branding/logo-lazisnu-putih.png');
+
+const formatCurrency = (nominal: number) =>
+  new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    maximumFractionDigits: 0,
+  }).format(nominal);
 
 const DashboardScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { todayStats, weekStats, pendingTasks, recentCollections, fetchDashboard, isLoading } =
+  const insets = useSafeAreaInsets();
+  const user = useAuthStore(state => state.user);
+  const { todayStats, pendingTasks, fetchDashboard, isLoading, error } =
     useDashboardStore();
-  const { pendingCount, permanentFailedCount, checkStatus, clearFailed } = useSyncStore();
+  const { pendingCount, permanentFailedCount, checkStatus, triggerSync } = useSyncStore();
+  const totalSyncIssues = pendingCount + permanentFailedCount;
 
   useEffect(() => {
     fetchDashboard();
     checkStatus();
-  }, [fetchDashboard, checkStatus]);
+  }, [checkStatus, fetchDashboard]);
 
-  const formatCurrency = (nominal: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-    }).format(nominal);
+  const refresh = () => {
+    fetchDashboard();
+    checkStatus();
+  };
+
+  const collected = todayStats?.collected || 0;
+  const remaining = todayStats?.remaining || 0;
+  const total = collected + remaining;
+  const progress = total ? collected / total : 0;
+  const firstName = user?.full_name?.trim().split(/\s+/)[0] || 'Petugas';
+  const date = new Intl.DateTimeFormat('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date());
+
+  const openSyncIssue = () => {
+    if (!permanentFailedCount && !pendingCount) {
+      return;
+    }
+    Alert.alert(
+      'Data Belum Terkirim',
+      'Penjemputan tetap aman tersimpan di perangkat. Aplikasi akan mencoba mengirim kembali secara otomatis.',
+      [
+        { text: 'Nanti', style: 'cancel' },
+        { text: 'Lihat Detail', onPress: () => navigation.navigate('History') },
+        { text: 'Coba Kirim Lagi', onPress: () => triggerSync() },
+      ],
+    );
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={isLoading} onRefresh={() => { fetchDashboard(); checkStatus(); }} />
-      }
-    >
-      {/* Banner Mode Trip Aktif */}
-      {pendingCount > 0 && (
-        <View style={styles.offlineBanner}>
-          <Icon name="wifi-off" size={24} color="#fff" style={styles.offlineIcon} />
-          <View style={styles.offlineContent}>
-            <Text style={styles.offlineTitle}>Mode Trip Aktif</Text>
-            <Text style={styles.offlineDesc}>{pendingCount} data infaq tersimpan offline dan akan sinkronisasi otomatis saat online.</Text>
-          </View>
-        </View>
-      )}
+    <View style={styles.screen}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading}
+            onRefresh={refresh}
+            colors={[Colors.brand.emerald]}
+            tintColor={Colors.brand.emerald}
+          />
+        }>
+        <LinearGradient
+          colors={[Colors.brand.heroStart, Colors.brand.deepGreen, Colors.brand.heroEnd]}
+          style={[styles.hero, { paddingTop: insets.top + Spacing.md }]}>
+          <View pointerEvents={'none'} style={styles.heroArcOuter} />
+          <View pointerEvents={'none'} style={styles.heroArcInner} />
 
-      {/* Banner Data Gagal Permanen */}
-      {permanentFailedCount > 0 && (
-        <View style={styles.errorBanner}>
-          <Icon name="alert-circle" size={24} color="#fff" style={styles.offlineIcon} />
-          <View style={styles.offlineContent}>
-            <Text style={styles.offlineTitle}>Data Gagal Dikirim</Text>
-            <Text style={styles.offlineDesc}>{permanentFailedCount} data tidak dapat dikirim dan perlu diperbaiki. Buka Riwayat untuk detail.</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.errorBannerButton}
-            onPress={() => navigation.navigate('History')}
-          >
-            <Text style={styles.errorBannerButtonText}>Lihat</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.errorBannerDeleteButton}
-            onPress={() => {
-              Alert.alert(
-                'Hapus Data Gagal?',
-                `${permanentFailedCount} data gagal akan dihapus permanen dari perangkat. Data ini tidak bisa dikembalikan.`,
-                [
-                  { text: 'Batal', style: 'cancel' },
-                  {
-                    text: 'Hapus',
-                    style: 'destructive',
-                    onPress: () => clearFailed(),
-                  },
-                ],
-              );
-            }}
-          >
-            <Text style={styles.errorBannerButtonText}>Hapus</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Welcome Section */}
-      <View style={styles.welcomeSection}>
-        <Text style={styles.welcomeText}>Selamat Datang, Petugas!</Text>
-        <Text style={styles.dateText}>
-          {new Date().toLocaleDateString('id-ID', {
-            weekday: 'long',
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric',
-          })}
-        </Text>
-      </View>
-
-      {/* Today's Stats Card */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Hari Ini</Text>
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{todayStats?.collected || 0}</Text>
-            <Text style={styles.statLabel}>Dijemput</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>
-              {formatCurrency(todayStats?.total_nominal || 0)}
-            </Text>
-            <Text style={styles.statLabel}>Total</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={[styles.statValue, styles.remainingValue]}>
-              {todayStats?.remaining || 0}
-            </Text>
-            <Text style={styles.statLabel}>Sisa</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Week Stats Card */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Minggu Ini</Text>
-        <View style={styles.weekStatsContainer}>
-          <View style={styles.weekStatItem}>
-            <Icon name="package-variant" size={24} color="#4CAF50" />
-            <View style={styles.weekStatContent}>
-              <Text style={styles.weekStatValue}>{weekStats?.collected || 0}</Text>
-              <Text style={styles.weekStatLabel}>Penjemputan</Text>
+          <View style={styles.topRow}>
+            <View style={styles.logoContainer}>
+              <Image source={logo} style={styles.logo} resizeMode={'contain'} />
+            </View>
+            <View style={styles.topActions}>
+              {permanentFailedCount ? (
+                <TouchableOpacity
+                  accessibilityRole={'button'}
+                  accessibilityLabel={'Buka data yang gagal dikirim'}
+                  onPress={openSyncIssue}
+                  style={styles.iconButton}>
+                  <Icon name={'bell-alert-outline'} size={28} color={Colors.text.white} />
+                  <View style={styles.notificationDot} />
+                </TouchableOpacity>
+              ) : (
+                <View
+                  accessible={false}
+                  importantForAccessibility={'no-hide-descendants'}
+                  style={styles.iconButton}>
+                  <Icon name={'bell-outline'} size={28} color={Colors.text.white} />
+                </View>
+              )}
+              <TouchableOpacity
+                accessibilityRole={'button'}
+                accessibilityLabel={'Buka profil'}
+                onPress={() => navigation.navigate('Profile')}
+                style={styles.avatar}>
+                <Icon name={'account'} size={29} color={Colors.brand.deepGreen} />
+              </TouchableOpacity>
             </View>
           </View>
-          <View style={styles.weekStatItem}>
-            <Icon name="cash" size={24} color="#4CAF50" />
-            <View style={styles.weekStatContent}>
-              <Text style={styles.weekStatValue}>
-                {formatCurrency(weekStats?.total_nominal || 0)}
+
+          <Text style={styles.greeting}>Assalamu’alaikum, {firstName}</Text>
+          <Text style={styles.date}>{date}</Text>
+
+          <TouchableOpacity
+            accessibilityRole={totalSyncIssues ? 'button' : undefined}
+            accessibilityLabel={
+              totalSyncIssues ? `Periksa ${totalSyncIssues} data belum tersinkronisasi` : undefined
+            }
+            disabled={!totalSyncIssues}
+            activeOpacity={totalSyncIssues ? 0.8 : 1}
+            onPress={openSyncIssue}
+            style={styles.syncBanner}>
+            <Icon
+              name={
+                permanentFailedCount
+                  ? 'alert-circle-outline'
+                  : pendingCount
+                    ? 'cloud-sync-outline'
+                    : 'cloud-check-outline'
+              }
+              size={26}
+              color={Colors.brand.deepGreen}
+            />
+            <View style={styles.syncContent}>
+              <Text style={styles.syncText}>
+                {totalSyncIssues
+                  ? `${totalSyncIssues} data belum tersinkronisasi`
+                  : 'Semua data tersinkronisasi'}
               </Text>
-              <Text style={styles.weekStatLabel}>Total</Text>
+              {!!totalSyncIssues && (
+                <Text style={styles.syncHelper}>
+                  {permanentFailedCount
+                    ? `${pendingCount} menunggu, ${permanentFailedCount} perlu ditinjau`
+                    : 'Akan dikirim saat koneksi tersedia'}
+                </Text>
+              )}
+            </View>
+          </TouchableOpacity>
+        </LinearGradient>
+
+        <View style={styles.body}>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryTitle}>Ringkasan Hari Ini</Text>
+            <View style={styles.statsRow}>
+              <Stat value={`${collected}`} label={'Dijemput'} />
+              <View style={styles.statDivider} />
+              <Stat
+                value={formatCurrency(todayStats?.total_nominal || 0)}
+                label={'Total Infak'}
+                wide
+              />
+              <View style={styles.statDivider} />
+              <Stat value={`${remaining}`} label={'Sisa Tugas'} />
+            </View>
+            <View style={styles.progressDivider} />
+            <View style={styles.progressHeading}>
+              <Text style={styles.progressLabel}>{collected} dari {total} tugas selesai</Text>
+              <Text style={styles.progressPercent}>{Math.round(progress * 100)}%</Text>
+            </View>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
             </View>
           </View>
-        </View>
-      </View>
 
-      {/* Quick Actions */}
-      <View style={styles.quickActions}>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => navigation.navigate('Scan')}
-        >
-          <View style={[styles.actionIcon, { backgroundColor: '#10B981' }]}>
-            <Icon name="qrcode-scan" size={32} color="#fff" />
-          </View>
-          <Text style={styles.actionText}>Scan QR</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => navigation.navigate('Tasks')}
-        >
-          <View style={[styles.actionIcon, { backgroundColor: '#F59E0B' }]}>
-            <Icon name="clipboard-text-clock-outline" size={32} color="#fff" />
-          </View>
-          <Text style={styles.actionText}>Lihat Tugas</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => navigation.navigate('History')}
-        >
-          <View style={[styles.actionIcon, { backgroundColor: '#3B82F6' }]}>
-            <Icon name="calendar-clock-outline" size={32} color="#fff" />
-          </View>
-          <Text style={styles.actionText}>Riwayat</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Pending Tasks Preview */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Tugas Pending</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Tasks')}>
-            <Text style={styles.seeAllText}>Lihat Semua</Text>
-          </TouchableOpacity>
-        </View>
-
-        {pendingTasks && pendingTasks.length > 0 ? (
-          pendingTasks.slice(0, 3).map((task, index) => (
-            <TouchableOpacity key={task.id || index} style={styles.taskCard}>
-              <View style={styles.taskIcon}>
-                <Icon name="package-variant" size={20} color="#1E88E5" />
-              </View>
-              <View style={styles.taskContent}>
-                <Text style={styles.taskOwner}>{task.owner_name}</Text>
-                <Text style={styles.taskAddress} numberOfLines={1}>
-                  {task.address}
-                </Text>
-              </View>
-              <Icon name="chevron-right" size={20} color="#999" />
+          {!!error && !isLoading && (
+            <TouchableOpacity
+              accessibilityRole={'button'}
+              accessibilityLabel={'Coba lagi memperbarui ringkasan'}
+              style={styles.errorBanner}
+              onPress={refresh}>
+              <Icon name={'alert-circle-outline'} size={20} color={Colors.status.error} />
+              <Text style={styles.errorText}>Ringkasan gagal diperbarui. Ketuk untuk mencoba lagi.</Text>
             </TouchableOpacity>
-          ))
-        ) : (
-          <View style={styles.emptyState}>
-            <Icon name="check-circle" size={48} color="#4CAF50" />
-            <Text style={styles.emptyText}>Semua tugas telah selesai!</Text>
-          </View>
-        )}
-      </View>
+          )}
 
-      {/* Recent Collections */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Penjemputan Terakhir</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('History')}>
-            <Text style={styles.seeAllText}>Lihat Semua</Text>
-          </TouchableOpacity>
-        </View>
-
-        {recentCollections && recentCollections.length > 0 ? (
-          recentCollections.slice(0, 5).map((collection, index) => (
-            <View key={collection.id || index} style={styles.collectionCard}>
-              <View style={styles.collectionIcon}>
-                <Icon name="cash" size={20} color="#4CAF50" />
-              </View>
-              <View style={styles.collectionContent}>
-                <Text style={styles.collectionOwner}>{collection.owner_name}</Text>
-                <Text style={styles.collectionDate}>
-                  {new Date(collection.collected_at).toLocaleDateString('id-ID')}
-                </Text>
-              </View>
-              <Text style={styles.collectionNominal}>
-                {formatCurrency(collection.nominal)}
-              </Text>
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text style={styles.sectionTitle}>Tugas Berikutnya</Text>
+              <Text style={styles.sectionSubtitle}>Penjemputan yang masih menunggu</Text>
             </View>
-          ))
-        ) : (
-          <View style={styles.emptyState}>
-            <Icon name="inbox" size={48} color="#ddd" />
-            <Text style={styles.emptyText}>Belum ada penjemputan</Text>
+            <TouchableOpacity
+              accessibilityRole={'button'}
+              accessibilityLabel={'Lihat semua tugas'}
+              onPress={() => navigation.navigate('Tasks')}
+              style={styles.seeAll}>
+              <Text style={styles.seeAllText}>Lihat Semua</Text>
+              <Icon name={'chevron-right'} size={21} color={Colors.brand.accentGold} />
+            </TouchableOpacity>
           </View>
-        )}
-      </View>
-    </ScrollView>
+
+          {pendingTasks.length ? (
+            pendingTasks.slice(0, 3).map(task => (
+              <TouchableOpacity
+                key={task.id}
+                accessibilityRole={'button'}
+                accessibilityLabel={`Buka tugas ${task.owner_name}`}
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate('Tasks')}
+                style={styles.taskCard}>
+                <View style={styles.taskIcon}>
+                  <Icon
+                    name={'package-variant-closed'}
+                    size={24}
+                    color={Colors.brand.deepGreen}
+                  />
+                </View>
+                <View style={styles.taskContent}>
+                  <Text style={styles.taskOwner} numberOfLines={1}>{task.owner_name}</Text>
+                  <Text style={styles.taskAddress} numberOfLines={1}>{task.address}</Text>
+                </View>
+                <View style={styles.pendingBadge}>
+                  <Text style={styles.pendingText}>BELUM</Text>
+                </View>
+                <Icon name={'chevron-right'} size={24} color={Colors.brand.deepGreen} />
+              </TouchableOpacity>
+            ))
+          ) : (
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIcon}>
+                <Icon name={'check'} size={26} color={Colors.brand.emerald} />
+              </View>
+              <View>
+                <Text style={styles.emptyTitle}>Semua tugas selesai</Text>
+                <Text style={styles.emptyText}>Tidak ada penjemputan yang menunggu.</Text>
+              </View>
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    </View>
   );
 };
 
+const Stat = ({ value, label, wide = false }: { value: string; label: string; wide?: boolean }) => (
+  <View style={[styles.stat, wide && styles.statWide]}>
+    <Text
+      style={[styles.statValue, wide && styles.statValueWide]}
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.72}>
+      {value}
+    </Text>
+    <Text style={styles.statLabel}>{label}</Text>
+  </View>
+);
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
+  screen: { flex: 1, backgroundColor: Colors.surface.page },
+  scrollContent: { paddingBottom: Spacing.xl },
+  hero: {
+    overflow: 'hidden',
+    paddingHorizontal: Layout.screenPadding,
+    paddingBottom: DashboardLayout.heroBottomPadding,
+    borderBottomLeftRadius: DashboardLayout.heroCornerRadius,
+    borderBottomRightRadius: DashboardLayout.heroCornerRadius,
   },
-  offlineBanner: {
-    backgroundColor: '#FF9800',
-    flexDirection: 'row',
+  heroArcOuter: {
+    position: 'absolute', width: 300, height: 300, borderRadius: 150,
+    borderWidth: 1, borderColor: Colors.overlay.sandSoft, top: -200, right: -132,
+  },
+  heroArcInner: {
+    position: 'absolute', width: 240, height: 240, borderRadius: 120,
+    borderWidth: 1, borderColor: Colors.overlay.sandSubtle, top: -156, right: -102,
+  },
+  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.xs },
+  logoContainer: {
+    width: 140,
+    height: 92,
     alignItems: 'center',
-    padding: 12,
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 8,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
-  },
-  offlineIcon: {
-    marginRight: 12,
-  },
-  offlineContent: {
-    flex: 1,
-  },
-  offlineTitle: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  offlineDesc: {
-    color: '#fff',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  errorBanner: {
-    backgroundColor: '#E53935',
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 8,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
-  },
-  errorBannerButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-    marginLeft: 8,
-  },
-  errorBannerDeleteButton: {
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-    marginLeft: 6,
-  },
-  errorBannerButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 13,
-  },
-  welcomeSection: {
-    backgroundColor: '#1E88E5',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 30,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-  },
-  welcomeText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  dateText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    marginTop: 4,
-  },
-  card: {
-    backgroundColor: '#fff',
-    marginHorizontal: 20,
-    marginTop: -20,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  cardTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-    marginBottom: 16,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-  },
-  statItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 4,
-  },
-  statDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: '#e0e0e0',
-  },
-  remainingValue: {
-    color: '#FF9800',
-  },
-  weekStatsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  weekStatItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  weekStatContent: {
-    marginLeft: 12,
-  },
-  weekStatValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  weekStatLabel: {
-    fontSize: 12,
-    color: '#999',
-  },
-  quickActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginHorizontal: 20,
-    marginTop: 20,
-    marginBottom: 10,
-  },
-  actionButton: {
-    alignItems: 'center',
-  },
-  actionIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
     justifyContent: 'center',
+    paddingTop: 22,
+  },
+  logo: {
+    width: 131,
+    height: 70,
+    tintColor: Colors.text.white,
+  },
+  topActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  notificationDot: {
+    position: 'absolute', right: 5, top: 5, width: 9, height: 9,
+    borderRadius: Radius.pill, backgroundColor: Colors.status.error,
+    borderWidth: 2, borderColor: Colors.brand.deepGreen,
+  },
+  avatar: {
+    width: 48, height: 48, borderRadius: Radius.pill, backgroundColor: Colors.surface.avatar,
+    borderWidth: 2, borderColor: Colors.text.white, alignItems: 'center', justifyContent: 'center',
+  },
+  greeting: { ...Typography.heading1, color: Colors.text.white, fontSize: 23, lineHeight: 29 },
+  date: { ...Typography.body, color: Colors.text.white, opacity: 0.86, marginTop: Spacing.xs },
+  syncBanner: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    marginTop: Spacing.md,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.brand.mutedSand,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    gap: Spacing.sm,
   },
-  actionText: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '500',
+  syncContent: { flex: 1 },
+  syncText: { ...Typography.body, color: Colors.brand.deepGreen, fontWeight: '700' },
+  syncHelper: { ...Typography.caption, color: Colors.brand.deepGreen, opacity: 0.75, marginTop: 2 },
+  body: { paddingHorizontal: Layout.screenPadding, marginTop: -DashboardLayout.heroOverlap },
+  summaryCard: {
+    minHeight: DashboardLayout.summaryMinHeight, backgroundColor: Colors.surface.card,
+    borderRadius: Radius.panel, borderWidth: 1, borderColor: Colors.border.accent,
+    padding: Layout.cardPadding, ...Shadows.medium,
   },
-  section: {
-    marginHorizontal: 20,
-    marginBottom: 20,
+  summaryTitle: { ...Typography.heading2, color: Colors.brand.deepGreen, marginBottom: Spacing.md },
+  statsRow: { flexDirection: 'row', alignItems: 'center' },
+  stat: { flex: 0.8, alignItems: 'center' },
+  statWide: { flex: 1.6 },
+  statValue: { color: Colors.brand.deepGreen, fontSize: 27, lineHeight: 33, fontWeight: '800' },
+  statValueWide: { fontSize: 19 },
+  statLabel: { ...Typography.bodySmall, color: Colors.text.secondary, marginTop: 2 },
+  statDivider: { width: 1, height: 54, backgroundColor: Colors.border.summary },
+  progressDivider: { height: 1, backgroundColor: Colors.border.summary, marginTop: Spacing.md, marginBottom: Spacing.sm },
+  progressHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  progressLabel: { ...Typography.bodySmall, color: Colors.brand.deepGreen, fontWeight: '600' },
+  progressPercent: { ...Typography.caption, color: Colors.text.secondary },
+  progressTrack: {
+    height: 10, borderRadius: Radius.pill, backgroundColor: Colors.surface.progressTrack,
+    marginTop: Spacing.sm, overflow: 'hidden',
   },
+  progressFill: { height: '100%', borderRadius: Radius.pill, backgroundColor: Colors.brand.emerald },
+  errorBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    backgroundColor: Colors.surface.errorSoft, padding: Spacing.sm, borderRadius: Radius.md, marginTop: Spacing.md,
+  },
+  errorText: { ...Typography.caption, color: Colors.status.error, flex: 1 },
   sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginTop: Spacing.lg, marginBottom: Spacing.sm,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  seeAllText: {
-    fontSize: 14,
-    color: '#1E88E5',
-    fontWeight: '500',
-  },
+  sectionTitle: { ...Typography.heading2, color: Colors.brand.deepGreen },
+  sectionSubtitle: { ...Typography.caption, color: Colors.text.secondary, marginTop: 2 },
+  seeAll: { minHeight: 48, flexDirection: 'row', alignItems: 'center' },
+  seeAllText: { ...Typography.bodySmall, color: Colors.brand.accentGold, fontWeight: '700' },
   taskCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
+    minHeight: 72, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border.warm,
+    backgroundColor: Colors.surface.card, marginBottom: Spacing.sm, paddingHorizontal: Spacing.sm,
+    flexDirection: 'row', alignItems: 'center', ...Shadows.soft,
   },
   taskIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#e3f2fd',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
+    width: 42, height: 42, borderRadius: Radius.md, backgroundColor: Colors.surface.successSubtle,
+    alignItems: 'center', justifyContent: 'center', marginRight: Spacing.sm,
   },
-  taskContent: {
-    flex: 1,
+  taskContent: { flex: 1, minWidth: 0 },
+  taskOwner: { ...Typography.body, color: Colors.brand.deepGreen, fontWeight: '700' },
+  taskAddress: { ...Typography.bodySmall, color: Colors.text.secondary, marginTop: 2 },
+  pendingBadge: {
+    borderRadius: Radius.md, backgroundColor: Colors.surface.warningSoft,
+    paddingHorizontal: Spacing.sm, paddingVertical: 6, marginRight: Spacing.xs,
   },
-  taskOwner: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
+  pendingText: { color: Colors.brand.accentGold, fontSize: 11, fontWeight: '700' },
+  emptyCard: {
+    minHeight: 90, borderRadius: Radius.lg, backgroundColor: Colors.surface.card,
+    borderWidth: 1, borderColor: Colors.border.warm, flexDirection: 'row',
+    alignItems: 'center', padding: Spacing.md,
   },
-  taskAddress: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 2,
+  emptyIcon: {
+    width: 44, height: 44, borderRadius: Radius.pill, backgroundColor: Colors.surface.successSubtle,
+    alignItems: 'center', justifyContent: 'center', marginRight: Spacing.sm,
   },
-  collectionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
-  },
-  collectionIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#e8f5e9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  collectionContent: {
-    flex: 1,
-  },
-  collectionOwner: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-  },
-  collectionDate: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 2,
-  },
-  collectionNominal: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#4CAF50',
-  },
-  emptyState: {
-    alignItems: 'center',
-    padding: 32,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-  },
-  emptyText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#999',
-  },
+  emptyTitle: { ...Typography.body, color: Colors.brand.deepGreen, fontWeight: '700' },
+  emptyText: { ...Typography.caption, color: Colors.text.secondary, marginTop: 2 },
 });
 
 export default DashboardScreen;

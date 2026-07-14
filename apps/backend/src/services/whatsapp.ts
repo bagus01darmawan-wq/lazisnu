@@ -121,29 +121,46 @@ export async function sendWhatsAppNotificationSync(
     };
   } else {
     try {
-      const response = await fetch(`${WA_API_URL}/${PHONE_NUMBER_ID}/messages`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${ACCESS_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: formattedPhone,
-          type: 'text',
-          text: { body: messageContent },
-        }),
-      });
+      const isFonnte = WA_API_URL.includes('fonnte.com');
+      let response: globalThis.Response;
+
+      if (isFonnte) {
+        response = await fetch(`${WA_API_URL}/send`, {
+          method: 'POST',
+          headers: {
+            Authorization: ACCESS_TOKEN,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            target: formattedPhone,
+            message: messageContent,
+          }),
+        });
+      } else {
+        response = await fetch(`${WA_API_URL}/${PHONE_NUMBER_ID}/messages`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            to: formattedPhone,
+            type: 'text',
+            text: { body: messageContent },
+          }),
+        });
+      }
 
       const data = await response.json() as any;
 
-      if (!response.ok) {
+      if (!response.ok || (isFonnte && data.status === false)) {
         console.error('WhatsApp API Error:', data);
-        throw Errors.WA_SEND_FAILED(data.error?.message || 'WhatsApp API request failed');
+        throw Errors.WA_SEND_FAILED(data.error?.message || data.reason || 'WhatsApp API request failed');
       }
 
       result = {
-        message_id: data.messages?.[0]?.id || `wa-${Date.now()}`,
+        message_id: isFonnte ? (data.id?.[0] || data.id || `fn-${Date.now()}`) : (data.messages?.[0]?.id || `wa-${Date.now()}`),
         status: 'SENT',
       };
     } catch (error) {

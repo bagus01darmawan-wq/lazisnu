@@ -37,7 +37,6 @@ import {
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { FilterPills } from '@/components/ui/FilterPills';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
 import { GlassSelect } from '@/components/ui/GlassSelect';
 import { Card } from '@/components/ui/Card';
@@ -48,7 +47,10 @@ interface CanExtended extends BaseCan {
   rw?: string;
   dukuh?: string;
   dukuh_id?: string;
-  assignments?: unknown[];
+  assignments?: {
+    id: string;
+    status: 'ACTIVE' | 'COMPLETED' | 'POSTPONED' | 'REASSIGNED';
+  }[];
   branch?: {
     name: string;
   } | null;
@@ -562,12 +564,23 @@ export default function CansPage() {
       cell: ({ row }) => {
         const can = row.original;
         const isAssigned = can.assignments && can.assignments.length > 0;
+        const assignmentStatus = can.assignments?.[0]?.status;
 
         if (!can.is_active) {
           return <span className="text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/40">NON-AKTIF</span>;
         }
 
         if (isAssigned) {
+          if (assignmentStatus === 'COMPLETED') {
+            return (
+              <span
+                className="text-[10px] font-bold uppercase tracking-widest text-[#1F8243] cursor-pointer hover:opacity-80 transition-opacity"
+                onClick={() => router.push('/dashboard/assignments')}
+              >
+                SELESAI
+              </span>
+            );
+          }
           return (
             <span
               className="text-[10px] font-bold uppercase tracking-widest text-[#DE6F4A] cursor-pointer hover:opacity-80 transition-opacity"
@@ -726,11 +739,14 @@ export default function CansPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-          <FilterPills
+          <DropdownFilter
+            label="Pilih Status"
+            showSearch={false}
             options={[
-              { label: 'SEMUA', value: 'ALL' },
+              { label: 'SEMUA STATUS', value: 'ALL' },
               { label: 'AKTIF', value: 'ACTIVE' },
               { label: 'ASSIGNED', value: 'ASSIGNED' },
+              { label: 'SELESAI', value: 'COMPLETED' },
               { label: 'NON-AKTIF', value: 'NON_ACTIVE' }
             ]}
             value={statusFilter}
@@ -738,7 +754,7 @@ export default function CansPage() {
               setStatusFilter(val);
               setCurrentPage(1);
             }}
-            className="h-[36px] p-1"
+            className="h-[36px]"
           />
 
           {user?.role === 'ADMIN_KECAMATAN' && (
