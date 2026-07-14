@@ -63,7 +63,7 @@ export const useSyncStore = create<SyncState>((set) => ({
     try {
       const result = await syncService.autoSync();
 
-      // SYNC_IN_PROGRESS: jangan anggap gagal â€” sync lain sedang berjalan.
+      // SYNC_IN_PROGRESS: jangan anggap gagal — sync lain sedang berjalan.
       // Update counts dari MMKV (yang mungkin sudah berubah oleh sync lain).
       if (result.error === 'SYNC_IN_PROGRESS') {
         set({
@@ -75,6 +75,19 @@ export const useSyncStore = create<SyncState>((set) => ({
         return { success: 0, failed: 0 };
       }
 
+      if (result.synced > 0) {
+        // ACK sudah aman, tetapi status sync UI baru selesai setelah semua store
+        // melihat snapshot server terbaru. allSettled mencegah satu layar gagal
+        // membatalkan keberhasilan transaksi yang sudah committed.
+        set({progress: 90});
+        await Promise.allSettled([
+          useDashboardStore.getState().fetchDashboard(),
+          useTasksStore.getState().fetchTasks('ACTIVE'),
+          useTasksStore.getState().fetchStats(),
+          useCollectionsStore.getState().fetchCollections(),
+        ]);
+      }
+
       set({
         isSyncing: false,
         progress: result.success ? 100 : 0,
@@ -82,13 +95,6 @@ export const useSyncStore = create<SyncState>((set) => ({
         pendingCount: offlineQueue.getQueueCount(),
         permanentFailedCount: offlineQueue.getFailedPermanentCount(),
       });
-
-      if (result.synced > 0) {
-        useDashboardStore.getState().fetchDashboard();
-        useTasksStore.getState().fetchTasks('ACTIVE');
-        useTasksStore.getState().fetchStats();
-        useCollectionsStore.getState().fetchCollections();
-      }
 
       return { success: result.synced, failed: result.failed };
     } catch (error: unknown) {
@@ -105,7 +111,6 @@ export const useSyncStore = create<SyncState>((set) => ({
       return { success: 0, failed: 0 };
     }
   },
-
   setProgress: (progress: number) => set({ progress }),
 }));
 

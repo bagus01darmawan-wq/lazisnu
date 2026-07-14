@@ -5,6 +5,8 @@ import NetInfo from '@react-native-community/netinfo';
 import { dashboardCache } from '../services/offline/cache';
 import { offlineQueue } from '../services/offline/queue';
 
+let latestDashboardRequestId = 0;
+
 const isToday = (dateStr: string): boolean => {
   const d = new Date(dateStr);
   const now = new Date();
@@ -133,7 +135,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   error: null,
 
   fetchDashboard: async () => {
+    const requestId = ++latestDashboardRequestId;
+    const isLatestRequest = () => requestId === latestDashboardRequestId;
     const netInfo = await NetInfo.fetch();
+    if (!isLatestRequest()) {return;}
+
     const isOnline = !!(netInfo.isConnected && netInfo.isInternetReachable);
 
     if (!isOnline) {
@@ -152,6 +158,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         cachedTasks,
         cachedRecent
       );
+      if (!isLatestRequest()) {return;}
       set({
         ...merged,
         isLoading: false,
@@ -162,6 +169,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const result = await dashboardService.getDashboard();
+      if (!isLatestRequest()) {return;}
 
       if (result.success && result.data) {
         const { today_stats, week_stats, pending_tasks, recent_collections } = result.data;
@@ -189,11 +197,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         });
       }
     } catch (error) {
+      if (!isLatestRequest()) {return;}
       const message = error instanceof Error ? error.message : 'Terjadi kesalahan jaringan';
       set({ error: message, isLoading: false });
     }
   },
-
   refreshStats: async () => {
     const { fetchDashboard } = get();
     await fetchDashboard();

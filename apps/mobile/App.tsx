@@ -36,14 +36,14 @@ const App = () => {
           );
         }
 
-        useDashboardStore.getState().hydrateFromCache();
-        useTasksStore.getState().hydrateFromCache();
-        useCollectionsStore.getState().hydrateFromCache();
 
         await useAuthStore.getState().initializeAuth();
 
-        // Migrasi antrean setelah user terhidrasi agar key MMKV memakai officerId yang benar.
+        // Queue memakai suffix user.id, jadi auth harus siap sebelum migrasi/hydrate.
         offlineQueue.runMigration();
+        useDashboardStore.getState().hydrateFromCache();
+        useTasksStore.getState().hydrateFromCache();
+        useCollectionsStore.getState().hydrateFromCache();
 
         if (status.fallback === 'ephemeral_default') {
           useAuthStore.getState().setEncryptionWarning(

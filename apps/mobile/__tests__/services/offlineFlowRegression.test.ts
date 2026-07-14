@@ -9,10 +9,16 @@ import {getOfflineStorage, initializeOfflineStorage} from '../../src/services/of
 import {offlineQueue, QueuedCollection} from '../../src/services/offline/queue';
 import {taskCache} from '../../src/services/offline/tasks';
 import {dashboardCache} from '../../src/services/offline/cache';
-import {tasksService} from '../../src/services/api';
+import {
+  collectionService,
+  dashboardService,
+  tasksService,
+} from '../../src/services/api';
+import {syncService} from '../../src/services/offline/sync';
 import {useSyncStore, getTotalSyncIssueCount} from '../../src/stores/useSyncStore';
 import {
   mergeCollectionsWithQueues,
+  useCollectionsStore,
 } from '../../src/stores/useCollectionStore';
 import {useTasksStore} from '../../src/stores/useTasksStore';
 import {useDashboardStore} from '../../src/stores/useDashboardStore';
@@ -22,6 +28,24 @@ import {
 import api from '../../src/services/api';
 
 const mmkvMock = require('react-native-mmkv');
+
+const createDeferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(promiseResolve => {
+    resolve = promiseResolve;
+  });
+  return {promise, resolve};
+};
+
+const waitForMockCalls = async (mock: jest.Mock, count: number) => {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    if (mock.mock.calls.length >= count) {return;}
+    await Promise.resolve();
+  }
+  throw new Error(
+    'Mock hanya dipanggil ' + mock.mock.calls.length + '/' + count + ' kali',
+  );
+};
 
 const makeTask = (
   id: string,
@@ -102,6 +126,14 @@ describe('offline collection regression', () => {
       recentCollections: [],
       isLoading: false,
       error: null,
+    });
+    useCollectionsStore.setState({
+      collections: [],
+      isLoading: false,
+      error: null,
+      page: 1,
+      totalPages: 1,
+      total: 0,
     });
     (NetInfo.fetch as jest.Mock).mockResolvedValue({
       isConnected: true,
@@ -325,5 +357,175 @@ describe('offline collection regression', () => {
       collected: 1,
       total_nominal: 50000,
     });
+  });
+
+  it('mengabaikan respons dashboard lama yang selesai setelah respons terbaru', async () => {
+    const stale = createDeferred<any>();
+    const fresh = createDeferred<any>();
+    const dashboardSpy = jest
+      .spyOn(dashboardService, 'getDashboard')
+      .mockImplementationOnce(() => stale.promise)
+      .mockImplementationOnce(() => fresh.promise);
+
+    const staleRequest = useDashboardStore.getState().fetchDashboard();
+    await waitForMockCalls(dashboardSpy as jest.Mock, 1);
+    const freshRequest = useDashboardStore.getState().fetchDashboard();
+    await waitForMockCalls(dashboardSpy as jest.Mock, 2);
+
+    fresh.resolve({
+      success: true,
+      data: {
+        today_stats: {collected: 1, total_nominal: 50000, remaining: 29},
+        week_stats: {collected: 1, total_nominal: 50000},
+        pending_tasks: [],
+        recent_collections: [],
+      },
+    });
+    await freshRequest;
+    stale.resolve({
+      success: true,
+      data: {
+        today_stats: {collected: 0, total_nominal: 0, remaining: 30},
+        week_stats: {collected: 0, total_nominal: 0},
+        pending_tasks: [],
+        recent_collections: [],
+      },
+    });
+    await staleRequest;
+
+    expect(useDashboardStore.getState().todayStats?.collected).toBe(1);
+    expect(dashboardCache.getTodayStats()?.collected).toBe(1);
+  });
+
+  it('mengabaikan respons riwayat lama setelah rekonsiliasi server terbaru', async () => {
+    const stale = createDeferred<any>();
+    const fresh = createDeferred<any>();
+    const historySpy = jest
+      .spyOn(collectionService, 'getHistory')
+      .mockImplementationOnce(() => stale.promise)
+      .mockImplementationOnce(() => fresh.promise);
+
+    const staleRequest = useCollectionsStore.getState().fetchCollections();
+    await waitForMockCalls(historySpy as jest.Mock, 1);
+    const freshRequest = useCollectionsStore.getState().fetchCollections();
+    await waitForMockCalls(historySpy as jest.Mock, 2);
+
+    fresh.resolve({
+      success: true,
+      data: {
+        items: [{
+          id: 'server-fresh',
+          offline_id: 'offline-fresh',
+          assignment_id: 'assignment-fresh',
+          can_id: 'can-fresh',
+          qr_code: 'QR-FRESH',
+          owner_name: 'Donatur Fresh',
+          owner_address: 'Alamat Fresh',
+          nominal: 50000,
+          collected_at: new Date().toISOString(),
+          sync_status: SyncStatus.COMPLETED,
+        }],
+        pagination: {page: 1, limit: 1000, total: 1, total_pages: 1},
+      },
+    });
+    await freshRequest;
+    stale.resolve({
+      success: true,
+      data: {
+        items: [],
+        pagination: {page: 1, limit: 1000, total: 0, total_pages: 1},
+      },
+    });
+    await staleRequest;
+
+    expect(useCollectionsStore.getState().collections.map(item => item.id)).toEqual([
+      'server-fresh',
+    ]);
+  });
+
+  it('mengabaikan respons tugas lama yang selesai setelah sync', async () => {
+    const staleActive = createDeferred<any>();
+    const staleCompleted = createDeferred<any>();
+    const freshActive = createDeferred<any>();
+    const freshCompleted = createDeferred<any>();
+    const tasksSpy = jest
+      .spyOn(tasksService, 'getTasks')
+      .mockImplementationOnce(() => staleActive.promise)
+      .mockImplementationOnce(() => staleCompleted.promise)
+      .mockImplementationOnce(() => freshActive.promise)
+      .mockImplementationOnce(() => freshCompleted.promise);
+    const task = makeTask('assignment-startup-race');
+    const response = (tasks: Task[], totalNominal = 0) => ({
+      success: true,
+      data: {
+        tasks,
+        total_nominal: totalNominal,
+        pagination: {page: 1, limit: 1000, total: tasks.length, total_pages: 1},
+      },
+    });
+
+    const staleRequest = useTasksStore.getState().fetchTasks('ACTIVE');
+    await waitForMockCalls(tasksSpy as jest.Mock, 2);
+    const freshRequest = useTasksStore.getState().fetchTasks('ACTIVE');
+    await waitForMockCalls(tasksSpy as jest.Mock, 4);
+
+    freshActive.resolve(response([]));
+    freshCompleted.resolve(response([
+      {...task, status: AssignmentStatus.COMPLETED},
+    ], 50000));
+    await freshRequest;
+    staleActive.resolve(response([task]));
+    staleCompleted.resolve(response([]));
+    await staleRequest;
+
+    expect(taskCache.getTasks('ACTIVE')).toEqual([]);
+    expect(taskCache.getTasks('COMPLETED').map(item => item.id)).toContain(task.id);
+    expect(useTasksStore.getState().tasks).toEqual([]);
+  });
+
+  it('triggerSync menunggu seluruh rekonsiliasi sebelum dinyatakan selesai', async () => {
+    jest.spyOn(syncService, 'autoSync').mockResolvedValue({
+      success: true,
+      synced: 1,
+      failed: 0,
+      remaining: 0,
+    });
+    const dashboardRefresh = createDeferred<void>();
+    const tasksRefresh = createDeferred<void>();
+    const statsRefresh = createDeferred<void>();
+    const historyRefresh = createDeferred<void>();
+    const dashboardSpy = jest
+      .spyOn(useDashboardStore.getState(), 'fetchDashboard')
+      .mockReturnValue(dashboardRefresh.promise);
+    const tasksSpy = jest
+      .spyOn(useTasksStore.getState(), 'fetchTasks')
+      .mockReturnValue(tasksRefresh.promise);
+    const statsSpy = jest
+      .spyOn(useTasksStore.getState(), 'fetchStats')
+      .mockReturnValue(statsRefresh.promise);
+    const historySpy = jest
+      .spyOn(useCollectionsStore.getState(), 'fetchCollections')
+      .mockReturnValue(historyRefresh.promise);
+
+    let completed = false;
+    const syncPromise = useSyncStore.getState().triggerSync().then(() => {
+      completed = true;
+    });
+    await waitForMockCalls(dashboardSpy as jest.Mock, 1);
+    await waitForMockCalls(tasksSpy as jest.Mock, 1);
+    await waitForMockCalls(statsSpy as jest.Mock, 1);
+    await waitForMockCalls(historySpy as jest.Mock, 1);
+
+    expect(completed).toBe(false);
+    expect(useSyncStore.getState().isSyncing).toBe(true);
+
+    dashboardRefresh.resolve();
+    tasksRefresh.resolve();
+    statsRefresh.resolve();
+    historyRefresh.resolve();
+    await syncPromise;
+
+    expect(completed).toBe(true);
+    expect(useSyncStore.getState().isSyncing).toBe(false);
   });
 });

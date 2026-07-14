@@ -11,6 +11,8 @@ import { useDashboardStore } from './useDashboardStore';
 import { collectionsCache } from '../services/offline/cache';
 import { taskCache } from '../services/offline/tasks';
 
+let latestCollectionsRequestId = 0;
+
 // Tipe jujur untuk data yang disimpan setelah submit (sebelum sync ke server).
 // Tidak menggunakan `Collection` karena data belum punya field server-side
 // seperti `id`, `officer_id`, `sync_status`, atau nested `can`.
@@ -274,12 +276,17 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
   },
 
   fetchCollections: async () => {
+    const requestId = ++latestCollectionsRequestId;
+    const isLatestRequest = () => requestId === latestCollectionsRequestId;
     const netInfo = await NetInfo.fetch();
+    if (!isLatestRequest()) {return;}
+
     const isOnline = !!(netInfo.isConnected && netInfo.isInternetReachable);
 
     if (!isOnline) {
       const cached = collectionsCache.get();
       const merged = mergeCollectionsWithQueues(cached);
+      if (!isLatestRequest()) {return;}
       if (merged.length > 0) {
         set({ collections: merged, total: merged.length, isLoading: false });
       }
@@ -292,6 +299,7 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
       // Jika backend mengembalikan lebih dari 1 halaman, auto-paginate sampai habis.
       const PAGE_LIMIT = 1000;
       const firstPage = await collectionService.getHistory({ page: 1, limit: PAGE_LIMIT });
+      if (!isLatestRequest()) {return;}
 
       if (firstPage.success && firstPage.data) {
         let allItems: HistoryItem[] = firstPage.data.items || [];
@@ -306,6 +314,7 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
           const results = await Promise.allSettled(
             remainingPages.map(p => collectionService.getHistory({ page: p, limit: PAGE_LIMIT })),
           );
+          if (!isLatestRequest()) {return;}
           for (const res of results) {
             if (res.status === 'fulfilled' && res.value.success && res.value.data) {
               allItems = [...allItems, ...(res.value.data.items || [])];
@@ -313,6 +322,7 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
           }
         }
 
+        if (!isLatestRequest()) {return;}
         const mapped = allItems.map(mapHistoryToCollection);
         collectionsCache.set(mapped);
 
@@ -331,11 +341,11 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
         });
       }
     } catch (error) {
+      if (!isLatestRequest()) {return;}
       const message = error instanceof Error ? error.message : 'Terjadi kesalahan jaringan';
       set({ error: message, isLoading: false });
     }
   },
-
   loadMore: async () => {
     const { page, totalPages, collections } = get();
     if (page >= totalPages) { return; }

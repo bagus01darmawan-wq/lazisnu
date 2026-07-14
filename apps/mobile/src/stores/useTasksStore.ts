@@ -6,6 +6,9 @@ import { tasksStatsCache } from '../services/offline/cache';
 import { offlineQueue } from '../services/offline/queue';
 import { taskCache } from '../services/offline/tasks';
 
+let latestTasksRequestId = 0;
+let latestStatsRequestId = 0;
+
 const dedupeTasksById = (tasks: Task[]): Task[] => Array.from(new Map(tasks.map(task => [task.id, task])).values());
 
 export const reconcileTasks = (serverTasks: Task[], status: 'ACTIVE' | 'COMPLETED'): Task[] => {
@@ -177,7 +180,11 @@ export const useTasksStore = create<TasksState>((set, get) => ({
   },
 
   fetchStats: async () => {
+    const requestId = ++latestStatsRequestId;
+    const isLatestRequest = () => requestId === latestStatsRequestId;
     const netInfo = await NetInfo.fetch();
+    if (!isLatestRequest()) {return;}
+
     const isOnline = !!(netInfo.isConnected && netInfo.isInternetReachable);
     if (!isOnline) {
       get().hydrateFromCache();
@@ -189,6 +196,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
         tasksService.getTasks({ status: 'ACTIVE', page: 1, limit: 1 }),
         tasksService.getTasks({ status: 'COMPLETED', page: 1, limit: 1 }),
       ]);
+      if (!isLatestRequest()) {return;}
 
       if (activeRes.success && completedRes.success) {
         const activeTotal = activeRes.data?.pagination?.total || 0;
@@ -224,12 +232,17 @@ export const useTasksStore = create<TasksState>((set, get) => ({
         });
       }
     } catch (e) {
-      console.warn('Gagal memuat statistik tugas online', e);
+      if (isLatestRequest()) {
+        console.warn('Gagal memuat statistik tugas online', e);
+      }
     }
   },
-
   fetchTasks: async (status: 'ACTIVE' | 'COMPLETED' = 'ACTIVE') => {
+    const requestId = ++latestTasksRequestId;
+    const isLatestRequest = () => requestId === latestTasksRequestId;
     const netInfo = await NetInfo.fetch();
+    if (!isLatestRequest()) {return;}
+
     const isOnline = !!(netInfo.isConnected && netInfo.isInternetReachable);
 
     if (!isOnline) {
@@ -256,6 +269,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
       fetchAllTasksByStatus(status),
       fetchAllTasksByStatus(otherStatus),
     ]);
+    if (!isLatestRequest()) {return;}
 
     if (selectedResult.status === 'rejected') {
       const message = selectedResult.reason instanceof Error
