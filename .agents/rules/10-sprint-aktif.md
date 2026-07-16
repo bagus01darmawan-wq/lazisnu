@@ -51,7 +51,7 @@ Catatan untuk agent:
 
 ## Sprint Aktif — Pekerjaan Tersisa
 
-### P0 — Crash Mobile pada Tab Riwayat / Collection [TERDIAGNOSIS 2026-07-02]
+### P0 — Crash Mobile pada Tab Riwayat / Collection [PATCH DITERAPKAN, BELUM DIVERIFIKASI ULANG]
 
 **Gejala runtime:** Hermes menampilkan `TypeError: Cannot read property 'task' of undefined` saat `CollectionScreen` dirender dari `BottomTabNavigator`.
 
@@ -63,7 +63,22 @@ Catatan untuk agent:
 
 **Dampak:** alur verifikasi scan QR → input nominal terblokir, dan pengguna dapat memicu crash hanya dengan membuka tab Riwayat.
 
-**Arah perbaikan yang direkomendasikan:** gunakan `HistoryScreen` sebagai komponen tab Riwayat; pindahkan `CollectionScreen` ke stack flow yang hanya dapat dibuka dengan parameter `{ task }`; lalu selaraskan `RootStackParamList`/`MainTabParamList` dan hilangkan penggunaan `useNavigation<any>()` agar mismatch terdeteksi TypeScript.
+**Patch source yang terdeteksi:**
+- `apps/mobile/src/navigation/AppNavigator.tsx` mendaftarkan `HistoryScreen` sebagai tab `History`, sementara `CollectionScreen` berada di `MainStack`.
+- `apps/mobile/src/navigation/types.ts` mendefinisikan `Collection: { task: Task }` dan `History: undefined`, sehingga kontrak parameter sudah selaras.
+- `apps/mobile/src/screens/ScanScreen.tsx` menavigasi ke `Collection` dengan `{ task: scannedData }` menggunakan `CompositeNavigationProp` bertipe.
+- `apps/mobile/src/screens/CollectionScreen.tsx` menerima `NativeStackScreenProps<RootStackParamList, 'Collection'>`.
+
+**Status verifikasi:** patch routing sudah ada di source pada audit 2026-07-17. Belum ada bukti baru bahwa `typecheck`, `lint`, `test`, `build:debug`, dan smoke test emulator setelah patch ini semuanya lulus. Jalankan:
+
+```bash
+pnpm --filter lazisnu-collector-app typecheck
+pnpm --filter lazisnu-collector-app lint
+pnpm --filter lazisnu-collector-app test
+pnpm --filter lazisnu-collector-app build:debug
+```
+
+Setelah command lulus, verifikasi emulator: buka tab Riwayat tanpa crash, scan QR, tekan Lanjutkan, lalu pastikan `CollectionScreen` menerima task yang benar. Baru ubah status menjadi **VERIFIED** beserta tanggal dan hasil command.
 
 **Status verifikasi:** diagnosis source selesai; patch, typecheck, lint, test, dan uji emulator belum dilakukan.
 
