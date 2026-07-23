@@ -4,9 +4,9 @@
 
 set -e
 
-DOMAIN_API="api.lazisnu.app"
-DOMAIN_WEB="dashboard.lazisnu.app"
-EMAIL="admin@lazisnu.app"
+DOMAIN_API="api.lazisnu.site"
+DOMAIN_WEB="dashboard.lazisnu.site"
+EMAIL="admin@lazisnu.site"
 
 echo "=== 1. Install Docker ==="
 apt-get update

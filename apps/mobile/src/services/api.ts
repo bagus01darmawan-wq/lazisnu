@@ -39,7 +39,7 @@ const getApiOrigin = (): string => {
     // Android emulator accessing host machine via 10.0.2.2
     return 'http://10.0.2.2:3001';
   }
-  return 'https://api.lazisnu.app'; // Production
+  return 'https://api.lazisnu.site'; // Production
 };
 
 export const API_ORIGIN = getApiOrigin();
