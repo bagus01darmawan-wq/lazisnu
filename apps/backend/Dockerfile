@@ -8,11 +8,12 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/backend/package.json apps/backend/
 COPY packages/shared-types/package.json packages/shared-types/
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --filter lazisnu-backend
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --filter lazisnu-backend --filter @lazisnu/shared-types
 
 FROM base AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules node_modules
+COPY --from=deps /app/pnpm-lock.yaml ./
 COPY . .
 RUN pnpm --filter @lazisnu/shared-types build
 RUN pnpm --filter lazisnu-backend build
