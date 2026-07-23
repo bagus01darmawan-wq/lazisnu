@@ -3,19 +3,15 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable && corepack prepare pnpm@10 --activate
 
-FROM base AS deps
+FROM base AS build
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/
 COPY packages/shared-types/package.json packages/shared-types/
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
-
-FROM base AS build
-WORKDIR /app
-COPY --from=deps /app/node_modules node_modules
 COPY . .
-RUN node node_modules/typescript/bin/tsc -p packages/shared-types/tsconfig.json 2>/dev/null || true
-RUN node node_modules/.bin/next build -C apps/web
+RUN node packages/shared-types/node_modules/typescript/bin/tsc -p packages/shared-types/tsconfig.json 2>/dev/null || true
+RUN cd apps/web && node_modules/.bin/next build
 
 FROM base AS runner
 WORKDIR /app
