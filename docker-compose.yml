@@ -39,6 +39,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - API_URL=http://backend:3001
     logging:
       driver: json-file
       options:
