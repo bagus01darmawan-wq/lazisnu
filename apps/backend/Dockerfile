@@ -16,8 +16,8 @@ ENV PATH="/app/node_modules/.bin:$PATH"
 COPY --from=deps /app/node_modules node_modules
 COPY --from=deps /app/pnpm-lock.yaml ./
 COPY . .
-RUN pnpm --filter @lazisnu/shared-types build
-RUN pnpm --filter lazisnu-backend build
+RUN cd packages/shared-types && npx tsc
+RUN npx tsc -p apps/backend/tsconfig.json
 
 FROM base AS runner
 WORKDIR /app

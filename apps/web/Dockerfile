@@ -15,8 +15,8 @@ WORKDIR /app
 ENV PATH="/app/node_modules/.bin:$PATH"
 COPY --from=deps /app/node_modules node_modules
 COPY . .
-RUN pnpm --filter @lazisnu/shared-types build
-RUN pnpm --filter web build
+RUN cd packages/shared-types && npx tsc
+RUN cd apps/web && npx next build
 
 FROM base AS runner
 WORKDIR /app
