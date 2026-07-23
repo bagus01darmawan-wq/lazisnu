@@ -145,24 +145,24 @@ export async function buildApp() {
       });
     }
 
-    // 5. JWT error
+    // 5. Rate limit error (from @fastify/rate-limit)
+    if ((error as unknown as Record<string, unknown>).statusCode === 429) {
+      return reply.status(429).send({
+        success: false,
+        error: {
+          code: 'TOO_MANY_REQUESTS',
+          message: 'Terlalu banyak permintaan, silakan coba lagi nanti',
+        },
+      });
+    }
+
+    // 6. JWT error
     if (isJwtErrorLike(error)) {
       return reply.status(401).send({
         success: false,
         error: {
           code: 'UNAUTHORIZED',
           message: 'Token tidak valid atau expired',
-        },
-      });
-    }
-
-    // 6. Rate limit error (from @fastify/rate-limit)
-    if (error.statusCode === 429) {
-      return reply.status(429).send({
-        success: false,
-        error: {
-          code: 'TOO_MANY_REQUESTS',
-          message: 'Terlalu banyak permintaan, silakan coba lagi nanti',
         },
       });
     }
