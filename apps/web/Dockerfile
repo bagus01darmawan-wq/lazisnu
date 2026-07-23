@@ -8,13 +8,11 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/
 COPY packages/shared-types/package.json packages/shared-types/
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --filter web
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
 FROM base AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules node_modules
-COPY --from=deps /app/apps/web/node_modules apps/web/node_modules
-COPY --from=deps /app/packages/shared-types/node_modules packages/shared-types/node_modules
 COPY . .
 RUN pnpm --filter @lazisnu/shared-types build
 RUN pnpm --filter web build
