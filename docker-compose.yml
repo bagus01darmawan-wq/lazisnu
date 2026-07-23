@@ -36,6 +36,8 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
     restart: unless-stopped
+    env_file:
+      - apps/backend/.env
     environment:
       - NODE_ENV=production
       - PORT=3000
