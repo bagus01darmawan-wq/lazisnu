@@ -1,0 +1,12 @@
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "mouse": false,
+  "keybinds": {
+    "messages_line_up": "up",
+    "messages_line_down": "down",
+    "history_previous": "ctrl+up",
+    "history_next": "ctrl+down",
+    "input_move_up": "alt+up",
+    "input_move_down": "alt+down"
+  }
+}

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { tasksService } from '../services/api';
+import { collectionService } from '../services/api';
 import { Task, AssignmentStatus } from '@lazisnu/shared-types';
 import NetInfo from '@react-native-community/netinfo';
 import { tasksStatsCache } from '../services/offline/cache';
@@ -21,20 +22,14 @@ export const reconcileTasks = (serverTasks: Task[], status: 'ACTIVE' | 'COMPLETE
   ]);
 
   if (status === 'ACTIVE') {
-    // Hilangkan task yang sudah ada di queue (sudah dijemput offline)
     return serverTasks.filter(task => task.status === AssignmentStatus.ACTIVE && !queuedIds.has(task.id));
   } else {
-    // COMPLETED: gabungkan 3 sumber:
-    // 1. Task dari queue lokal (belum sync) — tampilkan sebagai COMPLETED
-    // 2. Task dari server yang memang COMPLETED
-    // 3. Task dari taskCache COMPLETED (termasuk yang dipindahkan via markCompleted offline)
     const allCacheTasks = [
       ...taskCache.getTasks('ACTIVE'),
       ...taskCache.getTasks('COMPLETED'),
     ];
     const allQueueItems = [...activeQueue, ...failedQueue];
 
-    // Kumpulkan task dari queue
     const queuedTasks: Task[] = [];
     const queuedTaskIds = new Set<string>();
     for (const item of allQueueItems) {
@@ -48,9 +43,8 @@ export const reconcileTasks = (serverTasks: Task[], status: 'ACTIVE' | 'COMPLETE
       }
     }
 
-    // Server completed — exclude yang sudah ada di queuedTasks (mencegah duplikat)
     const serverCompleted = serverTasks.filter(
-      task => task.status === AssignmentStatus.COMPLETED && !queuedTaskIds.has(task.id),
+      task => (task.status === AssignmentStatus.COMPLETED || task.status === AssignmentStatus.UNCOLLECTED) && !queuedTaskIds.has(task.id),
     );
 
     return dedupeTasksById([...queuedTasks, ...serverCompleted]);
@@ -142,6 +136,8 @@ interface TasksState {
   setCurrentTask: (task: Task | null) => void;
   markTaskComplete: (taskId: string, nominal?: number) => void;
   adjustCompletedNominal: (delta: number) => void;
+  skipAssignment: (taskId: string) => Promise<boolean>;
+  completePeriod: () => Promise<{ skipped: number; error?: string }>;
 }
 
 
@@ -352,5 +348,60 @@ export const useTasksStore = create<TasksState>((set, get) => ({
       completedNominal: nextNominal,
     });
     set({completedNominal: nextNominal});
+  },
+
+  skipAssignment: async (taskId: string) => {
+    try {
+      const result = await collectionService.skipAssignment(taskId);
+      if (result.success) {
+        const {tasks, activeCount, completedCount, totalCount} = get();
+        set({
+          tasks: tasks.filter(task => task.id !== taskId),
+        });
+        taskCache.markCompleted(taskId);
+        tasksStatsCache.set({
+          active: Math.max(0, activeCount - 1),
+          completed: completedCount + 1,
+          total: totalCount,
+          completedNominal: get().completedNominal,
+        });
+        set({
+          activeCount: Math.max(0, activeCount - 1),
+          completedCount: completedCount + 1,
+        });
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  },
+
+  completePeriod: async () => {
+    try {
+      const result = await collectionService.completePeriod();
+      if (result.success && result.data) {
+        const skipped = result.data.skipped_count;
+        if (skipped > 0) {
+          const { completedCount, totalCount, completedNominal } = get();
+          tasksStatsCache.set({
+            active: 0,
+            completed: completedCount + skipped,
+            total: totalCount,
+            completedNominal,
+          });
+          set({
+            activeCount: 0,
+            completedCount: completedCount + skipped,
+          });
+          get().fetchTasks('ACTIVE');
+          get().fetchTasks('COMPLETED');
+        }
+        return { skipped };
+      }
+      return { skipped: 0, error: result.error?.message || 'Gagal menyelesaikan periode' };
+    } catch {
+      return { skipped: 0, error: 'Gagal menyelesaikan periode' };
+    }
   },
 }));

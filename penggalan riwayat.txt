@@ -1,0 +1,881 @@
+Verifikasi visual akhir layar setelah login masih memerlukan screenshot terbaru atau kredensial akun lokal yang valid.
+
+Worked for 4m 18s
+
+Karena verifikasi visual setelah login masih tertahan oleh akun lokal, saya lanjutkan dengan pengujian render terisolasi untuk layar utama. Tujuannya memastikan Beranda, Tugas, Riwayat, Profil, dan Input Penjemputan dapat dirender dengan data representatif tanpa crash sebelum screenshot pengguna tersedia.
+
+Updated Plan
+InProgress: Audit konfigurasi Jest dan kebutuhan mock layar utama
+Pending: Tambahkan smoke test render untuk layar setelah login
+Pending: Perbaiki crash render yang ditemukan dan jalankan suite penuh
+
+Heads up, you have less than 5% of your 5h limit left. Run /status for a breakdown.
+
+$ Get-Content apps/mobile/jest.config.js; Get-ChildItem apps/mobile/__tests__ -Recurse -File | Select-Object FullName; Get-Content apps/mobile/jest.setup.js -ErrorAction SilentlyContinue; Get-Content apps/mobile/__mocks__/react-native-vector-icons/MaterialCommunityIcons.js -ErrorAction SilentlyContinue
+// apps/mobile/jest.config.js
+//
+// Konfigurasi Jest untuk project ini. Pakai preset RN agar auto-mock
+// semua native module (AsyncStorage, NetInfo, dll). Mock spesifik untuk
+// react-native-keychain & react-native-mmkv ada di __mocks__/.
+
+module.exports = {
+  preset: 'react-native',
+  setupFiles: ['./jest.setup.js'],
+  // Mock module manual ada di __mocks__/ â€” auto-load oleh Jest
+  testMatch: [
+    '**/__tests__/**/*.test.ts',
+    '**/__tests__/**/*.test.tsx',
+  ],
+  transformIgnorePatterns: [
+    'node_modules/(?!(jest-)?react-native|@react-native|react-native-vector-icons)/',
+    '\\.pnpm/(?!(jest-)?react-native|@react-native|react-native-vector-icons)/',
+  ],
+  // Redirect @react-native/js-polyfills/error-guard ke mock karena file
+  // tersebut berisi Flow type syntax yang gagal di-transform oleh babel-jest
+  // di environment pnpm (symlink path tidak match transformIgnorePatterns).
+  moduleNameMapper: {
+    '^@react-native/js-polyfills/error-guard$':
+      '<rootDir>/__mocks__/error-guard-mock.js',
+    // react-native-get-random-values juga Flow syntax â€” di-mock sebagai no-op
+    // karena crypto.getRandomValues sudah di-setup di jest.setup.js
+    '^react-native-get-random-values$':
+      '<rootDir>/__mocks__/react-native-get-random-values.ts',
+  },
+  // Clear mocks otomatis sebelum tiap test
+  clearMocks: true,
+};
+
+FullName
+--------
+C:\Users\user\Documents\lazisnu\apps\mobile\__tests__\types.d.ts
+C:\Users\user\Documents\lazisnu\apps\mobile\__tests__\components\ui\AppButton.test.tsx
+C:\Users\user\Documents\lazisnu\apps\mobile\__tests__\components\ui\AppTextInput.test.tsx
+C:\Users\user\Documents\lazisnu\apps\mobile\__tests__\components\ui\SegmentedControl.test.tsx
+C:\Users\user\Documents\lazisnu\apps\mobile\__tests__\components\ui\StatusBadge.test.tsx
+C:\Users\user\Documents\lazisnu\apps\mobile\__tests__\services\encryptedStorage.test.ts
+C:\Users\user\Documents\lazisnu\apps\mobile\__tests__\services\secureKey.test.ts
+// apps/mobile/jest.setup.js
+/* global jest */
+//
+// Setup global untuk semua test. Dipanggil sekali sebelum test modules loaded.
+
+// Mock crypto.getRandomValues â€” Jest node environment tidak punya Web Crypto API.
+// react-native-get-random-values polyfill tidak bisa di-require() langsung karena
+// konflik Flow syntax dengan Jest runtime. Sebagai gantinya, kita berikan
+// implementasi deterministic berbasis Math.random untuk unit test.
+//
+// CATATAN: nilai random di test TIDAK akan cryptographically secure. Ini OK
+// karena unit test tidak menguji entropi â€” yang diuji adalah behavior
+// (generate key, reuse, wipe, fallback path).
+global.crypto = {
+  getRandomValues: (array) => {
+    for (let i = 0; i < array.length; i++) {
+      array[i] = Math.floor(Math.random() * 256);
+    }
+    return array;
+  },
+};
+
+jest.mock('@react-native-firebase/crashlytics', () => {
+  const reporter = {
+    log: jest.fn(),
+    recordError: jest.fn(),
+    setAttribute: jest.fn(),
+    setAttributes: jest.fn(),
+    setCrashlyticsCollectionEnabled: jest.fn(),
+    setUserId: jest.fn(),
+    crash: jest.fn(),
+    isCrashlyticsCollectionEnabled: false,
+  };
+
+  return jest.fn(() => reporter);
+});
+
+
+✗ (1) • 903ms
+
+You approved codex to run $patch = @' ... this time
+
+$ $patch = @'
+    *** Begin Patch
+    *** Add File: C:\Users\user\Documents\lazisnu\apps\mobile\__tests__\screens\AuthenticatedScreens.test.tsx
+    +import React from 'react';
+    +import renderer, {act} from 'react-test-renderer';
+    +
+    +const navigate = jest.fn();
+    +const goBack = jest.fn();
+    +const fetchDashboard = jest.fn();
+    +const checkStatus = jest.fn();
+    +const fetchTasks = jest.fn();
+    +const fetchCollections = jest.fn();
+    +
+    +const task = {
+    +  id: 'assignment-1',
+    +  can_id: 'can-1',
+    +  qr_code: 'LAZ-PNG-25-00001',
+    +  owner_name: 'Ibu Siti Aminah',
+    +  owner_phone: '081234567890',
+    +  owner_address: 'Dukuh Krajan, Paninggaran',
+    +  address: 'Dukuh Krajan, Paninggaran',
+    +  period: 'Juli 2026',
+    +  status: 'ACTIVE',
+    +};
+    +
+    +const authState = {
+    +  user: {
+    +    id: 'user-1',
+    +    full_name: 'Ahmad Petugas',
+    +    phone: '081234567892',
+    +    role: 'PETUGAS',
+    +    is_active: true,
+    +  },
+    +  logout: jest.fn(),
+    +};
+    +
+    +const useAuthStoreMock = Object.assign(
+    +  jest.fn((selector?: (state: typeof authState) => unknown) =>
+    +    selector ? selector(authState) : authState,
+    +  ),
+    +  {getState: () => authState},
+    +);
+    +
+    +const collectionStoreState = {
+    +  submitCollection: jest.fn(),
+    +  isSubmitting: false,
+    +  reset: jest.fn(),
+    +};
+    +
+    +const useCollectionStoreMock = Object.assign(
+    +  jest.fn(() => collectionStoreState),
+    +  {getState: () => ({...collectionStoreState, error: null})},
+    +);
+    +
+    +jest.mock('@react-navigation/native', () => ({
+    +  useNavigation: () => ({navigate, goBack}),
+    +}));
+    +
+    +jest.mock('react-native-safe-area-context', () => ({
+    +  useSafeAreaInsets: () => ({top: 0, right: 0, bottom: 0, left: 0}),
+    +}));
+    +
+    +jest.mock('react-native-linear-gradient', () => {
+    +  const {View} = require('react-native');
+    +  return View;
+    +});
+    +
+    +jest.mock('react-native-reanimated', () => {
+    +  const {View} = require('react-native');
+    +  return {
+    +    __esModule: true,
+    +    default: {View},
+    +    FadeInUp: {delay: () => ({duration: () => undefined})},
+    +    Layout: {springify: () => undefined},
+    +  };
+    +});
+    +
+    +jest.mock('../../src/stores', () => ({
+    +  useAuthStore: useAuthStoreMock,
+    +  useDashboardStore: () => ({
+    +    todayStats: {collected: 4, remaining: 6, total_nominal: 450000},
+    +    pendingTasks: [task],
+    +    fetchDashboard,
+    +    isLoading: false,
+    +    error: null,
+    +  }),
+    +  useSyncStore: () => ({
+    +    pendingCount: 0,
+    +    permanentFailedCount: 0,
+    +    checkStatus,
+    +    clearFailed: jest.fn(),
+    +  }),
+    +  useTasksStore: () => ({
+    +    tasks: [task],
+    +    fetchTasks,
+    +    loadMore: jest.fn(),
+    +    isLoading: false,
+    +    error: null,
+    +    page: 1,
+    +    totalPages: 1,
+    +  }),
+    +  useCollectionsStore: () => ({
+    +    collections: [
+    +      {
+    +        id: 'collection-1',
+    +        nominal: 125000,
+    +        payment_method: 'CASH',
+    +        collected_at: '2026-07-05T10:00:00.000Z',
+    +        sync_status: 'COMPLETED',
+    +        can: {
+    +          qr_code: task.qr_code,
+    +          owner_name: task.owner_name,
+    +          owner_address: task.owner_address,
+    +        },
+    +      },
+    +    ],
+    +    fetchCollections,
+    +    loadMore: jest.fn(),
+    +    isLoading: false,
+    +    error: null,
+    +    page: 1,
+    +    totalPages: 1,
+    +    total: 1,
+    +  }),
+    +  useCollectionStore: useCollectionStoreMock,
+    +}));
+    +
+    +jest.mock('../../src/services/api', () => ({
+    +  __esModule: true,
+    +  default: {
+    +    collection: {resubmitCollection: jest.fn()},
+    +  },
+    +}));
+    +
+    +import DashboardScreen from '../../src/screens/DashboardScreen';
+    +import TasksScreen from '../../src/screens/TasksScreen';
+    +import HistoryScreen from '../../src/screens/HistoryScreen';
+    +import ProfileScreen from '../../src/screens/ProfileScreen';
+    +import CollectionScreen from '../../src/screens/CollectionScreen';
+    +
+    +const render = (element: React.ReactElement) => {
+    +  let tree: renderer.ReactTestRenderer;
+    +  act(() => {
+    +    tree = renderer.create(element);
+    +  });
+    +  return tree!;
+    +};
+    +
+    +describe('authenticated screen render smoke tests', () => {
+    +  beforeEach(() => {
+    +    jest.clearAllMocks();
+    +  });
+    +
+    +  it('renders DashboardScreen with representative data', () => {
+    +    const tree = render(<DashboardScreen />);
+    +    expect(tree.toJSON()).not.toBeNull();
+    +    expect(fetchDashboard).toHaveBeenCalled();
+    +  });
+    +
+    +  it('renders TasksScreen with an active task', () => {
+    +    const tree = render(<TasksScreen />);
+    +    expect(tree.toJSON()).not.toBeNull();
+    +    expect(fetchTasks).toHaveBeenCalledWith('ACTIVE');
+    +  });
+    +
+    +  it('renders HistoryScreen with a completed collection', () => {
+    +    const tree = render(<HistoryScreen />);
+    +    expect(tree.toJSON()).not.toBeNull();
+    +    expect(fetchCollections).toHaveBeenCalled();
+    +  });
+    +
+    +  it('renders ProfileScreen using authenticated user data', () => {
+    +    expect(render(<ProfileScreen />).toJSON()).not.toBeNull();
+    +  });
+    +
+    +  it('renders CollectionScreen with a scanned task', () => {
+    +    const navigation = {navigate, goBack} as any;
+    +    const route = {params: {task}} as any;
+    +    expect(
+    +      render(<CollectionScreen navigation={navigation} route={route} />).toJSON(),
+    +    ).not.toBeNull();
+    +  });
+    +});
+    *** End Patch
+    '@
+    $patch = $patch.Replace("`r`n", "`n").TrimEnd() + "`n"
+    & 'C:\Users\user\AppData\Local\Programs\OpenAI\Codex\bin\codex.exe' --codex-run-as-apply-patch $patch
+Success. Updated the following files:
+A C:\Users\user\Documents\lazisnu\apps\mobile\__tests__\screens\AuthenticatedScreens.test.tsx
+✓ • 358ms
+
+Updated Plan
+Konfigurasi mock sudah disiapkan dan lima smoke test render ditambahkan untuk Beranda, Tugas, Riwayat, Profil, serta Input Penjemputan dengan data representatif.
+Completed: Audit konfigurasi Jest dan kebutuhan mock layar utama
+Completed: Tambahkan smoke test render untuk layar setelah login
+InProgress: Perbaiki crash render yang ditemukan dan jalankan suite penuh
+
+$ pnpm --filter lazisnu-collector-app test -- --runInBand __tests__/screens/AuthenticatedScreens.test.tsx
+
+> lazisnu-collector-app@1.0.0 test C:\Users\user\Documents\lazisnu\apps\mobile
+> jest "--runInBand" "__tests__/screens/AuthenticatedScreens.test.tsx"
+
+C:\Users\user\Documents\lazisnu\apps\mobile:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  lazisnu-collector-app@1.0.0 test: `jest "--runInBand" "__tests__/screens/AuthenticatedScreens.test.tsx"`
+Exit status 1
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+FAIL __tests__/screens/AuthenticatedScreens.test.tsx
+  ● Test suite failed to run
+
+    ReferenceError: C:\Users\user\Documents\lazisnu\apps\mobile\__tests__\screens\AuthenticatedScreens.test.tsx: The module factory of `jest.mock()` is not allowed to reference any out-of-scope variables.
+    Invalid variable access: navigate
+    Allowed objects: AbortController, AbortSignal, AggregateError, Array, ArrayBuffer, AsyncDisposableStack, Atomics, BigInt, BigInt64Array, BigUint64Array, Blob, Boolean, BroadcastChannel, Buffer, ByteLengthQueuingStrategy, CloseEvent, CompressionStream, CountQueuingStrategy, Crypto, CryptoKey, CustomEvent, DOMException, DataView, Date, DecompressionStream, DisposableStack, Error, ErrorEvent, EvalError, Event, EventTarget, File, FinalizationRegistry, Float16Array, Float32Array, Float64Array, FormData, Function, Generator, GeneratorFunction, Headers, Infinity, Int16Array, Int32Array, Int8Array, InternalError, Intl, Iterator, JSON, Map, Math, MessageChannel, MessageEvent, MessagePort, NaN, Navigator, Number, Object, Performance, PerformanceEntry, PerformanceMark, PerformanceMeasure, PerformanceObserver, PerformanceObserverEntryList, PerformanceResourceTiming, Promise, Proxy, QuotaExceededError, RangeError, ReadableByteStreamController, ReadableStream, ReadableStreamBYOBReader, ReadableStreamBYOBRequest, ReadableStreamDefaultController, ReadableStreamDefaultReader, ReferenceError, Reflect, RegExp, Request, Response, Set, SharedArrayBuffer, Storage, String, SubtleCrypto, SuppressedError, Symbol, SyntaxError, Temporal, TextDecoder, TextDecoderStream, TextEncoder, TextEncoderStream, TransformStream, TransformStreamDefaultController, TypeError, URIError, URL, URLPattern, URLSearchParams, Uint16Array, Uint32Array, Uint8Array, Uint8ClampedArray, WeakMap, WeakRef, WeakSet, WebAssembly, WebSocket, WritableStream, WritableStreamDefaultController, WritableStreamDefaultWriter, __addDisposableResource, __assign, __asyncDelegator, __asyncGenerator, __asyncValues, __await, __awaiter, __classPrivateFieldGet, __classPrivateFieldIn, __classPrivateFieldSet, __createBinding, __decorate, __dirname, __disposeResources, __esDecorate, __exportStar, __extends, __filename, __generator, __importDefault, __importStar, __makeTemplateObject, __metadata, __param, __propKey, __read, __rest, __rewriteRelativeImportExtension, __runInitializers, __setFunctionName, __spread, __spreadArray, __spreadArrays, __values, arguments, atob, btoa, clearImmediate, clearInterval, clearTimeout, console, crypto, decodeURI, decodeURIComponent, encodeURI, encodeURIComponent, escape, eval, expect, exports, fetch, global, globalThis, isFinite, isNaN, jest, localStorage, module, navigator, parseFloat, parseInt, performance, process, queueMicrotask, require, sessionStorage, setImmediate, setInterval, setTimeout, structuredClone, undefined, unescape.
+    Note: This is a precaution to guard against uninitialized mock variables. If it is ensured that the mock is required lazily, variable names prefixed with `mock` (case insensitive) are permitted.
+
+      51 |
+      52 | jest.mock('@react-navigation/native', () => ({
+    > 53 |   useNavigation: () => ({navigate, goBack}),
+         |                          ^^^^^^^^
+      54 | }));
+      55 |
+      56 | jest.mock('react-native-safe-area-context', () => ({
+
+      at File.buildCodeFrameError (../../node_modules/.pnpm/@babel+core@7.29.0/node_modules/@babel/core/src/transformation/file/file.ts:251:12)
+      at NodePath.buildError [as buildCodeFrameError] (../../node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/src/path/index.ts:161:21)
+      at call (../../node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/src/visitors.ts:299:14)
+      at NodePath.call [as _call] (../../node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/src/path/context.ts:36:20)
+      at NodePath.call (../../node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/src/path/context.ts:21:18)
+      at NodePath.call [as visit] (../../node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/src/path/context.ts:97:31)
+      at TraversalContext.visit [as visitQueue] (../../node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/src/context.ts:161:16)
+      at TraversalContext.visitQueue [as visitMultiple] (../../node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/src/context.ts:109:17)
+      at TraversalContext.visitMultiple [as visit] (../../node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/src/context.ts:192:19)
+      at visit (../../node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/src/traverse-node.ts:208:17)
+      at NodePath.visit (../../node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/src/path/context.ts:104:33)
+      at TraversalContext.visit [as visitQueue] (../../node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/src/context.ts:161:16)
+      at TraversalContext.visitQueue [as visitSingle] (../../node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/src/context.ts:119:19)
+      at TraversalContext.visitSingle [as visit] (../../node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/src/context.ts:194:19)
+      at visit (../../node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/src/traverse-node.ts:208:17)
+      at traverse (../../node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/src/index.ts:84:15)
+      at transformFile (../../node_modules/.pnpm/@babel+core@7.29.0/node_modules/@babel/core/src/transformation/index.ts:120:15)
+          at transformFile.next (<anonymous>)
+      at transformFile (../../node_modules/.pnpm/@babel+core@7.29.0/node_modules/@babel/core/src/transformation/index.ts:50:12)
+          at run.next (<anonymous>)
+      at transform (../../node_modules/.pnpm/@babel+core@7.29.0/node_modules/@babel/core/src/transform.ts:29:20)
+          at transform.next (<anonymous>)
+      at evaluateSync (../../node_modules/.pnpm/gensync@1.0.0-beta.2/node_modules/gensync/index.js:251:28)
+      at sync (../../node_modules/.pnpm/gensync@1.0.0-beta.2/node_modules/gensync/index.js:89:14)
+      at fn (../../node_modules/.pnpm/@babel+core@7.29.0/node_modules/@babel/core/src/errors/rewrite-stack-trace.ts:99:14)
+      at transformSync (../../node_modules/.pnpm/@babel+core@7.29.0/node_modules/@babel/core/src/transform.ts:66:52)
+      at ScriptTransformer.transformSource (../../node_modules/.pnpm/@jest+transform@29.7.0/node_modules/@jest/transform/build/ScriptTransformer.js:545:31)
+      at ScriptTransformer._transformAndBuildScript (../../node_modules/.pnpm/@jest+transform@29.7.0/node_modules/@jest/transform/build/ScriptTransformer.js:674:40)
+      at ScriptTransformer.transform (../../node_modules/.pnpm/@jest+transform@29.7.0/node_modules/@jest/transform/build/ScriptTransformer.js:726:19)
+      at asyncGeneratorStep (../../node_modules/.pnpm/@babel+runtime@7.29.2/node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/.pnpm/@babel+runtime@7.29.2/node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+Test Suites: 1 failed, 1 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        3.567 s
+Ran all test suites matching /__tests__\\screens\\AuthenticatedScreens.test.tsx/i.
+✗ (1) • 9.20s
+
+You approved codex to run $patch = @' ... this time
+
+$ $patch = @'
+    *** Begin Patch
+    *** Update File: C:\Users\user\Documents\lazisnu\apps\mobile\__tests__\screens\AuthenticatedScreens.test.tsx
+    @@
+    -const navigate = jest.fn();
+    -const goBack = jest.fn();
+    -const fetchDashboard = jest.fn();
+    -const checkStatus = jest.fn();
+    -const fetchTasks = jest.fn();
+    -const fetchCollections = jest.fn();
+    +const mockNavigate = jest.fn();
+    +const mockGoBack = jest.fn();
+    +const mockFetchDashboard = jest.fn();
+    +const mockCheckStatus = jest.fn();
+    +const mockFetchTasks = jest.fn();
+    +const mockFetchCollections = jest.fn();
+    @@
+    -const task = {
+    +const mockTask = {
+    @@
+    -const authState = {
+    +const mockAuthState = {
+    @@
+    -const useAuthStoreMock = Object.assign(
+    -  jest.fn((selector?: (state: typeof authState) => unknown) =>
+    -    selector ? selector(authState) : authState,
+    +const mockUseAuthStore = Object.assign(
+    +  jest.fn((selector?: (state: typeof mockAuthState) => unknown) =>
+    +    selector ? selector(mockAuthState) : mockAuthState,
+       ),
+    -  {getState: () => authState},
+    +  {getState: () => mockAuthState},
+     );
+    @@
+    -const collectionStoreState = {
+    +const mockCollectionStoreState = {
+    @@
+    -const useCollectionStoreMock = Object.assign(
+    -  jest.fn(() => collectionStoreState),
+    -  {getState: () => ({...collectionStoreState, error: null})},
+    +const mockUseCollectionStore = Object.assign(
+    +  jest.fn(() => mockCollectionStoreState),
+    +  {getState: () => ({...mockCollectionStoreState, error: null})},
+     );
+    @@
+    -  useNavigation: () => ({navigate, goBack}),
+    +  useNavigation: () => ({navigate: mockNavigate, goBack: mockGoBack}),
+    @@
+    -  useAuthStore: useAuthStoreMock,
+    +  useAuthStore: mockUseAuthStore,
+    @@
+    -    pendingTasks: [task],
+    -    fetchDashboard,
+    +    pendingTasks: [mockTask],
+    +    fetchDashboard: mockFetchDashboard,
+    @@
+    -    checkStatus,
+    +    checkStatus: mockCheckStatus,
+    @@
+    -    tasks: [task],
+    -    fetchTasks,
+    +    tasks: [mockTask],
+    +    fetchTasks: mockFetchTasks,
+    @@
+    -          qr_code: task.qr_code,
+    -          owner_name: task.owner_name,
+    -          owner_address: task.owner_address,
+    +          qr_code: mockTask.qr_code,
+    +          owner_name: mockTask.owner_name,
+    +          owner_address: mockTask.owner_address,
+    @@
+    -    fetchCollections,
+    +    fetchCollections: mockFetchCollections,
+    @@
+    -  useCollectionStore: useCollectionStoreMock,
+    +  useCollectionStore: mockUseCollectionStore,
+    @@
+    -    expect(fetchDashboard).toHaveBeenCalled();
+    +    expect(mockFetchDashboard).toHaveBeenCalled();
+    @@
+    -    expect(fetchTasks).toHaveBeenCalledWith('ACTIVE');
+    +    expect(mockFetchTasks).toHaveBeenCalledWith('ACTIVE');
+    @@
+    -    expect(fetchCollections).toHaveBeenCalled();
+    +    expect(mockFetchCollections).toHaveBeenCalled();
+    @@
+    -    const navigation = {navigate, goBack} as any;
+    -    const route = {params: {task}} as any;
+    +    const navigation = {navigate: mockNavigate, goBack: mockGoBack} as any;
+    +    const route = {params: {task: mockTask}} as any;
+    *** End Patch
+    '@
+    $patch = $patch.Replace("`r`n", "`n").TrimEnd() + "`n"
+    & 'C:\Users\user\AppData\Local\Programs\OpenAI\Codex\bin\codex.exe' --codex-run-as-apply-patch $patch
+Success. Updated the following files:
+M C:\Users\user\Documents\lazisnu\apps\mobile\__tests__\screens\AuthenticatedScreens.test.tsx
+✓ • 348ms
+
+$ pnpm --filter lazisnu-collector-app test -- --runInBand __tests__/screens/AuthenticatedScreens.test.tsx
+
+> lazisnu-collector-app@1.0.0 test C:\Users\user\Documents\lazisnu\apps\mobile
+> jest "--runInBand" "__tests__/screens/AuthenticatedScreens.test.tsx"
+
+  console.error
+    The above error occurred in the <DashboardScreen> component:
+
+        at DashboardScreen (C:\Users\user\Documents\lazisnu\apps\mobile\src\screens\DashboardScreen.tsx:31:28)
+
+    Consider adding an error boundary to your tree to customize error handling behavior.
+    Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+
+      138 | const render = (element: React.ReactElement) => {
+      139 |   let tree: renderer.ReactTestRenderer;
+    > 140 |   act(() => {
+          |      ^
+      141 |     tree = renderer.create(element);
+      142 |   });
+      143 |   return tree!;
+
+      at logCapturedError (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:8661:23)
+      at logCapturedError (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:8694:5)
+      at call (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:4092:12)
+      at callCallback (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:4113:9)
+      at commitUpdateQueue (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:13232:13)
+      at commitLayoutEffectOnFiber (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14330:9)
+      at commitLayoutMountEffects_complete (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14316:7)
+      at commitLayoutEffects_begin (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14301:3)
+      at commitLayoutEffects (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:16062:5)
+      at commitRootImpl (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:15933:5)
+      at commitRoot (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:15454:3)
+      at callback (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:2597:22)
+      at callback (../../node_modules/.pnpm/react@18.2.0/node_modules/react/cjs/react.development.js:2667:24)
+      at flushActQueue (../../node_modules/.pnpm/react@18.2.0/node_modules/react/cjs/react.development.js:2521:11)
+      at render (__tests__/screens/AuthenticatedScreens.test.tsx:140:6)
+      at Object.render (__tests__/screens/AuthenticatedScreens.test.tsx:152:18)
+
+  console.error
+    The above error occurred in the <ProfileScreen> component:
+
+        at ProfileScreen (C:\Users\user\Documents\lazisnu\apps\mobile\src\screens\ProfileScreen.tsx:18:38)
+
+    Consider adding an error boundary to your tree to customize error handling behavior.
+    Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+
+      138 | const render = (element: React.ReactElement) => {
+      139 |   let tree: renderer.ReactTestRenderer;
+    > 140 |   act(() => {
+          |      ^
+      141 |     tree = renderer.create(element);
+      142 |   });
+      143 |   return tree!;
+
+      at logCapturedError (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:8661:23)
+      at logCapturedError (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:8694:5)
+      at call (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:4092:12)
+      at callCallback (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:4113:9)
+      at commitUpdateQueue (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:13232:13)
+      at commitLayoutEffectOnFiber (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14330:9)
+      at commitLayoutMountEffects_complete (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14316:7)
+      at commitLayoutEffects_begin (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14301:3)
+      at commitLayoutEffects (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:16062:5)
+      at commitRootImpl (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:15933:5)
+      at commitRoot (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:15454:3)
+      at callback (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:2597:22)
+      at callback (../../node_modules/.pnpm/react@18.2.0/node_modules/react/cjs/react.development.js:2667:24)
+      at flushActQueue (../../node_modules/.pnpm/react@18.2.0/node_modules/react/cjs/react.development.js:2521:11)
+      at render (__tests__/screens/AuthenticatedScreens.test.tsx:140:6)
+      at Object.render (__tests__/screens/AuthenticatedScreens.test.tsx:170:12)
+
+  console.error
+    The above error occurred in the <CollectionScreen> component:
+
+        at navigation (C:\Users\user\Documents\lazisnu\apps\mobile\src\screens\CollectionScreen.tsx:31:45)
+
+    Consider adding an error boundary to your tree to customize error handling behavior.
+    Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+
+      138 | const render = (element: React.ReactElement) => {
+      139 |   let tree: renderer.ReactTestRenderer;
+    > 140 |   act(() => {
+          |      ^
+      141 |     tree = renderer.create(element);
+      142 |   });
+      143 |   return tree!;
+
+      at logCapturedError (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:8661:23)
+      at logCapturedError (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:8694:5)
+      at call (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:4092:12)
+      at callCallback (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:4113:9)
+      at commitUpdateQueue (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:13232:13)
+      at commitLayoutEffectOnFiber (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14330:9)
+      at commitLayoutMountEffects_complete (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14316:7)
+      at commitLayoutEffects_begin (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14301:3)
+      at commitLayoutEffects (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:16062:5)
+      at commitRootImpl (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:15933:5)
+      at commitRoot (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:15454:3)
+      at callback (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:2597:22)
+      at callback (../../node_modules/.pnpm/react@18.2.0/node_modules/react/cjs/react.development.js:2667:24)
+      at flushActQueue (../../node_modules/.pnpm/react@18.2.0/node_modules/react/cjs/react.development.js:2521:11)
+      at render (__tests__/screens/AuthenticatedScreens.test.tsx:140:6)
+      at Object.render (__tests__/screens/AuthenticatedScreens.test.tsx:177:7)
+
+C:\Users\user\Documents\lazisnu\apps\mobile:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  lazisnu-collector-app@1.0.0 test: `jest "--runInBand" "__tests__/screens/AuthenticatedScreens.test.tsx"`
+Exit status 1
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+FAIL __tests__/screens/AuthenticatedScreens.test.tsx (11.621 s)
+  authenticated screen render smoke tests
+    × renders DashboardScreen with representative data (150 ms)
+    √ renders TasksScreen with an active task (5550 ms)
+    √ renders HistoryScreen with a completed collection (1962 ms)
+    × renders ProfileScreen using authenticated user data (11 ms)
+    × renders CollectionScreen with a scanned task (10 ms)
+
+  ● authenticated screen render smoke tests › renders DashboardScreen with representative data
+
+    TypeError: (0 , _stores.useAuthStore) is not a function
+
+      29 |   const navigation = useNavigation<any>();
+      30 |   const insets = useSafeAreaInsets();
+    > 31 |   const user = useAuthStore(state => state.user);
+         |                            ^
+      32 |   const {todayStats, pendingTasks, fetchDashboard, isLoading, error} =
+      33 |     useDashboardStore();
+      34 |   const {pendingCount, permanentFailedCount, checkStatus, clearFailed} = useSyncStore();
+
+      at DashboardScreen (src/screens/DashboardScreen.tsx:31:28)
+      at Component (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6351:18)
+      at renderWithHooks (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:9855:13)
+      at mountIndeterminateComponent (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11312:16)
+      at beginWork$1 (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:15811:12)
+      at performUnitOfWork (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:15745:5)
+      at workLoopSync (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:15717:7)
+      at renderRootSync (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:15422:20)
+      at callback (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:2597:22)
+      at callback (../../node_modules/.pnpm/react@18.2.0/node_modules/react/cjs/react.development.js:2667:24)
+      at flushActQueue (../../node_modules/.pnpm/react@18.2.0/node_modules/react/cjs/react.development.js:2521:11)
+      at render (__tests__/screens/AuthenticatedScreens.test.tsx:140:6)
+      at Object.render (__tests__/screens/AuthenticatedScreens.test.tsx:152:18)
+
+  ● authenticated screen render smoke tests › renders ProfileScreen using authenticated user data
+
+    TypeError: (0 , _stores.useAuthStore) is not a function
+
+      16 | const ProfileScreen: React.FC = () => {
+      17 |   const insets = useSafeAreaInsets();
+    > 18 |   const {user, logout} = useAuthStore();
+         |                                      ^
+      19 |   const role = user?.role ? roleLabels[user.role] || user.role : 'Petugas';
+      20 |
+      21 |   const handleLogout = () => {
+
+      at ProfileScreen (src/screens/ProfileScreen.tsx:18:38)
+      at Component (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6351:18)
+      at renderWithHooks (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:9855:13)
+      at mountIndeterminateComponent (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11312:16)
+      at beginWork$1 (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:15811:12)
+      at performUnitOfWork (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:15745:5)
+      at workLoopSync (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:15717:7)
+      at renderRootSync (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:15422:20)
+      at callback (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:2597:22)
+      at callback (../../node_modules/.pnpm/react@18.2.0/node_modules/react/cjs/react.development.js:2667:24)
+      at flushActQueue (../../node_modules/.pnpm/react@18.2.0/node_modules/react/cjs/react.development.js:2521:11)
+      at render (__tests__/screens/AuthenticatedScreens.test.tsx:140:6)
+      at Object.render (__tests__/screens/AuthenticatedScreens.test.tsx:170:12)
+
+  ● authenticated screen render smoke tests › renders CollectionScreen with a scanned task
+
+    TypeError: (0 , _stores.useCollectionStore) is not a function
+
+      31 | const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
+      32 |   const {task} = route.params;
+    > 33 |   const {submitCollection, isSubmitting, reset} = useCollectionStore();
+         |                                                                     ^
+      34 |   const [nominal, setNominal] = useState('');
+      35 |   const [paymentMethod, setPaymentMethod] =
+      36 |     useState<'CASH' | 'TRANSFER'>('CASH');
+
+      at CollectionScreen (src/screens/CollectionScreen.tsx:33:69)
+      at Component (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6351:18)
+      at renderWithHooks (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:9855:13)
+      at mountIndeterminateComponent (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11312:16)
+      at beginWork$1 (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:15811:12)
+      at performUnitOfWork (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:15745:5)
+      at workLoopSync (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:15717:7)
+      at renderRootSync (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:15422:20)
+      at callback (../../node_modules/.pnpm/react-test-renderer@18.2.0_react@18.2.0/node_modules/react-test-renderer/cjs/react-test-renderer.development.js:2597:22)
+      at callback (../../node_modules/.pnpm/react@18.2.0/node_modules/react/cjs/react.development.js:2667:24)
+      at flushActQueue (../../node_modules/.pnpm/react@18.2.0/node_modules/react/cjs/react.development.js:2521:11)
+      at render (__tests__/screens/AuthenticatedScreens.test.tsx:140:6)
+      at Object.render (__tests__/screens/AuthenticatedScreens.test.tsx:177:7)
+
+Test Suites: 1 failed, 1 total
+Tests:       3 failed, 2 passed, 5 total
+Snapshots:   0 total
+Time:        12.488 s
+Ran all test suites matching /__tests__\\screens\\AuthenticatedScreens.test.tsx/i.
+✗ (1) • 16.18s
+
+You approved codex to run $patch = @' ... this time
+
+$ $patch = @'
+    *** Begin Patch
+    *** Update File: C:\Users\user\Documents\lazisnu\apps\mobile\__tests__\screens\AuthenticatedScreens.test.tsx
+    @@
+    -const mockAuthState = {
+    -  user: {
+    -    id: 'user-1',
+    -    full_name: 'Ahmad Petugas',
+    -    phone: '081234567892',
+    -    role: 'PETUGAS',
+    -    is_active: true,
+    -  },
+    -  logout: jest.fn(),
+    -};
+    -
+    -const mockUseAuthStore = Object.assign(
+    -  jest.fn((selector?: (state: typeof mockAuthState) => unknown) =>
+    -    selector ? selector(mockAuthState) : mockAuthState,
+    -  ),
+    -  {getState: () => mockAuthState},
+    -);
+    -
+    -const mockCollectionStoreState = {
+    -  submitCollection: jest.fn(),
+    -  isSubmitting: false,
+    -  reset: jest.fn(),
+    -};
+    -
+    -const mockUseCollectionStore = Object.assign(
+    -  jest.fn(() => mockCollectionStoreState),
+    -  {getState: () => ({...mockCollectionStoreState, error: null})},
+    -);
+    -
+    @@
+     jest.mock('../../src/stores', () => ({
+    -  useAuthStore: mockUseAuthStore,
+    +  useAuthStore: (selector?: (state: any) => unknown) => {
+    +    const state = {
+    +      user: {
+    +        id: 'user-1',
+    +        full_name: 'Ahmad Petugas',
+    +        phone: '081234567892',
+    +        role: 'PETUGAS',
+    +        is_active: true,
+    +      },
+    +      logout: jest.fn(),
+    +    };
+    +    return selector ? selector(state) : state;
+    +  },
+    @@
+    -  useCollectionStore: mockUseCollectionStore,
+    +  useCollectionStore: () => ({
+    +    submitCollection: jest.fn(),
+    +    isSubmitting: false,
+    +    reset: jest.fn(),
+    +  }),
+     }));
+    *** End Patch
+    '@
+    $patch = $patch.Replace("`r`n", "`n").TrimEnd() + "`n"
+    & 'C:\Users\user\AppData\Local\Programs\OpenAI\Codex\bin\codex.exe' --codex-run-as-apply-patch $patch
+Success. Updated the following files:
+M C:\Users\user\Documents\lazisnu\apps\mobile\__tests__\screens\AuthenticatedScreens.test.tsx
+✓ • 345ms
+
+$ pnpm --filter lazisnu-collector-app test -- --runInBand __tests__/screens/AuthenticatedScreens.test.tsx
+
+> lazisnu-collector-app@1.0.0 test C:\Users\user\Documents\lazisnu\apps\mobile
+> jest "--runInBand" "__tests__/screens/AuthenticatedScreens.test.tsx"
+
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+PASS __tests__/screens/AuthenticatedScreens.test.tsx
+  authenticated screen render smoke tests
+    √ renders DashboardScreen with representative data (1034 ms)
+    √ renders TasksScreen with an active task (142 ms)
+    √ renders HistoryScreen with a completed collection (227 ms)
+    √ renders ProfileScreen using authenticated user data (6 ms)
+    √ renders CollectionScreen with a scanned task (307 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       5 passed, 5 total
+Snapshots:   0 total
+Time:        5.6 s, estimated 12 s
+Ran all test suites matching /__tests__\\screens\\AuthenticatedScreens.test.tsx/i.
+✓ • 9.10s
+
+Kelima layar setelah login berhasil dirender dengan data representatif tanpa crash. Saya menjalankan suite penuh sekarang untuk memastikan mock dan tes baru tidak memengaruhi pemeriksaan lainnya.
+
+$ pnpm --filter lazisnu-collector-app typecheck; pnpm --filter lazisnu-collector-app exec eslint src __tests__; pnpm --filter lazisnu-collector-app test -- --runInBand
+
+> lazisnu-collector-app@1.0.0 typecheck C:\Users\user\Documents\lazisnu\apps\mobile
+> tsc --noEmit
+
+
+> lazisnu-collector-app@1.0.0 test C:\Users\user\Documents\lazisnu\apps\mobile
+> jest "--runInBand"
+
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+PASS __tests__/screens/AuthenticatedScreens.test.tsx
+PASS __tests__/components/ui/AppButton.test.tsx
+PASS __tests__/components/ui/AppTextInput.test.tsx
+PASS __tests__/components/ui/SegmentedControl.test.tsx
+PASS __tests__/services/encryptedStorage.test.ts
+  ● Console
+
+    console.warn
+      [secureKey] Failed to get/create encryption key: Error: Keychain corrupt
+          at Object.<anonymous> (C:\Users\user\Documents\lazisnu\apps\mobile\__tests__\services\encryptedStorage.test.ts:54:31)
+          at Generator.next (<anonymous>)
+          at asyncGeneratorStep (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\@babel+runtime@7.29.2\node_modules\@babel\runtime\helpers\asyncToGenerator.js:3:17)
+          at asyncGeneratorStep (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\@babel+runtime@7.29.2\node_modules\@babel\runtime\helpers\asyncToGenerator.js:17:9)
+          at _next (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\@babel+runtime@7.29.2\node_modules\@babel\runtime\helpers\asyncToGenerator.js:22:7)
+          at new Promise (<anonymous>)
+          at Object.<anonymous> (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\@babel+runtime@7.29.2\node_modules\@babel\runtime\helpers\asyncToGenerator.js:14:12)
+          at Promise.then.completed (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\jest-circus@29.7.0\node_modules\jest-circus\build\utils.js:298:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\jest-circus@29.7.0\node_modules\jest-circus\build\utils.js:231:10)
+          at _callCircusTest (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\jest-circus@29.7.0\node_modules\jest-circus\build\run.js:316:40)
+          at _runTest (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\jest-circus@29.7.0\node_modules\jest-circus\build\run.js:252:3)
+          at _runTestsForDescribeBlock (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\jest-circus@29.7.0\node_modules\jest-circus\build\run.js:126:9)
+          at _runTestsForDescribeBlock (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\jest-circus@29.7.0\node_modules\jest-circus\build\run.js:121:9)
+          at _runTestsForDescribeBlock (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\jest-circus@29.7.0\node_modules\jest-circus\build\run.js:121:9)
+          at run (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\jest-circus@29.7.0\node_modules\jest-circus\build\run.js:71:3)
+          at runAndTransformResultsToJestFormat (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\jest-circus@29.7.0\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapterInit.js:122:21)
+
+      115 |     return { ok: true, key: keyBase64, source: 'keychain' };
+      116 |   } catch (error) {
+    > 117 |     console.warn('[secureKey] Failed to get/create encryption key:', error);
+          |             ^
+      118 |     return { ok: false, reason: 'keychain_unavailable' };
+      119 |   }
+      120 | }
+
+      at warn (src/services/secureKey.ts:117:13)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (../../node_modules/.pnpm/@babel+runtime@7.29.2/node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at asyncGeneratorStep (../../node_modules/.pnpm/@babel+runtime@7.29.2/node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+PASS __tests__/components/ui/StatusBadge.test.tsx
+PASS __tests__/services/secureKey.test.ts
+  ● Console
+
+    console.warn
+      [secureKey] Failed to get/create encryption key: Error: Keychain corrupt
+          at Object.<anonymous> (C:\Users\user\Documents\lazisnu\apps\mobile\__tests__\services\secureKey.test.ts:78:31)
+          at Generator.next (<anonymous>)
+          at asyncGeneratorStep (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\@babel+runtime@7.29.2\node_modules\@babel\runtime\helpers\asyncToGenerator.js:3:17)
+          at asyncGeneratorStep (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\@babel+runtime@7.29.2\node_modules\@babel\runtime\helpers\asyncToGenerator.js:17:9)
+          at _next (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\@babel+runtime@7.29.2\node_modules\@babel\runtime\helpers\asyncToGenerator.js:22:7)
+          at new Promise (<anonymous>)
+          at Object.<anonymous> (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\@babel+runtime@7.29.2\node_modules\@babel\runtime\helpers\asyncToGenerator.js:14:12)
+          at Promise.then.completed (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\jest-circus@29.7.0\node_modules\jest-circus\build\utils.js:298:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\jest-circus@29.7.0\node_modules\jest-circus\build\utils.js:231:10)
+          at _callCircusTest (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\jest-circus@29.7.0\node_modules\jest-circus\build\run.js:316:40)
+          at _runTest (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\jest-circus@29.7.0\node_modules\jest-circus\build\run.js:252:3)
+          at _runTestsForDescribeBlock (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\jest-circus@29.7.0\node_modules\jest-circus\build\run.js:126:9)
+          at _runTestsForDescribeBlock (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\jest-circus@29.7.0\node_modules\jest-circus\build\run.js:121:9)
+          at _runTestsForDescribeBlock (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\jest-circus@29.7.0\node_modules\jest-circus\build\run.js:121:9)
+          at run (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\jest-circus@29.7.0\node_modules\jest-circus\build\run.js:71:3)
+          at runAndTransformResultsToJestFormat (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\jest-circus@29.7.0\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapterInit.js:122:21)
+
+      115 |     return { ok: true, key: keyBase64, source: 'keychain' };
+      116 |   } catch (error) {
+    > 117 |     console.warn('[secureKey] Failed to get/create encryption key:', error);
+          |             ^
+      118 |     return { ok: false, reason: 'keychain_unavailable' };
+      119 |   }
+      120 | }
+
+      at warn (src/services/secureKey.ts:117:13)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (../../node_modules/.pnpm/@babel+runtime@7.29.2/node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at asyncGeneratorStep (../../node_modules/.pnpm/@babel+runtime@7.29.2/node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+    console.warn
+      [secureKey] Failed to clear encryption key: Error: Keychain unavailable
+          at Object.<anonymous> (C:\Users\user\Documents\lazisnu\apps\mobile\__tests__\services\secureKey.test.ts:148:31)
+          at Generator.next (<anonymous>)
+          at asyncGeneratorStep (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\@babel+runtime@7.29.2\node_modules\@babel\runtime\helpers\asyncToGenerator.js:3:17)
+          at asyncGeneratorStep (C:\Users\user\Documents\lazisnu\node_modules\.pnpm\@babel+runtime@7.29.2\node_modules\@babel\runtime\helpers\asyncToGenerator.js:17:9)
+
+      145 |     await Keychain.resetGenericPassword({ service: KEYCHAIN_SERVICE });
+      146 |   } catch (error) {
+    > 147 |     console.warn('[secureKey] Failed to clear encryption key:', error);
+          |             ^
+      148 |   }
+      149 | }
+      150 |
+
+      at warn (src/services/secureKey.ts:147:13)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (../../node_modules/.pnpm/@babel+runtime@7.29.2/node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at asyncGeneratorStep (../../node_modules/.pnpm/@babel+runtime@7.29.2/node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+
+Test Suites: 7 passed, 7 total
+Tests:       33 passed, 33 total
+Snapshots:   0 total
+Time:        6.287 s, estimated 9 s
+Ran all test suites.
+✓ • 27.18s
+
+Updated Plan
+Completed: Audit konfigurasi Jest dan kebutuhan mock layar utama
+Completed: Tambahkan smoke test render untuk layar setelah login
+Completed: Perbaiki crash render yang ditemukan dan jalankan suite penuh
+
+Smoke test layar setelah login telah ditambahkan:
+
+- Beranda
+- Tugas
+- Riwayat
+- Profil
+- Input Penjemputan
+
+Kelima layar berhasil dirender dengan data representatif tanpa crash. Total sekarang 33 tes; semuanya lulus bersama TypeScript dan ESLint.

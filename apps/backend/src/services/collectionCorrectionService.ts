@@ -15,7 +15,7 @@ import * as schema from '../database/schema';
 import { resubmitCollection } from './collectionSubmission';
 import type { InferSelectModel } from 'drizzle-orm';
 
-type Can = InferSelectModel<typeof schema.cans>;
+type Can = InferSelectModel<typeof schema.cans> & { branch?: InferSelectModel<typeof schema.branches> | null };
 type Collection = InferSelectModel<typeof schema.collections>;
 
 export interface CorrectionInput {

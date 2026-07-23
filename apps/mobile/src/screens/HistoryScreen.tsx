@@ -66,6 +66,8 @@ const HistoryItem = memo(
             <StatusBadge status={'pending'} label={'Belum Terkirim'} />
           ) : item.sync_status === 'FAILED' ? (
             <StatusBadge status={'error'} label={'Gagal Terkirim'} />
+          ) : Number(item.submit_sequence || 1) > 1 ? (
+            <StatusBadge status={'corrected'} label={'Terkoreksi'} />
           ) : (
             <StatusBadge status={'success'} label={'Tersimpan'} />
           )}
@@ -171,7 +173,10 @@ const HistoryScreen: React.FC = () => {
 
   const openCorrection = useCallback((item: Collection) => {
     setCorrection({
-      id: item.offline_id || item.id,
+      id:
+        item.sync_status === 'PENDING'
+          ? item.offline_id || item.id
+          : item.id,
       nominal: String(item.nominal),
       originalNominal: item.nominal,
       isPending: item.sync_status === 'PENDING',

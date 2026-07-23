@@ -10,6 +10,7 @@ describe('mobile collection history contract', () => {
       nominal: '75000',
       collectedAt: new Date('2026-07-15T02:00:00.000Z'),
       syncStatus: 'COMPLETED',
+      submitSequence: 1,
       can: {
         qrCode: 'QR-001',
         ownerName: 'Donatur',
@@ -24,6 +25,7 @@ describe('mobile collection history contract', () => {
       can_id: '00000000-0000-0000-0000-000000000002',
       nominal: 75000,
       sync_status: 'COMPLETED',
+      submit_sequence: 1,
     });
   });
 });

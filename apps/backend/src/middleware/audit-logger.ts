@@ -31,11 +31,13 @@ export async function auditLogger(request: FastifyRequest, reply: FastifyReply) 
 
   // 403 — security/permission denied (ownership or access forbidden)
   if (reply.statusCode === 403) {
+    const auditCode = (reply as any)._auditCode;
+    const actionType = auditCode === 'FORBIDDEN_SCOPE' ? 'OWNERSHIP_DENIED' : 'AUTH_FAILED';
     await insertAuditLog({
       request,
       userId: user?.userId || null,
       officerId: user?.officerId || null,
-      actionType: 'AUTH_FAILED',
+      actionType,
       entityType: inferEntity(request.url),
       entityId: (request.params as any)?.id || null,
       ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,

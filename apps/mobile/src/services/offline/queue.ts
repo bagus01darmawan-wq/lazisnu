@@ -95,7 +95,7 @@ export const offlineQueue = {
    * Mengembalikan true jika item ditemukan dan diperbarui.
    */
   updateNominal: (offline_id: string, newNominal: number): boolean => {
-    if (!Number.isSafeInteger(newNominal) || newNominal <= 0) { return false; }
+    if (!Number.isSafeInteger(newNominal) || newNominal < 0) { return false; }
     const queue = offlineQueue.getQueue();
     const idx = queue.findIndex(item => item.offline_id === offline_id);
     if (idx === -1) { return false; }
@@ -196,7 +196,7 @@ export const offlineQueue = {
           typeof item.offline_id === 'string' && item.offline_id.length > 0 &&
           typeof item.assignment_id === 'string' && item.assignment_id.length > 0 &&
           typeof item.can_id === 'string' && item.can_id.length > 0 &&
-          typeof item.nominal === 'number' && item.nominal > 0 &&
+          typeof item.nominal === 'number' && item.nominal >= 0 &&
           typeof item.collected_at === 'string' && !isNaN(Date.parse(item.collected_at));
 
         if (isValid) {

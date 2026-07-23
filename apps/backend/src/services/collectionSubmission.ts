@@ -148,7 +148,11 @@ export async function resubmitCollection(
 ) {
   const oldCollection = await tx.query.collections.findFirst({
     where: eq(schema.collections.id, input.collectionId),
-    with: { can: true },
+    with: {
+      can: {
+        with: { branch: true }
+      }
+    },
   });
 
   if (!oldCollection) {

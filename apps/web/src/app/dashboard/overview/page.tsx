@@ -312,101 +312,132 @@ export default function OverviewPage() {
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <Card variant="glass" className="h-[450px] flex flex-col border-white/5">
+        <Card variant="glass" className="h-[450px] flex flex-col border-white/5" contentClassName="p-0 flex flex-1 min-h-0 flex-col">
           <div className="px-6 py-4 border-b border-white/5">
             <h3 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
               <BarChart2 size={16} className="text-[#EAD19B]" />
               {user?.role === 'ADMIN_KECAMATAN' ? "Perolehan per Ranting" : "Perolehan per Petugas"}
             </h3>
           </div>
-          <div className="flex-1 w-full mt-4 px-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={(user?.role === 'ADMIN_KECAMATAN' ? data.by_branch : data.by_officer) as Array<Record<string, unknown>>}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(244, 241, 234, 0.08)" />
-                <XAxis
-                  dataKey={user?.role === 'ADMIN_KECAMATAN' ? "branch_name" : "officer_name"}
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 10, fill: '#F4F1EA', fontWeight: 600 }}
-                  dy={10}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 10, fill: '#F4F1EA' }}
-                />
-                <Tooltip
-                  cursor={{ fill: 'rgba(244, 241, 234, 0.05)' }}
-                  contentStyle={{
-                    borderRadius: '12px',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    backgroundColor: '#2C473E',
-                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
-                    fontSize: '12px',
-                    color: '#F4F1EA'
-                  }}
-                  formatter={(value) => [`Rp ${Number(value || 0).toLocaleString('id-ID')}`, 'Nominal']}
-                />
-                <Bar
-                  dataKey="nominal"
-                  fill="#1F8243"
-                  radius={[6, 6, 0, 0]}
-                  barSize={user?.role === 'ADMIN_KECAMATAN' ? 48 : 24}
-                />
-              </BarChart>
-            </ResponsiveContainer>
+<div className="flex-1 w-full min-h-0 mt-4 px-2">
+            {(() => {
+              const chartData = user?.role === 'ADMIN_KECAMATAN' ? data.by_branch : data.by_officer;
+              const dataKey = user?.role === 'ADMIN_KECAMATAN' ? 'branch_name' : 'officer_name';
+              if (!chartData || chartData.length === 0) {
+                return (
+                  <div className="flex-1 flex items-center justify-center text-[#F4F1EA]/40">
+                    <p className="text-sm">Data per {user?.role === 'ADMIN_KECAMATAN' ? 'ranting' : 'petugas'} tidak tersedia</p>
+                  </div>
+                );
+              }
+              return (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={chartData as Array<Record<string, unknown>>}
+                    margin={{ top: 20, right: 20, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(244, 241, 234, 0.08)" />
+                    <XAxis
+                      dataKey={dataKey}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: '#F4F1EA', fontWeight: 600 }}
+                      dy={10}
+                      tickFormatter={(value) => (value.length > 12 ? value.substring(0, 12) + '…' : value)}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: '#F4F1EA' }}
+                      tickFormatter={(value) => value >= 1e6 ? (value / 1e6).toFixed(1) + 'M' : value >= 1e3 ? (value / 1e3).toFixed(0) + 'K' : value}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'rgba(244, 241, 234, 0.05)' }}
+                      contentStyle={{
+                        borderRadius: '12px',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        backgroundColor: '#2C473E',
+                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
+                        fontSize: '12px',
+                        color: '#F4F1EA'
+                      }}
+                      formatter={(value) => [`Rp ${Number(value || 0).toLocaleString('id-ID')}`, 'Nominal']}
+                    />
+                    <Bar
+                      dataKey="nominal"
+                      fill="#1F8243"
+                      radius={[6, 6, 0, 0]}
+                      barSize={user?.role === 'ADMIN_KECAMATAN' ? 48 : 24}
+                      minPointSize={2}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              );
+            })()}
           </div>
         </Card>
 
-        <Card variant="glass" className="h-[450px] flex flex-col border-white/5">
+        <Card variant="glass" className="h-[450px] flex flex-col border-white/5" contentClassName="p-0 flex flex-1 min-h-0 flex-col">
           <div className="px-6 py-4 border-b border-white/5">
             <h3 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
               <TrendingUp size={16} className="text-[#EAD19B]" />
               Tren Infaq Harian (Minggu Ini)
             </h3>
           </div>
-          <div className="flex-1 w-full mt-4 px-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data.daily_trends || []}>
-                <defs>
-                  <linearGradient id="colorNominal" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#DE6F4A" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#DE6F4A" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(244, 241, 234, 0.08)" />
-                <XAxis
-                  dataKey="day"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 11, fill: '#F4F1EA', fontWeight: 600 }}
-                  dy={10}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 11, fill: '#F4F1EA' }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: '12px',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    backgroundColor: '#2C473E',
-                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
-                    fontSize: '12px',
-                    color: '#F4F1EA'
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="nominal"
-                  stroke="#DE6F4A"
-                  strokeWidth={4}
-                  fillOpacity={1}
-                  fill="url(#colorNominal)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+          <div className="flex-1 w-full min-h-0 mt-4 px-2">
+            {data.daily_trends && data.daily_trends.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={data.daily_trends}
+                  margin={{ top: 20, right: 20, left: 0, bottom: 0 }}
+                >
+                  <defs>
+                    <linearGradient id="colorNominal" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#DE6F4A" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#DE6F4A" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(244, 241, 234, 0.08)" />
+                  <XAxis
+                    dataKey="day"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 11, fill: '#F4F1EA', fontWeight: 600 }}
+                    dy={10}
+                  />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 11, fill: '#F4F1EA' }}
+                    tickFormatter={(value) => value >= 1e6 ? (value / 1e6).toFixed(1) + 'M' : value >= 1e3 ? (value / 1e3).toFixed(0) + 'K' : value}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: '12px',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      backgroundColor: '#2C473E',
+                      boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
+                      fontSize: '12px',
+                      color: '#F4F1EA'
+                    }}
+                    formatter={(value) => [`Rp ${Number(value || 0).toLocaleString('id-ID')}`, 'Nominal']}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="nominal"
+                    stroke="#DE6F4A"
+                    strokeWidth={4}
+                    fillOpacity={1}
+                    fill="url(#colorNominal)"
+                    isAnimationActive={false}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-[#F4F1EA]/40">
+                <p className="text-sm">Data tren minggu ini tidak tersedia</p>
+              </div>
+            )}
           </div>
         </Card>
       </div>
@@ -502,16 +533,16 @@ export default function OverviewPage() {
 
           {/* District Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <Card variant="glass" className="h-[450px] flex flex-col border-white/5">
+            <Card variant="glass" className="h-[450px] flex flex-col border-white/5" contentClassName="p-0 flex flex-1 min-h-0 flex-col">
               <div className="px-6 py-4 border-b border-white/5">
                 <h3 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
                   <BarChart2 size={16} className="text-[#EAD19B]" />
                   Perolehan per Ranting (Kecamatan)
                 </h3>
               </div>
-              <div className="flex-1 w-full mt-4 px-2">
+              <div className="flex-1 w-full min-h-0 mt-4 px-2">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.district.by_branch || []}>
+                  <BarChart data={data.district.by_branch || []} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(244, 241, 234, 0.08)" />
                     <XAxis
                       dataKey="branch_name"
@@ -524,6 +555,7 @@ export default function OverviewPage() {
                       axisLine={false}
                       tickLine={false}
                       tick={{ fontSize: 10, fill: '#F4F1EA' }}
+                      tickFormatter={(value) => value >= 1e6 ? (value / 1e6).toFixed(1) + 'M' : value >= 1e3 ? (value / 1e3).toFixed(0) + 'K' : value}
                     />
                     <Tooltip
                       cursor={{ fill: 'rgba(244, 241, 234, 0.05)' }}
@@ -542,22 +574,26 @@ export default function OverviewPage() {
                       fill="#EAD19B"
                       radius={[6, 6, 0, 0]}
                       barSize={48}
+                      minPointSize={2}
                     />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </Card>
 
-            <Card variant="glass" className="h-[450px] flex flex-col border-white/5">
+            <Card variant="glass" className="h-[450px] flex flex-col border-white/5" contentClassName="p-0 flex flex-1 min-h-0 flex-col">
               <div className="px-6 py-4 border-b border-white/5">
                 <h3 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
                   <TrendingUp size={16} className="text-[#EAD19B]" />
                   Tren Infaq Harian (Kecamatan)
                 </h3>
               </div>
-              <div className="flex-1 w-full mt-4 px-2">
+              <div className="flex-1 w-full min-h-0 mt-4 px-2">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={data.district.daily_trends || []}>
+                  <AreaChart
+                    data={data.district.daily_trends || []}
+                    margin={{ top: 20, right: 20, left: 0, bottom: 0 }}
+                  >
                     <defs>
                       <linearGradient id="colorDistrict" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#EAD19B" stopOpacity={0.2} />
@@ -576,6 +612,7 @@ export default function OverviewPage() {
                       axisLine={false}
                       tickLine={false}
                       tick={{ fontSize: 11, fill: '#F4F1EA' }}
+                      tickFormatter={(value) => value >= 1e6 ? (value / 1e6).toFixed(1) + 'M' : value >= 1e3 ? (value / 1e3).toFixed(0) + 'K' : value}
                     />
                     <Tooltip
                       contentStyle={{
@@ -594,6 +631,7 @@ export default function OverviewPage() {
                       strokeWidth={4}
                       fillOpacity={1}
                       fill="url(#colorDistrict)"
+                      isAnimationActive={false}
                     />
                   </AreaChart>
                 </ResponsiveContainer>

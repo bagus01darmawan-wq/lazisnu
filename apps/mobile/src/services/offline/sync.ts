@@ -50,6 +50,7 @@ export const syncService = {
       let totalFailed = 0;
       // Batch-level iteration cap — mencegah infinite loop jika ada item yg selalu gagal 5xx
       // tanpa melebihi retry_attempts per-item.
+      // Batch-level retry dinonaktifkan (MAX_BATCH_ITERATIONS=1). Per-item backoff via next_retry_at sudah cukup.
       const MAX_BATCH_ITERATIONS = 1;
       let batchIteration = 0;
 
@@ -142,24 +143,12 @@ export const syncService = {
             // P2: Increment retry_attempts pada SEMUA item di batch ini.
             offlineQueue.incrementRetryAttempts(remaining);
             devLog(`[Sync] Batch gagal, retry_attempts di-increment untuk ${remaining.length} item.`);
-
-            if (batchIteration < MAX_BATCH_ITERATIONS) {
-              const delay = Math.pow(2, batchIteration - 1) * 1000;
-              devLog(`[Sync] Mencoba ulang dalam ${delay}ms... (Iterasi ${batchIteration})`);
-              await new Promise(res => { setTimeout(() => res(undefined), delay); });
-            }
           }
         } catch (error) {
           // Network error (5xx, timeout, dll)
           // P2: Increment retry_attempts pada semua item di batch.
           offlineQueue.incrementRetryAttempts(remaining);
           devLog(`[Sync] Network error, retry_attempts di-increment untuk ${remaining.length} item.`);
-
-          if (batchIteration < MAX_BATCH_ITERATIONS) {
-            const delay = Math.pow(2, batchIteration - 1) * 1000;
-            devLog(`[Sync] Gagal, mencoba ulang dalam ${delay}ms... (Iterasi ${batchIteration})`);
-            await new Promise(res => { setTimeout(() => res(undefined), delay); });
-          }
         }
       }
 

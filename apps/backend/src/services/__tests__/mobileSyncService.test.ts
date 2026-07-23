@@ -9,6 +9,8 @@ jest.mock('../../config/database', () => ({
       collections: {
         findFirst: jest.fn(),
       },
+      cans: { findFirst: jest.fn() },
+      officers: { findFirst: jest.fn() },
     },
     transaction: jest.fn(),
   },
@@ -17,6 +19,10 @@ jest.mock('../../config/database', () => ({
 jest.mock('../collectionSubmission', () => ({
   validateAssignmentForSubmit: jest.fn(),
   submitCollection: jest.fn(),
+}));
+
+jest.mock('../whatsapp', () => ({
+  sendWhatsAppNotification: jest.fn(),
 }));
 
 describe('mobileSyncService syncCollectionsBatch', () => {

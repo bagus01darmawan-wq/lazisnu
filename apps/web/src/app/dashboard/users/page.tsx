@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Table } from '@/components/ui/Table';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -30,7 +31,8 @@ import {
   CheckSquare,
   Square,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  Eye
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -80,6 +82,7 @@ export default function UsersPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const { user } = useAuthStore();
+  const router = useRouter();
 
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<OfficerFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -371,6 +374,15 @@ export default function UsersPage() {
         const isNonActiveRow = !row.original.is_active;
         return (
           <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-white/10 transition-all duration-300 group"
+              onClick={() => router.push(`/dashboard/users/${row.original.id}`)}
+              title="Lihat Detail"
+            >
+              <Eye size={14} className="text-[#6B9E9F] group-hover:text-[#6B9E9F]" />
+            </Button>
             {isNonActiveRow ? (
               <Button 
                 variant="outline" 

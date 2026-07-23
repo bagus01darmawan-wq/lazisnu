@@ -5,6 +5,8 @@ import { eq, and, desc, asc, gte, sql } from 'drizzle-orm';
 import { isValidQRCode } from '../../utils/qr';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { getLatestCollectionCondition } from '../../services/collectionSubmission';
+import { skipAssignmentSchema } from './schemas';
+import { AppError, isAppError } from '../../utils/AppError';
 
 export async function tasksRoutes(fastify: FastifyInstance) {
   // GET /mobile/dashboard
@@ -261,6 +263,107 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         status: activeAssignment.status,
         assigned_at: activeAssignment.assignedAt,
         period: `${activeAssignment.periodYear}-${String(activeAssignment.periodMonth).padStart(2, '0')}`,
+      });
+    } catch (error) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  // POST /mobile/assignments/:id/skip
+  fastify.post('/assignments/:id/skip', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const body = skipAssignmentSchema.parse(request.body || {});
+      const user = request.currentUser!;
+      const officerId = user.officerId;
+
+      if (!officerId) {
+        return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
+      }
+
+      const assignment = await db.query.assignments.findFirst({
+        where: and(
+          eq(schema.assignments.id, id),
+          eq(schema.assignments.officerId, officerId),
+          eq(schema.assignments.status, 'ACTIVE')
+        ),
+      });
+
+      if (!assignment) {
+        return sendError(reply, 403, 'ASSIGNMENT_INVALID', 'Assignment tidak valid, bukan milik Anda, atau sudah selesai');
+      }
+
+      await db.update(schema.assignments)
+        .set({
+          status: 'UNCOLLECTED',
+          notes: body.notes || null,
+          updatedAt: new Date(),
+          completedAt: new Date(),
+        })
+        .where(eq(schema.assignments.id, id));
+
+      return sendSuccess(reply, {
+        id,
+        status: 'UNCOLLECTED',
+        message: 'Kaleng ditandai tidak dijemput',
+      });
+    } catch (error) {
+      if (error instanceof AppError || isAppError(error)) {
+        return sendError(reply, (error as AppError).statusCode, (error as AppError).code, (error as AppError).message);
+      }
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  // POST /mobile/periods/complete
+  fastify.post('/periods/complete', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = request.currentUser!;
+      const officerId = user.officerId;
+
+      if (!officerId) {
+        return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
+      }
+
+      const now = new Date();
+      const periodYear = now.getFullYear();
+      const periodMonth = now.getMonth() + 1;
+
+      const activeCount = await db.$count(
+        schema.assignments,
+        and(
+          eq(schema.assignments.officerId, officerId),
+          eq(schema.assignments.periodYear, periodYear),
+          eq(schema.assignments.periodMonth, periodMonth),
+          eq(schema.assignments.status, 'ACTIVE')
+        )
+      );
+
+      if (activeCount === 0) {
+        return sendSuccess(reply, {
+          period: `${periodYear}-${String(periodMonth).padStart(2, '0')}`,
+          skipped_count: 0,
+          message: 'Tidak ada kaleng yang perlu ditandai',
+        });
+      }
+
+      await db.update(schema.assignments)
+        .set({
+          status: 'UNCOLLECTED',
+          updatedAt: new Date(),
+          completedAt: new Date(),
+        })
+        .where(and(
+          eq(schema.assignments.officerId, officerId),
+          eq(schema.assignments.periodYear, periodYear),
+          eq(schema.assignments.periodMonth, periodMonth),
+          eq(schema.assignments.status, 'ACTIVE')
+        ));
+
+      return sendSuccess(reply, {
+        period: `${periodYear}-${String(periodMonth).padStart(2, '0')}`,
+        skipped_count: activeCount,
+        message: `${activeCount} kaleng ditandai tidak dijemput untuk periode berjalan`,
       });
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);

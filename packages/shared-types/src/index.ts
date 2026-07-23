@@ -13,10 +13,11 @@ export enum UserRole {
 }
 
 export enum AssignmentStatus {
-  ACTIVE     = 'ACTIVE',
-  COMPLETED  = 'COMPLETED',
-  POSTPONED  = 'POSTPONED',
-  REASSIGNED = 'REASSIGNED',
+  ACTIVE      = 'ACTIVE',
+  COMPLETED   = 'COMPLETED',
+  POSTPONED   = 'POSTPONED',
+  REASSIGNED  = 'REASSIGNED',
+  UNCOLLECTED = 'UNCOLLECTED',
 }
 
 export enum SyncStatus {
@@ -362,6 +363,22 @@ export interface ProfileResponse {
   stats: { total_collections: number; total_amount: number };
 }
 
+export interface ResubmitTrackerItem {
+  id: string;
+  collected_at: string;
+  corrected_at?: string | null;
+  submit_sequence: number;
+  original_nominal: number;
+  corrected_nominal: number;
+  difference: number;
+  alasan_resubmit: string;
+  officer_name: string;
+  officer_code: string;
+  qr_code: string;
+  owner_name: string;
+  branch_name: string;
+  district_name: string;
+}
 // GET /mobile/collections (history) — paginated
 export interface HistoryItem {
   id: string;
@@ -374,6 +391,7 @@ export interface HistoryItem {
   nominal: number;
   collected_at: string;
   sync_status: SyncStatus;
+  submit_sequence?: number;
 }
 
 export interface HistoryResponse {

@@ -21,6 +21,7 @@ type MobileHistoryCollection = {
   nominal: string | number | bigint;
   collectedAt: Date;
   syncStatus: string;
+  submitSequence?: number;
   can: {
     qrCode: string | null;
     ownerName: string;
@@ -40,6 +41,7 @@ export function toMobileHistoryItem(collection: MobileHistoryCollection) {
     nominal: Number(collection.nominal),
     collected_at: collection.collectedAt,
     sync_status: collection.syncStatus,
+    submit_sequence: collection.submitSequence,
   };
 }
 
@@ -92,7 +94,10 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
         });
       });
 
-      const insertedCan = await db.query.cans.findFirst({ where: eq(schema.cans.id, body.can_id) });
+      const insertedCan = await db.query.cans.findFirst({ 
+        where: eq(schema.cans.id, body.can_id),
+        with: { branch: true }
+      });
       const officer = await db.query.officers.findFirst({ where: eq(schema.officers.id, officerId) });
 
       let whatsappStatus = 'SKIPPED';
@@ -103,7 +108,11 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
             insertedCan.ownerName,
             body.nominal,
             officer?.fullName || 'Petugas Lazisnu',
-            { collectionId: result.id, collectedAt: body.collected_at }
+            { 
+              collectionId: result.id, 
+              collectedAt: body.collected_at,
+              branchName: insertedCan.branch?.name
+            }
           );
           whatsappStatus = 'ENQUEUED';
         } catch (waError) {
@@ -229,7 +238,12 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
             oldCollection.can.ownerName,
             body.nominal,
             officer?.fullName || 'Petugas Lazisnu',
-            { collectionId: newCollection.id, collectedAt: oldCollection.collectedAt.toISOString(), isResubmit: true }
+            { 
+              collectionId: newCollection.id, 
+              collectedAt: oldCollection.collectedAt.toISOString(), 
+              isResubmit: true,
+              branchName: oldCollection.can.branch?.name
+            }
           );
           whatsappStatus = 'ENQUEUED';
         } catch (waError) {

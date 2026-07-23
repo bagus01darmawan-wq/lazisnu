@@ -9,10 +9,11 @@ import { v4 as uuidv4 } from 'uuid';
 // JWT Payload type
 export interface JWTPayload {
   userId: string;
-  role: 'ADMIN_PUSAT' | 'ADMIN_KABUPATEN' | 'ADMIN_KECAMATAN' | 'ADMIN_RANTING' | 'BENDAHARA' | 'PETUGAS';
+  role: 'ADMIN_KECAMATAN' | 'ADMIN_RANTING' | 'BENDAHARA' | 'PETUGAS';
   officerId?: string;
   branchId?: string;
   districtId?: string;
+  did?: string; // device_id
 }
 
 // Extend FastifyRequest to add typed `currentUser`
@@ -100,17 +101,24 @@ export function authorize(...allowedRoles: Array<JWTPayload['role']>) {
 }
 
 // Generate access + refresh tokens
-export function generateTokens(payload: JWTPayload, fastify: any, jti?: string) {
+export function generateTokens(payload: JWTPayload, fastify: any, jti?: string, deviceId?: string) {
   const { config } = require('../config/env');
   const accessTtl = config.JWT_ACCESS_TTL || '15m';
   const refreshTtl = payload.role === 'PETUGAS'
-    ? (config.JWT_REFRESH_TTL_PETUGAS || '7d')
-    : (config.JWT_REFRESH_TTL || '7d');
+    ? (config.JWT_REFRESH_TTL_PETUGAS || '365d')
+    : (config.JWT_REFRESH_TTL || '365d');
 
-  const accessToken = fastify.jwt.sign({ ...payload, tokenType: 'access' }, { expiresIn: accessTtl });
+  const accessToken = fastify.jwt.sign(
+    { ...payload, tokenType: 'access' },
+    { expiresIn: accessTtl, key: config.JWT_ACCESS_SECRET }
+  );
   const refreshJti = jti || uuidv4();
-  const refreshToken = fastify.jwt.sign({ ...payload, tokenType: 'refresh', jti: refreshJti }, { expiresIn: refreshTtl });
-  return { accessToken, refreshToken, refreshJti };
+  const did = deviceId || uuidv4();
+  const refreshToken = fastify.jwt.sign(
+    { ...payload, tokenType: 'refresh', jti: refreshJti, did },
+    { expiresIn: refreshTtl, key: config.JWT_REFRESH_SECRET }
+  );
+  return { accessToken, refreshToken, refreshJti, did };
 }
 
 export default { authenticate, authorize, generateTokens };

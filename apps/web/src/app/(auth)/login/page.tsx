@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import { useAuthStore } from '@/store/useAuthStore';
-import { LogIn, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { User, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { authHelper } from '@/lib/auth';
 
@@ -78,17 +78,17 @@ export default function LoginPage() {
 
       <Card className="w-full max-w-md relative z-10 p-8 shadow-2xl border-white/10 bg-white/5 backdrop-blur-2xl rounded-3xl">
         <div className="flex flex-col items-center text-center mb-10">
-          <div className="w-20 h-20 bg-linear-to-br from-green-500 to-emerald-700 rounded-2xl flex items-center justify-center shadow-2xl shadow-green-900/40 mb-6 group transition-transform hover:rotate-3 duration-500">
-            <LogIn className="text-white" size={40} />
-          </div>
-          <h1 className="text-4xl font-bold tracking-tight text-white mb-2 uppercase" style={{ fontFamily: 'Cambria, Georgia, serif' }}>
-            LAZISNU
-          </h1>
-          <p className="text-emerald-500/80 font-bold tracking-[0.2em] text-xs uppercase">MWC Paninggaran</p>
+          <img
+            src="/logo-lazisnu-putih.png"
+            alt="LAZISNU"
+            className="w-48 h-auto mb-0 drop-shadow-lg"
+          />
+          <p className="text-sm font-bold text-white/80">Lembaga Amil Zakat</p>
+          <p className="text-sm font-bold text-white/80">Infak dan Sedekah Nahdlatul Ulama</p>
         </div>
 
-        <form 
-          onSubmit={handleSubmit(onSubmit)} 
+        <form
+          onSubmit={handleSubmit(onSubmit)}
           className={cn(
             "space-y-6 transition-all duration-500",
             isLoading && "opacity-40 blur-[2px] pointer-events-none scale-[0.98]"
@@ -103,7 +103,7 @@ export default function LoginPage() {
 
           <div className="space-y-4">
             <div className="relative group">
-              <LogIn className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-green-400 transition-colors z-10 pointer-events-none" size={18} />
+              <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-green-400 transition-colors z-10 pointer-events-none" size={18} />
               <Input
                 {...register('identifier')}
                 placeholder="Email atau Nomor HP"
@@ -143,7 +143,9 @@ export default function LoginPage() {
 
         <div className="mt-10 pt-6 border-t border-white/5 text-center">
           <p className="text-[10px] text-slate-500 uppercase tracking-[0.3em] font-black">
-            Infaq Management System
+            Lazis Management System
+            <br />
+            MWCNU PANINGGARAN
           </p>
         </div>
       </Card>

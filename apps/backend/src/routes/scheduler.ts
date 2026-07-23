@@ -20,7 +20,10 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
   // Internal API key guard
   fastify.addHook('preHandler', async (request, reply) => {
     const apiKey = request.headers['x-internal-api-key'];
-    if (config.INTERNAL_API_KEY && apiKey !== config.INTERNAL_API_KEY) {
+    if (!config.INTERNAL_API_KEY) {
+      return sendError(reply, 503, 'NOT_CONFIGURED', 'Scheduler API tidak dikonfigurasi');
+    }
+    if (apiKey !== config.INTERNAL_API_KEY) {
       try {
         await insertActivityLog({
           userId: null,

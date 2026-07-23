@@ -19,13 +19,14 @@ const envSchema = z.object({
   REDIS_URL: z.string().url().optional(),
 
   // JWT
+  // JWT_SECRET is deprecated — gunakan JWT_ACCESS_SECRET + JWT_REFRESH_SECRET
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().default('7d'),
-  JWT_ACCESS_SECRET: z.string().optional(),
-  JWT_REFRESH_SECRET: z.string().optional(),
+  JWT_ACCESS_SECRET: z.string().min(32),
+  JWT_REFRESH_SECRET: z.string().min(32),
   JWT_ACCESS_TTL: z.string().default('15m'),
-  JWT_REFRESH_TTL: z.string().default('7d'),
-  JWT_REFRESH_TTL_PETUGAS: z.string().default('7d'),
+  JWT_REFRESH_TTL: z.string().default('365d'),
+  JWT_REFRESH_TTL_PETUGAS: z.string().default('365d'),
 
   // CORS
   CORS_ORIGINS: z.string().default('*'),
@@ -34,6 +35,7 @@ const envSchema = z.object({
   API_BASE_URL: z.string().default('http://localhost:3001'),
 
   // WhatsApp Business API
+  WA_PROVIDER: z.enum(['meta', 'fonnte']).default('meta'),
   WA_BUSINESS_API_URL: z.string().optional(),
   WA_PHONE_NUMBER_ID: z.string().optional(),
   WA_ACCESS_TOKEN: z.string().optional(),

@@ -4,7 +4,7 @@ import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
-import { config } from './config/env';
+import { config, corsOrigins, isProduction } from './config/env';
 import { authRoutes } from './routes/auth';
 import { mobileRoutes } from './routes/mobile';
 import adminRoutes from './routes/admin';
@@ -24,7 +24,13 @@ export async function buildApp() {
   initSentry();
 
   const server = Fastify({
-    logger: process.env.NODE_ENV !== 'test',
+    logger: {
+      level: config.NODE_ENV === 'production' ? 'info' : 'debug',
+      redact: {
+        paths: ['req.headers.authorization', 'body.password', 'body.otp'],
+        censor: '[REDACTED]'
+      }
+    },
   });
 
   // Paling awal: correlation ID untuk semua request
@@ -32,12 +38,12 @@ export async function buildApp() {
 
   // Plugins
   await server.register(cors, {
-    origin: true,
+    origin: isProduction ? corsOrigins : true,
     credentials: true,
   });
 
   await server.register(jwt, {
-    secret: config.JWT_SECRET,
+    secret: config.JWT_ACCESS_SECRET,
     sign: { expiresIn: config.JWT_EXPIRES_IN },
   });
 
@@ -93,6 +99,7 @@ export async function buildApp() {
 
     // 1. AppError domain error — kirim code + message
     if (isAppError(error)) {
+      (reply as any)._auditCode = error.code;
       return reply.status(error.statusCode).send({
         success: false,
         error: {
@@ -127,7 +134,18 @@ export async function buildApp() {
       });
     }
 
-    // 4. JWT error
+    // 4. JSON body parsing error (SyntaxError dari Fastify body parser)
+    if (error instanceof SyntaxError) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: 'INVALID_JSON',
+          message: 'Body JSON tidak valid',
+        },
+      });
+    }
+
+    // 5. JWT error
     if (isJwtErrorLike(error)) {
       return reply.status(401).send({
         success: false,

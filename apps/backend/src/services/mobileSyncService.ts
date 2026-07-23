@@ -11,6 +11,7 @@ import { eq } from 'drizzle-orm';
 import { validateAssignmentForSubmit, submitCollection } from './collectionSubmission';
 import { getErrorMessage } from '../utils/error-guards';
 import { isAppError } from '../utils/AppError';
+import { sendWhatsAppNotification } from './whatsapp';
 
 /** Satu item batch dari request mobile */
 export interface BatchCollectionItem {
@@ -101,6 +102,25 @@ async function processSyncItem(
       deviceInfo: item.device_info,
     });
   });
+
+  const [can, officer] = await Promise.all([
+    db.query.cans.findFirst({ 
+      where: eq(schema.cans.id, item.can_id),
+      with: { branch: true }
+    }),
+    db.query.officers.findFirst({ where: eq(schema.officers.id, officerId) }),
+  ]);
+  if (can?.ownerWhatsapp) {
+    try {
+      await sendWhatsAppNotification(can.ownerWhatsapp, can.ownerName, item.nominal, officer?.fullName || 'Petugas Lazisnu', {
+        collectionId: collection.id, 
+        collectedAt: item.collected_at,
+        branchName: can.branch?.name
+      });
+    } catch {
+      // Kegagalan antrean tidak membatalkan transaksi koleksi yang sudah valid.
+    }
+  }
 
   return {
     offline_id: item.offline_id,

@@ -390,6 +390,22 @@ export const collectionService = {
       body: JSON.stringify(data),
     });
   },
+
+  skipAssignment: async (
+    id: string,
+    notes?: string,
+  ): Promise<ApiResponse<{ id: string; status: string; message: string }>> => {
+    return apiRequest(`/mobile/assignments/${id}/skip`, {
+      method: 'POST',
+      body: JSON.stringify(notes ? { notes } : {}),
+    });
+  },
+
+  completePeriod: async (): Promise<ApiResponse<{ period: string; skipped_count: number; message: string }>> => {
+    return apiRequest('/mobile/periods/complete', {
+      method: 'POST',
+    });
+  },
 };
 
 // ── Network Check ─────────────────────────────────────────────────────────────

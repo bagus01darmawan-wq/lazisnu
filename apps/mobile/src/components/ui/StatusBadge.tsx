@@ -7,6 +7,8 @@ export type StatusBadgeStatus =
   | 'pending'
   | 'offline'
   | 'syncing'
+  | 'corrected'
+  | 'warning'
   | 'error';
 
 type StatusBadgeProps = {
@@ -25,6 +27,10 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, label }) => {
         return { bg: Colors.text.muted + '20', text: Colors.text.muted };
       case 'syncing':
         return { bg: Colors.status.info + '20', text: Colors.status.info };
+      case 'corrected':
+        return { bg: Colors.status.warning + '20', text: Colors.status.warning };
+      case 'warning':
+        return { bg: '#F59E0B20', text: '#D97706' };
       case 'error':
         return { bg: Colors.status.error + '20', text: Colors.status.error };
     }

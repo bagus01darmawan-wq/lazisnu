@@ -26,6 +26,7 @@ export async function addWhatsAppJob(data: {
   collectionId?: string;
   collectedAt?: string;
   isResubmit?: boolean;
+  branchName?: string;
 }) {
   // Convert nominal to string if it's a bigint for serializability
   const jobData = {
@@ -33,7 +34,9 @@ export async function addWhatsAppJob(data: {
     nominal: data.nominal.toString(),
   };
 
-  return whatsappQueue.add('send-notification', jobData);
+  return whatsappQueue.add('send-notification', jobData, {
+    ...(data.collectionId ? { jobId: `collection-${data.collectionId}` } : {}),
+  });
 }
 
 export default {

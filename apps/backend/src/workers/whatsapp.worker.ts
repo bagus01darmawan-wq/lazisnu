@@ -1,6 +1,8 @@
 import { Worker, Job } from 'bullmq';
 import { redisConnection } from '../config/redis';
 import { sendWhatsAppNotificationSync } from '../services/whatsapp';
+import { db } from '../config/database';
+import * as schema from '../database/schema';
 
 /**
  * Worker to process WhatsApp notifications
@@ -10,10 +12,8 @@ export const whatsappWorker = new Worker(
   async (job: Job) => {
     const { phone, ownerName, nominal, officerName, ...options } = job.data;
     
-    console.log(`[Worker] Processing WhatsApp to ${phone} (Job ID: ${job.id})`);
+    console.log(`[Worker] Processing WhatsApp job ${job.id}`);
     
-    // We call the 'Sync' version of the service which does the actual API call
-    // Note: nominal is passed as string from queue, converted back
     return sendWhatsAppNotificationSync(
         phone, 
         ownerName, 
@@ -24,22 +24,41 @@ export const whatsappWorker = new Worker(
   },
   {
     connection: redisConnection,
-    // Rate limit: 2 messages per second (1000ms)
     limiter: {
       max: 2,
       duration: 1000,
     },
-    concurrency: 1, // Process one by one to respect rate limit precisely
+    concurrency: 1,
   }
 );
 
-// Event listeners for monitoring
 whatsappWorker.on('completed', (job) => {
   console.log(`[Worker] Job ${job.id} completed successfully`);
 });
 
 whatsappWorker.on('failed', (job, err) => {
   console.error(`[Worker] Job ${job?.id} failed: ${err.message}`);
+
+  if (job && job.attemptsMade >= (job.opts.attempts || 1)) {
+    const { phone, ownerName, nominal, officerName, collectionId } = job.data;
+    const formattedPhone = phone;
+    const formattedAmount = new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+    }).format(BigInt(nominal));
+    const messageContent = `Notifikasi gagal: ${formattedAmount}`;
+
+    db.insert(schema.notifications).values({
+      collectionId: collectionId ?? null,
+      recipientPhone: formattedPhone,
+      recipientName: ownerName,
+      messageTemplate: 'collection_receipt',
+      messageContent,
+      status: 'FAILED',
+      errorMessage: err.message || 'Provider rejected or could not deliver the message',
+    }).catch(() => {});
+  }
 });
 
 console.log('🚀 WhatsApp Worker initialized and ready.');

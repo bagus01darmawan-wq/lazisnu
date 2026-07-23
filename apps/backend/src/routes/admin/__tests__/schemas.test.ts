@@ -1,4 +1,4 @@
-import { createCanSchema, createAssignmentSchema, resubmitCollectionSchema } from '../schemas';
+import { createCanSchema, createAssignmentSchema } from '../schemas';
 
 describe('createCanSchema', () => {
   const validBody = {
@@ -139,28 +139,3 @@ describe('createAssignmentSchema', () => {
   });
 });
 
-describe('resubmitCollectionSchema', () => {
-  it('menerima body valid', () => {
-    const result = resubmitCollectionSchema.safeParse({
-      nominal: 75000,
-      alasan_resubmit: 'koreksi nominal',
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('menolak alasan_resubmit kurang dari 5 karakter', () => {
-    const result = resubmitCollectionSchema.safeParse({
-      nominal: 75000,
-      alasan_resubmit: 'sala',
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('menolak nominal negatif', () => {
-    const result = resubmitCollectionSchema.safeParse({
-      nominal: -100,
-      alasan_resubmit: 'koreksi nominal',
-    });
-    expect(result.success).toBe(false);
-  });
-});

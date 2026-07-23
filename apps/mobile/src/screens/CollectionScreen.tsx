@@ -35,7 +35,7 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
 
   const handleSubmit = async () => {
     const numericNominal = Number(nominal);
-    if (!numericNominal) {
+    if (isNaN(numericNominal) || nominal === '') {
       Alert.alert('Nominal Belum Diisi', 'Masukkan nominal hasil penjemputan.');
       return;
     }
@@ -46,6 +46,28 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
       );
       return;
     }
+    if (numericNominal === 0) {
+      return new Promise<void>((resolve) => {
+        Alert.alert(
+          'Konfirmasi Kaleng Kosong',
+          'Nominal yang dimasukkan adalah Rp0. Apakah kaleng benar-benar kosong?',
+          [
+            { text: 'Tidak', style: 'cancel', onPress: () => resolve() },
+            {
+              text: 'Ya, Lanjutkan',
+              onPress: () => {
+                resolve(doSubmit(numericNominal));
+              },
+            },
+          ],
+        );
+      });
+    }
+
+    await doSubmit(numericNominal);
+  };
+
+  const doSubmit = async (numericNominal: number) => {
 
     reset();
     const result = await submitCollection({
@@ -233,7 +255,7 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
           icon={'check-circle-outline'}
           onPress={handleSubmit}
           loading={isSubmitting}
-          disabled={!nominal}
+          disabled={nominal === ''}
           fullWidth
         />
       </View>

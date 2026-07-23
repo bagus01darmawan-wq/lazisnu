@@ -48,10 +48,12 @@ const TaskItem = memo(
     item,
     index,
     onCopy,
+    onSkip,
   }: {
     item: Task;
     index: number;
     onCopy: (text: string) => void;
+    onSkip: (taskId: string) => void;
   }) => {
     const active = item.status === 'ACTIVE';
 
@@ -77,8 +79,8 @@ const TaskItem = memo(
               </Text>
             </View>
             <StatusBadge
-              status={active ? 'pending' : 'success'}
-              label={active ? 'Belum' : 'Selesai'}
+              status={active ? 'pending' : item.status === 'UNCOLLECTED' ? 'warning' : 'success'}
+              label={active ? 'Belum' : item.status === 'UNCOLLECTED' ? 'Terlewat' : 'Selesai'}
             />
           </View>
 
@@ -109,6 +111,24 @@ const TaskItem = memo(
                 </Text>
               </View>
               <Icon name={'history'} size={22} color={Colors.brand.mutedTeal} />
+            </View>
+          )}
+
+          {active && (
+            <TouchableOpacity
+              accessibilityRole={'button'}
+              accessibilityLabel={'Tandai tidak dijemput'}
+              onPress={() => onSkip(item.id)}
+              style={styles.skipButton}>
+              <Icon name={'cancel'} size={16} color={Colors.status.warning} />
+              <Text style={styles.skipText}>Tidak Dijemput</Text>
+            </TouchableOpacity>
+          )}
+
+          {!active && item.status === 'UNCOLLECTED' && (
+            <View style={styles.uncollectedBadge}>
+              <Icon name={'alert-circle-outline'} size={17} color={Colors.status.warning} />
+              <Text style={styles.uncollectedText}>Terlewat</Text>
             </View>
           )}
 
@@ -152,6 +172,8 @@ const TasksScreen: React.FC = () => {
     totalCount,
     completedNominal,
     fetchStats,
+    skipAssignment,
+    completePeriod,
   } = useTasksStore();
   const [filter, setFilter] = useState<'ACTIVE' | 'COMPLETED'>('ACTIVE');
   const [searchQuery, setSearchQuery] = useState('');
@@ -176,6 +198,47 @@ const TasksScreen: React.FC = () => {
     setSearchQuery('');
   };
 
+  const handleSkip = useCallback((taskId: string) => {
+    Alert.alert(
+      'Tandai Tidak Dijemput',
+      'Tandai kaleng ini sebagai tidak dijemput untuk periode berjalan?',
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Ya, Tandai',
+          onPress: async () => {
+            const ok = await skipAssignment(taskId);
+            if (!ok) {
+              Alert.alert('Gagal', 'Gagal menandai kaleng. Pastikan koneksi internet tersedia.');
+            }
+          },
+        },
+      ],
+    );
+  }, [skipAssignment]);
+
+  const handleCompletePeriod = useCallback(() => {
+    if (activeCount === 0) { return; }
+    Alert.alert(
+      'Selesai Periode',
+      `Anda memiliki ${activeCount} kaleng yang belum dijemput. Tandai semua sebagai selesai dan lanjut ke periode berikutnya?`,
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Ya, Selesaikan',
+          onPress: async () => {
+            const result = await completePeriod();
+            if (result.error) {
+              Alert.alert('Gagal', result.error);
+            } else if (result.skipped > 0) {
+              Alert.alert('Berhasil', `${result.skipped} kaleng ditandai tidak dijemput. Periode berjalan selesai.`);
+            }
+          },
+        },
+      ],
+    );
+  }, [activeCount, completePeriod]);
+
   const filteredTasks = tasks.filter(task => {
     const query = searchQuery.toLowerCase().trim();
     if (!query) {return true;}
@@ -194,9 +257,10 @@ const TasksScreen: React.FC = () => {
         item={item}
         index={index}
         onCopy={copyToClipboard}
+        onSkip={handleSkip}
       />
     ),
-    [copyToClipboard],
+    [copyToClipboard, handleSkip],
   );
 
   const renderEmpty = () => (
@@ -317,6 +381,16 @@ const TasksScreen: React.FC = () => {
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
           </View>
+          {activeCount > 0 && (
+            <TouchableOpacity
+              accessibilityRole={'button'}
+              accessibilityLabel={'Selesaikan periode berjalan'}
+              onPress={handleCompletePeriod}
+              style={styles.completePeriodButton}>
+              <Icon name={'flag-checkered'} size={18} color={Colors.status.warning} />
+              <Text style={styles.completePeriodText}>Selesai Periode ({activeCount} belum)</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -710,6 +784,55 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: Radius.pill,
     backgroundColor: Colors.brand.emerald,
+  },
+  skipButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    borderColor: Colors.status.warning + '50',
+    alignSelf: 'flex-start',
+  },
+  skipText: {
+    ...Typography.caption,
+    color: Colors.status.warning,
+    fontWeight: '600',
+  },
+  uncollectedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radius.sm,
+    backgroundColor: '#F59E0B15',
+    alignSelf: 'flex-start',
+  },
+  uncollectedText: {
+    ...Typography.caption,
+    color: '#D97706',
+    fontWeight: '600',
+  },
+  completePeriodButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    marginTop: Spacing.md,
+    paddingVertical: Spacing.xs + 2,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.status.warning + '60',
+    backgroundColor: '#F59E0B12',
+  },
+  completePeriodText: {
+    ...Typography.label,
+    color: Colors.status.warning,
   },
 });
 

@@ -56,9 +56,9 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/dashboard/overview', request.url));
       }
 
-      // Restricted routes for Resubmit (only Kecamatan + Ranting)
+      // Re-submit tracker is read-only and available to all dashboard reporting roles.
       if (path.includes('/resubmit') && 
-          userRole !== 'ADMIN_KECAMATAN' && userRole !== 'ADMIN_RANTING') {
+          userRole !== 'ADMIN_KECAMATAN' && userRole !== 'ADMIN_RANTING' && userRole !== 'BENDAHARA') {
         return NextResponse.redirect(new URL('/dashboard/overview', request.url));
       }
     } catch {
@@ -81,6 +81,6 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+    '/((?!api|_next/static|_next/image|favicon\\.ico|.*\\.(?:png|svg|jpg|jpeg|gif|webp)$).*)',
   ],
 };

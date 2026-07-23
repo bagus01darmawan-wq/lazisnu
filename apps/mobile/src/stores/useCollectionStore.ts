@@ -170,6 +170,7 @@ function mapHistoryToCollection(item: HistoryItem): Collection {
     collected_at: item.collected_at,
     sync_status: item.sync_status,
     offline_id: item.offline_id || undefined,
+    submit_sequence: item.submit_sequence,
     can: {
       qr_code: item.qr_code,
       owner_name: item.owner_name,

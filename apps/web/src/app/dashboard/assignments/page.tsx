@@ -133,9 +133,10 @@ export default function AssignmentsPage() {
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
 
-  const [filter, setFilter] = useState({
+  const [filter, setFilter] = useState<{ year: number; month: number; months: number[] }>({
     year: currentYear,
-    month: currentMonth
+    month: currentMonth,
+    months: [currentMonth],
   });
   const [search, setSearch] = useState('');
   const [branchFilter, setBranchFilter] = useState('');
@@ -509,6 +510,7 @@ export default function AssignmentsPage() {
           COMPLETED: { label: 'SELESAI', color: 'text-[#1F8243]' },
           POSTPONED: { label: 'TERTUNDA', color: 'text-[#EAD19B]' },
           REASSIGNED: { label: 'RE-ASSIGN', color: 'text-[#EAD19B]' },
+          UNCOLLECTED: { label: 'TERLEWAT', color: 'text-[#F59E0B]' },
         };
         const s = statuses[row.original.status as keyof typeof statuses] || statuses.ACTIVE;
         return (
@@ -629,10 +631,10 @@ export default function AssignmentsPage() {
 
         <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
           <PeriodPicker
-            month={filter.month}
+            months={filter.months}
             year={filter.year}
             onChange={(m, y) => {
-              setFilter({ month: m, year: y });
+              setFilter({ year: y, month: m[0] || currentMonth, months: m });
               setCurrentPage(1);
             }}
           />
@@ -678,7 +680,7 @@ export default function AssignmentsPage() {
             onClick={() => {
               setSearch('');
               setBranchFilter('');
-              setFilter({ year: currentYear, month: currentMonth });
+              setFilter({ year: currentYear, month: currentMonth, months: [currentMonth] });
               setCurrentPage(1);
               setPageSize(10);
             }}

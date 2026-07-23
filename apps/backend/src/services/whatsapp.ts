@@ -7,14 +7,15 @@ import * as schema from '../database/schema';
 import { config } from '../config/env';
 import { addWhatsAppJob } from './queues';
 import { Errors } from '../utils/errorCatalog';
+import { AppError } from '../utils/AppError';
 
 interface WhatsAppResponse {
   message_id: string;
   status: 'SENT' | 'FAILED';
 }
 
-// WhatsApp Business API configuration
-const WA_API_URL = config.WA_BUSINESS_API_URL || 'https://graph.facebook.com/v18.0';
+const WA_PROVIDER = config.WA_PROVIDER;
+const WA_API_URL = config.WA_BUSINESS_API_URL || (WA_PROVIDER === 'fonnte' ? 'https://api.fonnte.com' : 'https://graph.facebook.com/v18.0');
 const PHONE_NUMBER_ID = config.WA_PHONE_NUMBER_ID;
 const ACCESS_TOKEN = config.WA_ACCESS_TOKEN;
 
@@ -40,7 +41,8 @@ function buildCollectionMessage(
   nominal: number | bigint,
   officerName: string,
   collectedAt?: string,
-  isResubmit: boolean = false
+  isResubmit: boolean = false,
+  branchName?: string
 ): string {
   const dateStr = new Date(collectedAt || Date.now()).toLocaleDateString('id-ID', {
     day: 'numeric',
@@ -54,14 +56,17 @@ function buildCollectionMessage(
     minimumFractionDigits: 0,
   }).format(BigInt(nominal));
 
-  let message = `Assalamu'alaikum, Bapak/Ibu ${ownerName}.
-Kami dari Lazisnu telah menjemput kotak infaq/sodaqoh Bapak/Ibu.
-Nominal yang diterima: ${formattedAmount}
-Tanggal: ${dateStr}
-Jazakumullahu khairan.`;
+  const branchDisplay = branchName ? `Ranting ${branchName}` : '';
+  let message = `_*Assalamualaikum warahmatullahi wabarakatuh*_, Bapak/Ibu *${ownerName}*.
+
+Kami dari Lazisnu ${branchDisplay}`.trim() + ` telah menjemput kotak infaq/sodaqoh Bapak/Ibu.
+Nominal yang diterima: *${formattedAmount}*
+Tanggal: _${dateStr}_
+
+Semoga  setiap rupiah yang disedekahkan menjadi amal jariyah, membawa keberkahan, serta diganti dengan rezeki yang berlipat ganda oleh Allah SWT. _Jazakumullahu khairan._`;
 
   if (isResubmit) {
-    message += '\nCatatan: Pesan ini menggantikan pesan sebelumnya sebagai data yang berlaku.';
+    message += '\n\n_*Catatan:* Pesan ini menggantikan pesan sebelumnya sebagai data yang berlaku._';
   }
 
   return message;
@@ -79,9 +84,9 @@ export async function sendWhatsAppNotification(
     collectionId?: string;
     collectedAt?: string;
     isResubmit?: boolean;
+    branchName?: string;
   }
 ): Promise<any> {
-  console.log(`[WhatsApp Service] Queueing notification to ${phone}`);
   return addWhatsAppJob({
     phone,
     ownerName,
@@ -104,36 +109,44 @@ export async function sendWhatsAppNotificationSync(
     collectionId?: string;
     collectedAt?: string;
     isResubmit?: boolean;
+    branchName?: string;
   }
 ): Promise<WhatsAppResponse> {
   const formattedPhone = formatPhoneNumber(phone);
-  const messageContent = buildCollectionMessage(ownerName, nominal, officerName, options?.collectedAt, options?.isResubmit);
+  const messageContent = buildCollectionMessage(
+    ownerName, 
+    nominal, 
+    officerName, 
+    options?.collectedAt, 
+    options?.isResubmit,
+    options?.branchName
+  );
 
   let result: WhatsAppResponse;
 
   // Development mode: skip actual API call
-  if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) {
-    console.log(`[WhatsApp Dev] To: ${formattedPhone}`);
-    console.log(`[WhatsApp Dev] Message:\n${messageContent}`);
+  if ((WA_PROVIDER === 'fonnte' && !ACCESS_TOKEN) || (WA_PROVIDER !== 'fonnte' && (!PHONE_NUMBER_ID || !ACCESS_TOKEN))) {
+    console.log('[WhatsApp Dev] Notification queued in dry-run mode');
     result = {
       message_id: `dev-${Date.now()}`,
       status: 'SENT',
     };
   } else {
     try {
-      const isFonnte = WA_API_URL.includes('fonnte.com');
+      const isFonnte = WA_PROVIDER === 'fonnte';
       let response: globalThis.Response;
 
       if (isFonnte) {
         response = await fetch(`${WA_API_URL}/send`, {
           method: 'POST',
           headers: {
-            Authorization: ACCESS_TOKEN,
-            'Content-Type': 'application/json',
+            Authorization: ACCESS_TOKEN!,
+            'Content-Type': 'application/x-www-form-urlencoded',
           },
-          body: JSON.stringify({
+          body: new URLSearchParams({
             target: formattedPhone,
             message: messageContent,
+            countryCode: '0',
           }),
         });
       } else {
@@ -154,7 +167,7 @@ export async function sendWhatsAppNotificationSync(
 
       const data = await response.json() as any;
 
-      if (!response.ok || (isFonnte && data.status === false)) {
+      if (!response.ok || (isFonnte && (data.status === false || data.Status === false))) {
         console.error('WhatsApp API Error:', data);
         throw Errors.WA_SEND_FAILED(data.error?.message || data.reason || 'WhatsApp API request failed');
       }
@@ -164,11 +177,8 @@ export async function sendWhatsAppNotificationSync(
         status: 'SENT',
       };
     } catch (error) {
-      console.error('WhatsApp send error:', error);
-      result = {
-        message_id: `failed-${Date.now()}`,
-        status: 'FAILED',
-      };
+      // FAILED log dipindahkan ke worker (whatsapp.worker.ts) agar hanya dicatat 1x di attempt terakhir (P2-C)
+      throw error;
     }
   }
 
@@ -204,9 +214,13 @@ export async function sendTemplateMessage(
 ): Promise<WhatsAppResponse> {
   const formattedPhone = formatPhoneNumber(phone);
 
-  if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) {
+  if ((WA_PROVIDER === 'fonnte' && !ACCESS_TOKEN) || (WA_PROVIDER !== 'fonnte' && (!PHONE_NUMBER_ID || !ACCESS_TOKEN))) {
     console.log(`[WhatsApp Dev] Template: ${templateName} → ${formattedPhone}`, variables);
     return { message_id: `dev-${Date.now()}`, status: 'SENT' };
+  }
+
+  if (WA_PROVIDER === 'fonnte') {
+    throw new AppError('UNSUPPORTED_OPERATION', 'Template message tidak didukung oleh Fonnte provider. Gunakan Meta.', 400, false);
   }
 
   let result: WhatsAppResponse;

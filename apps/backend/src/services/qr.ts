@@ -1,8 +1,8 @@
 import crypto from 'crypto';
 import { config } from '../config/env';
 
-// Gunakan secret key dari .env atau fallback untuk development
-const QR_SECRET = config.JWT_SECRET || 'lazisnu-secret-key';
+// Gunakan APP_SECRET dari .env untuk QR signing
+const QR_SECRET = (config as any).APP_SECRET || config.JWT_ACCESS_SECRET;
 
 export function generateQrToken(kalengId: string, bulan: number, tahun: number): string {
   const payload = `${kalengId}|${bulan}|${tahun}`;

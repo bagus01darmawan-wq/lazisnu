@@ -63,6 +63,7 @@ export default function AuditLogPage() {
   const [pageSize, setPageSize] = useState(20);
   const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
   const [year, setYear] = useState<number>(new Date().getFullYear());
+  const [months, setMonths] = useState<number[]>([new Date().getMonth() + 1]);
 
   const fetchLogs = async (currentPage = page, searchQuery = search, m = month, y = year, limit = pageSize) => {
     try {
@@ -254,10 +255,11 @@ export default function AuditLogPage() {
           </button>
 
           <PeriodPicker
-            month={month}
+            months={months}
             year={year}
             onChange={(m, y) => {
-              setMonth(m);
+              setMonths(m);
+              setMonth(m[0] || new Date().getMonth() + 1);
               setYear(y);
               setPage(1);
             }}

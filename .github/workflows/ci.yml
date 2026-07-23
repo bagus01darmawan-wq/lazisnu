@@ -36,3 +36,8 @@ jobs:
 
     - name: Run type check
       run: pnpm -r exec tsc --noEmit
+
+    - name: Run unit tests
+      run: |
+        pnpm --filter lazisnu-backend test:unit
+        pnpm --filter lazisnu-collector-app test
