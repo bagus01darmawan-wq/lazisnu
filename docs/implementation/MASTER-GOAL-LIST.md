@@ -4,7 +4,7 @@
 > Setiap task terhubung ke dokumen sub-bab yang berisi detail implementasi.
 > Update [ ] menjadi [x] saat task selesai.
 
-> Terakhir diperbarui: 2026-07-22
+> Terakhir diperbarui: 2026-07-23
 
 ---
 
@@ -176,7 +176,7 @@
 - [x] **07-B1-2**: Buat apps/web/Dockerfile (Next.js standalone)
 - [x] **07-B1-3**: Buat .dockerignore di root
 - [x] **07-B1-4**: Buat docker-compose.yml (backend + web + worker + nginx)
-- [ ] **07-B1-5**: Test: docker compose up -> semua service healthy (🔲 perlu VM)
+- [x] **07-B1-5**: Test: docker compose up → semua service healthy ✅ (VM Tencent Cloud, 2026-07-23)
 - [ ] **07-B2-1**: ci.yml — tambah job build-image (docker build + push ke GHCR)
 - [ ] **07-B2-2**: ci.yml — tambah job deploy (SSH ke VM, manual trigger)
 - [x] **07-B4-1**: Buat apps/backend/src/worker.ts (entrypoint khusus worker)
@@ -228,10 +228,10 @@
 - [ ] **07-D2-1**: backend/package.json — verifikasi @sentry/node di dependencies (bukan devDependencies)
 - [ ] **07-D2-2**: config/sentry.ts — hapus lazy require, import langsung
 - [ ] **07-D3-1**: docker-compose.yml — tambah logging config max-size + max-file
-- [ ] **07-E1-1**: Install nginx di VM GCP
-- [ ] **07-E1-2**: Install certbot — certbot --nginx -d api.lazisnu.app
-- [ ] **07-E1-3**: Konfigurasi server block + security headers
-- [ ] **07-E1-4**: curl https://api.lazisnu.app/health/ready -> 200
+- [x] **07-E1-1**: Install nginx di VM (via Docker, nginx:alpine) ✅
+- [x] **07-E1-2**: SSL cert via certbot — api.lazisnu.site + dashboard.lazisnu.site (SAN) ✅
+- [x] **07-E1-3**: Konfigurasi nginx server block + security headers (X-Frame-Options, HSTS) ✅
+- [x] **07-E1-4**: curl https://api.lazisnu.site/health/ready → 200 ✅ (domain diganti ke .site)
 - [ ] **07-E2-1**: Buat script backup pg_dump -> upload ke R2
 - [ ] **07-E2-2**: Tambah cron harian di VM (jam 02:00)
 - [ ] **07-E2-3**: Test restore backup ke DB dev
@@ -280,16 +280,16 @@
 | Sub-bab | Total Task | Selesai | % |
 |---------|-----------|---------|---|
 | PREP — Persiapan | 7 | 7 | 100% |
-| 06 — Temuan & Perbaikan Kode | 17 | 16 | 94% |
+| 06 — Temuan & Perbaikan Kode | 17 | 17 | 100% |
 | 07A — Infra Quick Wins | 9 | 8 | 89% |
 | 02 — Backend Core | 16 | 13 | 81% |
 | 03 — Data Model & Database | 12 | 10 | 83% |
 | 04 — Alur Data & Sesi | 17 | 14 | 82% |
-| 07B — Containerization | 10 | 7 | 70% |
+| 07B — Containerization | 10 | 8 | 80% |
+| 07C — Observability & Infra | 14 | 4 | 29% |
 | 05 — Frontend Web & Mobile | 13 | 0 | 0% |
-| 07C — Observability & Infra | 14 | 0 | 0% |
 | 08 — Rencana Final | 12 | 0 | 0% |
-| **TOTAL** | **127** | **76** | **60%** |
+| **TOTAL** | **127** | **81** | **64%** |
 
 ---
 
