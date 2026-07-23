@@ -156,7 +156,18 @@ export async function buildApp() {
       });
     }
 
-    // 5. Unknown error — sanitize: log detail di server, response generik
+    // 6. Rate limit error (from @fastify/rate-limit)
+    if (error.statusCode === 429) {
+      return reply.status(429).send({
+        success: false,
+        error: {
+          code: 'TOO_MANY_REQUESTS',
+          message: 'Terlalu banyak permintaan, silakan coba lagi nanti',
+        },
+      });
+    }
+
+    // 7. Unknown error — sanitize: log detail di server, response generik
     return reply.status(500).send({
       success: false,
       error: {

@@ -18,9 +18,9 @@ export async function middleware(request: NextRequest) {
 
   // 3. Proper Role Check using JWT decoding
   if (token && !isAuthPage) {
-    const jwtSecretRaw = process.env.JWT_SECRET;
+    const jwtSecretRaw = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET;
     if (!jwtSecretRaw || jwtSecretRaw.length < 32) {
-      console.error('[SECURITY] JWT_SECRET tidak terkonfigurasi atau kurang dari 32 karakter!');
+      console.error('[SECURITY] JWT_ACCESS_SECRET (atau JWT_SECRET fallback) tidak terkonfigurasi atau kurang dari 32 karakter!');
       const response = NextResponse.redirect(new URL('/login', request.url));
       response.cookies.delete('lazisnu_token');
       return response;
