@@ -15,8 +15,8 @@ WORKDIR /app
 ENV PATH="/app/node_modules/.bin:$PATH"
 COPY --from=deps /app/node_modules node_modules
 COPY . .
-RUN cd packages/shared-types && npx tsc
-RUN cd apps/web && npx next build
+RUN cd packages/shared-types && node_modules/.bin/tsc
+RUN cd apps/web && node_modules/.bin/next build
 
 FROM base AS runner
 WORKDIR /app
