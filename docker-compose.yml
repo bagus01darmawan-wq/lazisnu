@@ -42,7 +42,7 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - API_URL=http://backend:3001
-      - NEXT_PUBLIC_API_URL=https://api.lazisnu.site
+      - NEXT_PUBLIC_API_URL=http://backend:3001
     logging:
       driver: json-file
       options:
