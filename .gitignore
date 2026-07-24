@@ -41,3 +41,6 @@ apps/mobile/apps/mobile/android/app/src/main/assets/index.android.bundle
 
 # SSL certificates (generated at runtime by certbot, NOT for git)
 nginx/certbot/
+
+# Redis persistence data (generated at runtime)
+redis-data/

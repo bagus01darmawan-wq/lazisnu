@@ -202,13 +202,17 @@
 │  └───┬────┘ └────────┘                                          │
 │      │                                                          │
 │      ├──▶ Supabase PostgreSQL (cloud)                            │
-│      ├──▶ Upstash Redis (cloud)                                 │
+│      ├──▶ Redis :6379 (container, AOF persistence)              │
 │      └──▶ Fonnte API (WhatsApp)                                 │
 │                                                                 │
-│  ┌────────┐                                                     │
-│  │ worker │   WhatsApp notification queue                        │
-│  │ :3001  │                                                     │
-│  └────────┘                                                     │
+│  ┌────────┐     ┌────────┐                                      │
+│  │ worker │     │ redis  │   Redis v7-alpine                    │
+│  │ :3001  │────▶│ :6379  │   AOF + RDB snapshot                 │
+│  └────────┘     └───┬────┘   50MB max, volatile-lru             │
+│                     │                                           │
+│                     ▼                                           │
+│              ./redis-data/                                       │
+│              (volume mount)                                      │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -219,6 +223,7 @@ HOST (/)
  │
  ├── /opt/lazisnu/nginx/nginx.conf ═══mount══▶ container nginx:/etc/nginx/nginx.conf
  ├── /opt/lazisnu/nginx/certbot/   ═══mount══▶ container nginx:/etc/letsencrypt
+ ├── /opt/lazisnu/redis-data/      ═══mount══▶ container redis:/data
  │
  ├── /opt/lazisnu/apps/backend/    ═══COPY═══▶ image lazisnu-backend
  ├── /opt/lazisnu/apps/web/        ═══COPY═══▶ image lazisnu-web
@@ -240,9 +245,10 @@ HOST (/)
 │  ├── Database production            │
 │  └── Connection: DATABASE_URL .env  │
 │                                     │
-│  Upstash (Redis)                    │
+│  Redis (container)                 │
 │  ├── Cache + Session store          │
 │  ├── Keys: refresh:{uid}:{did}      │
+│  ├── AOF persistence on disk        │
 │  └── Connection: REDIS_URL .env     │
 │                                     │
 │  Fonnte (WhatsApp API)              │
@@ -281,7 +287,7 @@ nginx:443 (SSL terminated)
 | RAM | ~4 GB | 39% | Aman |
 | CPU Cores | 2 | Load 0.01 | Santai |
 | Swap | - | 0% | Tidak digunakan |
-| Container | 4 (semua running) | 4 | backend, web, worker, nginx |
+| Container | 5 (semua running) | 5 | backend, web, worker, nginx, redis |
 
 ## Perintah Berguna
 

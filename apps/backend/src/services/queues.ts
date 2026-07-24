@@ -5,10 +5,10 @@ import { redisConnection } from '../config/redis';
 export const whatsappQueue = new Queue('whatsapp-notifications', {
   connection: redisConnection,
   defaultJobOptions: {
-    attempts: 3,
+    attempts: 10,
     backoff: {
       type: 'exponential',
-      delay: 5000, // 5 seconds initial delay
+      delay: 3000, // 3→6→12→24→48→96→192→384→768 detik (~25.5 menit total)
     },
     removeOnComplete: true, // Keep it clean
     removeOnFail: false,   // Keep failed jobs for debugging

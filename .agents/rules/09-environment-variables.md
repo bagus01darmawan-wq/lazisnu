@@ -28,7 +28,7 @@ DATABASE_URL=postgresql://lazisnu_dev:password_dev_123@localhost:5432/lazisnu_db
 
 # ── Redis ────────────────────────────────────────────────────────
 REDIS_URL=redis://localhost:6379
-# Production: ganti dengan URL Redis Railway atau Upstash
+# Production: Redis container di docker-compose (redis://redis:6379)
 
 # ── JWT ──────────────────────────────────────────────────────────
 JWT_ACCESS_SECRET=ganti_dengan_random_string_min_64_karakter
