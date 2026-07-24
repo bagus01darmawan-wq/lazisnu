@@ -35,6 +35,8 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://backend:3001
     restart: unless-stopped
     env_file:
       - apps/backend/.env
