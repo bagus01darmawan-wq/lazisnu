@@ -2,7 +2,7 @@
 
 > Dokumen ini adalah **indeks utama** dari seluruh implementation plan Lazisnu.
 > Disusun berdasarkan analisis: docs/analisis-master-lazisnu.md
-> Terakhir diperbarui: 2026-07-22
+> Terakhir diperbarui: 2026-07-24
 
 ---
 
