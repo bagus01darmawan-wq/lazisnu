@@ -16,7 +16,7 @@ async function getStatsData(month: string, months: string, year: string, branch:
   if (!token) return null;
 
   try {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    const API_URL = process.env.API_URL || 'http://localhost:3001';
     const url = new URL(`${API_URL}/v1/bendahara/reports/summary`);
     url.searchParams.append('year', year);
     if (months) url.searchParams.append('months', months);
@@ -45,7 +45,7 @@ async function getAdditionalStats(month: string, months: string, year: string, b
   if (!token) return null;
 
   try {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    const API_URL = process.env.API_URL || 'http://localhost:3001';
     const url = new URL(`${API_URL}/v1/bendahara/reports/stats`);
     url.searchParams.append('year', year);
     if (months) url.searchParams.append('months', months);
@@ -76,7 +76,7 @@ async function TransactionList({ month, months, year, branch, officer, search, p
   let paginationData: { page: number; limit: number; total: number; total_pages: number } | undefined;
 
   try {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    const API_URL = process.env.API_URL || 'http://localhost:3001';
 
     let startDate: string;
     let endDate: string;

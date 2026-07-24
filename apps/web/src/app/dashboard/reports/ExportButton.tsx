@@ -33,7 +33,7 @@ export default function ExportButton() {
         return;
       }
 
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001');
       const res = await fetch(`${API_URL}/v1/bendahara/export?start_date=${startDate}&end_date=${endDate}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
