@@ -16,6 +16,7 @@ import { redisConnection } from '../config/redis';
 import { sendSuccess, sendError, sendInternalError } from '../utils/response';
 import { insertActivityLog } from '../services/auditLogService';
 import { config } from '../config/env';
+import { sendOtpMessage } from '../services/whatsapp';
 
 // Request schemas
 const loginSchema = z.object({
@@ -264,10 +265,16 @@ export async function authRoutes(fastify: FastifyInstance) {
         return sendError(reply, 500, 'OTP_ERROR', 'Gagal membuat OTP');
       }
 
-      // In production, send via WhatsApp Business API
-      // For now, mask the phone number in log
+      // Kirim OTP via WhatsApp — dipanggil langsung (bukan via queue)
+      // karena OTP time-sensitive (TTL 5 menit).
+      const waResult = await sendOtpMessage(body.phone, result.otp);
+      if (waResult.status === 'FAILED') {
+        return sendError(reply, 502, 'WA_SEND_FAILED', 'Gagal mengirim OTP via WhatsApp. Coba lagi.');
+      }
+
+      // OTP tidak di-log — hanya catat metadata
       const maskedPhone = body.phone.slice(0, 4) + '****' + body.phone.slice(-3);
-      fastify.log.info({ phone: maskedPhone }, 'OTP generated and sent to WhatsApp');
+      fastify.log.info({ phone: maskedPhone, waMessageId: waResult.message_id }, 'OTP dikirim via WhatsApp');
 
       return sendSuccess(reply, {
         message: 'OTP dikirim ke WhatsApp',

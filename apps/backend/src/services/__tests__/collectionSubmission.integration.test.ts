@@ -14,6 +14,41 @@ describe('Collection Submission Integration Test', () => {
   let districtId: string;
 
   beforeAll(async () => {
+    // ── Bersihkan sisa data dari test run sebelumnya (idempotent) ──
+    // Urutan: child → parent (karena foreign key constraints)
+
+    // 1. Hapus collections & assignments terkait can 'TEST-QR-INT'
+    const oldCans = await db.query.cans.findMany({
+      where: eq(schema.cans.qrCode, 'TEST-QR-INT'),
+      columns: { id: true },
+    });
+    for (const c of oldCans) {
+      await db.delete(schema.collections).where(eq(schema.collections.canId, c.id));
+      await db.delete(schema.assignments).where(eq(schema.assignments.canId, c.id));
+      await db.delete(schema.cans).where(eq(schema.cans.id, c.id));
+    }
+
+    // 2. Hapus officers dengan employeeCode 'EMP-001'
+    const oldOfficers = await db.query.officers.findMany({
+      where: eq(schema.officers.employeeCode, 'EMP-001'),
+      columns: { id: true },
+    });
+    for (const o of oldOfficers) {
+      await db.delete(schema.assignments).where(eq(schema.assignments.officerId, o.id));
+      await db.delete(schema.officers).where(eq(schema.officers.id, o.id));
+    }
+
+    // 3. Hapus users dengan email test
+    await db.delete(schema.users).where(eq(schema.users.email, 'officer-int@test.com'));
+
+    // 4. Hapus branches dengan code 'BTI'
+    await db.delete(schema.branches).where(eq(schema.branches.code, 'BTI'));
+
+    // 5. Hapus districts dengan code 'DTI'
+    await db.delete(schema.districts).where(eq(schema.districts.code, 'DTI'));
+
+    // ── Insert data baru ──
+
     // Insert district
     const [district] = await db.insert(schema.districts).values({
       name: 'District Test Integration',

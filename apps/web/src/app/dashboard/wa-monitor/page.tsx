@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Table } from '@/components/ui/Table';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -18,8 +18,6 @@ import {
   CheckCircle2,
   User,
   TrendingUp,
-  Building2,
-  Calendar,
 } from 'lucide-react';
 import { format, isValid } from 'date-fns';
 import { id } from 'date-fns/locale';
@@ -28,8 +26,6 @@ import { DropdownFilter } from '@/components/ui/DropdownFilter';
 import { cn } from '@/lib/utils';
 import { ApiResponse } from '@lazisnu/shared-types';
 import {
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -101,6 +97,30 @@ interface WaSummaryResponse {
   daily_trends: WaDailyTrend[];
   by_branch: WaBranchStat[];
   period: string;
+}
+
+interface FailedJobData {
+  phone: string;
+  ownerName: string;
+  nominal: string;
+  officerName: string;
+  collectionId?: string;
+  [key: string]: unknown;
+}
+
+interface FailedJob {
+  id: string;
+  name: string;
+  data: FailedJobData;
+  failedReason: string;
+  timestamp: number;
+  finishedOn?: number;
+  attemptsMade: number;
+}
+
+interface FailedJobsResponse {
+  total: number;
+  jobs: FailedJob[];
 }
 
 function DailyTrendsChart({ data }: { data: WaDailyTrend[] }) {
@@ -194,7 +214,6 @@ export default function WAMonitorPage() {
   });
   const [dbStats, setDbStats] = React.useState<WaSummaryStats | null>(null);
   const [dailyTrends, setDailyTrends] = React.useState<WaDailyTrend[]>([]);
-  const [branchStats, setBranchStats] = React.useState<WaBranchStat[]>([]);
   const [dbLoading, setDbLoading] = React.useState(true);
   const [period, setPeriod] = React.useState<'today' | 'week' | 'month' | 'all'>('month');
   
@@ -251,7 +270,6 @@ export default function WAMonitorPage() {
       if (response.success && response.data) {
         setDbStats(response.data.summary);
         setDailyTrends(response.data.daily_trends || []);
-        setBranchStats(response.data.by_branch || []);
       }
     } catch (error) {
       console.error('Failed to fetch WA summary:', error);
@@ -260,11 +278,85 @@ export default function WAMonitorPage() {
     }
   };
 
+  const [failedJobs, setFailedJobs] = useState<FailedJob[]>([]);
+  const [failedJobsLoading, setFailedJobsLoading] = useState(false);
+  const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
+
+  const fetchFailedJobs = async () => {
+    setFailedJobsLoading(true);
+    try {
+      const response = await api.get('/admin/wa/failed') as unknown as ApiResponse<FailedJobsResponse>;
+      if (response.success && response.data) {
+        setFailedJobs(response.data.jobs || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch failed jobs:', error);
+    } finally {
+      setFailedJobsLoading(false);
+    }
+  };
+
+  const handleRetry = async (jobId: string) => {
+    setRetryingIds(prev => new Set(prev).add(jobId));
+    try {
+      const response = await api.post(`/admin/wa/retry/${jobId}`) as unknown as ApiResponse<{ message: string; jobId: string }>;
+      if (response.success) {
+        toast.success('Job berhasil dijadwalkan ulang');
+        setFailedJobs(prev => prev.filter(j => j.id !== jobId));
+      }
+    } catch (error) {
+      const getApiErrorMessage = (err: unknown) => {
+        if (err && typeof err === 'object') {
+          const record = err as { error?: { message?: string }, message?: string };
+          return record.error?.message || record.message;
+        }
+        return undefined;
+      };
+      toast.error(getApiErrorMessage(error) || 'Gagal retry job');
+    } finally {
+      setRetryingIds(prev => {
+        const next = new Set(prev);
+        next.delete(jobId);
+        return next;
+      });
+    }
+  };
+
+  const handleRetryAll = async () => {
+    if (failedJobs.length === 0) return;
+    const allIds = failedJobs.map(j => j.id);
+    setRetryingIds(new Set(allIds));
+    let successCount = 0;
+    for (const jobId of allIds) {
+      try {
+        const response = await api.post(`/admin/wa/retry/${jobId}`) as unknown as ApiResponse<{ message: string }>;
+        if (response.success) successCount++;
+      } catch { /* continue */ }
+    }
+    toast.success(`${successCount}/${allIds.length} job berhasil dijadwalkan ulang`);
+    setRetryingIds(new Set());
+    void fetchFailedJobs();
+  };
+
+  const handleFlushFailed = async () => {
+    try {
+      const response = await api.post('/admin/wa/flush-failed') as unknown as ApiResponse<void>;
+      if (response.success) {
+        toast.success('Antrean berhasil dibersihkan');
+        setFailedJobs([]);
+        void fetchWAStatus();
+      }
+    } catch {
+      toast.error('Gagal membersihkan antrean');
+    }
+  };
+
   React.useEffect(() => {
     const timer = setTimeout(() => {
       setPage(1);
       void fetchWAStatus(1, search, pageSize);
       void fetchWASummary(period);
+      void fetchFailedJobs();
     }, 500);
     return () => clearTimeout(timer);
   }, [search, pageSize, period]);
@@ -358,7 +450,7 @@ export default function WAMonitorPage() {
           </div>
 
           <Button
-            onClick={() => fetchWAStatus(page, search, pageSize)}
+            onClick={() => { void fetchWAStatus(page, search, pageSize); void fetchFailedJobs(); }}
             className="h-[35px] px-4 rounded-xl text-[11px] font-bold bg-[#EAD19B] text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 hover:bg-[#EAD19B]/90 transition-all active:scale-95 flex items-center gap-2"
           >
             <RefreshCw size={14} strokeWidth={3} className={cn(loading && "animate-spin")} />
@@ -615,36 +707,88 @@ export default function WAMonitorPage() {
           )}
         </Card>
 
-        <div className="bg-[#DE6F4A]/10 backdrop-blur-md p-6 rounded-3xl border border-[#DE6F4A]/20 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-[#DE6F4A]/20 text-[#F4F1EA] rounded-2xl shadow-lg">
-              <XCircle size={24} />
+        <div className="bg-[#DE6F4A]/10 backdrop-blur-md p-6 rounded-3xl border border-[#DE6F4A]/20 shadow-xl">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-[#DE6F4A]/20 text-[#F4F1EA] rounded-2xl shadow-lg">
+                <XCircle size={24} />
+              </div>
+              <div>
+                <h3 className="font-bold text-[#F4F1EA] tracking-tight">Antrean Gagal (DLQ)</h3>
+                <p className="text-xs text-[#F4F1EA]/60 font-medium max-w-md mt-0.5">
+                  {failedJobs.length > 0
+                    ? `${failedJobs.length} job gagal menunggu diproses ulang.`
+                    : 'Tidak ada job gagal. Mantap.'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-bold text-[#F4F1EA] tracking-tight">Antrean Gagal (DLQ)</h3>
-              <p className="text-xs text-[#F4F1EA]/60 font-medium max-w-md mt-0.5">
-                Pesan yang gagal dikirim setelah beberapa kali percobaan akan masuk ke sini untuk diproses ulang atau dihapus.
-              </p>
+
+            <div className="flex items-center gap-2">
+              {failedJobs.length > 0 && (
+                <button
+                  onClick={handleRetryAll}
+                  disabled={retryingIds.size > 0}
+                  className="px-4 py-2 bg-[#EAD19B] text-[#2C473E] text-xs font-bold rounded-2xl hover:bg-[#EAD19B]/90 transition-all active:scale-95 shadow-lg shadow-[#EAD19B]/20 flex items-center gap-2 disabled:opacity-50"
+                >
+                  <RotateCcw size={14} strokeWidth={3} className={retryingIds.size > 0 ? 'animate-spin' : ''} />
+                  Retry Semua
+                </button>
+              )}
+              <button
+                onClick={handleFlushFailed}
+                className="px-4 py-2 bg-[#DE6F4A] text-white text-xs font-bold rounded-2xl hover:bg-[#DE6F4A]/90 transition-all active:scale-95 shadow-lg shadow-[#DE6F4A]/30 flex items-center gap-2 border border-white/10"
+              >
+                <Trash2 size={14} />
+                Bersihkan Semua
+              </button>
             </div>
           </div>
 
-          <button
-            onClick={async () => {
-              try {
-                const response = await api.post('/admin/wa/flush-failed') as unknown as ApiResponse<void>;
-                if (response.success) {
-                  toast.success('Antrean berhasil dibersihkan');
-                  void fetchWAStatus();
-                }
-              } catch {
-                toast.error('Gagal membersihkan antrean');
-              }
-            }}
-            className="px-6 py-2.5 bg-[#DE6F4A] text-white text-xs font-bold rounded-2xl hover:bg-[#DE6F4A]/90 transition-all active:scale-95 shadow-lg shadow-[#DE6F4A]/30 flex items-center gap-2 border border-white/10"
-          >
-            <Trash2 size={16} />
-            Bersihkan Semua Gagal
-          </button>
+          {failedJobs.length > 0 && (
+            <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar">
+              {failedJobs.map(job => (
+                <div key={job.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-[#2C473E]/40 rounded-2xl border border-white/5">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-widest truncate">
+                        {job.id}
+                      </span>
+                      <span className="text-[9px] font-bold text-[#DE6F4A] bg-[#DE6F4A]/10 px-2 py-0.5 rounded-full">
+                        {job.attemptsMade}x gagal
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#F4F1EA]/80 font-medium">
+                      {job.data.ownerName || 'Donatur'} — {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(BigInt(job.data.nominal || 0))}
+                    </p>
+                    <p className="text-[10px] text-[#F4F1EA]/40 mt-0.5 line-clamp-1">
+                      {job.failedReason || 'Tidak diketahui'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleRetry(job.id)}
+                    disabled={retryingIds.has(job.id)}
+                    className="shrink-0 px-4 py-1.5 bg-[#1F8243]/20 text-[#1F8243] text-[11px] font-bold rounded-xl hover:bg-[#1F8243]/30 transition-all active:scale-95 flex items-center gap-1.5 border border-[#1F8243]/20 disabled:opacity-40"
+                  >
+                    <RotateCcw size={12} strokeWidth={3} className={retryingIds.has(job.id) ? 'animate-spin' : ''} />
+                    Retry
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!failedJobsLoading && failedJobs.length === 0 && (
+            <div className="text-center py-4">
+              <CheckCircle2 size={32} className="text-[#1F8243]/40 mx-auto mb-2" />
+              <p className="text-xs text-[#F4F1EA]/40 font-medium">Semua bersih, tidak ada job gagal.</p>
+            </div>
+          )}
+
+          {failedJobsLoading && (
+            <div className="text-center py-4">
+              <RefreshCw size={20} className="text-[#F4F1EA]/40 mx-auto animate-spin" />
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,8 +1,9 @@
-import React from 'react';
-import {Alert, ScrollView, StyleSheet, Text, View} from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {Alert, ScrollView, StyleSheet, Switch, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useAuthStore} from '../stores';
+import {getBiometryType, isBiometricAvailable} from '../services/biometric';
 import {AppButton, AppCard, StatusBadge} from '../components/ui';
 import {Colors, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
 
@@ -15,8 +16,32 @@ const roleLabels: Record<string, string> = {
 
 const ProfileScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const {user, logout} = useAuthStore();
+  const {user, logout, biometricEnabled, enableBiometric: enableBio, disableBiometric: disableBio} = useAuthStore();
   const role = user?.role ? roleLabels[user.role] || user.role : 'Petugas';
+  const [biometryType, setBiometryType] = useState<string | null>(null);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const available = await isBiometricAvailable();
+      setBiometricAvailable(available);
+      if (available) {
+        const type = await getBiometryType();
+        setBiometryType(type);
+      }
+    })();
+  }, []);
+
+  const handleToggleBiometric = async (value: boolean) => {
+    if (value) {
+      const success = await enableBio();
+      if (!success) {
+        Alert.alert('Biometrik Tidak Tersedia', 'Perangkat ini tidak mendukung biometrik atau terjadi kesalahan.');
+      }
+    } else {
+      await disableBio();
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert(
@@ -66,6 +91,40 @@ const ProfileScreen: React.FC = () => {
           last
         />
       </AppCard>
+
+      {biometricAvailable && (
+        <>
+          <Text style={styles.sectionTitle}>Keamanan Biometrik</Text>
+          <AppCard variant={'elevated'} style={styles.infoCard}>
+            <View style={styles.biometricRow}>
+              <View style={styles.biometricLeft}>
+                <Icon
+                  name={'fingerprint'}
+                  size={22}
+                  color={Colors.brand.deepGreen}
+                />
+                <View style={styles.biometricText}>
+                  <Text style={styles.biometricLabel}>
+                    {biometryType || 'Login Biometrik'}
+                  </Text>
+                  <Text style={styles.biometricStatus}>
+                    {biometricEnabled ? 'Aktif' : 'Tidak Aktif'}
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={biometricEnabled}
+                onValueChange={handleToggleBiometric}
+                trackColor={{
+                  false: Colors.border.warm,
+                  true: Colors.brand.deepGreen,
+                }}
+                thumbColor={Colors.text.white}
+              />
+            </View>
+          </AppCard>
+        </>
+      )}
 
       <View style={styles.securityNotice}>
         <Icon name={'shield-check-outline'} size={22} color={Colors.brand.deepGreen} />
@@ -203,6 +262,29 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xl,
   },
   versionText: {...Typography.caption, color: Colors.text.muted},
+  biometricRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.md,
+  },
+  biometricLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  biometricText: {
+    flexDirection: 'column',
+  },
+  biometricLabel: {
+    ...Typography.body,
+    color: Colors.text.primary,
+    fontWeight: '600',
+  },
+  biometricStatus: {
+    ...Typography.caption,
+    color: Colors.text.secondary,
+  },
 });
 
 export default ProfileScreen;

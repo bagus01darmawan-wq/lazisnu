@@ -305,3 +305,186 @@ describe('[POST] /v1/auth/logout', () => {
     expect(res.body.success).toBe(true);
   });
 });
+
+// ─── 04-F1: Session Management Integration Tests ───
+
+describe('Session Management (04-F1)', () => {
+  let sessionToken: string | null = null;
+  let sessionRefresh: string | null = null;
+  
+  // Impor jwt untuk decode token
+  const jwt = require('jsonwebtoken');
+  const { revokeDeviceSession, revokeAllUserSessions } = require('../../services/tokenService');
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  afterEach(async () => {
+    // Bersihkan Redis mock + reset mock state untuk isolasi antar test
+    const { getRedis } = require('../../config/redis');
+    const redis = getRedis();
+    if (redis) await redis.flushall();
+  });
+
+  it('Full cycle: login → refresh → logout → refresh after logout gagal', async () => {
+    const app = await getApp();
+    
+    // ── 1. Login ──
+    (db.query.users.findFirst as jest.Mock).mockResolvedValue(mockUser);
+    const mockWhere = jest.fn().mockResolvedValue([{ id: 'officer-id' }]);
+    const mockFrom = jest.fn().mockImplementation(() => ({ where: mockWhere }));
+    (db.select as jest.Mock).mockImplementation(() => ({ from: mockFrom }));
+
+    const loginRes = await request(app.server)
+      .post('/v1/auth/login')
+      .send(VALID_ADMIN);
+    
+    expect(loginRes.status).toBe(200);
+    const token1 = loginRes.body.data.refresh_token;
+    expect(token1).toBeDefined();
+
+    // ── 2. Refresh ──
+    const mockLimit = jest.fn().mockResolvedValue([mockUser]);
+    const mockWhere2 = jest.fn().mockImplementation(() => ({ limit: mockLimit }));
+    const mockFrom2 = jest.fn().mockImplementation(() => ({ where: mockWhere2 }));
+    (db.select as jest.Mock).mockImplementation(() => ({ from: mockFrom2 }));
+
+    const refreshRes = await request(app.server)
+      .post('/v1/auth/refresh')
+      .send({ refresh_token: token1 });
+    
+    expect(refreshRes.status).toBe(200);
+    const token2 = refreshRes.body.data.refresh_token;
+    sessionToken = token2;
+
+    // Token lama (token1) tidak bisa dipakai refresh lagi (sudah dirotasi)
+    (db.select as jest.Mock).mockImplementation(() => ({ from: mockFrom2 }));
+    const refreshOld = await request(app.server)
+      .post('/v1/auth/refresh')
+      .send({ refresh_token: token1 });
+    
+    // Token lama sudah direvoke (rotasi) → 401 REFRESH_REVOKED
+    expect(refreshOld.status).toBe(401);
+    expect(refreshOld.body.error.code).toBe('REFRESH_REVOKED');
+
+    // ── 3. Logout → refresh gagal ──
+    (db.select as jest.Mock).mockImplementation(() => ({ from: mockFrom2 }));
+    const logoutRes = await request(app.server)
+      .post('/v1/auth/logout')
+      .send({ refresh_token: token2 });
+    
+    expect(logoutRes.status).toBe(200);
+
+    // Setelah logout, refresh harus gagal
+    (db.select as jest.Mock).mockImplementation(() => ({ from: mockFrom2 }));
+    const refreshAfterLogout = await request(app.server)
+      .post('/v1/auth/refresh')
+      .send({ refresh_token: token2 });
+    
+    expect(refreshAfterLogout.status).toBe(401);
+    expect(refreshAfterLogout.body.error.code).toBe('REFRESH_REVOKED');
+  });
+
+  it('Revoke sesi tunggal → refresh gagal REFRESH_REVOKED', async () => {
+    const app = await getApp();
+    
+    // ── 1. Login 2x (2 device berbeda, deviceId di-generate server) ──
+    (db.query.users.findFirst as jest.Mock).mockResolvedValue(mockUser);
+    const mockWhere = jest.fn().mockResolvedValue([{ id: 'officer-id' }]);
+    const mockFrom = jest.fn().mockImplementation(() => ({ where: mockWhere }));
+    (db.select as jest.Mock).mockImplementation(() => ({ from: mockFrom }));
+
+    const loginA = await request(app.server)
+      .post('/v1/auth/login')
+      .send(VALID_ADMIN);
+    expect(loginA.status).toBe(200);
+
+    const loginB = await request(app.server)
+      .post('/v1/auth/login')
+      .send(VALID_ADMIN);
+    expect(loginB.status).toBe(200);
+
+    const tokenA = loginA.body.data.refresh_token;
+    const tokenB = loginB.body.data.refresh_token;
+
+    // ── 2. Decode token, revoke device A via Redis ──
+    const decodedA: any = jwt.decode(tokenA);
+    const deviceIdA = decodedA.did || decodedA.jti;
+    await revokeDeviceSession(decodedA.userId, deviceIdA);
+
+    // ── 3. Refresh device A → gagal REFRESH_REVOKED ──
+    const mockLimit = jest.fn().mockResolvedValue([mockUser]);
+    const mockWhere2 = jest.fn().mockImplementation(() => ({ limit: mockLimit }));
+    const mockFrom2 = jest.fn().mockImplementation(() => ({ where: mockWhere2 }));
+    (db.select as jest.Mock).mockImplementation(() => ({ from: mockFrom2 }));
+
+    const refreshA = await request(app.server)
+      .post('/v1/auth/refresh')
+      .send({ refresh_token: tokenA });
+    
+    expect(refreshA.status).toBe(401);
+    expect(refreshA.body.error.code).toBe('REFRESH_REVOKED');
+
+    // ── 4. Refresh device B → sukses ──
+    (db.select as jest.Mock).mockImplementation(() => ({ from: mockFrom2 }));
+    const refreshB = await request(app.server)
+      .post('/v1/auth/refresh')
+      .send({ refresh_token: tokenB });
+    
+    expect(refreshB.status).toBe(200);
+    expect(refreshB.body.data).toHaveProperty('refresh_token');
+  });
+
+  it('Revoke semua sesi → semua device mati kecuali current', async () => {
+    const app = await getApp();
+    
+    // ── 1. Login 2 device ──
+    (db.query.users.findFirst as jest.Mock).mockResolvedValue(mockUser);
+    const mockWhere = jest.fn().mockResolvedValue([{ id: 'officer-id' }]);
+    const mockFrom = jest.fn().mockImplementation(() => ({ where: mockWhere }));
+    (db.select as jest.Mock).mockImplementation(() => ({ from: mockFrom }));
+
+    const loginA = await request(app.server)
+      .post('/v1/auth/login')
+      .send(VALID_ADMIN);
+    const loginB = await request(app.server)
+      .post('/v1/auth/login')
+      .send(VALID_ADMIN);
+
+    expect(loginA.status).toBe(200);
+    expect(loginB.status).toBe(200);
+
+    const tokenA = loginA.body.data.refresh_token;
+    const tokenB = loginB.body.data.refresh_token;
+
+    // Device B adalah "current" yang dikecualikan
+    const decodedB: any = jwt.decode(tokenB);
+    const userId = decodedB.userId;
+    const exceptDeviceId = decodedB.did || decodedB.jti;
+
+    // ── 2. Revoke semua kecuali device B ──
+    const revoked = await revokeAllUserSessions(userId, exceptDeviceId);
+    // Harus ada device A yang direvoke
+    expect(revoked.length).toBeGreaterThanOrEqual(1);
+    expect(revoked).not.toContain(exceptDeviceId);
+
+    // ── 3. Refresh device A → gagal ──
+    const mockLimit = jest.fn().mockResolvedValue([mockUser]);
+    const mockWhere2 = jest.fn().mockImplementation(() => ({ limit: mockLimit }));
+    const mockFrom2 = jest.fn().mockImplementation(() => ({ where: mockWhere2 }));
+    (db.select as jest.Mock).mockImplementation(() => ({ from: mockFrom2 }));
+
+    const refreshA = await request(app.server)
+      .post('/v1/auth/refresh')
+      .send({ refresh_token: tokenA });
+    expect(refreshA.status).toBe(401);
+
+    // ── 4. Refresh device B → sukses ──
+    (db.select as jest.Mock).mockImplementation(() => ({ from: mockFrom2 }));
+    const refreshB = await request(app.server)
+      .post('/v1/auth/refresh')
+      .send({ refresh_token: tokenB });
+    expect(refreshB.status).toBe(200);
+  });
+});

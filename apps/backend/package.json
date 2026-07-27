@@ -19,7 +19,8 @@
     "seed": "tsx src/database/seed.ts",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:check-orphans": "node scripts/check-migration-orphans.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1034.0",
@@ -30,6 +31,7 @@
     "@fastify/swagger": "^8.14.0",
     "@fastify/swagger-ui": "^3.0.0",
     "@lazisnu/shared-types": "file:../../packages/shared-types",
+    "@sentry/node": "^10.68.0",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.74.1",
     "dotenv": "^16.4.5",
@@ -38,6 +40,7 @@
     "firebase-admin": "^13.8.0",
     "ioredis": "^5.4.1",
     "pdf-lib": "^1.17.1",
+    "pino": "^10.3.1",
     "postgres": "^3.4.9",
     "prom-client": "^15.1.3",
     "qrcode": "^1.5.3",

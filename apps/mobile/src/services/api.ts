@@ -1,6 +1,7 @@
 // Mobile API Service - Lazisnu Collector App
 
 import { MMKV } from 'react-native-mmkv';
+import { Platform } from 'react-native';
 import { ApiResponse, Task, AuthLoginResponse, MeResponse, DashboardResponse, TaskListResponse, ProfileResponse, HistoryResponse, BatchSyncResponse, BatchCollectionRequestItem } from '@lazisnu/shared-types';
 import { captureAuthEvent } from '../config/crashlytics';
 
@@ -67,6 +68,32 @@ export const clearToken = async (): Promise<void> => {
   getAuthStorage().delete('access_token');
   getAuthStorage().delete('refresh_token');
 };
+
+// ── Device ID — identifikasi sesi per perangkat (Sub-bab 04 + 05) ─────────────
+
+const DEVICE_ID_KEY = 'device_id';
+
+function generateUUID(): string {
+  // react-native-get-random-values polyfills crypto.getRandomValues
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+export function getOrCreateDeviceId(): string {
+  const existing = getAuthStorage().getString(DEVICE_ID_KEY);
+  if (existing) return existing;
+
+  const newId = generateUUID();
+  getAuthStorage().set(DEVICE_ID_KEY, newId);
+  return newId;
+}
+
+export function getDeviceLabel(): string {
+  // Platform.OS = 'android' | 'ios', Platform.Version = versi OS
+  return `${Platform.OS === 'ios' ? 'iPhone' : 'Android'} ${Platform.Version}`;
+}
 
 // ── Token Refresh Logic ──────────────────────────────────────────────────────
 
@@ -266,28 +293,45 @@ export const authService = {
   login: async (identifier: string, password: string): Promise<ApiResponse<AuthLoginResponse>> => {
     return apiRequest<AuthLoginResponse>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ identifier, password }),
+      body: JSON.stringify({
+        identifier,
+        password,
+        device_id: getOrCreateDeviceId(),
+        device_label: getDeviceLabel(),
+      }),
     });
   },
 
   requestOTP: async (phone: string): Promise<ApiResponse<{ message: string; expires_in: number }>> => {
     return apiRequest('/auth/request-otp', {
       method: 'POST',
-      body: JSON.stringify({ phone }),
+      body: JSON.stringify({
+        phone,
+        device_id: getOrCreateDeviceId(),
+        device_label: getDeviceLabel(),
+      }),
     });
   },
 
   verifyOTP: async (phone: string, otp: string): Promise<ApiResponse<AuthLoginResponse>> => {
     return apiRequest<AuthLoginResponse>('/auth/verify-otp', {
       method: 'POST',
-      body: JSON.stringify({ phone, otp }),
+      body: JSON.stringify({
+        phone,
+        otp,
+        device_id: getOrCreateDeviceId(),
+        device_label: getDeviceLabel(),
+      }),
     });
   },
 
   refresh: async (refreshToken: string): Promise<ApiResponse<{ access_token: string; refresh_token: string }>> => {
     return apiRequest('/auth/refresh', {
       method: 'POST',
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      body: JSON.stringify({
+        refresh_token: refreshToken,
+        device_id: getOrCreateDeviceId(),
+      }),
     });
   },
 

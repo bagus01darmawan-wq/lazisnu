@@ -1,0 +1,92 @@
+# ============================================
+# Lazisnu Staging Environment
+# ============================================
+# Network: bergabung dengan lazisnu_default (dari docker-compose.yml)
+# sehingga nginx production bisa proxy ke staging container.
+#
+# Jalankan: docker compose -f docker-compose.staging.yml up -d
+# ============================================
+
+networks:
+  lazisnu_default:
+    external: true
+
+services:
+  redis-staging:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server /usr/local/etc/redis/redis.conf
+    volumes:
+      - ./redis-data-staging:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks: [lazisnu_default]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  backend-staging:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis-staging:
+        condition: service_healthy
+    networks: [lazisnu_default]
+    env_file:
+      - apps/backend/.env.staging
+    environment:
+      - NODE_ENV=production
+      - PORT=4001
+      - REDIS_URL=redis://redis-staging:6379
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  worker-staging:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis-staging:
+        condition: service_healthy
+    networks: [lazisnu_default]
+    entrypoint: ["node", "apps/backend/dist/worker.js"]
+    env_file:
+      - apps/backend/.env.staging
+    environment:
+      - NODE_ENV=production
+      - REDIS_URL=redis://redis-staging:6379
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  web-staging:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    networks: [lazisnu_default]
+    env_file:
+      - apps/backend/.env.staging
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - API_URL=http://backend-staging:4001
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

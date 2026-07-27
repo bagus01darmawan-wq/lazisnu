@@ -3,6 +3,7 @@ import { redisConnection } from '../config/redis';
 import { sendWhatsAppNotificationSync } from '../services/whatsapp';
 import { db } from '../config/database';
 import * as schema from '../database/schema';
+import { logger } from '../config/logger';
 
 /**
  * Worker to process WhatsApp notifications
@@ -12,7 +13,7 @@ export const whatsappWorker = new Worker(
   async (job: Job) => {
     const { phone, ownerName, nominal, officerName, ...options } = job.data;
     
-    console.log(`[Worker] Processing WhatsApp job ${job.id}`);
+    logger.info({ jobId: job.id }, 'Processing WhatsApp job');
     
     return sendWhatsAppNotificationSync(
         phone, 
@@ -33,11 +34,11 @@ export const whatsappWorker = new Worker(
 );
 
 whatsappWorker.on('completed', (job) => {
-  console.log(`[Worker] Job ${job.id} completed successfully`);
+  logger.info({ jobId: job.id }, 'WhatsApp job completed');
 });
 
 whatsappWorker.on('failed', (job, err) => {
-  console.error(`[Worker] Job ${job?.id} failed: ${err.message}`);
+  logger.error({ jobId: job?.id, errMsg: err.message }, 'WhatsApp job failed');
 
   if (job && job.attemptsMade >= (job.opts.attempts || 1)) {
     const { phone, ownerName, nominal, officerName, collectionId } = job.data;
@@ -61,6 +62,6 @@ whatsappWorker.on('failed', (job, err) => {
   }
 });
 
-console.log('🚀 WhatsApp Worker initialized and ready.');
+logger.info('WhatsApp Worker initialized and ready');
 
 export default whatsappWorker;

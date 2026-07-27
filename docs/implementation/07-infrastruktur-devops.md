@@ -299,6 +299,21 @@ Referensi analisis: `analisis-master-lazisnu.md` Bab 17–18 (gap + INFRA-1 s/d 
 
 ---
 
+### G3 — Backup Admin Endpoints (setengah hari)
+
+- [ ] **G3-1**: Mount `/opt/lazisnu/backup-active` ke container backend via `docker-compose.yml`
+- [ ] **G3-2**: Buat `apps/backend/src/routes/admin/backup.ts`:
+  - `POST /v1/admin/backup/start` — `fs.writeFile('/app/backup-active', '')`
+  - `POST /v1/admin/backup/stop` — `fs.unlink('/app/backup-active')`
+  - `GET /v1/admin/backup/status` — cek apakah file flag ada
+- [ ] **G3-3**: Register route di `apps/backend/src/app.ts`
+- [ ] **G3-4**: Integrasikan ke dashboard web admin — tombol "Mulai Penugasan" / "Penugasan Selesai" memanggil endpoint
+- [ ] **G3-5**: Test: klik tombol start → flag terbuat → backup cron berjalan; klik stop → flag hilang → backup cron skip
+
+**Effort**: setengah hari | **Referensi**: 07-E2, I-23
+
+---
+
 ## Verifikasi dan Done Criteria
 
 ### Minggu 1

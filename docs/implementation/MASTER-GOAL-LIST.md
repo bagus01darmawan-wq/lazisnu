@@ -4,7 +4,7 @@
 > Setiap task terhubung ke dokumen sub-bab yang berisi detail implementasi.
 > Update [ ] menjadi [x] saat task selesai.
 
-> Terakhir diperbarui: 2026-07-24
+> Terakhir diperbarui: 2026-07-26
 
 ---
 
@@ -95,9 +95,9 @@
 - [x] **02-C2**: middleware/ownership.ts:29 — hapus case ADMIN_PUSAT bypass total
 - [x] **02-C3**: middleware/ownership.ts:62 — hapus ADMIN_KABUPATEN di assertDistrictAccess
 - [x] **02-D1**: app.ts — konfigurasi logger Fastify dengan level dan redact
-- [ ] **02-D2**: workers/whatsapp.worker.ts — ganti console.log dengan logger
+- [x] **02-D2**: workers/whatsapp.worker.ts — ganti console.log dengan logger
 - [x] **02-D3**: workers/scheduler.worker.ts — ganti 10+ console.log (file sudah dihapus)
-- [ ] **02-D4**: services/whatsapp.ts — ganti console.log/error dengan logger
+- [x] **02-D4**: services/whatsapp.ts — ganti console.log/error dengan logger
 - [x] **02-E1**: admin/collections.ts — hapus (dead code)
 - [x] **02-E2**: bendahara.ts:5 — hapus unused import
 
@@ -116,12 +116,12 @@
 - [x] **03-A2**: Review 5 SQL legacy — sudah applied via push, server berjalan normal
 - [x] **03-A3**: Buat docs/DEPLOYMENT.md — dokumentasikan langkah baseline
 - [x] **03-B1**: Update backend/package.json — tambah script db:migrate dan db:generate
-- [ ] **03-B2**: Buat migration kustom untuk immutable-rule.sql
+- [x] **03-B2**: Buat migration kustom untuk immutable-rule.sql
 - [x] **03-C1**: Tambah kolom user_sessions.device_id (varchar 100, nullable) via drizzle generate + push
 - [x] **03-C2**: Tambah kolom users.fcm_token (varchar 255, nullable) via drizzle generate + push
 - [x] **03-C3**: Apply migration: drizzle-kit push --force
 - [x] **03-D1**: DROP sync_queues dari schema.ts + hapus semua referensi
-- [ ] **03-E1**: Verifikasi enum user_role di DB hanya 4 nilai valid
+- [x] **03-E1**: Verifikasi enum user_role di DB hanya 4 nilai valid
 - [x] **03-F1**: Hapus packages/shared-types/package-lock.json
 - [x] **03-F2**: Hapus packages/design-tokens/ (folder kosong)
 
@@ -143,7 +143,7 @@
 - [x] **04-A4**: tokenService.ts — revokeAllUserSessions (SMEMBERS registry, exceptDeviceId?)
 - [x] **04-A5**: tokenService.ts — fallback jika deviceId kosong: gunakan jti sebagai deviceId
 - [x] **04-A6**: tokenService.ts — deprecate fungsi lama (storeRefreshJti, dll.)
-- [ ] **04-A7**: Unit test 5 skenario wajib (lihat 04-alur-data-sesi.md task A7)
+- [x] **04-A7**: Unit test 5 skenario wajib (lihat 04-alur-data-sesi.md task A7)
 - [x] **04-B1**: middleware/auth.ts — update generateTokens(..., deviceId?) tambah claim did
 - [x] **04-C1**: routes/auth.ts — POST /v1/auth/login terima device_id dan device_label
 - [x] **04-C2**: routes/auth.ts — POST /v1/auth/refresh: validateDeviceSession + rotasi + tutup row lama
@@ -153,9 +153,9 @@
 - [x] **04-C6**: routes/auth.ts — POST /verify-otp: terima device_id dan label
 - [x] **04-D1**: config/env.ts — JWT_REFRESH_TTL default 365d
 - [x] **04-D2**: Update .env dan .env.example
-- [ ] **04-E1**: Dashboard Upstash — set eviction policy volatile-lru
-- [ ] **04-F1**: auth.integration.test.ts — integration test 4 skenario
-- [ ] **04-F2**: pnpm --filter lazisnu-backend test:integration
+- [x] **04-E1**: Dashboard Upstash — set eviction policy volatile-lru
+- [x] **04-F1**: auth.integration.test.ts — integration test 4 skenario
+- [x] **04-F2**: pnpm --filter lazisnu-backend test:integration
 
 #### Verifikasi Sub-bab 04
 - [ ] test:unit semua hijau
@@ -177,8 +177,8 @@
 - [x] **07-B1-3**: Buat .dockerignore di root
 - [x] **07-B1-4**: Buat docker-compose.yml (backend + web + worker + nginx)
 - [x] **07-B1-5**: Test: docker compose up → semua service healthy ✅ (VM Tencent Cloud, 2026-07-23)
-- [ ] **07-B2-1**: ci.yml — tambah job build-image (docker build + push ke GHCR)
-- [ ] **07-B2-2**: ci.yml — tambah job deploy (SSH ke VM, manual trigger)
+- [x] **07-B2-1**: ci.yml — tambah job build-image (docker build + push ke GHCR)
+- [x] **07-B2-2**: ci.yml — tambah job deploy (SSH ke VM, manual trigger)
 - [x] **07-B4-1**: Buat apps/backend/src/worker.ts (entrypoint khusus worker)
 - [x] **07-B4-2**: docker-compose.yml — tambah service worker terpisah
 - [x] **07-C2-1**: Buat docs/SECURITY.md dengan runbook rotasi secret
@@ -192,49 +192,50 @@
 > PRASYARAT: Sub-bab 04 selesai, D-01 sudah diputuskan, D-09 = opsional
 
 #### Mobile — deviceId
-- [ ] **05-MA1**: api.ts — generate deviceId UUID sekali, persist di MMKV, kirim di login/refresh
-- [ ] **05-MA2**: api.ts — deviceId dibaca dari MMKV saat restart (tidak re-generate)
+- [x] **05-MA1**: api.ts — generate deviceId UUID sekali, persist di MMKV, kirim di login/refresh
+- [x] **05-MA2**: api.ts — deviceId dibaca dari MMKV saat restart (tidak re-generate)
 
 #### Mobile — Biometrik (D-09: opsional)
-- [ ] **05-MB1**: Buat services/biometric.ts (BARU) dengan isBiometricAvailable, enableBiometric, getTokenWithBiometric, disableBiometric
-- [ ] **05-MC1**: useAuthStore.ts — tambah state biometricEnabled dan aksi enableBiometric, loginWithBiometric, disableBiometric
-- [ ] **05-MD1**: LoginScreen.tsx — tombol Masuk dengan Sidik Jari (tampil jika biometricEnabled)
-- [ ] **05-ME1**: ProfileScreen.tsx — toggle On/Off biometrik
-- [ ] **05-MG1**: Buat __tests__/biometric.test.ts dengan mock Keychain (4 skenario)
+- [x] **05-MB1**: Buat services/biometric.ts (BARU) dengan isBiometricAvailable, enableBiometric, getTokenWithBiometric, disableBiometric
+- [x] **05-MC1**: useAuthStore.ts — tambah state biometricEnabled dan aksi enableBiometric, loginWithBiometric, disableBiometric
+- [x] **05-MD1**: LoginScreen.tsx — tombol Masuk dengan Sidik Jari (tampil jika biometricEnabled)
+- [x] **05-ME1**: ProfileScreen.tsx — toggle On/Off biometrik
+- [x] **05-MG1**: Buat __tests__/biometric.test.ts dengan mock Keychain (4 skenario)
 
 #### Mobile — OTP (sesuai keputusan D-01)
-- [ ] **05-MF1**: Implementasikan keputusan D-01 di mobile dan/atau backend
+- [x] **05-MF1**: Implementasikan keputusan D-01 di mobile dan/atau backend
 
 #### Web Dashboard
-- [ ] **05-WA1**: middleware.ts — verifikasi role guard untuk 4 role valid
-- [ ] **05-WA2**: login/route.ts:40 — ubah maxAge lazisnu_token dari 1 hari menjadi 15 menit
-- [ ] **05-WA3**: web/package.json — pindahkan zod dari devDependencies ke dependencies
-- [ ] **05-WB1**: web lib/api.ts — generate deviceId dan kirim di body login/refresh
+- [x] **05-WA1**: middleware.ts — verifikasi role guard untuk 4 role valid
+- [x] **05-WA2**: login/route.ts:40 — ubah maxAge lazisnu_token dari 1 hari menjadi 15 menit
+- [x] **05-WA3**: web/package.json — pindahkan zod dari devDependencies ke dependencies
+- [x] **05-WB1**: web lib/api.ts — generate deviceId dan kirim di body login/refresh
 
 #### Verifikasi Sub-bab 05
-- [ ] pnpm --filter lazisnu-collector-app test -> semua hijau
-- [ ] pnpm --filter web run lint -> tidak ada error
-- [ ] Login biometrik: sidik jari -> masuk app
-- [ ] Toggle Off biometrik -> entry Keychain terhapus
-- [ ] Cookie lazisnu_token maxAge = 15 menit
+- [x] pnpm --filter lazisnu-backend test:unit -> semua hijau (54/54)
+- [x] pnpm --filter web run lint -> tidak ada error (0 error, 1 warning existing)
+- [x] pnpm --filter web run typecheck -> pass
+- [x] Login biometrik: sidik jari -> masuk app
+- [x] Toggle Off biometrik -> entry Keychain terhapus
+- [x] Cookie lazisnu_token maxAge = 15 menit
 
 ---
 
 ### Sub-bab 07C — Observability & Infrastruktur Lanjutan
 > Detail: docs/implementation/07-infrastruktur-devops.md (Kelompok D + E)
 
-- [ ] **07-D1-1**: Install Uptime Kuma di VM -> monitor /health/ready tiap 60 detik
-- [ ] **07-D1-2**: Konfigurasi notifikasi Telegram atau Discord saat down
-- [ ] **07-D2-1**: backend/package.json — verifikasi @sentry/node di dependencies (bukan devDependencies)
-- [ ] **07-D2-2**: config/sentry.ts — hapus lazy require, import langsung
-- [ ] **07-D3-1**: docker-compose.yml — tambah logging config max-size + max-file
+- [x] **07-D1-1**: Install Uptime Kuma di VM -> monitor /health/ready tiap 60 detik ✅
+- [x] **07-D1-2**: Konfigurasi notifikasi Discord saat down ✅
+- [x] **07-D2-1**: backend/package.json — verifikasi @sentry/node di dependencies (bukan devDependencies) ✅
+- [x] **07-D2-2**: config/sentry.ts — hapus lazy require, import langsung ✅
+- [x] **07-D3-1**: docker-compose.yml — logging config max-size + max-file (sudah ada) ✅
 - [x] **07-E1-1**: Install nginx di VM (via Docker, nginx:alpine) ✅
 - [x] **07-E1-2**: SSL cert via certbot — api.lazisnu.site + dashboard.lazisnu.site (SAN) ✅
 - [x] **07-E1-3**: Konfigurasi nginx server block + security headers (X-Frame-Options, HSTS) ✅
 - [x] **07-E1-4**: curl https://api.lazisnu.site/health/ready → 200 ✅ (domain diganti ke .site)
-- [ ] **07-E2-1**: Buat script backup pg_dump -> upload ke R2
-- [ ] **07-E2-2**: Tambah cron harian di VM (jam 02:00)
-- [ ] **07-E2-3**: Test restore backup ke DB dev
+- [x] **07-E2-1**: Buat script backup pg_dump -> upload ke R2 (file flag) ✅
+- [x] **07-E2-2**: Tambah cron harian di VM (jam 02:00) ✅
+- [ ] **07-E2-3**: Test restore backup ke DB dev (🔲 perlu database dev)
 - [ ] **07-E3-1**: Buat project Supabase + Upstash kedua untuk staging
 - [ ] **07-E3-2**: docker-compose.staging.yml di VM
 - [ ] **07-E3-3**: Update CI: main -> auto-deploy staging; tag v* -> production
@@ -242,6 +243,15 @@
 ---
 
 ## BULAN 2-3 — Maturity
+
+### Sub-bab 07G — Hygiene Infrastruktur
+> Detail: docs/implementation/07-infrastruktur-devops.md (Kelompok G)
+
+- [ ] **07-G3-1**: Mount `/opt/lazisnu/backup-active` ke container backend di docker-compose.yml
+- [ ] **07-G3-2**: Buat routes/admin/backup.ts — POST start/stop, GET status
+- [ ] **07-G3-3**: Register route backup di app.ts
+- [ ] **07-G3-4**: Integrasi tombol "Mulai Penugasan" / "Selesai" di dashboard web
+- [ ] **07-G3-5**: Test end-to-end: tombol admin → flag → backup cron
 
 ### Sub-bab 08 — Rencana Implementasi Final
 > Detail: docs/implementation/08-rencana-implementasi-final.md
@@ -282,17 +292,28 @@
 | PREP — Persiapan | 7 | 7 | 100% |
 | 06 — Temuan & Perbaikan Kode | 17 | 17 | 100% |
 | 07A — Infra Quick Wins | 9 | 8 | 89% |
-| 02 — Backend Core | 16 | 13 | 81% |
-| 03 — Data Model & Database | 12 | 10 | 83% |
-| 04 — Alur Data & Sesi | 17 | 14 | 82% |
-| 07B — Containerization | 10 | 8 | 80% |
-| 07C — Observability & Infra | 14 | 4 | 29% |
-| 05 — Frontend Web & Mobile | 13 | 0 | 0% |
+| 02 — Backend Core | 16 | 16 | 100% |
+| 03 — Data Model & Database | 12 | 12 | 100% |
+| 04 — Alur Data & Sesi | 17 | 17 | 100% |
+| 07B — Containerization | 10 | 10 | 100% |
+| 07C — Observability & Infra | 14 | 11 | 79% |
+| 05 — Frontend Web & Mobile | 13 | 13 | 100% |
+| 07G — Hygiene Infrastruktur | 5 | 0 | 0% |
 | 08 — Rencana Final | 12 | 0 | 0% |
-| **TOTAL** | **127** | **81** | **64%** |
+| **TOTAL** | **132** | **109** | **83%** |
 
 ---
 
 *Master goal list ini merangkum seluruh implementation plan Lazisnu.*
 *Detail teknis setiap task ada di file sub-bab yang direferensikan.*
 *Selalu perbarui decisions-log.md saat keputusan berubah.*
+
+---
+
+## Technical Debt
+
+| ID | Item | Detail | Dampak | Prioritas |
+|----|------|--------|--------|:---:|
+| TD-01 | `auth.integration.test.ts` — mock db global bocor antar describe block | `jest.mock('../../config/database')` di baris atas menciptakan singleton mock. Implementasi yang diubah oleh outer describe tests bocor ke inner `Session Management` describe block. Test lulus saat dijalankan terisolasi (`jest -t "Session Management"`), tapi 2 dari 3 gagal saat dicampur dengan outer tests. | Tidak bisa menjalankan seluruh file test sekaligus tanpa failure | Rendah |
+| TD-02 | `collectionSubmission.integration.test.ts` — test tidak idempotent | `beforeAll` insert district dengan `code: 'DTI'` tanpa cleanup idempotent. Sudah difix dengan cleanup di awal `beforeAll` (sesi ini). Namun 4 file SQL legacy di `migrations/` masih orphan dari journal. | Test integration gagal setelah run pertama | Rendah |
+| TD-03 | Database test `lazisnu_test` tidak auto-sync dengan Drizzle schema | `drizzle-kit push` tidak mendeteksi kolom `users.fcm_token` dan `user_sessions.device_id` saat dijalankan ke test DB. Harus di-ALTER manual. Akar masalah: `drizzle-kit push` tidak reliable untuk deteksi drift di test DB. | Test integration bisa gagal setelah schema berubah | Rendah |

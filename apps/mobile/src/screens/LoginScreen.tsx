@@ -22,7 +22,7 @@ import { Colors, Layout, Radius, Spacing, Typography } from '../theme';
 const LoginScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const { login, requestOTP, isLoading, error, clearError } = useAuthStore();
+  const { login, requestOTP, loginWithBiometric, isLoading, error, clearError, biometricEnabled } = useAuthStore();
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -66,6 +66,17 @@ const LoginScreen: React.FC = () => {
     }
     const message = useAuthStore.getState().error;
     Alert.alert('OTP Tidak Terkirim', message || 'Coba kembali beberapa saat lagi.');
+  };
+
+  const handleBiometricLogin = async () => {
+    clearError();
+    const success = await loginWithBiometric();
+    if (!success) {
+      const message = useAuthStore.getState().error;
+      if (message) {
+        Alert.alert('Login Biometrik Gagal', message);
+      }
+    }
   };
 
   return (
@@ -145,6 +156,17 @@ const LoginScreen: React.FC = () => {
               loading={isLoading}
               fullWidth
             />
+
+            {biometricEnabled && (
+              <AppButton
+                label={'Masuk dengan Sidik Jari'}
+                icon={'fingerprint'}
+                variant={'outline'}
+                onPress={handleBiometricLogin}
+                loading={isLoading}
+                fullWidth
+              />
+            )}
           </AppCard>
 
           <Text style={styles.footerText}>

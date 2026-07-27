@@ -12,6 +12,8 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { User, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { authHelper } from '@/lib/auth';
+import { getOrCreateDeviceId } from '@/lib/deviceId';
+import Image from 'next/image';
 
 
 const loginSchema = z.object({
@@ -42,12 +44,13 @@ export default function LoginPage() {
     setIsLoading(true);
     setError(null);
     try {
+      const deviceId = getOrCreateDeviceId();
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, device_id: deviceId }),
       });
 
       const resData = await response.json();
@@ -78,10 +81,13 @@ export default function LoginPage() {
 
       <Card className="w-full max-w-md relative z-10 p-8 shadow-2xl border-white/10 bg-white/5 backdrop-blur-2xl rounded-3xl">
         <div className="flex flex-col items-center text-center mb-10">
-          <img
+          <Image
             src="/logo-lazisnu-putih.png"
             alt="LAZISNU"
+            width={192}
+            height={48}
             className="w-48 h-auto mb-0 drop-shadow-lg"
+            priority
           />
           <p className="text-sm font-bold text-white/80">Lembaga Amil Zakat</p>
           <p className="text-sm font-bold text-white/80">Infak dan Sedekah Nahdlatul Ulama</p>

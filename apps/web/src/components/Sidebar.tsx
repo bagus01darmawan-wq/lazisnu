@@ -7,6 +7,7 @@ import { getMenuItems, UserRole } from '@/lib/menu-config';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/useAuthStore';
 import { LogOut, User as UserIcon, Loader2, X } from 'lucide-react';
+import Image from 'next/image';
 
 interface SidebarProps {
   role?: UserRole;
@@ -61,10 +62,13 @@ const Sidebar = ({ role: initialRole, userName: initialUserName, isMobileOpen = 
         {/* Brand Header */}
         <div className="py-5 px-6 border-b border-[#2C473E]/10 bg-[#F4F1EA] flex items-center justify-between">
           <div className="flex flex-col items-center gap-1">
-            <img
+            <Image
               src="/logolzs.svg"
               alt="LAZISNU"
+              width={140}
+              height={40}
               className="w-35 h-auto mb-2"
+              priority
             />
             <div className="text-center">
               <h1 className="text-[#2C473E] font-bold tracking-tight">NU-CARE LAZISNU</h1>

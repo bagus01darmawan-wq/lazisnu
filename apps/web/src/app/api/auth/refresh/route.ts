@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
   try {
     const refreshToken = request.cookies.get('lazisnu_refresh_token')?.value;
+    const deviceId = request.cookies.get('lazisnu_device_id')?.value;
 
     if (!refreshToken) {
       return NextResponse.json(
@@ -27,10 +28,17 @@ export async function POST(request: NextRequest) {
     }
 
     const finalBackendUrl = backendUrl || 'http://localhost:3001';
+
+    // Build body with device info
+    const backendBody: Record<string, string> = { refresh_token: refreshToken };
+    if (deviceId) {
+      backendBody.device_id = deviceId;
+    }
+
     const backendRes = await fetch(`${finalBackendUrl}/v1/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      body: JSON.stringify(backendBody),
     });
 
     const data = await backendRes.json();
@@ -53,10 +61,11 @@ export async function POST(request: NextRequest) {
     });
 
     // Set Access Token (non-HttpOnly for client Axios and middleware)
+    // maxAge 15 menit = 900 detik, sesuai TTL access token
     response.cookies.set('lazisnu_token', access_token, {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 60 * 60 * 24, // 1 day
+      maxAge: 60 * 15, // 15 menit
       path: '/',
     });
 

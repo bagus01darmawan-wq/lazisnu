@@ -8,6 +8,7 @@ import { config } from '../config/env';
 import { addWhatsAppJob } from './queues';
 import { Errors } from '../utils/errorCatalog';
 import { AppError } from '../utils/AppError';
+import { logger } from '../config/logger';
 
 interface WhatsAppResponse {
   message_id: string;
@@ -126,7 +127,7 @@ export async function sendWhatsAppNotificationSync(
 
   // Development mode: skip actual API call
   if ((WA_PROVIDER === 'fonnte' && !ACCESS_TOKEN) || (WA_PROVIDER !== 'fonnte' && (!PHONE_NUMBER_ID || !ACCESS_TOKEN))) {
-    console.log('[WhatsApp Dev] Notification queued in dry-run mode');
+    logger.info('WhatsApp notification queued in dry-run mode');
     result = {
       message_id: `dev-${Date.now()}`,
       status: 'SENT',
@@ -168,7 +169,7 @@ export async function sendWhatsAppNotificationSync(
       const data = await response.json() as any;
 
       if (!response.ok || (isFonnte && (data.status === false || data.Status === false))) {
-        console.error('WhatsApp API Error:', data);
+        logger.error({ waResponse: data }, 'WhatsApp API error');
         throw Errors.WA_SEND_FAILED(data.error?.message || data.reason || 'WhatsApp API request failed');
       }
 
@@ -197,7 +198,7 @@ export async function sendWhatsAppNotificationSync(
     });
   } catch (dbError) {
     // Log DB error but don't fail the main operation
-    console.error('Failed to log WhatsApp notification to DB:', dbError);
+    logger.error({ err: dbError }, 'Failed to log WhatsApp notification to DB');
   }
 
   return result;
@@ -215,7 +216,7 @@ export async function sendTemplateMessage(
   const formattedPhone = formatPhoneNumber(phone);
 
   if ((WA_PROVIDER === 'fonnte' && !ACCESS_TOKEN) || (WA_PROVIDER !== 'fonnte' && (!PHONE_NUMBER_ID || !ACCESS_TOKEN))) {
-    console.log(`[WhatsApp Dev] Template: ${templateName} → ${formattedPhone}`, variables);
+    logger.info({ templateName, phone: formattedPhone, variables }, 'WhatsApp template dry-run');
     return { message_id: `dev-${Date.now()}`, status: 'SENT' };
   }
 
@@ -260,7 +261,7 @@ export async function sendTemplateMessage(
       status: 'SENT',
     };
   } catch (error) {
-    console.error('WhatsApp template error:', error);
+    logger.error({ err: error }, 'WhatsApp template send failed');
     result = { message_id: `failed-${Date.now()}`, status: 'FAILED' };
   }
 
@@ -277,7 +278,7 @@ export async function sendTemplateMessage(
         errorMessage: result.status === 'FAILED' ? `Template send failed` : null,
     });
   } catch (dbError) {
-    console.error('Failed to log template notification to DB:', dbError);
+    logger.error({ err: dbError }, 'Failed to log template notification to DB');
   }
 
   return result;
@@ -314,7 +315,7 @@ export async function sendBulkNotifications(
       );
       enqueued++;
     } catch (err) {
-      console.error('Failed to enqueue bulk message:', err);
+      logger.error({ err }, 'Failed to enqueue bulk message');
     }
   }
 
@@ -325,4 +326,74 @@ export default {
   sendWhatsAppNotification,
   sendTemplateMessage,
   sendBulkNotifications,
+  sendOtpMessage,
 };
+
+/**
+ * Kirim pesan OTP via WhatsApp Business API.
+ * DIPANGGIL LANGSUNG (bukan via queue) — OTP time-sensitive (TTL 5 menit).
+ * OTP TIDAK PERNAH di-log.
+ */
+export async function sendOtpMessage(
+  phone: string,
+  otp: string,
+): Promise<WhatsAppResponse> {
+  const formattedPhone = formatPhoneNumber(phone);
+  const messageContent = `Kode OTP Lazisnu Anda: *${otp}*\n\nKode berlaku 5 menit. JANGAN berikan kode ini kepada siapa pun, termasuk pihak Lazisnu.`;
+
+  // Development mode: skip actual API call
+  if ((WA_PROVIDER === 'fonnte' && !ACCESS_TOKEN) || (WA_PROVIDER !== 'fonnte' && (!PHONE_NUMBER_ID || !ACCESS_TOKEN))) {
+    logger.info({ phone: formatPhoneNumber(phone).slice(0, 6) + '***' }, 'OTP dry-run (tidak dikirim)');
+    return { message_id: `dev-otp-${Date.now()}`, status: 'SENT' };
+  }
+
+  try {
+    const isFonnte = WA_PROVIDER === 'fonnte';
+    let response: globalThis.Response;
+
+    if (isFonnte) {
+      response = await fetch(`${WA_API_URL}/send`, {
+        method: 'POST',
+        headers: {
+          Authorization: ACCESS_TOKEN!,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          target: formattedPhone,
+          message: messageContent,
+          countryCode: '0',
+        }),
+      });
+    } else {
+      response = await fetch(`${WA_API_URL}/${PHONE_NUMBER_ID}/messages`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: formattedPhone,
+          type: 'text',
+          text: { body: messageContent },
+        }),
+      });
+    }
+
+    const data = await response.json() as any;
+
+    if (!response.ok || (isFonnte && (data.status === false || data.Status === false))) {
+      // TIDAK LOG OTP — hanya catat metadata
+      logger.error({ phone: formatPhoneNumber(phone).slice(0, 6) + '***', waResponse: { status: data.status, error: data.reason } }, 'OTP WhatsApp API error');
+      return { message_id: `otp-failed-${Date.now()}`, status: 'FAILED' };
+    }
+
+    return {
+      message_id: isFonnte ? (data.id?.[0] || data.id || `otp-fn-${Date.now()}`) : (data.messages?.[0]?.id || `otp-wa-${Date.now()}`),
+      status: 'SENT',
+    };
+  } catch (error) {
+    logger.error({ phone: formatPhoneNumber(phone).slice(0, 6) + '***', err: error }, 'OTP send exception');
+    return { message_id: `otp-error-${Date.now()}`, status: 'FAILED' };
+  }
+}

@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import { Card } from '@/components/ui/Card';
 import { MapPin, Phone, Calendar, UserCheck, UserX, Briefcase, Hash } from 'lucide-react';
 
@@ -41,10 +42,13 @@ export function ProfileCard({ officer }: ProfileCardProps) {
         <div className="flex flex-col md:flex-row gap-6 items-start">
           <div className="flex-shrink-0">
             {officer.photo_url ? (
-              <img
+              <Image
                 src={officer.photo_url}
                 alt={officer.full_name}
+                width={96}
+                height={96}
                 className="w-24 h-24 rounded-2xl object-cover border-2 border-white/10"
+                unoptimized
               />
             ) : (
               <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-[#DE6F4A] to-[#EAD19B] flex items-center justify-center text-[#2C473E] text-2xl font-black border-2 border-white/10">
