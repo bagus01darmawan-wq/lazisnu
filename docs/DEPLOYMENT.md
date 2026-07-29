@@ -552,7 +552,7 @@ curl -I http://staging.lazisnu.site
 | Network | `lazisnu_default` (default) | `lazisnu_default` (external) |
 | DB Supabase | Production project | Staging project (`ngskcwwjwxsvjrswomkf`) |
 | Env file | `apps/backend/.env` | `apps/backend/.env.staging` |
-| SSL | HTTPS (Let's Encrypt) | HTTP only |
+| SSL | HTTPS (Let's Encrypt) | HTTPS (Let's Encrypt, sejak 2026-07-29) |
 | Redis data | `./redis-data` | `./redis-data-staging` |
 
 ### Menjalankan staging berdampingan dengan production
