@@ -9,7 +9,15 @@ const connectionString = process.env.DATABASE_URL as string;
 
 // Disable prefetch as it is not supported for "Transaction" pool mode if using PgBouncer
 // But we use direct connection usually here.
-const client = postgres(connectionString, { max: 10 });
+//
+// Pool tuning (08-D1, 2026-07-30): disesuaikan dengan kapasitas nyata Supabase
+// (max_connections=60, penggunaan app terukur ≤ 10, mayoritas koneksi server adalah internal Supabase).
+const client = postgres(connectionString, {
+  max: 10,                    // cukup untuk beban aktual; menyisakan headroom utk Supavisor, backup, admin
+  idle_timeout: 20,           // tutup koneksi idle >20 detik — lepas slot kembali ke pooler
+  max_lifetime: 60 * 30,      // recycle koneksi tiap 30 menit — cegah koneksi stale lewat Supavisor
+  connect_timeout: 10,        // gagal cepat bila pooler tidak reachable (default 30 detik terlalu lama bagi request handler)
+});
 
 export const db = drizzle(client, { schema });
 

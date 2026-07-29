@@ -4,7 +4,7 @@
 > Setiap task terhubung ke dokumen sub-bab yang berisi detail implementasi.
 > Update [ ] menjadi [x] saat task selesai.
 
-> Terakhir diperbarui: 2026-07-30 (07-A2-2 CI hijau + PR #17 merged, db:migrate production terverifikasi; sisa: 08-C3, 08-D1)
+> Terakhir diperbarui: 2026-07-30 (07-A2-2 + db:migrate production + 08-D1 selesai; sisa 1 task: 08-C3 blue-green deploy)
 
 ---
 
