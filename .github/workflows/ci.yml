@@ -121,45 +121,44 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
-  # ─── 07-B2-2: Deploy ke Production (Manual via tag v*) ───
+  # ─── 07-B2-2: Deploy ke Production (tag v*) — blue-green (08-C3, zero downtime) ───
   deploy:
     needs: build-image
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    environment: production
+    environment: Production
 
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    - name: Deploy to VM via SSH
+    - name: Deploy to VM via SSH (blue-green)
       uses: appleboy/ssh-action@v1
       with:
         host: ${{ secrets.VM_HOST }}
         username: ${{ secrets.VM_USER }}
         key: ${{ secrets.VM_SSH_KEY }}
         script: |
-          cd ~/lazisnu
+          set -eo pipefail
+          cd /opt/lazisnu
 
-          # Login ke GHCR
+          # Sinkronkan source ke versi tag (ops lokal di-stash agar tidak konflik)
+          git stash push -m "pre-deploy $(date -Iseconds)" || true
+          git fetch origin --tags
+          git checkout ${{ github.sha }}
+          echo "✓ Repository updated to ${{ github.sha }}"
+
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
 
-          # Pull images terbaru (pakai tag SHA)
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:${{ github.sha }}
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:${{ github.sha }}
+          # Deploy blue-green tanpa downtime (pull image baru, smoke test, switch nginx, teardown warna lama)
+          GHCR_REPO=${{ github.repository }} \
+          IMAGE_TAG=${{ github.sha }} \
+          AUTO_TEARDOWN=1 \
+            bash scripts/deploy-blue-green.sh deploy
 
-          # Tag ulang sebagai latest dan restart services
-          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:${{ github.sha }} ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:latest
-          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:${{ github.sha }} ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:latest
-
-          # Restart services (production compose)
-          docker compose down
-          docker compose up -d
-
-          # Health check
-          sleep 10
-          curl -sf http://localhost:3001/health && echo "✅ Backend healthy" || echo "❌ Backend DOWN"
-          curl -sf http://localhost:3000 && echo "✅ Web healthy" || echo "❌ Web DOWN"
+          # Health check publik
+          curl -sf https://api.lazisnu.site/health/ready && echo "✅ Backend healthy" || { echo "❌ Backend DOWN"; exit 1; }
+          curl -sf https://dashboard.lazisnu.site && echo "✅ Web healthy" || { echo "❌ Web DOWN"; exit 1; }
 
   # ─── 07-E3-4: Deploy ke Staging (auto dari push main) ───
   deploy-staging:
@@ -179,12 +178,17 @@ jobs:
         username: ${{ secrets.VM_USER }}
         key: ${{ secrets.VM_SSH_KEY }}
         script: |
-          cd ~/lazisnu
+          set -eo pipefail
+          cd /opt/lazisnu
 
-          # Login ke GHCR
+          # Sinkronkan source ke main terbaru (ops lokal di-stash agar tidak konflik)
+          git stash push -m "pre-staging-deploy $(date -Iseconds)" || true
+          git fetch origin
+          git checkout origin/main
+          echo "✓ Repository updated"
+
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
 
-          # Pull images terbaru
           docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:latest
           docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:latest
 
@@ -194,5 +198,5 @@ jobs:
 
           # Smoke test (07-E3-5)
           sleep 10
-          curl -sf http://localhost:4001/health && echo "✅ Staging Backend healthy" || echo "❌ Staging Backend DOWN"
-          curl -sf http://localhost:4000 && echo "✅ Staging Web healthy" || echo "❌ Staging Web DOWN"
+          curl -sf http://localhost:4001/health && echo "✅ Staging Backend healthy" || { echo "❌ Staging Backend DOWN"; exit 1; }
+          curl -sf http://localhost:4000 && echo "✅ Staging Web healthy" || { echo "❌ Staging Web DOWN"; exit 1; }

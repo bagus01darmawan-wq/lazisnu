@@ -353,11 +353,15 @@ fi
 # ─── Step 5: Teardown warna lama (opsional) ───
 if [ -n "$ACTIVE" ] && [ "$ACTIVE" != "$TARGET" ]; then
   echo ""
-  read -r -p "$(echo -e "${YELLOW}Tear down old ${ACTIVE}? [y/N] ${NC}")" CONFIRM
-  if [ "$CONFIRM" = "y" ] || [ "$CONFIRM" = "Y" ]; then
+  if [ "$AUTO_TEARDOWN" = "1" ]; then
     teardown_color "$ACTIVE"
   else
-    warn "Old ${ACTIVE} kept running — you can rollback with: $0 rollback"
+    read -r -p "$(echo -e "${YELLOW}Tear down old ${ACTIVE}? [y/N] ${NC}")" CONFIRM
+    if [ "$CONFIRM" = "y" ] || [ "$CONFIRM" = "Y" ]; then
+      teardown_color "$ACTIVE"
+    else
+      warn "Old ${ACTIVE} kept running — you can rollback with: $0 rollback"
+    fi
   fi
 fi
 

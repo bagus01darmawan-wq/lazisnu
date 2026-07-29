@@ -18,16 +18,21 @@ services:
     image: ghcr.io/${GHCR_REPO}/backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     container_name: ${COLOR}-backend
-    networks: [lazisnu_default]
+    ports:
+      - "127.0.0.1:${BACKEND_PORT}:${BACKEND_PORT}"
+    networks:
+      lazisnu_default:
+        aliases:
+          - ${COLOR}-backend
     env_file:
       - apps/backend/.env
     environment:
       - NODE_ENV=production
       - PORT=${BACKEND_PORT}
       - REDIS_URL=redis://redis:6379
-      - BACKUP_FLAG_PATH=/app/backup-active
+      - BACKUP_FLAG_PATH=/app/backup-data/active
     volumes:
-      - ./backup-active:/app/backup-active
+      - ./backup-data:/app/backup-data
     logging:
       driver: json-file
       options:
@@ -38,7 +43,10 @@ services:
     image: ghcr.io/${GHCR_REPO}/backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     container_name: ${COLOR}-worker
-    networks: [lazisnu_default]
+    networks:
+      lazisnu_default:
+        aliases:
+          - ${COLOR}-worker
     entrypoint: ["node", "apps/backend/dist/worker.js"]
     env_file:
       - apps/backend/.env
@@ -55,7 +63,12 @@ services:
     image: ghcr.io/${GHCR_REPO}/web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     container_name: ${COLOR}-web
-    networks: [lazisnu_default]
+    ports:
+      - "127.0.0.1:${WEB_PORT}:${WEB_PORT}"
+    networks:
+      lazisnu_default:
+        aliases:
+          - ${COLOR}-web
     env_file:
       - apps/backend/.env
     environment:
