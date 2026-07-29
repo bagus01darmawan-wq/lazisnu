@@ -1,0 +1,27 @@
+# EAS Build ignore — perkeci size upload
+# node_modules (EAS akan install sendiri)
+node_modules/
+
+# android build artifacts (dibuild di cloud)
+android/app/build/
+android/.gradle/
+android/build/
+android/captures/
+
+# nested bundle artifacts
+apps/
+
+# IDE & OS
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Test files (tidak perlu di APK)
+__tests__/
+coverage/
+jest.config.js
+
+# Misc
+*.log
+*.tgz

@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "build:android": "react-native build-android --mode release",
     "build:debug": "react-native build-android --mode debug",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "eas-build-post-install": "pnpm --filter @lazisnu/shared-types build"
   },
   "dependencies": {
     "@lazisnu/shared-types": "file:../../packages/shared-types",
@@ -52,6 +53,7 @@
     "@types/react-native-vector-icons": "^6.4.18",
     "@types/react-test-renderer": "^19.1.0",
     "babel-jest": "^29.7.0",
+    "eas-cli": "^21.4.0",
     "eslint": "^8.57.1",
     "eslint-plugin-eslint-comments": "^3.2.0",
     "eslint-plugin-ft-flow": "^3.0.11",

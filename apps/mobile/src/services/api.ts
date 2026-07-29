@@ -36,11 +36,18 @@ export function getAuthStorage(): MMKV {
 }
 
 const getApiOrigin = (): string => {
+  // API_URL di-inject oleh EAS Build per profile (eas.json).
+  // development: http://10.0.2.2:3001
+  // preview:     https://staging-api.lazisnu.site
+  // production:  https://api.lazisnu.site
+  if (process.env.API_URL) {
+    return process.env.API_URL;
+  }
+  // Fallback: local dev (React Native CLI tanpa EAS)
   if (__DEV__) {
-    // Android emulator accessing host machine via 10.0.2.2
     return 'http://10.0.2.2:3001';
   }
-  return 'https://api.lazisnu.site'; // Production
+  return 'https://api.lazisnu.site';
 };
 
 export const API_ORIGIN = getApiOrigin();
