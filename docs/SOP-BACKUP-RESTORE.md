@@ -1,6 +1,6 @@
 # SOP Backup & Restore — Lazisnu
 
-> Terakhir diperbarui: 2026-07-29
+> Terakhir diperbarui: 2026-07-30 (test restore pertama berhasil — 08-B2 ✅)
 
 ## Jadwal
 
@@ -73,7 +73,14 @@ aws s3 cp "s3://$R2_BUCKET_NAME/backups/lazisnu_20260701_020001.sql.gz" \
   --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
 
 # 3. Restore ke database staging
-# Gunakan DIRECT_URL staging untuk koneksi langsung
+# Dump menggunakan DIRECT_URL (session pooler, port 5432)
+# pg_dump versi 17 diperlukan karena Supabase PG 17.x
+# Flags wajib:
+#   --schema=public  : hanya public schema (bukan internal Supabase)
+#   --no-owner       : tidak dump owner (postgres user staging berbeda)
+#   --no-acl         : tidak dump GRANT/REVOKE
+#   --clean          : tambah DROP TABLE IF EXISTS sebelum CREATE (restore idempotent)
+#   --if-exists      : DROP IF EXISTS, tidak error jika tabel belum ada
 gunzip -c restore_test.sql.gz | \
   psql "$DIRECT_URL_STAGING" 2>&1 | tee restore_$(date +%Y%m%d).log
 
@@ -178,7 +185,15 @@ cat /opt/lazisnu/.env.backup | grep R2
 
 ---
 
-## 5. Checklist Bulanan
+## 5. Riwayat Test Restore
+
+| Tanggal | Backup | Ukuran | Status | Catatan |
+|---------|--------|--------|:------:|---------|
+| 2026-07-30 | lazisnu_20260730_003554.sql.gz | 80K | ✅ SUKSES | Test restore pertama (08-B2). collections=42, assignments=79, users=10, cans=76, user_sessions=252. Fix: tambah --clean --if-exists ke pg_dump |
+
+---
+
+## 6. Checklist Bulanan
 
 - [ ] Cron backup berjalan (cek log: `tail /opt/lazisnu/backups/backup.log`)
 - [ ] Backup terbaru ada di R2 (cek dashboard Cloudflare)

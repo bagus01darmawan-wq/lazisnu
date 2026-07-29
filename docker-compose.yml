@@ -31,9 +31,9 @@ services:
       - NODE_ENV=production
       - PORT=3001
       - REDIS_URL=redis://redis:6379
-      - BACKUP_FLAG_PATH=/app/backup-active
+      - BACKUP_FLAG_PATH=/app/backup-data/active
     volumes:
-      - ./backup-active:/app/backup-active
+      - ./backup-data:/app/backup-data
     logging:
       driver: json-file
       options:
@@ -67,6 +67,7 @@ services:
       - "127.0.0.1:9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml:ro
       - ./prometheus-data:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"

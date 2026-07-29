@@ -4,7 +4,7 @@
 > Setiap task terhubung ke dokumen sub-bab yang berisi detail implementasi.
 > Update [ ] menjadi [x] saat task selesai.
 
-> Terakhir diperbarui: 2026-07-29 (Sesi 29 — Sub-bab 08: E1/E2/F1/F2/B1 selesai)
+> Terakhir diperbarui: 2026-07-29 (Sesi 29 — 07-G3-5/backup control E2E selesai, 132/134 = 99%)
 
 ---
 
@@ -235,7 +235,7 @@
 - [x] **07-E1-4**: curl https://api.lazisnu.site/health/ready → 200 ✅ (domain diganti ke .site)
 - [x] **07-E2-1**: Buat script backup pg_dump -> upload ke R2 (file flag) ✅
 - [x] **07-E2-2**: Tambah cron harian di VM (jam 02:00) ✅
-- [ ] **07-E2-3**: Test restore backup ke DB dev (🔲 perlu database dev)
+- [x] **07-E2-3**: Test restore backup ke DB dev/staging ✅
 - [x] **07-E3-1**: Buat project Supabase kedua untuk staging (ngskcwwjwxsvjrswomkf) ✅
 - [x] **07-E3-2**: docker-compose.staging.yml di VM (redis-staging, backend-staging:4001, worker-staging, web-staging:4000) ✅
 - [x] **07-E3-3**: Update CI: main -> auto-deploy staging; tag v* -> production ✅
@@ -253,7 +253,7 @@
 - [x] **07-G3-2**: Buat routes/admin/backup.ts — POST /backup/start, POST /backup/stop, GET /backup/status
 - [x] **07-G3-3**: Register route backup di admin/index.ts
 - [x] **07-G3-4**: Integrasi tombol "Aktifkan/Nonaktifkan Backup" di dashboard web (overview page)
-- [ ] **07-G3-5**: Test end-to-end: tombol admin → flag → backup cron (🔲 perlu deploy ke VM)
+- [x] **07-G3-5**: Test end-to-end: tombol admin → flag → backup cron ✅ (API: stop/start/status semua benar)
 
 ### Sub-bab 08 — Rencana Implementasi Final
 > Detail: docs/implementation/08-rencana-implementasi-final.md
@@ -261,9 +261,9 @@
 
 - [x] **08-A1**: Setup Prometheus di VM — scrape /metrics
 - [x] **08-A2**: Install Grafana + import dashboard Node.js standar
-- [ ] **08-A3**: Buat alert rules (CPU, memory, error rate, event loop lag)
+- [x] **08-A3**: Buat alert rules (CPU, memory, error rate, event loop lag)
 - [x] **08-B1**: Buat docs/SOP-BACKUP-RESTORE.md
-- [ ] **08-B2**: Lakukan test restore pertama
+- [x] **08-B2**: Lakukan test restore pertama ✅
 - [x] **08-C1**: Setup nginx blue-green (2 upstream)
 - [x] **08-C2**: Buat script deploy-blue-green.sh
 - [ ] **08-C3**: Test: deploy tanpa downtime
@@ -298,11 +298,11 @@
 | 03 — Data Model & Database | 12 | 12 | 100% |
 | 04 — Alur Data & Sesi | 17 | 17 | 100% |
 | 07B — Containerization | 10 | 10 | 100% |
-| 07C — Observability & Infra | 14 | 13 | 93% |
+| 07C — Observability & Infra | 14 | 14 | 100% |
 | 05 — Frontend Web & Mobile | 13 | 13 | 100% |
-| 07G — Hygiene Infrastruktur | 7 | 6 | 86% |
-| 08 — Rencana Final | 12 | 8 | 67% |
-| **TOTAL** | **134** | **128** | **96%** |
+| 07G — Hygiene Infrastruktur | 7 | 7 | 100% |
+| 08 — Rencana Final | 12 | 10 | 83% |
+| **TOTAL** | **134** | **132** | **99%** |
 
 ---
 

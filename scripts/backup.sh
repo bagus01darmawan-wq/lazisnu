@@ -20,7 +20,7 @@ set -eo pipefail
 # Load credentials dari file env
 set -a; . /opt/lazisnu/.env.backup; set +a
 
-FLAG_FILE="/opt/lazisnu/backup-active"
+FLAG_FILE="/opt/lazisnu/backup-data/active"
 BACKUP_DIR="/opt/lazisnu/backups"
 LOG_FILE="$BACKUP_DIR/backup.log"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -43,7 +43,13 @@ mkdir -p "$BACKUP_DIR"
 # Dump menggunakan DIRECT_URL (session pooler, port 5432)
 # pg_dump versi 17 diperlukan karena Supabase PG 17.x
 log "Dumping database..."
-/usr/lib/postgresql/17/bin/pg_dump "$DIRECT_URL" 2>> "$LOG_FILE" | gzip > "$BACKUP_FILE"
+/usr/lib/postgresql/17/bin/pg_dump \
+  --schema=public \
+  --no-owner \
+  --no-acl \
+  --clean \
+  --if-exists \
+  "$DIRECT_URL" 2>> "$LOG_FILE" | gzip > "$BACKUP_FILE"
 
 SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
 log "Dump created: $BACKUP_FILE ($SIZE)"
