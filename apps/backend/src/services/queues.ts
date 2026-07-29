@@ -5,10 +5,10 @@ import { redisConnection } from '../config/redis';
 export const whatsappQueue = new Queue('whatsapp-notifications', {
   connection: redisConnection,
   defaultJobOptions: {
-    attempts: 3,
+    attempts: 10,
     backoff: {
       type: 'exponential',
-      delay: 5000, // 5 seconds initial delay
+      delay: 3000, // 3→6→12→24→48→96→192→384→768 detik (~25.5 menit total)
     },
     removeOnComplete: true, // Keep it clean
     removeOnFail: false,   // Keep failed jobs for debugging
@@ -26,6 +26,7 @@ export async function addWhatsAppJob(data: {
   collectionId?: string;
   collectedAt?: string;
   isResubmit?: boolean;
+  branchName?: string;
 }) {
   // Convert nominal to string if it's a bigint for serializability
   const jobData = {
@@ -33,7 +34,9 @@ export async function addWhatsAppJob(data: {
     nominal: data.nominal.toString(),
   };
 
-  return whatsappQueue.add('send-notification', jobData);
+  return whatsappQueue.add('send-notification', jobData, {
+    ...(data.collectionId ? { jobId: `collection-${data.collectionId}` } : {}),
+  });
 }
 
 export default {

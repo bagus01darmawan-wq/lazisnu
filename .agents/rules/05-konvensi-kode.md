@@ -44,7 +44,7 @@ const submitCollectionSchema = z.object({
   canId        : z.string().uuid(),
   assignmentId : z.string().uuid(),
   nominal      : z.number().int().positive(),
-  paymentMethod: z.enum(['CASH', 'TRANSFER']),
+  paymentMethod: z.enum(['CASH', 'TRANSFER']), // Note: Rejected/excluded in offline batch sync payload
   collectedAt  : z.string().datetime().optional(),
 })
 
@@ -193,7 +193,7 @@ Data fetching client-side boleh memakai SWR jika memang perlu revalidation/inter
 | Pengambilan uang | `collections` | `collection`, `collectionId` | “Koleksi” / “Pengambilan” |
 | Penugasan | `assignments` | `assignment`, `assignmentId` | “Penugasan” |
 | Petugas lapangan | `officers` / user role | `officer`, `officerId` | “Petugas” |
-| Metode bayar | `payment_method` | `paymentMethod` | “Metode Bayar” |
+| Metode bayar | `payment_method` | `paymentMethod` | “Metode Bayar” (Note: Rejected/excluded in offline batch sync payload) |
 | Re-submit/koreksi | `submit_sequence`, `is_latest`, `alasan_resubmit` | `submitSequence`, `isLatest`, `reason` | “Laporkan Koreksi” / “Revisi” |
 | Periode | `period_month`, `period_year` atau schema aktual | `periodMonth`, `periodYear` | “Periode Bulan/Tahun” |
 

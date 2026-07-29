@@ -4,22 +4,26 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { db } from '../config/database';
-import { users, officers } from '../database/schema';
-import { eq, or } from 'drizzle-orm';
+import { users, officers, userSessions } from '../database/schema';
+import { eq, or, and, isNull } from 'drizzle-orm';
 import { generateTokens } from '../middleware/auth';
 import { otpService } from '../services/otp';
-import { storeRefreshJti, validateRefreshJti, revokeRefreshJti } from '../services/tokenService';
-import { createSession, getUserSessions, revokeSession, revokeAllUserSessions } from '../services/sessionService';
-import { redisConnection } from '../config/redis';
+import { storeDeviceSession, validateDeviceSession, revokeDeviceSession, revokeAllUserSessions } from '../services/tokenService';
+import { createSession, getUserSessions } from '../services/sessionService';
 import { ApiResponse, User } from '@lazisnu/shared-types';
 import { isJwtErrorLike } from '../utils/error-guards';
+import { redisConnection } from '../config/redis';
 import { sendSuccess, sendError, sendInternalError } from '../utils/response';
-import { activityLogs } from '../database/schema';
+import { insertActivityLog } from '../services/auditLogService';
+import { config } from '../config/env';
+import { sendOtpMessage } from '../services/whatsapp';
 
 // Request schemas
 const loginSchema = z.object({
   identifier: z.string().min(3),
   password: z.string().min(6),
+  device_id: z.string().optional(),
+  device_label: z.string().max(100).optional(),
 });
 
 const requestOTPSchema = z.object({
@@ -29,6 +33,8 @@ const requestOTPSchema = z.object({
 const verifyOTPSchema = z.object({
   phone: z.string().min(10).max(15),
   otp: z.string().length(6),
+  device_id: z.string().optional(),
+  device_label: z.string().max(100).optional(),
 });
 
 export async function authRoutes(fastify: FastifyInstance) {
@@ -73,10 +79,20 @@ export async function authRoutes(fastify: FastifyInstance) {
       }
 
       if (!user) {
-        await db.insert(activityLogs).values({
-          actionType: 'FAILED_LOGIN',
-          newData: { identifier: body.identifier, reason: 'USER_NOT_FOUND' },
-        });
+        try {
+          await insertActivityLog({
+            actionType: 'FAILED_LOGIN',
+            userId: null,
+            officerId: null,
+            entityType: 'auth',
+            entityId: null,
+            newData: { identifier: body.identifier, reason: 'USER_NOT_FOUND' },
+            ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+            userAgent: request.headers['user-agent'] || null,
+          });
+        } catch (err) {
+          request.log.error({ err }, 'FAILED_LOGIN audit log failed');
+        }
         return sendError(reply, 401, 'INVALID_CREDENTIALS', 'Email/Nomor HP atau password salah');
       }
 
@@ -97,11 +113,20 @@ export async function authRoutes(fastify: FastifyInstance) {
           await redisConnection.del(attemptKey);
         }
 
-        await db.insert(activityLogs).values({
-          actionType: 'FAILED_LOGIN',
-          userId: user.id,
-          newData: { identifier: body.identifier, reason: 'INVALID_PASSWORD', attempts: attemptCount },
-        });
+        try {
+          await insertActivityLog({
+            actionType: 'FAILED_LOGIN',
+            userId: user.id,
+            officerId: null,
+            entityType: 'auth',
+            entityId: null,
+            newData: { identifier: body.identifier, reason: 'INVALID_PASSWORD', attempts: attemptCount },
+            ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+            userAgent: request.headers['user-agent'] || null,
+          });
+        } catch (err) {
+          request.log.error({ err }, 'FAILED_LOGIN audit log failed');
+        }
         return sendError(reply, 401, 'INVALID_CREDENTIALS', 'Email/Nomor HP atau password salah');
       }
 
@@ -111,11 +136,20 @@ export async function authRoutes(fastify: FastifyInstance) {
 
       // Check if user is active
       if (!user.isActive) {
-        await db.insert(activityLogs).values({
-          actionType: 'FAILED_LOGIN',
-          userId: user.id,
-          newData: { identifier: body.identifier, reason: 'ACCOUNT_DISABLED' },
-        });
+        try {
+          await insertActivityLog({
+            actionType: 'FAILED_LOGIN',
+            userId: user.id,
+            officerId: null,
+            entityType: 'auth',
+            entityId: null,
+            newData: { identifier: body.identifier, reason: 'ACCOUNT_DISABLED' },
+            ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+            userAgent: request.headers['user-agent'] || null,
+          });
+        } catch (err) {
+          request.log.error({ err }, 'FAILED_LOGIN audit log failed');
+        }
         return sendError(reply, 403, 'ACCOUNT_DISABLED', 'Akun Anda tidak aktif');
       }
 
@@ -134,28 +168,35 @@ export async function authRoutes(fastify: FastifyInstance) {
         officerId: officer?.id,
       };
 
-      const tokens = generateTokens(payload, fastify);
+      const deviceId = body.device_id || undefined;
+      const deviceLabel = body.device_label || undefined;
 
-      // Simpan jti refresh token ke Redis
-      await storeRefreshJti(tokens.refreshJti, user.id, 30 * 24 * 60 * 60);
+      const tokens = generateTokens(payload, fastify, undefined, deviceId);
 
-      // Simpan session ke DB
+      await storeDeviceSession(user.id, tokens.did, tokens.refreshJti, 365 * 24 * 60 * 60);
+
       await createSession({
         userId: user.id,
         jti: tokens.refreshJti,
+        deviceLabel,
         userAgent: request.headers['user-agent'] || undefined,
         ipAddress: request.ip,
       });
 
-      await db.insert(activityLogs).values({
-        actionType: 'LOGIN_SUCCESS',
-        userId: user.id,
-        officerId: officer?.id || null,
-        entityType: 'auth',
-        newData: { method: 'password', identifier: body.identifier },
-        ipAddress: request.ip,
-        userAgent: request.headers['user-agent'] || null,
-      });
+      try {
+        await insertActivityLog({
+          actionType: 'LOGIN_SUCCESS',
+          userId: user.id,
+          officerId: officer?.id || null,
+          entityType: 'auth',
+          entityId: null,
+          newData: { method: 'password', identifier: body.identifier },
+          ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+          userAgent: request.headers['user-agent'] || null,
+        });
+      } catch (err) {
+        request.log.error({ err }, 'LOGIN_SUCCESS audit log failed');
+      }
 
       return sendSuccess(reply, {
         access_token: tokens.accessToken,
@@ -199,17 +240,17 @@ export async function authRoutes(fastify: FastifyInstance) {
     try {
       const body = requestOTPSchema.parse(request.body);
 
-      // Check if user/officer exists
-      const userRes = await db.select().from(users).where(eq(users.phone, body.phone)).limit(1);
-      const user = userRes[0];
+      // Check if officer exists (OTP khusus petugas — lookup via officers join users)
+      const officer = await db.query.officers.findFirst({
+        where: eq(officers.phone, body.phone),
+        with: { user: true }
+      });
 
-      if (!user) {
-        // For security, don't reveal if user exists or not
-        return sendSuccess(reply, {
-          message: 'OTP dikirim ke WhatsApp',
-          expires_in: 300,
-        });
+      if (!officer || !officer.user) {
+        return sendError(reply, 404, 'USER_NOT_FOUND', 'Pengguna tidak ditemukan');
       }
+
+      const user = officer.user;
 
       // Check rate limit before generating
       const allowed = await otpService.checkRateLimit(body.phone);
@@ -224,10 +265,16 @@ export async function authRoutes(fastify: FastifyInstance) {
         return sendError(reply, 500, 'OTP_ERROR', 'Gagal membuat OTP');
       }
 
-      // In production, send via WhatsApp Business API
-      // For now, mask the phone number in log
+      // Kirim OTP via WhatsApp — dipanggil langsung (bukan via queue)
+      // karena OTP time-sensitive (TTL 5 menit).
+      const waResult = await sendOtpMessage(body.phone, result.otp);
+      if (waResult.status === 'FAILED') {
+        return sendError(reply, 502, 'WA_SEND_FAILED', 'Gagal mengirim OTP via WhatsApp. Coba lagi.');
+      }
+
+      // OTP tidak di-log — hanya catat metadata
       const maskedPhone = body.phone.slice(0, 4) + '****' + body.phone.slice(-3);
-      fastify.log.info({ phone: maskedPhone }, 'OTP generated and sent to WhatsApp');
+      fastify.log.info({ phone: maskedPhone, waMessageId: waResult.message_id }, 'OTP dikirim via WhatsApp');
 
       return sendSuccess(reply, {
         message: 'OTP dikirim ke WhatsApp',
@@ -283,10 +330,20 @@ export async function authRoutes(fastify: FastifyInstance) {
           await redisConnection.expire(attemptKey, 300); // 5 menit
         }
 
-        await db.insert(activityLogs).values({
-          actionType: 'FAILED_OTP',
-          newData: { phone: body.phone, reason: 'INVALID_OTP' },
-        });
+        try {
+          await insertActivityLog({
+            actionType: 'FAILED_OTP',
+            userId: null,
+            officerId: null,
+            entityType: 'auth',
+            entityId: null,
+            newData: { phone: body.phone, reason: 'INVALID_OTP' },
+            ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+            userAgent: request.headers['user-agent'] || null,
+          });
+        } catch (err) {
+          request.log.error({ err }, 'FAILED_OTP audit log failed');
+        }
         return sendError(reply, 401, 'INVALID_OTP', 'OTP tidak valid atau sudah expired');
       }
 
@@ -331,28 +388,35 @@ export async function authRoutes(fastify: FastifyInstance) {
         districtId: officer.districtId,
       };
 
-      const tokens = generateTokens(payload, fastify);
+      const deviceId = body.device_id || undefined;
+      const tokens = generateTokens(payload, fastify, undefined, deviceId);
 
-      // Simpan jti refresh token ke Redis
-      await storeRefreshJti(tokens.refreshJti, officer.user.id, 30 * 24 * 60 * 60);
+      // Simpan sesi per-device ke Redis
+      await storeDeviceSession(officer.user.id, tokens.did, tokens.refreshJti, 365 * 24 * 60 * 60);
 
       // Simpan session ke DB
       await createSession({
         userId: officer.user.id,
         jti: tokens.refreshJti,
+        deviceLabel: body.device_label,
         userAgent: request.headers['user-agent'] || undefined,
         ipAddress: request.ip,
       });
 
-      await db.insert(activityLogs).values({
-        actionType: 'LOGIN_SUCCESS',
-        userId: officer.user.id,
-        officerId: officer.id,
-        entityType: 'auth',
-        newData: { method: 'otp', phone: body.phone },
-        ipAddress: request.ip,
-        userAgent: request.headers['user-agent'] || null,
-      });
+      try {
+        await insertActivityLog({
+          actionType: 'LOGIN_SUCCESS',
+          userId: officer.user.id,
+          officerId: officer.id,
+          entityType: 'auth',
+          entityId: null,
+          newData: { method: 'otp', phone: body.phone },
+          ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+          userAgent: request.headers['user-agent'] || null,
+        });
+      } catch (err) {
+        request.log.error({ err }, 'LOGIN_SUCCESS audit log failed');
+      }
 
       return sendSuccess(reply, {
         access_token: tokens.accessToken,
@@ -385,21 +449,22 @@ export async function authRoutes(fastify: FastifyInstance) {
         return sendError(reply, 400, 'MISSING_TOKEN', 'Refresh token diperlukan');
       }
 
-      // 1. Verify refresh token
-      const decoded = await request.server.jwt.verify<any>(refresh_token);
+      // 1. Verify refresh token dengan secret khusus
+      const decoded = await request.server.jwt.verify<any>(refresh_token, { key: config.JWT_REFRESH_SECRET });
 
       if (decoded.tokenType !== 'refresh') {
         return sendError(reply, 401, 'INVALID_TOKEN', 'Token yang diberikan bukan refresh token');
       }
 
-      // 2. Validasi jti — cek apakah masih valid (belum di-revoke)
+      // 2. Validasi sesi per-device (Bab 20 Fase 1)
+      const deviceId = decoded.did || decoded.jti;
       if (decoded.jti) {
-        const jtiUserId = await validateRefreshJti(decoded.jti);
-        if (!jtiUserId) {
+        const isValid = await validateDeviceSession(decoded.userId, deviceId, decoded.jti);
+        if (!isValid) {
           return sendError(reply, 401, 'REFRESH_REVOKED', 'Refresh token sudah tidak berlaku');
         }
-        // Revoke jti lama (rotation)
-        await revokeRefreshJti(decoded.jti);
+        // Revoke jti lama (rotation) — hanya di Redis, DB session ditutup nanti
+        await revokeDeviceSession(decoded.userId, deviceId);
       }
 
       // 3. Check user active status
@@ -436,13 +501,21 @@ export async function authRoutes(fastify: FastifyInstance) {
       // 4. Generate new tokens dengan jti baru
       const tokens = generateTokens(newPayload, request.server);
 
-      // 5. Simpan jti baru ke Redis dan update session activity
-      await storeRefreshJti(tokens.refreshJti, user.id, 30 * 24 * 60 * 60);
+      // 5. Simpan sesi baru ke Redis + DB
+      await storeDeviceSession(user.id, deviceId, tokens.refreshJti, 365 * 24 * 60 * 60);
 
-      // Update session activity untuk jti lama (sudah di-revoke, buat session baru)
+      // Tutup session DB lama (tandai revokedAt)
+      if (decoded.jti) {
+        await db.update(userSessions)
+          .set({ revokedAt: new Date() } as any)
+          .where(eq(userSessions.jti, decoded.jti))
+          .catch(() => {}); // best-effort
+      }
+
       await createSession({
         userId: user.id,
         jti: tokens.refreshJti,
+        deviceLabel: undefined,
         userAgent: request.headers['user-agent'] || undefined,
         ipAddress: request.ip,
       });
@@ -466,29 +539,58 @@ export async function authRoutes(fastify: FastifyInstance) {
       const { refresh_token } = request.body as { refresh_token: string };
       const access_token = (request.headers.authorization || '').replace('Bearer ', '');
 
+      let userId: string | null = null;
+      let officerId: string | null = null;
+      let deviceId: string | null = null;
+
       if (refresh_token) {
         try {
-          // Decode untuk mendapatkan jti
-          const decoded = await request.server.jwt.verify<any>(refresh_token);
-          if (decoded.jti) {
-            await revokeRefreshJti(decoded.jti);
+          const decoded = await request.server.jwt.verify<any>(refresh_token, { key: config.JWT_REFRESH_SECRET });
+          userId = decoded.userId || null;
+          officerId = decoded.officerId || null;
+          deviceId = decoded.did || decoded.jti || null;
+
+          if (userId && deviceId) {
+            await revokeDeviceSession(userId, deviceId);
           }
 
-          // Blacklist access token juga (optional)
-          if (access_token) {
-            try {
-              const accessDecoded = await request.server.jwt.verify<any>(access_token);
-              const now = Math.floor(Date.now() / 1000);
-              const ttl = accessDecoded.exp - now;
-              if (ttl > 0) {
-                await redisConnection.set(`blacklist:at:${access_token}`, '1', 'EX', ttl);
-              }
-            } catch {
-              // Abaikan jika access token sudah expired
-            }
+          // Tutup session DB
+          if (decoded.jti) {
+            await db.update(userSessions)
+              .set({ revokedAt: new Date() } as any)
+              .where(eq(userSessions.jti, decoded.jti))
+              .catch(() => {});
           }
         } catch (e) {
-          // Jika token sudah tidak valid/expired, abaikan saja
+          // Token sudah expired — tidak masalah
+        }
+      }
+
+      // Resolve userId dari access token jika belum dapat
+      if (!userId && access_token) {
+        try {
+          const decodedAccess = await request.server.jwt.verify<any>(access_token);
+          userId = decodedAccess.userId || null;
+          officerId = decodedAccess.officerId || null;
+        } catch {
+          // Abaikan error decoding
+        }
+      }
+
+      if (userId) {
+        try {
+          await insertActivityLog({
+            actionType: 'LOGOUT',
+            userId,
+            officerId,
+            entityType: 'auth',
+            newData: { reason: 'USER_LOGOUT' },
+            ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+            userAgent: request.headers['user-agent'] || null,
+            entityId: null,
+          });
+        } catch (err) {
+          request.log.error({ err }, 'Manual logout audit log insertion failed');
         }
       }
 
@@ -586,11 +688,23 @@ export async function authRoutes(fastify: FastifyInstance) {
       const decoded = request.user as any;
       const { id } = request.params as { id: string };
 
-      const revoked = await revokeSession(id, decoded.userId);
+      // Cari session untuk mendapatkan jti dan deviceId
+      const session = await db.query.userSessions.findFirst({
+        where: and(eq(userSessions.id, id), eq(userSessions.userId, decoded.userId), isNull(userSessions.revokedAt)),
+      });
 
-      if (!revoked) {
+      if (!session) {
         return sendError(reply, 404, 'SESSION_NOT_FOUND', 'Sesi tidak ditemukan atau sudah dicabut');
       }
+
+      // Revoke di Redis (FIX P0-2: sebelumnya hanya set revokedAt di DB, Redis tidak disentuh)
+      const deviceId = decoded.did || session.jti;
+      await revokeDeviceSession(decoded.userId, deviceId);
+
+      // Tandai revokedAt di DB
+      await db.update(userSessions)
+        .set({ revokedAt: new Date() } as any)
+        .where(eq(userSessions.id, id));
 
       return sendSuccess(reply, { message: 'Sesi berhasil dicabut' });
     } catch (error: unknown) {
@@ -607,11 +721,23 @@ export async function authRoutes(fastify: FastifyInstance) {
       await request.jwtVerify();
       const decoded = request.user as any;
 
-      const count = await revokeAllUserSessions(decoded.userId);
+      const currentDeviceId = decoded.did || decoded.jti;
+      const revokedDeviceIds = await revokeAllUserSessions(decoded.userId, currentDeviceId);
+
+      // Tandai revokedAt di DB untuk semua device yang di-revoke
+      for (const did of revokedDeviceIds) {
+        await db.update(userSessions)
+          .set({ revokedAt: new Date() } as any)
+          .where(and(
+            eq(userSessions.userId, decoded.userId),
+            isNull(userSessions.revokedAt),
+          ))
+          .catch(() => {});
+      }
 
       return sendSuccess(reply, {
-        message: `${count} sesi lain berhasil dicabut`,
-        revoked_count: count,
+        message: `${revokedDeviceIds.length} sesi lain berhasil dicabut`,
+        revoked_count: revokedDeviceIds.length,
       });
     } catch (error: unknown) {
       if (isJwtErrorLike(error) && (error.statusCode === 401 || error.code?.includes('JWT'))) {

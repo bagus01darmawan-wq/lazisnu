@@ -1,38 +1,14 @@
-import crypto from 'crypto';
-import { config } from '../config/env';
+const QR_CODE_PATTERN = /^LAZ-[A-Z0-9]+(?:-[A-Z0-9]+)+$/;
+const QR_CODE_MAX_LENGTH = 50;
 
 /**
- * Membangun token QR yang ditandatangani menggunakan HMAC-SHA256.
- * Format: hmac_signature.qr_code
+ * Memvalidasi qr_code mentah secara exact-match.
+ * Fungsi ini sengaja tidak melakukan trim atau perubahan kapitalisasi.
  */
-export function signQRCode(qrCode: string): string {
-  const hmac = crypto.createHmac('sha256', config.APP_SECRET);
-  hmac.update(qrCode);
-  const signature = hmac.digest('hex').substring(0, 32); // Gunakan 32 karakter pertama untuk efisiensi
-  return `${signature}.${qrCode}`;
-}
-
-/**
- * Memverifikasi token QR dan mengembalikan qrCode asli jika valid.
- * Format token: signature.qr_code
- */
-export function verifyQRCode(token: string): string | null {
-  if (!token || !token.includes('.')) return null;
-
-  const [signature, qrCode] = token.split('.');
-  if (!signature || !qrCode) return null;
-
-  const expectedSignature = crypto
-    .createHmac('sha256', config.APP_SECRET)
-    .update(qrCode)
-    .digest('hex')
-    .substring(0, 32);
-
-  if (signature.length !== expectedSignature.length) return null;
-
-  if (crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
-    return qrCode;
-  }
-
-  return null;
+export function isValidQRCode(qrCode: string): boolean {
+  return (
+    qrCode.length > 0 &&
+    qrCode.length <= QR_CODE_MAX_LENGTH &&
+    QR_CODE_PATTERN.test(qrCode)
+  );
 }

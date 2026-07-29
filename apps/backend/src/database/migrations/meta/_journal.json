@@ -15,6 +15,27 @@
       "when": 1777651747595,
       "tag": "0001_long_blur",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784480644407,
+      "tag": "0002_great_virginia_dare",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784732995514,
+      "tag": "0003_calm_ultron",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1753276800000,
+      "tag": "0004_immutable_rule",
+      "breakpoints": true
     }
   ]
 }

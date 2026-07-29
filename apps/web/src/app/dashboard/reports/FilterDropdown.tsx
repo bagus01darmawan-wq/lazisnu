@@ -20,11 +20,21 @@ export default function FilterDropdown() {
   const { user } = useAuthStore();
   const isRanting = user?.role === 'ADMIN_RANTING';
 
-  const currentMonth = searchParams.get('month') || (new Date().getMonth() + 1).toString();
+  const currentMonth = searchParams.get('month') || '';
+  const monthsParam = searchParams.get('months') || '';
   const currentYear = searchParams.get('year') || new Date().getFullYear().toString();
   const currentBranch = searchParams.get('branch') || '';
   const currentOfficer = searchParams.get('officer') || '';
   const initialSearch = searchParams.get('search') || '';
+
+  const initialMonths = monthsParam
+    ? monthsParam.split(',').map(Number).filter(n => n >= 1 && n <= 12)
+    : currentMonth
+      ? [parseInt(currentMonth)]
+      : [new Date().getMonth() + 1];
+
+  const [selectedMonths, setSelectedMonths] = useState<number[]>(initialMonths);
+  const [selectedYear, setSelectedYear] = useState(parseInt(currentYear));
 
   const [branches, setBranches] = useState<Branch[]>([]);
   const [officers, setOfficers] = useState<OfficerExtended[]>([]);
@@ -110,10 +120,29 @@ export default function FilterDropdown() {
   const handleReset = () => {
     setSearchTerm('');
     const params = new URLSearchParams();
-    params.set('month', (new Date().getMonth() + 1).toString());
     params.set('year', new Date().getFullYear().toString());
+    params.set('month', (new Date().getMonth() + 1).toString());
     router.push(`?${params.toString()}`);
   };
+
+  const handlePeriodChange = useCallback((newMonths: number[], newYear: number) => {
+    setSelectedMonths(newMonths);
+    setSelectedYear(newYear);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('year', newYear.toString());
+    if (newMonths.length === 0) {
+      params.delete('months');
+      params.delete('month');
+    } else if (newMonths.length === 1) {
+      params.delete('months');
+      params.set('month', newMonths[0].toString());
+    } else {
+      params.delete('month');
+      params.set('months', newMonths.join(','));
+    }
+    params.delete('page');
+    router.push(`?${params.toString()}`);
+  }, [router, searchParams]);
 
 
   const filteredOfficers = currentBranch
@@ -176,15 +205,9 @@ export default function FilterDropdown() {
 
         {/* Period Filter Pill Wrapper */}
         <PeriodPicker
-          month={Number(currentMonth)}
-          year={Number(currentYear)}
-          onChange={(m, y) => {
-            const params = new URLSearchParams(searchParams.toString());
-            params.set('month', m.toString());
-            params.set('year', y.toString());
-            params.delete('page');
-            router.push(`?${params.toString()}`);
-          }}
+          months={selectedMonths}
+          year={selectedYear}
+          onChange={handlePeriodChange}
         />
 
         <DropdownFilter

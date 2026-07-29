@@ -25,66 +25,62 @@ iOS: SKIP untuk saat ini. Jangan tambahkan iOS-specific code.
 ### AuthStack (sebelum login)
 ```
 SplashScreen       → cek token → redirect ke MainStack atau LoginScreen
-LoginScreen        → form ID petugas + password
+LoginScreen        → form nomor HP + OTP
 ```
 
 ### MainStack (setelah login)
 ```
-DashboardScreen    → list task + progress bar + tombol Mulai Trip
-  ↓ tap task
-DetailTaskScreen   → info kaleng: nama pemilik, alamat, status periode ini
-  ↓ tap Scan QR
-QRScannerScreen    → kamera scan + validasi
-  ↓ QR valid
-InputNominalScreen → keyboard angka + pilih Cash/Transfer
-  ↓ lanjut
-KonfirmasiScreen   → review ringkasan + tombol konfirmasi (tidak bisa batal)
-  ↓ submit
-SuksesScreen       → animasi sukses + status WA
-ResubmitFormScreen → input nominal baru + alasan wajib (dari list task selesai)
-ProfilScreen       → nama, wilayah, logout
+DashboardScreen    → ringkasan tugas + progress + nominal hari/minggu ini
+ScanScreen         → kamera scanner QR + detail info kaleng (jika terdeteksi)
+CollectionScreen   → input nominal infaq + metode penerimaan (Tunai/Transfer) + detail kaleng
+SuccessScreen      → status sukses penjemputan + notifikasi WA
+HistoryScreen      → daftar riwayat penjemputan (termasuk status pending sync lokal)
+TasksScreen        → list tugas (ACTIVE & COMPLETED) dengan filter segmented control
+ProfileScreen      → profil petugas + tombol logout
 ```
 
 ---
 
-## Alur Offline yang Harus Diimplementasikan
+## Kebijakan Offline-First & Alur Sinkronisasi (Wajib Dipatuhi)
 
 ```typescript
-// 1. Petugas tap "Mulai Trip" → app switch ke offline mode
-//    (data mulai di-queue lokal meski ada sinyal — untuk konsistensi)
+// 1. DATA INVARIANT FINANSIAL:
+// Dilarang keras menghapus queued collection tanpa konfirmasi sukses dari server (ACK).
+// Tidak boleh ada fungsi clearQueue() atau tombol "Hapus Data Lokal".
+// Saat logout, data pending/failed tidak boleh dihapus (simpan berdasarkan officerId).
 
-// 2. Setiap submit koleksi:
-const isOnline = await NetInfo.fetch().then(s => s.isConnected)
-
-if (isOnline) {
-  try {
-    await koleksiService.submit(record)
-    // sukses → update status task ke 'selesai' di local state
-  } catch {
-    offlineQueueStore.addToQueue(record)
-    // tampil indikator "Menunggu Sinkronisasi"
-  }
-} else {
-  offlineQueueStore.addToQueue(record)
-  // tampil indikator "Menunggu Sinkronisasi"
+// 2. Pemisahan payload batch transaksi dengan metadata lokal:
+interface BatchCollectionRequestItem {
+  offline_id: string;
+  assignment_id: string;
+  can_id: string;
+  nominal: number;
+  collected_at: string;
+  latitude?: number;
+  longitude?: number;
+  device_info?: DeviceInfo;
 }
 
-// 3. NetInfo event listener:
-NetInfo.addEventListener(state => {
-  if (state.isConnected && state.isInternetReachable) {
-    syncService.syncPendingQueue()
-  }
-})
-
-// 4. syncService.syncPendingQueue():
-async function syncPendingQueue() {
-  const queue = offlineQueueStore.getQueue()
-  if (queue.length === 0) return
-
-  const result = await koleksiService.batchSync(queue)
-  // Hapus dari queue hanya yang berhasil di-sync
-  offlineQueueStore.removeSubmitted(result.successIds)
+// Gunakan mapper allowlist untuk membuang metadata lokal sebelum dikirim ke API:
+function toBatchPayload(item: QueuedCollection): BatchCollectionRequestItem {
+  return {
+    offline_id: item.offline_id,
+    assignment_id: item.assignment_id,
+    can_id: item.can_id,
+    nominal: item.nominal,
+    collected_at: item.collected_at,
+    latitude: item.latitude,
+    longitude: item.longitude,
+  };
 }
+
+// 3. Logika Retrying dan Rekonsiliasi Refresh:
+// - Coba kirim ulang 1x per event perubahan konektivitas.
+// - Gunakan exponential backoff dan simpan `next_retry_at`.
+// - HTTP 5xx/network error harus tetap di active queue (tidak dibuang).
+// - Validation error (HTTP 400) masuk karantina/needs-review untuk diulas, bukan dihapus.
+// - Saat reload/refresh, data server digabungkan dengan queue lokal (active & quarantine) 
+//   berdasarkan offline_id agar data transaksi lokal tetap tampil dan tidak hilang/double-count.
 ```
 
 ---

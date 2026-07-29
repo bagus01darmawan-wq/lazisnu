@@ -2,8 +2,7 @@
  * Ownership guard — memastikan user hanya bisa mengakses resource miliknya sendiri.
  *
  * Aturan akses:
- * - ADMIN_PUSAT: boleh akses apa pun.
- * - ADMIN_KABUPATEN: hanya districtId miliknya.
+ * - ADMIN_KECAMATAN: hanya districtId miliknya.
  * - ADMIN_RANTING: hanya branchId miliknya.
  * - BENDAHARA: hanya branchId miliknya.
  * - PETUGAS: hanya collection miliknya (officerId).
@@ -26,8 +25,6 @@ export async function assertBranchAccess(ctx: AuthContext, branchId: string): Pr
   if (!branchId) throw Errors.FORBIDDEN_SCOPE('branchId tidak diberikan');
 
   switch (ctx.role) {
-    case 'ADMIN_PUSAT':
-      return; // boleh semua
     case 'ADMIN_RANTING':
     case 'BENDAHARA':
       if (ctx.branchId !== branchId) {
@@ -57,9 +54,7 @@ export async function assertDistrictAccess(ctx: AuthContext, districtId: string)
   if (!districtId) throw Errors.FORBIDDEN_SCOPE('districtId tidak diberikan');
 
   switch (ctx.role) {
-    case 'ADMIN_PUSAT':
-      return;
-    case 'ADMIN_KABUPATEN':
+    case 'ADMIN_KECAMATAN':
       if (ctx.districtId !== districtId) {
         throw Errors.FORBIDDEN_SCOPE('Tidak punya akses ke kecamatan ini');
       }
@@ -96,8 +91,6 @@ export async function assertCollectionAccess(ctx: AuthContext, collectionId: str
   if (!collection) throw Errors.COLLECTION_NOT_FOUND();
 
   switch (ctx.role) {
-    case 'ADMIN_PUSAT':
-      return;
     case 'PETUGAS':
       if (collection.officerId !== ctx.officerId) {
         throw Errors.FORBIDDEN_SCOPE('Tidak punya akses ke perolehan ini');

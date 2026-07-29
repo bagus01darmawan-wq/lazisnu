@@ -33,29 +33,11 @@ interface OfficerState {
 }
 
 export const useOfficerStore = create<OfficerState>((set) => ({
-  officer: {
-    id: 'off-1',
-    name: 'Petugas Lapangan Lazisnu',
-    code: 'PL-001',
-    district: {
-      id: 'dist-1',
-      name: 'Kecamatan Paninggaran',
-    },
-    branch: {
-      id: 'br-1',
-      name: 'Ranting Domiyang',
-    },
-    stats: {
-      totalCollections: 156,
-      thisMonth: 42,
-      totalAmount: 3750000,
-    },
-  },
+  officer: null,
   isLoading: false,
   error: null,
   fetchOfficer: async () => {
-    // Simulasi fetch
-    set({ isLoading: true });
-    setTimeout(() => set({ isLoading: false }), 500);
+    // Endpoint profil petugas belum tersedia. Jangan mengisi UI dengan data simulasi.
+    set({isLoading: false, officer: null, error: null});
   },
 }));

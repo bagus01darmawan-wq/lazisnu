@@ -1,7 +1,7 @@
 /**
  * TC-QR-01 & TC-QR-02: Unit Test — QR Scan Logic
  *
- * TC-QR-01: Scan QR kaleng milik sendiri → API return assignment_id + can_id benar
+ * TC-QR-01: Scan QR kaleng milik sendiri → API return task id + can_id benar
  * TC-QR-02: Scan QR kaleng milik orang lain → TIDAK bocor data pemilik (owner_name, phone, address)
  *
  * Menguji fungsi buildScanResponse() yang menentukan data apa yang dikembalikan
@@ -40,14 +40,16 @@ function buildScanResponse(
 ) {
   if (!activeAssignment) {
     return {
-      id: can.id,
-      qr_code: can.qrCode,
-      status: 'UNASSIGNED',
+      error: {
+        code: 'QR_NOT_ASSIGNED',
+        message: 'Kaleng ini bukan tugas Anda pada periode berjalan',
+      },
     };
   }
 
   return {
-    id: can.id,
+    id: activeAssignment.id,
+    can_id: can.id,
     qr_code: can.qrCode,
     owner_name: can.ownerName,
     owner_phone: can.ownerPhone,
@@ -58,7 +60,6 @@ function buildScanResponse(
       ? { nominal: Number(lastCollection.nominal), date: lastCollection.collectedAt }
       : null,
     status: activeAssignment.status,
-    assignment_id: activeAssignment.id,
   };
 }
 
@@ -84,15 +85,15 @@ const mockLastCollection: LastCollection = {
 };
 
 // ============================================================================
-// TC-QR-01: Scan QR milik sendiri → return assignment_id + can_id
+// TC-QR-01: Scan QR milik sendiri → return task id + can_id
 // ============================================================================
 
 describe('TC-QR-01: Scan QR kaleng milik sendiri', () => {
-  it('return assignment_id dan can_id saat ada activeAssignment', () => {
+  it('return task id dan can_id saat ada activeAssignment', () => {
     const result = buildScanResponse(mockCan, mockAssignment, mockLastCollection);
 
-    expect(result).toHaveProperty('assignment_id', 'assignment-456');
-    expect(result).toHaveProperty('id', 'can-123');
+    expect(result).toHaveProperty('id', 'assignment-456');
+    expect(result).toHaveProperty('can_id', 'can-123');
     expect(result.status).toBe('ACTIVE');
   });
 
@@ -133,48 +134,48 @@ describe('TC-QR-01: Scan QR kaleng milik sendiri', () => {
 // ============================================================================
 
 describe('TC-QR-02: Scan QR bukan penugasan — tidak bocor data owner', () => {
-  it('return status UNASSIGNED saat tidak ada activeAssignment', () => {
+  it('return QR_NOT_ASSIGNED saat tidak ada activeAssignment', () => {
     const result = buildScanResponse(mockCan, null, null);
 
-    expect(result.status).toBe('UNASSIGNED');
+    expect(result.error?.code).toBe('QR_NOT_ASSIGNED');
   });
 
-  it('TIDAK mengandung owner_name saat UNASSIGNED', () => {
+  it('TIDAK mengandung owner_name saat QR_NOT_ASSIGNED', () => {
     const result = buildScanResponse(mockCan, null, null);
 
     expect(result).not.toHaveProperty('owner_name');
   });
 
-  it('TIDAK mengandung owner_phone saat UNASSIGNED', () => {
+  it('TIDAK mengandung owner_phone saat QR_NOT_ASSIGNED', () => {
     const result = buildScanResponse(mockCan, null, null);
 
     expect(result).not.toHaveProperty('owner_phone');
   });
 
-  it('TIDAK mengandung owner_address saat UNASSIGNED', () => {
+  it('TIDAK mengandung owner_address saat QR_NOT_ASSIGNED', () => {
     const result = buildScanResponse(mockCan, null, null);
 
     expect(result).not.toHaveProperty('owner_address');
   });
 
-  it('TIDAK mengandung assignment_id saat UNASSIGNED', () => {
+  it('TIDAK mengandung id transaksi saat QR_NOT_ASSIGNED', () => {
     const result = buildScanResponse(mockCan, null, null);
 
     expect(result).not.toHaveProperty('assignment_id');
   });
 
-  it('hanya return id, qr_code, dan status = UNASSIGNED', () => {
+  it('hanya return error QR_NOT_ASSIGNED', () => {
     const result = buildScanResponse(mockCan, null, null);
 
-    expect(Object.keys(result).sort()).toEqual(['id', 'qr_code', 'status'].sort());
     expect(result).toEqual({
-      id: 'can-123',
-      qr_code: 'LAZ-JKT-00001',
-      status: 'UNASSIGNED',
+      error: {
+        code: 'QR_NOT_ASSIGNED',
+        message: 'Kaleng ini bukan tugas Anda pada periode berjalan',
+      },
     });
   });
 
-  it('UNASSIGNED tidak bocor meski data can lengkap tersedia di memori', () => {
+  it('QR_NOT_ASSIGNED tidak bocor meski data can lengkap tersedia di memori', () => {
     const canWithFullData: CanScanData = {
       id: 'can-999',
       qrCode: 'LAZ-BGR-00999',
@@ -192,7 +193,7 @@ describe('TC-QR-02: Scan QR bukan penugasan — tidak bocor data owner', () => {
     expect(result).not.toHaveProperty('owner_address');
     expect(result).not.toHaveProperty('latitude');
     expect(result).not.toHaveProperty('longitude');
-    expect(result.status).toBe('UNASSIGNED');
+    expect(result.error?.code).toBe('QR_NOT_ASSIGNED');
   });
 });
 
@@ -214,7 +215,7 @@ describe('QR Scan — various officer scenarios', () => {
 
     const result = buildScanResponse(mockCan, activeAssignment, null);
 
-    expect(result.status).toBe('UNASSIGNED');
+    expect(result.error?.code).toBe('QR_NOT_ASSIGNED');
     expect(result).not.toHaveProperty('owner_name');
   });
 
@@ -227,10 +228,10 @@ describe('QR Scan — various officer scenarios', () => {
     };
 
     // Route hanya query assignment dengan status = 'ACTIVE'
-    // Kalau tidak ketemu → UNASSIGNED
+    // Kalau tidak ketemu → QR_NOT_ASSIGNED
     const result = buildScanResponse(mockCan, null, null);
 
-    expect(result.status).toBe('UNASSIGNED');
+    expect(result.error?.code).toBe('QR_NOT_ASSIGNED');
   });
 
   it('scan QR di luar periode bulan ini → tidak ada activeAssignment', () => {
@@ -238,7 +239,7 @@ describe('QR Scan — various officer scenarios', () => {
     // Kalau assignment bulan lalu → tidak ketemu
     const result = buildScanResponse(mockCan, null, null);
 
-    expect(result.status).toBe('UNASSIGNED');
+    expect(result.error?.code).toBe('QR_NOT_ASSIGNED');
     expect(result).not.toHaveProperty('owner_name');
   });
 });

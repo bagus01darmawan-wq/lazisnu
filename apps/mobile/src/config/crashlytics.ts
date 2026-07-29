@@ -3,12 +3,22 @@
 // Centralized Firebase Crashlytics helper. Semua module lain wajib lewat file
 // ini agar key attribute konsisten dan data sensitif tidak ikut terkirim.
 
-import crashlytics from '@react-native-firebase/crashlytics';
+import {
+  getCrashlytics,
+  log,
+  setAttribute,
+  setCrashlyticsCollectionEnabled,
+  setUserId,
+} from '@react-native-firebase/crashlytics';
 
 let initialized = false;
 
 function getReporter() {
-  return crashlytics();
+  return getCrashlytics();
+}
+
+function ignoreFailure(operation: Promise<unknown>): void {
+  operation.catch(() => undefined);
 }
 
 export function initCrashlytics(): void {
@@ -18,11 +28,12 @@ export function initCrashlytics(): void {
 
   try {
     const reporter = getReporter();
-    reporter.setCrashlyticsCollectionEnabled(!__DEV__);
-    reporter.log(
+    ignoreFailure(setCrashlyticsCollectionEnabled(reporter, !__DEV__));
+    log(
+      reporter,
       __DEV__
         ? 'Crashlytics initialized with collection disabled in development.'
-        : 'Crashlytics initialized.'
+        : 'Crashlytics initialized.',
     );
     initialized = true;
   } catch (error) {
@@ -32,7 +43,7 @@ export function initCrashlytics(): void {
 
 export function setAuthTag(key: string, value: string | number | boolean): void {
   try {
-    getReporter().setAttribute(`auth.${key}`, String(value));
+    ignoreFailure(setAttribute(getReporter(), `auth.${key}`, String(value)));
   } catch {
     /* noop - native module may not be ready in tests or early startup */
   }
@@ -44,15 +55,15 @@ export function captureAuthEvent(
 ): void {
   try {
     const reporter = getReporter();
-    reporter.setAttribute('auth.event_code', code);
+    ignoreFailure(setAttribute(reporter, 'auth.event_code', code));
     if (context) {
       Object.entries(context).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
-          reporter.setAttribute(`auth.${key}`, String(value));
+          ignoreFailure(setAttribute(reporter, `auth.${key}`, String(value)));
         }
       });
     }
-    reporter.log(`Auth: ${code}`);
+    log(reporter, `Auth: ${code}`);
   } catch {
     /* noop */
   }
@@ -60,7 +71,7 @@ export function captureAuthEvent(
 
 export function setAuthenticatedUser(officerId: string): void {
   try {
-    getReporter().setUserId(officerId);
+    ignoreFailure(setUserId(getReporter(), officerId));
   } catch {
     /* noop */
   }
@@ -68,7 +79,7 @@ export function setAuthenticatedUser(officerId: string): void {
 
 export function clearAuthenticatedUser(): void {
   try {
-    getReporter().setUserId('');
+    ignoreFailure(setUserId(getReporter(), ''));
   } catch {
     /* noop */
   }

@@ -1,286 +1,316 @@
-import React, { useEffect, useState, useCallback, memo } from 'react';
+import React, {memo, useCallback, useEffect, useState} from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  RefreshControl,
   ActivityIndicator,
-  Modal,
-  TextInput,
   Alert,
+  FlatList,
+  Modal,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useCollectionsStore } from '../stores';
-import { Collection } from '@lazisnu/shared-types';
-import { Colors, Spacing, Typography, Shadows } from '../theme';
-import Animated, { FadeInUp, Layout } from 'react-native-reanimated';
+import Animated, {FadeInUp, Layout as AnimatedLayout} from 'react-native-reanimated';
+import type {Collection} from '@lazisnu/shared-types';
+import {useCollectionsStore, useSyncStore, useTasksStore} from '../stores';
 import api from '../services/api';
+import {offlineQueue} from '../services/offline/queue';
+import {AppButton, AppCard, AppTextInput, StatusBadge} from '../components/ui';
+import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
 
-// Collection dengan flag `isLatest` dari backend (atau computed client-side).
-// Field ini belum ada di shared-types `Collection` — digunakan sebagai penanda
-// versi setoran paling baru untuk fitur resubmit/koreksi.
-type CollectionWithLatest = Collection & { isLatest?: boolean };
+export const updatePendingCollectionNominal = (
+  offlineId: string,
+  nominal: number,
+): boolean => offlineQueue.updateNominal(offlineId, nominal);
 
-const formatCurrency = (nominal: number) => {
-  return new Intl.NumberFormat('id-ID', {
+const formatCurrency = (nominal: number) =>
+  new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
-    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   }).format(nominal);
-};
 
-const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('id-ID', {
-    weekday: 'short',
+const formatDate = (value: string) =>
+  new Intl.DateTimeFormat('id-ID', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-  });
-};
+  }).format(new Date(value));
 
-const CollectionItem = memo(({
-  item,
-  index,
-  onResubmit,
-}: {
-  item: CollectionWithLatest;
-  index: number;
-  onResubmit: (id: string, currentNominal: number, method: 'CASH' | 'TRANSFER') => void
-}) => {
-  const getPaymentMethodIcon = (method: string) => {
-    return method === 'CASH' ? 'cash' : 'bank-transfer';
-  };
-
-  // isLatest ditentukan dari field opsional di response (jika dikirim backend),
-  // atau dari computed client-side (resubmit menghasilkan isLatest=true)
-  const isLatest = item.isLatest !== false;
-
-  return (
+const HistoryItem = memo(
+  ({
+    item,
+    index,
+    onCorrect,
+    onViewFailureDetail,
+  }: {
+    item: Collection;
+    index: number;
+    onCorrect: (item: Collection) => void;
+    onViewFailureDetail?: (item: Collection) => void;
+  }) => (
     <Animated.View
-      entering={FadeInUp.delay(index * 50).duration(400)}
-      layout={Layout.springify()}
-    >
-      <View style={styles.collectionCard}>
-        <View style={styles.cardHeader}>
-          <View style={styles.dateContainer}>
-            <Icon name="calendar" size={14} color={Colors.text.muted} />
+      entering={FadeInUp.delay(index * 40).duration(320)}
+      layout={AnimatedLayout.springify()}>
+      <AppCard variant={'elevated'} style={styles.historyCard}>
+        <View style={styles.cardTopRow}>
+          <View style={styles.dateRow}>
+            <Icon name={'calendar-outline'} size={16} color={Colors.text.muted} />
             <Text style={styles.dateText}>{formatDate(item.collected_at)}</Text>
           </View>
-          <View style={styles.methodBadge}>
+          {item.sync_status === 'PENDING' ? (
+            <StatusBadge status={'pending'} label={'Belum Terkirim'} />
+          ) : item.sync_status === 'FAILED' ? (
+            <StatusBadge status={'error'} label={'Gagal Terkirim'} />
+          ) : Number(item.submit_sequence || 1) > 1 ? (
+            <StatusBadge status={'corrected'} label={'Terkoreksi'} />
+          ) : (
+            <StatusBadge status={'success'} label={'Tersimpan'} />
+          )}
+        </View>
+
+        <View style={styles.identityRow}>
+          <View style={styles.packageIcon}>
             <Icon
-              name={getPaymentMethodIcon(item.payment_method)}
-              size={12}
-              color={Colors.secondary.main}
+              name={'package-variant-closed'}
+              size={24}
+              color={Colors.brand.deepGreen}
             />
-            <Text style={styles.methodText}>
-              {item.payment_method === 'CASH' ? 'Tunai' : 'Transfer'}
+          </View>
+          <View style={styles.identityContent}>
+            <Text style={styles.ownerName} numberOfLines={1}>
+              {item.can?.owner_name || 'Donatur'}
+            </Text>
+            <Text style={styles.ownerAddress} numberOfLines={2}>
+              {item.can?.owner_address || 'Alamat tidak tersedia'}
             </Text>
           </View>
         </View>
 
-        <View style={styles.cardBody}>
-          <View style={styles.qrInfo}>
-            <Icon name="qrcode" size={18} color={Colors.secondary.main} />
-            <Text style={styles.qrCode}>{item.can?.qr_code || 'N/A'}</Text>
-          </View>
-          <Text style={styles.ownerName}>{item.can?.owner_name || 'Pemilik'}</Text>
-          <Text style={styles.ownerAddress} numberOfLines={1}>
-            {item.can?.owner_address || '-'}
-          </Text>
-        </View>
-
-        <View style={styles.cardFooter}>
-          <View style={styles.nominalContainer}>
-            <Text style={styles.nominalLabel}>Nominal</Text>
-            <Text style={styles.nominalValue}>{formatCurrency(item.nominal)}</Text>
-          </View>
-          <View style={styles.statusContainer}>
-            <Icon
-              name={item.whatsapp_status === 'ENQUEUED' || item.whatsapp_status === 'COMPLETED' ? 'check-circle' : 'clock-outline'}
-              size={14}
-              color={item.whatsapp_status === 'ENQUEUED' || item.whatsapp_status === 'COMPLETED' ? Colors.status.success : Colors.status.warning}
-            />
+        <View style={styles.valueRow}>
+          <View>
+            <Text style={styles.valueLabel}>Nominal diterima</Text>
             <Text
-              style={[
-                styles.statusText,
-                { color: item.whatsapp_status === 'ENQUEUED' || item.whatsapp_status === 'COMPLETED' ? Colors.status.success : Colors.status.warning },
-              ]}
-            >
-              {item.whatsapp_status === 'ENQUEUED' || item.whatsapp_status === 'COMPLETED' ? 'Notifikasi Terkirim' : 'Menunggu'}
+              style={styles.nominalValue}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}>
+              {formatCurrency(Number(item.nominal))}
             </Text>
           </View>
         </View>
 
-
-
-        {isLatest && (
-          <TouchableOpacity
-            style={styles.resubmitButton}
-            onPress={() => onResubmit(item.id, Number(item.nominal), item.payment_method)}
-          >
-            <Icon name="refresh" size={16} color={Colors.primary.main} />
-            <Text style={styles.resubmitButtonText}>Koreksi Data</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+        <View style={styles.cardBottomRow}>
+          <View style={styles.qrRow}>
+            <Icon name={'qrcode'} size={16} color={Colors.text.muted} />
+            <Text style={styles.qrText} numberOfLines={1}>
+              {item.can?.qr_code || '-'}
+            </Text>
+          </View>
+          {item.sync_status === 'FAILED' ? (
+            <TouchableOpacity
+              accessibilityRole={'button'}
+              accessibilityLabel={'Lihat detail kegagalan'}
+              onPress={() => onViewFailureDetail?.(item)}
+              style={styles.correctButton}>
+              <Icon name={'alert-circle-outline'} size={17} color={Colors.status.error} />
+              <Text style={[styles.correctButtonText, { color: Colors.status.error }]}>Detail Gagal</Text>
+            </TouchableOpacity>
+          ) : item.sync_status === 'PENDING' ? (
+            <TouchableOpacity
+              accessibilityRole={'button'}
+              accessibilityLabel={'Koreksi data penjemputan yang belum terkirim'}
+              onPress={() => onCorrect(item)}
+              style={styles.correctButton}>
+              <Icon name={'pencil-outline'} size={17} color={Colors.brand.mutedTeal} />
+              <Text style={[styles.correctButtonText, { color: Colors.brand.mutedTeal }]}>Koreksi</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              accessibilityRole={'button'}
+              accessibilityLabel={'Koreksi data penjemputan'}
+              onPress={() => onCorrect(item)}
+              style={styles.correctButton}>
+              <Icon name={'pencil-outline'} size={17} color={Colors.brand.deepGreen} />
+              <Text style={styles.correctButtonText}>Koreksi</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </AppCard>
     </Animated.View>
-  );
-});
+  ),
+);
+
+type Correction = {
+  id: string;
+  nominal: string;
+  originalNominal: number;
+  isPending: boolean; // true = item masih di queue lokal, false = sudah sync ke server
+};
 
 const HistoryScreen: React.FC = () => {
-  const {
-    collections,
-    fetchCollections,
-    isLoading,
-    error,
-    page,
-    totalPages,
-    loadMore,
-  } = useCollectionsStore();
-  const [filter, setFilter] = useState<'ALL' | 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH'>('ALL');
-
-  // Resubmit Modal State
-  const [resubmitModalVisible, setResubmitModalVisible] = useState(false);
-  const [selectedCol, setSelectedCol] = useState<{id: string, nominal: string, method: 'CASH' | 'TRANSFER'} | null>(null);
-  const [alasanResubmit, setAlasanResubmit] = useState('');
+  const insets = useSafeAreaInsets();
+  const {collections, fetchCollections, loadMore, isLoading, error, page, totalPages, total} =
+    useCollectionsStore();
+  const {checkStatus} = useSyncStore();
+  const [correction, setCorrection] = useState<Correction | null>(null);
+  const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [failureItem, setFailureItem] = useState<Collection | null>(null);
 
-  useEffect(() => {
-    fetchCollections(filter);
-  }, [filter, fetchCollections]);
-
-  const handleOpenResubmit = useCallback((id: string, currentNominal: number, method: 'CASH' | 'TRANSFER') => {
-    setSelectedCol({ id, nominal: currentNominal.toString(), method });
-    setAlasanResubmit('');
-    setResubmitModalVisible(true);
+  const openFailureDetail = useCallback((item: Collection) => {
+    setFailureItem(item);
   }, []);
 
-  const submitResubmit = async () => {
-    if (!selectedCol) {return;}
-    if (alasanResubmit.trim().length < 5) {
-      Alert.alert('Error', 'Alasan koreksi minimal 5 karakter');
+  useEffect(() => {
+    fetchCollections();
+    checkStatus();
+  }, [checkStatus, fetchCollections]);
+
+  const openCorrection = useCallback((item: Collection) => {
+    setCorrection({
+      id:
+        item.sync_status === 'PENDING'
+          ? item.offline_id || item.id
+          : item.id,
+      nominal: String(item.nominal),
+      originalNominal: item.nominal,
+      isPending: item.sync_status === 'PENDING',
+    });
+    setReason('');
+  }, []);
+
+  const closeCorrection = () => {
+    if (!isSubmitting) {
+      setCorrection(null);
+      setReason('');
+    }
+  };
+
+  const submitCorrection = async () => {
+    if (!correction) {
       return;
     }
-    if (!selectedCol.nominal || isNaN(Number(selectedCol.nominal))) {
-      Alert.alert('Error', 'Nominal harus berupa angka');
+    const nominal = Number(correction.nominal.replace(/\D/g, ''));
+    if (!nominal) {
+      Alert.alert('Nominal Tidak Valid', 'Masukkan nominal koreksi yang benar.');
+      return;
+    }
+
+    // PENDING items: koreksi lokal di offlineQueue (belum ada di server)
+    if (correction.isPending) {
+      const updated = updatePendingCollectionNominal(correction.id, nominal);
+      if (!updated) {
+        Alert.alert('Koreksi Gagal', 'Item tidak ditemukan di antrean.');
+        return;
+      }
+      useTasksStore.getState().adjustCompletedNominal(nominal - correction.originalNominal);
+      setCorrection(null);
+      setReason('');
+      // Refresh UI dari queue MMKV yang sudah diperbarui.
+      await fetchCollections();
+      Alert.alert('Koreksi Tersimpan', 'Nominal diperbarui. Data akan dikirim saat koneksi tersedia.');
+      return;
+    }
+
+    // Synced items: koreksi via API resubmit
+    if (reason.trim().length < 5) {
+      Alert.alert('Alasan Terlalu Singkat', 'Jelaskan alasan koreksi minimal 5 karakter.');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const response = await api.collection.resubmitCollection(selectedCol.id, {
-        nominal: Number(selectedCol.nominal),
-        payment_method: selectedCol.method,
-        alasan_resubmit: alasanResubmit.trim(),
+      const response = await api.collection.resubmitCollection(correction.id, {
+        nominal,
+        alasan_resubmit: reason.trim(),
       });
-
-      if (response.success) {
-        Alert.alert('Berhasil', 'Data berhasil dikoreksi', [
-          { text: 'OK', onPress: () => {
-              setResubmitModalVisible(false);
-              fetchCollections(filter); // Refresh data
-            },
-          },
-        ]);
-      } else {
-        Alert.alert('Gagal', response.error?.message || 'Terjadi kesalahan');
+      if (!response.success) {
+        Alert.alert('Koreksi Gagal', response.error?.message || 'Data belum dapat dikoreksi.');
+        return;
       }
-    } catch (_err) {
-      Alert.alert('Gagal', 'Terjadi kesalahan sistem');
+      setCorrection(null);
+      setReason('');
+      await fetchCollections();
+      Alert.alert('Koreksi Tersimpan', 'Riwayat telah diperbarui.');
+    } catch {
+      Alert.alert('Koreksi Gagal', 'Terjadi kesalahan saat mengirim koreksi.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const renderCollectionItem = useCallback(({ item, index }: { item: CollectionWithLatest; index: number }) => (
-    <CollectionItem item={item} index={index} onResubmit={handleOpenResubmit} />
-  ), [handleOpenResubmit]);
-
-  const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Icon name="history" size={64} color={Colors.slate[200]} />
-      <Text style={styles.emptyTitle}>Belum Ada Riwayat</Text>
-      <Text style={styles.emptyText}>
-        Riwayat penjemputan Anda akan muncul di sini
-      </Text>
-    </View>
+  const renderItem = useCallback(
+    ({item, index}: {item: Collection; index: number}) => (
+      <HistoryItem
+        item={item}
+        index={index}
+        onCorrect={openCorrection}
+        onViewFailureDetail={openFailureDetail}
+      />
+    ),
+    [openCorrection, openFailureDetail],
   );
-
-  const filterOptions: { key: 'ALL' | 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH'; label: string }[] = [
-    { key: 'ALL', label: 'Semua' },
-    { key: 'TODAY', label: 'Hari Ini' },
-    { key: 'THIS_WEEK', label: 'Minggu Ini' },
-    { key: 'THIS_MONTH', label: 'Bulan Ini' },
-  ];
 
   return (
     <View style={styles.container}>
-      <View style={styles.filterContainer}>
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={filterOptions}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              key={item.key}
-              style={[styles.filterChip, filter === item.key && styles.filterChipActive]}
-              onPress={() => setFilter(item.key)}
-            >
-              <Text style={[styles.filterText, filter === item.key && styles.filterTextActive]}>
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          )}
-          keyExtractor={(item) => item.key}
-          contentContainerStyle={styles.filterList}
-        />
-      </View>
-
-      <View style={styles.summaryCard}>
-        <View style={styles.summaryItem}>
-          <Text style={styles.summaryValue}>{collections.length}</Text>
-          <Text style={styles.summaryLabel}>Total Jemput</Text>
-        </View>
-        <View style={styles.summaryDivider} />
-        <View style={styles.summaryItem}>
-          <Text style={styles.summaryValue}>
-            {formatCurrency(
-              collections.reduce((sum: number, c: Collection) => sum + Number(c.nominal), 0)
-            )}
-          </Text>
-          <Text style={styles.summaryLabel}>Total Nominal</Text>
+      <View style={[styles.header, {paddingTop: insets.top + Spacing.sm}]}>
+        <Text style={styles.headerTitle}>Riwayat Penjemputan</Text>
+        <Text style={styles.headerSubtitle}>
+          Data penjemputan yang sudah tersimpan
+        </Text>
+        <View style={styles.headerSummary}>
+          <View style={styles.summaryIcon}>
+            <Icon name={'history'} size={24} color={Colors.brand.deepGreen} />
+          </View>
+          <View>
+            <Text style={styles.summaryValue}>{total}</Text>
+            <Text style={styles.summaryLabel}>Total riwayat penjemputan</Text>
+          </View>
         </View>
       </View>
 
-      {/* Error Banner — tampil saat API gagal memuat data */}
       {error && !isLoading && (
         <View style={styles.errorBanner}>
-          <Icon name="alert-circle-outline" size={20} color="#FCA5A5" />
-          <Text style={styles.errorBannerText} numberOfLines={2}>{error}</Text>
-          <TouchableOpacity
-            style={styles.errorBannerButton}
-            onPress={() => fetchCollections(filter)}
-          >
-            <Text style={styles.errorBannerButtonText}>Coba Lagi</Text>
+          <Icon name={'alert-circle-outline'} size={20} color={Colors.text.white} />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity onPress={() => fetchCollections()}>
+            <Text style={styles.retryText}>Coba lagi</Text>
           </TouchableOpacity>
         </View>
       )}
 
       <FlatList
         data={collections}
-        renderItem={renderCollectionItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
-        ListEmptyComponent={renderEmpty}
+        renderItem={renderItem}
+        keyExtractor={item => item.id}
+        contentContainerStyle={styles.listContent}
+        ListHeaderComponent={
+          collections.length ? <Text style={styles.listTitle}>Terbaru</Text> : null
+        }
+        ListEmptyComponent={
+          !isLoading ? (
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIcon}>
+                <Icon name={'history'} size={44} color={Colors.brand.deepGreen} />
+              </View>
+              <Text style={styles.emptyTitle}>Belum ada riwayat</Text>
+              <Text style={styles.emptyText}>
+                Penjemputan yang selesai akan muncul di halaman ini.
+              </Text>
+            </View>
+          ) : null
+        }
         refreshControl={
           <RefreshControl
             refreshing={isLoading && page === 1}
-            onRefresh={() => fetchCollections(filter)}
-            colors={[Colors.primary.main]}
+            onRefresh={() => { fetchCollections(); checkStatus(); }}
+            colors={[Colors.brand.emerald]}
+            tintColor={Colors.brand.emerald}
           />
         }
         onEndReached={() => {
@@ -291,65 +321,168 @@ const HistoryScreen: React.FC = () => {
         onEndReachedThreshold={0.5}
         ListFooterComponent={
           isLoading && page > 1 ? (
-            <ActivityIndicator style={styles.loadingFooter} color={Colors.primary.main} />
+            <ActivityIndicator style={styles.loadingFooter} color={Colors.brand.emerald} />
           ) : null
         }
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={10}
-        windowSize={5}
+        showsVerticalScrollIndicator={false}
       />
 
-      {/* Resubmit Modal */}
       <Modal
-        visible={resubmitModalVisible}
+        visible={!!correction}
         transparent
-        animationType="slide"
-        onRequestClose={() => setResubmitModalVisible(false)}
-      >
+        animationType={'fade'}
+        onRequestClose={closeCorrection}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Koreksi Penjemputan</Text>
-
-            <Text style={styles.inputLabel}>Nominal Baru</Text>
-            <TextInput
-              style={styles.textInput}
-              keyboardType="numeric"
-              value={selectedCol?.nominal}
-              onChangeText={(text) => setSelectedCol(prev => prev ? {...prev, nominal: text} : null)}
-              placeholder="Masukkan nominal"
-            />
-
-            <Text style={styles.inputLabel}>Alasan Koreksi</Text>
-            <TextInput
-              style={[styles.textInput, styles.textArea]}
-              multiline
-              numberOfLines={3}
-              value={alasanResubmit}
-              onChangeText={setAlasanResubmit}
-              placeholder="Contoh: Salah ketik nominal"
-            />
-
-            <View style={styles.modalActions}>
+          <AppCard variant={'elevated'} style={styles.modalCard}>
+            <View style={styles.modalHeading}>
+              <View>
+                <Text style={styles.modalTitle}>Koreksi Penjemputan</Text>
+                <Text style={styles.modalSubtitle}>
+                  {correction?.isPending
+                    ? 'Nominal akan diperbarui sebelum dikirim ke server.'
+                    : 'Perubahan akan tercatat dalam audit.'}
+                </Text>
+              </View>
               <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setResubmitModalVisible(false)}
-                disabled={isSubmitting}
-              >
-                <Text style={styles.cancelButtonText}>Batal</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.submitButton]}
-                onPress={submitResubmit}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator color={Colors.text.white} size="small" />
-                ) : (
-                  <Text style={styles.submitButtonText}>Simpan Koreksi</Text>
-                )}
+                accessibilityRole={'button'}
+                accessibilityLabel={'Tutup koreksi'}
+                onPress={closeCorrection}
+                style={styles.closeButton}>
+                <Icon name={'close'} size={22} color={Colors.text.secondary} />
               </TouchableOpacity>
             </View>
-          </View>
+
+            <AppTextInput
+              label={'Nominal baru'}
+              keyboardType={'numeric'}
+              value={correction?.nominal || ''}
+              onChangeText={text =>
+                setCorrection(previous =>
+                  previous ? {...previous, nominal: text.replace(/\D/g, '')} : null,
+                )
+              }
+              placeholder={'Masukkan nominal'}
+            />
+            {!correction?.isPending && (
+              <AppTextInput
+                label={'Alasan koreksi'}
+                multiline
+                numberOfLines={3}
+                value={reason}
+                onChangeText={setReason}
+                placeholder={'Contoh: salah memasukkan nominal'}
+                helperText={'Minimal 5 karakter'}
+              />
+            )}
+
+            <View style={styles.modalActions}>
+              <View style={styles.modalButton}>
+                <AppButton
+                  label={'Batal'}
+                  variant={'outline'}
+                  onPress={closeCorrection}
+                  disabled={isSubmitting}
+                  fullWidth
+                />
+              </View>
+              <View style={styles.modalButton}>
+                <AppButton
+                  label={'Simpan Koreksi'}
+                  onPress={submitCorrection}
+                  loading={isSubmitting}
+                  fullWidth
+                />
+              </View>
+            </View>
+          </AppCard>
+        </View>
+      </Modal>
+
+      {/* Modal Detail Gagal Kirim */}
+      <Modal
+        visible={!!failureItem}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFailureItem(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <AppCard style={styles.modalCard}>
+            <View style={styles.modalHeading}>
+              <View>
+                <Text style={styles.modalTitle}>Detail Gagal Kirim</Text>
+                <Text style={styles.modalSubtitle}>Transaksi tertunda di perangkat</Text>
+              </View>
+              <TouchableOpacity onPress={() => setFailureItem(null)} style={styles.closeButton}>
+                <Icon name="close" size={24} color={Colors.text.muted} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ marginBottom: Spacing.md }}>
+              <Text style={styles.inputLabel}>Kaleng Infaq</Text>
+              <Text style={styles.textValue}>{failureItem?.can?.owner_name || 'Donatur'} ({failureItem?.can?.qr_code || '-'})</Text>
+
+              <Text style={styles.inputLabel}>Nominal</Text>
+              <Text style={styles.textValue}>{failureItem ? formatCurrency(Number(failureItem.nominal)) : ''}</Text>
+
+              <Text style={styles.inputLabel}>Waktu Penjemputan</Text>
+              <Text style={styles.textValue}>{failureItem ? formatDate(failureItem.collected_at) : ''}</Text>
+
+              <Text style={styles.inputLabel}>Jumlah Percobaan</Text>
+              <Text style={styles.textValue}>{failureItem?.retry_attempts || 0} kali</Text>
+
+              <Text style={styles.inputLabel}>Pesan Masalah</Text>
+              <Text style={[styles.textValue, { color: Colors.status.error }]}>
+                {failureItem?.error_message || 'Koneksi internet bermasalah. Sistem akan mencoba mengirim kembali secara otomatis.'}
+              </Text>
+            </View>
+
+            <View style={styles.modalActions}>
+              <View style={styles.modalButton}>
+                <AppButton
+                  label={'Tutup'}
+                  variant={'outline'}
+                  onPress={() => setFailureItem(null)}
+                  disabled={isSubmitting}
+                  fullWidth
+                />
+              </View>
+              <View style={styles.modalButton}>
+                <AppButton
+                  label={'Kirim Ulang'}
+                  onPress={async () => {
+                    if (!failureItem) {return;}
+                    setIsSubmitting(true);
+                    try {
+                      const failedList = offlineQueue.getFailedPermanent();
+                      const itemToRecover = failedList.find(i => i.offline_id === failureItem.id);
+                      if (itemToRecover) {
+                        itemToRecover.retry_attempts = 0;
+                        delete itemToRecover.error_message;
+                        delete itemToRecover.error_type;
+                        delete itemToRecover.can_retry;
+                        delete itemToRecover.next_retry_at;
+
+                        // Tulis active queue lebih dahulu; jika gagal, record tetap di quarantine.
+                        offlineQueue.enqueue(itemToRecover);
+                        offlineQueue.removeFromFailedPermanent([failureItem.id]);
+
+                        await useSyncStore.getState().triggerSync();
+                        setFailureItem(null);
+                        await fetchCollections();
+                        Alert.alert('Proses Sinkronisasi', 'Mencoba mengirim kembali data penjemputan...');
+                      }
+                    } catch (err) {
+                      Alert.alert('Gagal', 'Terjadi kesalahan saat memproses pengiriman ulang.');
+                    } finally {
+                      setIsSubmitting(false);
+                    }
+                  }}
+                  loading={isSubmitting}
+                  fullWidth
+                />
+              </View>
+            </View>
+          </AppCard>
         </View>
       </Modal>
     </View>
@@ -357,301 +490,150 @@ const HistoryScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
+  container: {flex: 1, backgroundColor: Colors.surface.page},
+  header: {
+    paddingHorizontal: Layout.screenPadding,
+    paddingBottom: Spacing.lg,
+    backgroundColor: Colors.brand.deepGreen,
+    borderBottomLeftRadius: Radius.panel,
+    borderBottomRightRadius: Radius.panel,
   },
-  filterContainer: {
-    backgroundColor: Colors.card,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.slate[100],
+  headerTitle: {...Typography.heading1, color: Colors.text.white},
+  headerSubtitle: {...Typography.bodySmall, color: Colors.text.white, opacity: 0.78, marginTop: 3},
+  headerSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.brand.mutedSand,
+    borderRadius: Radius.lg,
+    padding: Spacing.sm,
+    marginTop: Spacing.md,
   },
-  filterList: {
-    paddingHorizontal: Spacing.md,
-  },
-  filterChip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: 20,
-    backgroundColor: Colors.slate[100],
+  summaryIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.overlay.lightGlass,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: Spacing.sm,
   },
-  filterChipActive: {
-    backgroundColor: Colors.primary.main,
-  },
-  filterText: {
-    fontSize: Typography.caption.fontSize,
-    color: Colors.text.secondary,
-    fontWeight: '500',
-  },
-  filterTextActive: {
-    color: Colors.text.white,
-  },
-  summaryCard: {
-    flexDirection: 'row',
-    backgroundColor: Colors.card,
-    marginHorizontal: Spacing.md,
-    marginTop: Spacing.md,
-    borderRadius: 16,
-    padding: Spacing.md,
-    ...Shadows.soft,
-  },
-  summaryItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  summaryValue: {
-    fontSize: Typography.h3.fontSize,
-    fontWeight: '800',
-    color: Colors.primary.main,
-    marginBottom: 4,
-  },
-  summaryLabel: {
-    fontSize: Typography.caption.fontSize,
-    color: Colors.text.muted,
-  },
-  summaryDivider: {
-    width: 1,
-    backgroundColor: Colors.slate[100],
-  },
-  listContainer: {
-    padding: Spacing.md,
+  summaryValue: {...Typography.heading2, color: Colors.brand.deepGreen},
+  summaryLabel: {...Typography.caption, color: Colors.brand.deepGreen},
+  listContent: {
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.xl,
     flexGrow: 1,
   },
-  collectionCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    marginBottom: Spacing.md,
-    overflow: 'hidden',
-    ...Shadows.soft,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  listTitle: {...Typography.heading3, color: Colors.brand.deepGreen, marginBottom: Spacing.sm},
+  historyCard: {
     padding: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.slate[50],
-  },
-  dateContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  dateText: {
-    fontSize: Typography.caption.fontSize,
-    color: Colors.text.secondary,
-    marginLeft: 4,
-  },
-  methodBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.secondary.light,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  methodText: {
-    fontSize: Typography.caption.fontSize - 1,
-    color: Colors.secondary.dark,
-    fontWeight: '600',
-    marginLeft: 4,
-  },
-  cardBody: {
-    padding: Spacing.md,
-  },
-  qrInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  qrCode: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.secondary.main,
-    marginLeft: 6,
-  },
-  ownerName: {
-    fontSize: Typography.body1.fontSize,
-    fontWeight: '700',
-    color: Colors.text.primary,
-    marginBottom: 2,
-  },
-  ownerAddress: {
-    fontSize: Typography.body2.fontSize,
-    color: Colors.text.secondary,
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.md,
-  },
-  nominalContainer: {},
-  nominalLabel: {
-    fontSize: Typography.caption.fontSize - 2,
-    color: Colors.text.muted,
-    marginBottom: 2,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  nominalValue: {
-    fontSize: Typography.h3.fontSize,
-    fontWeight: '800',
-    color: Colors.status.success,
-  },
-  statusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statusText: {
-    fontSize: Typography.caption.fontSize,
-    fontWeight: '600',
-    marginLeft: 4,
-  },
-  notesContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.md,
-    backgroundColor: Colors.slate[50],
-    paddingTop: 8,
-  },
-  notesText: {
-    fontSize: Typography.caption.fontSize,
-    color: Colors.text.muted,
-    marginLeft: 4,
-    fontStyle: 'italic',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  emptyTitle: {
-    fontSize: Typography.h3.fontSize,
-    fontWeight: '700',
-    color: Colors.text.primary,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: Typography.body2.fontSize,
-    color: Colors.text.muted,
-    textAlign: 'center',
-  },
-  loadingFooter: {
-    paddingVertical: 20,
-  },
-  resubmitButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: Colors.slate[100],
-    backgroundColor: Colors.slate[50],
-  },
-  resubmitButtonText: {
-    fontSize: Typography.body2.fontSize,
-    color: Colors.primary.main,
-    fontWeight: '600',
-    marginLeft: Spacing.xs,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: Spacing.lg,
-    width: '85%',
-    maxWidth: 400,
-  },
-  modalTitle: {
-    fontSize: Typography.h3.fontSize,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
     marginBottom: Spacing.md,
-    textAlign: 'center',
-  },
-  inputLabel: {
-    fontSize: Typography.body2.fontSize,
-    color: Colors.text.secondary,
-    marginBottom: Spacing.xs,
-    marginTop: Spacing.sm,
-  },
-  textInput: {
     borderWidth: 1,
-    borderColor: Colors.slate[200],
-    borderRadius: 8,
-    padding: Spacing.sm,
-    fontSize: Typography.body1.fontSize,
-    color: Colors.text.primary,
+    borderColor: Colors.border.warm,
   },
-  textArea: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: Spacing.lg,
-  },
-  modalButton: {
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    borderRadius: 8,
-    marginLeft: Spacing.sm,
-    minWidth: 80,
+  cardTopRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
+  dateRow: {flexDirection: 'row', alignItems: 'center', gap: 5},
+  dateText: {...Typography.caption, color: Colors.text.secondary},
+  identityRow: {flexDirection: 'row', alignItems: 'center', marginTop: Spacing.md},
+  packageIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.surface.successSubtle,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.sm,
   },
-  cancelButton: {
-    backgroundColor: Colors.slate[100],
+  identityContent: {flex: 1},
+  ownerName: {...Typography.heading3, color: Colors.brand.deepGreen},
+  ownerAddress: {...Typography.bodySmall, color: Colors.text.secondary, marginTop: 2},
+  valueRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: Colors.surface.cardMuted,
+    borderRadius: Radius.md,
+    padding: Spacing.sm,
+    marginTop: Spacing.md,
   },
-  cancelButtonText: {
+  valueLabel: {...Typography.caption, color: Colors.text.secondary},
+  nominalValue: {...Typography.heading3, color: Colors.brand.emerald, marginTop: 2},
+  cardBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: Spacing.md,
+  },
+  qrRow: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 5, paddingRight: Spacing.sm},
+  qrText: {...Typography.caption, color: Colors.text.muted, flex: 1},
+  correctButton: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 7,
+    paddingHorizontal: Spacing.sm,
+    justifyContent: 'center',
+  },
+  correctButtonText: {...Typography.label, color: Colors.brand.deepGreen},
+  emptyContainer: {flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 70},
+  emptyIcon: {
+    width: 84,
+    height: 84,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.surface.successSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTitle: {...Typography.heading3, color: Colors.text.primary, marginTop: Spacing.md},
+  emptyText: {
+    ...Typography.bodySmall,
     color: Colors.text.secondary,
-    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: Spacing.xs,
   },
-  submitButton: {
-    backgroundColor: Colors.primary.main,
-  },
-  submitButtonText: {
-    color: Colors.text.white,
-    fontWeight: '600',
-  },
-  // ── Error Banner ───────────────────────────────────────────────────────
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#7F1D1D',
-    marginHorizontal: 16,
-    marginBottom: 12,
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: Colors.status.error,
+    margin: Spacing.md,
+    padding: Spacing.sm,
+    borderRadius: Radius.md,
   },
-  errorBannerText: {
+  errorText: {...Typography.caption, color: Colors.text.white, flex: 1, marginHorizontal: Spacing.sm},
+  retryText: {...Typography.label, color: Colors.text.white},
+  loadingFooter: {paddingVertical: Spacing.lg},
+  modalOverlay: {
     flex: 1,
-    color: '#FCA5A5',
-    fontSize: 13,
-    marginLeft: 10,
-    marginRight: 10,
+    justifyContent: 'center',
+    backgroundColor: Colors.overlay.dark,
+    padding: Spacing.md,
   },
-  errorBannerButton: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
+  modalCard: {padding: Spacing.lg},
+  inputLabel: {
+    ...Typography.caption,
+    color: Colors.text.secondary,
+    marginTop: Spacing.sm,
+    marginBottom: 2,
+    textTransform: 'uppercase',
   },
-  errorBannerButtonText: {
-    color: '#FCA5A5',
-    fontSize: 13,
+  modalHeading: {flexDirection: 'row', justifyContent: 'space-between', marginBottom: Spacing.md},
+  modalTitle: {...Typography.heading3, color: Colors.brand.deepGreen},
+  modalSubtitle: {...Typography.caption, color: Colors.text.secondary, marginTop: 3},
+  closeButton: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalActions: {flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm},
+  modalButton: {flex: 1},
+  textValue: {
+    ...Typography.bodySmall,
+    color: Colors.text.primary,
     fontWeight: '600',
+    marginBottom: Spacing.sm,
   },
 });
 

@@ -1,4 +1,9 @@
 {
   "name": "LazisnuCollectorApp",
-  "displayName": "LazisnuCollectorApp"
+  "displayName": "LazisnuCollectorApp",
+  "extra": {
+    "eas": {
+      "projectId": "6b596ee2-44f9-492e-ba9a-a4082a7730ed"
+    }
+  }
 }

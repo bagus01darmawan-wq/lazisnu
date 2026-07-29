@@ -2,8 +2,7 @@
 import { config } from './config/env';
 import { disconnectRedis } from './config/redis';
 import { buildApp } from './app';
-import './workers/whatsapp.worker'; // Initialize WhatsApp worker
-import { schedulerWorker, registerMonthlyAssignmentCron } from './workers/scheduler.worker'; // Initialize Scheduler worker
+import { whatsappWorker } from './workers/whatsapp.worker';
 
 // Start server
 async function start() {
@@ -16,10 +15,8 @@ async function start() {
     await server.listen({ port: parseInt(config.PORT), host: '0.0.0.0' });
     server.log.info(`Server running on port ${config.PORT}`);
 
-    // Register BullMQ cron jobs (after server starts)
-    if (config.NODE_ENV !== 'test') {
-      await registerMonthlyAssignmentCron();
-    }
+    // Job scheduler dihapus per D-06 (penugasan 100% via Admin Web).
+    // HTTP /v1/scheduler/* tetap dipertahankan sebagai fallback manual (D-05).
   } catch (error) {
     server.log.error(error);
     process.exit(1);
@@ -28,14 +25,22 @@ async function start() {
   // Graceful shutdown
   const gracefulShutdown = async (signal: string) => {
     server.log.info(`${signal} received, shutting down gracefully`);
-    await server.close();
-    await schedulerWorker.close();
-    await disconnectRedis();
-    process.exit(0);
+    try {
+      await server.close();
+      await whatsappWorker.close();
+      await disconnectRedis();
+    } catch (err) {
+      server.log.error({ err }, 'Error during shutdown');
+    } finally {
+      process.exit(0);
+    }
   };
 
+  // SIGUSR2: sinyal yang dipakai tsx watch saat hot-reload
+  // Tanpa ini, module lama bisa "menggantung" dan menyebabkan cache stale
+  process.once('SIGUSR2', () => gracefulShutdown('SIGUSR2'));
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
-start();
+start();

@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import { authService, setToken, setRefreshToken, getToken, clearToken, setSessionExpiredHandler } from '../services/api';
-import { offlineQueue } from '../services/offline/queue';
+import { authService, setToken, setRefreshToken, getToken, clearToken, setSessionExpiredHandler, getAuthStorage, getRefreshToken } from '../services/api';
+import { isBiometricAvailable, enableBiometric, getTokenWithBiometric, updateBiometricToken, disableBiometric } from '../services/biometric';
 import { taskCache } from '../services/offline/tasks';
+import { clearAllCache } from '../services/offline/cache';
 import { useDashboardStore } from './useDashboardStore';
 import { useTasksStore } from './useTasksStore';
 import { useCollectionsStore } from './useCollectionStore';
@@ -19,6 +20,9 @@ interface AuthState {
   error: string | null;
   /** Pesan warning non-fatal (mis. mode enkripsi fallback). null = tidak ada. */
   encryptionWarning: string | null;
+
+  /** Biometrik: apakah login sidik jari / face ID diaktifkan user */
+  biometricEnabled: boolean;
 
   /**
    * Dipanggil sekali saat app boot. Jika ada token di MMKV,
@@ -39,6 +43,15 @@ interface AuthState {
    */
   forceLogout: (reason?: string) => void;
 
+  /** Biometrik: aktifkan login sidik jari / face ID */
+  enableBiometric: () => Promise<boolean>;
+
+  /** Biometrik: login dengan sidik jari — dapat token baru dari server */
+  loginWithBiometric: () => Promise<boolean>;
+
+  /** Biometrik: nonaktifkan, hapus token dari Keystore */
+  disableBiometric: () => Promise<void>;
+
   setUser: (user: User) => void;
   clearError: () => void;
   setEncryptionWarning: (message: string | null) => void;
@@ -48,13 +61,49 @@ interface AuthState {
  * Reset semua Zustand store + bersihkan MMKV instance kedua
  * (offline queue + task cache). Dipakai oleh logout/forceLogout.
  */
+const CACHED_USER_KEY = 'cached_user_profile';
+const BIOMETRIC_ENABLED_KEY = 'biometric_enabled';
+
+function loadBiometricEnabled(): boolean {
+  try {
+    return getAuthStorage().getBoolean(BIOMETRIC_ENABLED_KEY) ?? false;
+  } catch {
+    // Storage belum diinisialisasi (import time / test) — default aman: biometrik nonaktif
+    return false;
+  }
+}
+
+function saveBiometricEnabled(enabled: boolean): void {
+  getAuthStorage().set(BIOMETRIC_ENABLED_KEY, enabled);
+}
+
+function saveCachedUser(user: User): void {
+  getAuthStorage().set(CACHED_USER_KEY, JSON.stringify(user));
+}
+
+function getCachedUser(): User | null {
+  const raw = getAuthStorage().getString(CACHED_USER_KEY);
+  if (!raw) {return null;}
+  try {
+    const parsed = JSON.parse(raw) as User;
+    return parsed?.id ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearCachedUser(): void {
+  getAuthStorage().delete(CACHED_USER_KEY);
+}
+
 function resetAllClientState() {
-  // 1. Bersihkan antrean offline koleksi finansial
-  offlineQueue.clearQueue();
-  offlineQueue.clearFailedPermanent();
-  // 2. Bersihkan cache task
+  // 1. Bersihkan cache task
   taskCache.clearTasks();
-  // 3. Reset Zustand stores (kecuali auth sendiri — di-handle pemanggil)
+  clearCachedUser();
+  // 3. Bersihkan cache MMKV tampilan (dashboard, tasks stats, collections)
+  //    WAJIB dipanggil saat logout/ganti akun agar data petugas lama tidak bocor.
+  clearAllCache();
+  // 4. Reset Zustand stores (kecuali auth sendiri — di-handle pemanggil)
   useDashboardStore.setState({
     todayStats: null,
     weekStats: null,
@@ -70,6 +119,9 @@ function resetAllClientState() {
     error: null,
     page: 1,
     totalPages: 1,
+    activeCount: 0,
+    completedCount: 0,
+    totalCount: 0,
   });
   useCollectionsStore.setState({
     collections: [],
@@ -77,6 +129,7 @@ function resetAllClientState() {
     error: null,
     page: 1,
     totalPages: 1,
+    total: 0,
   });
   useSyncStore.setState({
     pendingCount: 0,
@@ -97,6 +150,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   isInitializing: true, // true sampai initializeAuth selesai
   error: null,
   encryptionWarning: null,
+  biometricEnabled: loadBiometricEnabled(),
 
   initializeAuth: async () => {
     set({ isInitializing: true, error: null });
@@ -141,6 +195,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           isAuthenticated: true,
           isInitializing: false,
         });
+        saveCachedUser({ id, full_name, email: email || '', phone: phone || '', role: role as User['role'], branch_id, district_id, is_active });
         setAuthenticatedUser(id);
       } else {
         // Token ditolak backend — bersihkan semuanya
@@ -160,7 +215,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       console.warn('[Auth] initializeAuth network error:', getErrorMessage(error, ''));
       const cachedToken = await getToken();
       if (cachedToken) {
-        set({ token: cachedToken, isAuthenticated: true, isInitializing: false });
+        const cachedUser = getCachedUser();
+        set({ user: cachedUser, token: cachedToken, isAuthenticated: true, isInitializing: false });
+        if (cachedUser) {setAuthenticatedUser(cachedUser.id);}
       } else {
         set({ isInitializing: false });
       }
@@ -200,7 +257,10 @@ export const useAuthStore = create<AuthState>((set) => ({
           isAuthenticated: true,
           isLoading: false,
         });
+        saveCachedUser({ id: user.id, full_name: user.full_name, email: user.email || '', phone, role: user.role as User['role'], branch_id: user.branch_id, district_id: user.district_id, is_active: true });
         setAuthenticatedUser(user.id);
+        // Setelah login, ulangi migrasi agar legacy queue memakai key officerId.
+        require('../services/offline/queue').offlineQueue.runMigration();
         return true;
       } else {
         set({ error: result.error?.message || 'Login gagal', isLoading: false });
@@ -263,7 +323,10 @@ export const useAuthStore = create<AuthState>((set) => ({
           isAuthenticated: true,
           isLoading: false,
         });
+        saveCachedUser({ id: user.id, full_name: user.full_name, email: user.email || '', phone, role: user.role as User['role'], branch_id: user.branch_id, district_id: user.district_id, is_active: true });
         setAuthenticatedUser(user.id);
+        // Setelah login, ulangi migrasi agar legacy queue memakai key officerId.
+        require('../services/offline/queue').offlineQueue.runMigration();
         return true;
       } else {
         set({ error: result.error?.message || 'OTP tidak valid', isLoading: false });
@@ -301,6 +364,111 @@ export const useAuthStore = create<AuthState>((set) => ({
       isAuthenticated: false,
       error: reason || 'Sesi telah berakhir. Silakan login kembali.',
     });
+  },
+
+  // ── Biometrik ──────────────────────────────────────────────────────────
+
+  enableBiometric: async () => {
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) return false;
+
+    const available = await isBiometricAvailable();
+    if (!available) return false;
+
+    const result = await enableBiometric(refreshToken);
+    if (result) {
+      saveBiometricEnabled(true);
+      set({ biometricEnabled: true });
+    }
+    return result;
+  },
+
+  loginWithBiometric: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const storedToken = await getTokenWithBiometric();
+      if (!storedToken) {
+        set({ isLoading: false, error: 'Biometrik dibatalkan atau gagal' });
+        return false;
+      }
+
+      // Panggil refresh dengan token dari Keystore
+      const result = await authService.refresh(storedToken);
+
+      if (result.success && result.data) {
+        const { access_token, refresh_token } = result.data;
+
+        if (!access_token) {
+          set({ error: 'Respons server tidak valid (token kosong)', isLoading: false });
+          return false;
+        }
+
+        await setToken(access_token);
+        if (refresh_token) {
+          setRefreshToken(refresh_token);
+          // Simpan refresh token baru kembali ke Keystore (rotasi)
+          await updateBiometricToken(refresh_token);
+        }
+
+        // Ambil profil user untuk set state
+        const meResult = await authService.me();
+        if (meResult.success && meResult.data) {
+          const { id, full_name, email, phone, role, branch_id, district_id, is_active } = meResult.data;
+          if (!is_active) {
+            await clearToken();
+            await disableBiometric();
+            saveBiometricEnabled(false);
+            set({
+              user: null, token: null, isAuthenticated: false,
+              biometricEnabled: false, isLoading: false,
+              error: 'Akun tidak aktif',
+            });
+            return false;
+          }
+          set({
+            user: {
+              id, full_name,
+              email: email || '', phone: phone || '',
+              role: role as User['role'], branch_id, district_id, is_active,
+            },
+            token: access_token,
+            isAuthenticated: true,
+            isLoading: false,
+          });
+          saveCachedUser({ id, full_name, email: email || '', phone: phone || '', role: role as User['role'], branch_id, district_id, is_active });
+          setAuthenticatedUser(id);
+          return true;
+        }
+
+        // me() gagal tapi token valid — set minimal state dari refresh response
+        set({ token: access_token, isAuthenticated: true, isLoading: false });
+        return true;
+      }
+
+      // REFRESH_REVOKED — nonaktifkan biometrik
+      if (result.error?.code === 'REFRESH_REVOKED' || result.error?.code === 'UNAUTHORIZED') {
+        await disableBiometric();
+        saveBiometricEnabled(false);
+        set({
+          biometricEnabled: false,
+          isLoading: false,
+          error: 'Sesi biometrik telah berakhir. Silakan login dengan kata sandi.',
+        });
+        return false;
+      }
+
+      set({ error: result.error?.message || 'Login biometrik gagal', isLoading: false });
+      return false;
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, 'Terjadi kesalahan'), isLoading: false });
+      return false;
+    }
+  },
+
+  disableBiometric: async () => {
+    await disableBiometric();
+    saveBiometricEnabled(false);
+    set({ biometricEnabled: false });
   },
 
   setUser: (user: User) => set({ user }),

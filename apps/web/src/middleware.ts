@@ -18,9 +18,9 @@ export async function middleware(request: NextRequest) {
 
   // 3. Proper Role Check using JWT decoding
   if (token && !isAuthPage) {
-    const jwtSecretRaw = process.env.JWT_SECRET;
+    const jwtSecretRaw = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET;
     if (!jwtSecretRaw || jwtSecretRaw.length < 32) {
-      console.error('[SECURITY] JWT_SECRET tidak terkonfigurasi atau kurang dari 32 karakter!');
+      console.error('[SECURITY] JWT_ACCESS_SECRET (atau JWT_SECRET fallback) tidak terkonfigurasi atau kurang dari 32 karakter!');
       const response = NextResponse.redirect(new URL('/login', request.url));
       response.cookies.delete('lazisnu_token');
       return response;
@@ -39,9 +39,15 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/dashboard/overview', request.url));
       }
 
-      // Restricted routes: users & wa-monitor only for Kecamatan + Ranting
-      if ((path.includes('/users') || path.includes('/wa-monitor')) && 
+      // Restricted routes: users only for Kecamatan + Ranting
+      if (path.includes('/users') && 
           userRole !== 'ADMIN_KECAMATAN' && userRole !== 'ADMIN_RANTING') {
+        return NextResponse.redirect(new URL('/dashboard/overview', request.url));
+      }
+
+      // Restricted routes: wa-monitor only for Kecamatan, Ranting, and Bendahara
+      if (path.includes('/wa-monitor') && 
+          userRole !== 'ADMIN_KECAMATAN' && userRole !== 'ADMIN_RANTING' && userRole !== 'BENDAHARA') {
         return NextResponse.redirect(new URL('/dashboard/overview', request.url));
       }
       
@@ -50,9 +56,9 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/dashboard/overview', request.url));
       }
 
-      // Restricted routes for Resubmit (only Kecamatan + Ranting)
+      // Re-submit tracker is read-only and available to all dashboard reporting roles.
       if (path.includes('/resubmit') && 
-          userRole !== 'ADMIN_KECAMATAN' && userRole !== 'ADMIN_RANTING') {
+          userRole !== 'ADMIN_KECAMATAN' && userRole !== 'ADMIN_RANTING' && userRole !== 'BENDAHARA') {
         return NextResponse.redirect(new URL('/dashboard/overview', request.url));
       }
     } catch {
@@ -75,6 +81,6 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+    '/((?!api|_next/static|_next/image|favicon\\.ico|.*\\.(?:png|svg|jpg|jpeg|gif|webp)$).*)',
   ],
 };

@@ -6,19 +6,21 @@ import { usePathname } from 'next/navigation';
 import { getMenuItems, UserRole } from '@/lib/menu-config';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/useAuthStore';
-import { LogOut, User as UserIcon, Loader2 } from 'lucide-react';
+import { LogOut, User as UserIcon, Loader2, X } from 'lucide-react';
+import Image from 'next/image';
 
 interface SidebarProps {
   role?: UserRole;
   userName?: string;
-  isOpen?: boolean;
-  onClose?: () => void;
+  isMobileOpen?: boolean;
+  isDesktopVisible?: boolean;
+  onMobileClose?: () => void;
 }
 
-const Sidebar = ({ role: initialRole, userName: initialUserName, isOpen, onClose }: SidebarProps) => {
+const Sidebar = ({ role: initialRole, userName: initialUserName, isMobileOpen = false, isDesktopVisible = true, onMobileClose }: SidebarProps) => {
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
-  
+
   // Use store data or fallback to props
   const role = user?.role || initialRole;
   const userName = user?.full_name || initialUserName;
@@ -27,8 +29,9 @@ const Sidebar = ({ role: initialRole, userName: initialUserName, isOpen, onClose
     return (
       <aside className={cn(
         "w-64 bg-slate-900 flex items-center justify-center h-screen fixed z-50 transition-transform duration-300",
-        isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-      )}>
+        isDesktopVisible ? "lg:translate-x-0" : "lg:-translate-x-full",
+        isMobileOpen ? "translate-x-0 visible" : "-translate-x-full invisible lg:visible"
+      )} id="sidebar" aria-hidden={!isDesktopVisible && !isMobileOpen}>
         <Loader2 className="animate-spin text-green-500" size={24} />
       </aside>
     );
@@ -39,32 +42,48 @@ const Sidebar = ({ role: initialRole, userName: initialUserName, isOpen, onClose
   return (
     <>
       {/* Mobile Overlay */}
-      {isOpen && (
-        <div 
+      {isMobileOpen && (
+        <div
           className="fixed inset-0 bg-[#2C473E]/40 backdrop-blur-sm z-40 lg:hidden"
-          onClick={onClose}
+          onClick={onMobileClose}
+          aria-hidden="true"
         />
       )}
 
-      <aside className={cn(
-        "w-64 bg-[#F4F1EA] text-[#2C473E] flex flex-col h-screen fixed left-0 top-0 z-50 border-r border-[#2C473E]/5 shadow-2xl transition-transform duration-300 ease-in-out",
-        isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-      )}>
+      <aside
+        className={cn(
+          "w-64 bg-[#F4F1EA] text-[#2C473E] flex flex-col h-screen fixed left-0 top-0 z-50 border-r border-[#2C473E]/5 shadow-2xl transition-transform duration-300 ease-in-out",
+          isDesktopVisible ? "lg:translate-x-0 lg:visible" : "lg:-translate-x-full lg:invisible",
+          isMobileOpen ? "translate-x-0 visible" : "-translate-x-full invisible lg:visible"
+        )}
+        id="sidebar"
+        aria-hidden={!isDesktopVisible && !isMobileOpen}
+      >
         {/* Brand Header */}
-        <div className="h-20 flex items-center justify-between px-6 border-b border-[#2C473E]/10 bg-[#F4F1EA]">
-          <div className="flex items-center gap-3">
-            <div>
-              <h1 className="text-[#2C473E] font-bold tracking-tight">LAZISNU</h1>
+        <div className="py-5 px-6 border-b border-[#2C473E]/10 bg-[#F4F1EA] flex items-center justify-between">
+          <div className="flex flex-col items-center gap-1">
+            <Image
+              src="/logolzs.svg"
+              alt="LAZISNU"
+              width={140}
+              height={40}
+              className="w-35 h-auto mb-2"
+              priority
+            />
+            <div className="text-center">
+              <h1 className="text-[#2C473E] font-bold tracking-tight">NU-CARE LAZISNU</h1>
               <p className="text-[10px] text-[#2C473E]/50 uppercase tracking-widest font-bold">Collector Dashboard</p>
             </div>
           </div>
-          
+
           {/* Close button for mobile */}
-          <button 
-            onClick={onClose}
-            className="lg:hidden p-2 rounded-lg hover:bg-[#2C473E]/5 text-[#2C473E]/50"
+          <button
+            onClick={onMobileClose}
+            className="lg:hidden p-3 rounded-xl hover:bg-[#2C473E]/5 text-[#2C473E]/50 transition-all"
+            aria-label="Tutup menu"
+            type="button"
           >
-            <LogOut className="rotate-180" size={20} />
+            <X size={20} />
           </button>
         </div>
 
@@ -79,21 +98,21 @@ const Sidebar = ({ role: initialRole, userName: initialUserName, isOpen, onClose
                 key={item.path}
                 href={item.path}
                 onClick={() => {
-                  if (window.innerWidth < 1024) onClose?.();
+                  if (window.innerWidth < 1024) onMobileClose?.();
                 }}
                 className={cn(
                   'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group',
-                  isActive 
-                    ? 'bg-[#DE6F4A]/10 text-[#DE6F4A] font-bold' 
+                  isActive
+                    ? 'bg-[#DE6F4A]/10 text-[#DE6F4A] font-bold'
                     : 'hover:bg-[#2C473E]/5 text-[#2C473E]/70 hover:text-[#2C473E]'
                 )}
               >
-                <Icon 
-                  size={20} 
+                <Icon
+                  size={20}
                   className={cn(
                     'transition-transform group-hover:scale-110',
                     isActive ? 'text-[#DE6F4A]' : 'text-[#2C473E]/40 group-hover:text-[#2C473E]'
-                  )} 
+                  )}
                 />
                 <span className="text-sm">{item.title}</span>
                 {isActive && (
@@ -115,8 +134,8 @@ const Sidebar = ({ role: initialRole, userName: initialUserName, isOpen, onClose
               <p className="text-[10px] text-[#2C473E]/50 uppercase font-bold">{role.replace('_', ' ')}</p>
             </div>
           </div>
-          
-          <button 
+
+          <button
             onClick={() => logout()}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#D97A76]/5 hover:bg-[#D97A76]/15 text-[#D97A76] transition-all duration-300 text-sm font-bold group border border-[#D97A76]/10 hover:border-[#D97A76]/30"
           >

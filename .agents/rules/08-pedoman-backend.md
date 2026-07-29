@@ -88,7 +88,7 @@ Gunakan nama aktual implementasi database/API berbahasa Inggris untuk kode dan s
 collections
 cans
 assignments
-paymentMethod
+paymentMethod -- Note: Excluded in offline sync batch payloads
 submitSequence
 isLatest
 reason
@@ -150,13 +150,12 @@ Untuk fitur QR PDF:
 ```
 Rate limiting login wajib lebih ketat dari endpoint umum.
 JWT_ACCESS_SECRET dan JWT_REFRESH_SECRET harus berbeda.
-APP_SECRET untuk HMAC QR tidak boleh sama dengan JWT secret.
 ```
 
 Jangan pernah log:
 - password atau password hash;
 - JWT token;
-- APP_SECRET atau JWT secret;
+- JWT secret;
 - private key;
 - access token WhatsApp;
 - nomor HP pengguna di log level INFO/DEBUG.

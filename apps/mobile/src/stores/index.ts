@@ -2,7 +2,7 @@ import { useAuthStore } from './useAuthStore';
 import { useDashboardStore } from './useDashboardStore';
 import { useTasksStore } from './useTasksStore';
 import { useCollectionStore, useCollectionsStore } from './useCollectionStore';
-import { useSyncStore } from './useSyncStore';
+import { useSyncStore, refreshSyncCounts } from './useSyncStore';
 import { useOfficerStore } from './useOfficerStore';
 
 export {
@@ -12,6 +12,7 @@ export {
   useCollectionStore,
   useCollectionsStore,
   useSyncStore,
+  refreshSyncCounts,
   useOfficerStore,
 };
 
@@ -22,5 +23,6 @@ export default {
   useCollectionStore,
   useCollectionsStore,
   useSyncStore,
+  refreshSyncCounts,
   useOfficerStore,
 };

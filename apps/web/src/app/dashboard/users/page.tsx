@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Table } from '@/components/ui/Table';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -30,13 +31,13 @@ import {
   CheckSquare,
   Square,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  Eye
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useAuthStore } from '@/store/useAuthStore';
-import { FilterPills } from '@/components/ui/FilterPills';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
 import { Officer as BaseOfficer, Branch, ApiResponse, PaginatedResponse } from '@lazisnu/shared-types';
 
@@ -81,6 +82,7 @@ export default function UsersPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const { user } = useAuthStore();
+  const router = useRouter();
 
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<OfficerFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -372,6 +374,15 @@ export default function UsersPage() {
         const isNonActiveRow = !row.original.is_active;
         return (
           <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-white/10 transition-all duration-300 group"
+              onClick={() => router.push(`/dashboard/users/${row.original.id}`)}
+              title="Lihat Detail"
+            >
+              <Eye size={14} className="text-[#6B9E9F] group-hover:text-[#6B9E9F]" />
+            </Button>
             {isNonActiveRow ? (
               <Button 
                 variant="outline" 
@@ -483,9 +494,11 @@ export default function UsersPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-          <FilterPills 
+          <DropdownFilter
+            label="Pilih Status"
+            showSearch={false}
             options={[
-              { label: 'SEMUA', value: 'ALL' },
+              { label: 'SEMUA STATUS', value: 'ALL' },
               { label: 'AKTIF', value: 'ACTIVE' },
               { label: 'NON-AKTIF', value: 'NON_ACTIVE' }
             ]}
@@ -494,7 +507,7 @@ export default function UsersPage() {
               setStatusFilter(val);
               setCurrentPage(1);
             }}
-            className="h-[36px] p-1"
+            className="h-[36px]"
           />
 
           {user?.role === 'ADMIN_KECAMATAN' && (

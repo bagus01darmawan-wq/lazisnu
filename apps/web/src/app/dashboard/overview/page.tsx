@@ -26,7 +26,9 @@ import {
   BarChart2,
   AlertTriangle,
   LogIn,
-  Building2
+  Building2,
+  Database,
+  Power,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -101,6 +103,31 @@ export default function OverviewPage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
+  // Backup flag state
+  const [backupActive, setBackupActive] = React.useState(false);
+  const [backupLoading, setBackupLoading] = React.useState(false);
+  const [backupMessage, setBackupMessage] = React.useState<string | null>(null);
+
+  const handleToggleBackup = async () => {
+    try {
+      setBackupLoading(true);
+      setBackupMessage(null);
+      const endpoint = backupActive ? '/admin/backup/stop' : '/admin/backup/start';
+      const res = await api.post(endpoint) as unknown as ApiResponse<{ active: boolean; message?: string }>;
+      if (res.success && res.data) {
+        setBackupActive(res.data.active);
+        setBackupMessage(res.data.message ?? (res.data.active ? 'Backup diaktifkan' : 'Backup dinonaktifkan'));
+      }
+    } catch (err) {
+      console.error('Backup toggle error:', err);
+      setBackupMessage('Gagal mengubah status backup. Coba lagi.');
+    } finally {
+      setBackupLoading(false);
+      // Auto-clear message after 4 seconds
+      setTimeout(() => setBackupMessage(null), 4000);
+    }
+  };
+
 
 
   const fetchStats = async () => {
@@ -150,6 +177,16 @@ export default function OverviewPage() {
     };
     void loadStats();
   }, [user]);
+
+  // Fetch backup status on mount
+  React.useEffect(() => {
+    api.get('/admin/backup/status')
+      .then((res: unknown) => {
+        const r = res as ApiResponse<{ active: boolean }>;
+        if (r.success && r.data) setBackupActive(r.data.active);
+      })
+      .catch(() => { /* optional infra, silent fail */ });
+  }, []);
 
   if (loading) {
     return (
@@ -310,103 +347,178 @@ export default function OverviewPage() {
         </Card>
       </div>
 
+      {/* Backup Control — only for ADMIN_KECAMATAN */}
+      {user?.role === 'ADMIN_KECAMATAN' && (
+        <Card variant="glass" className="border-white/5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className={`p-3 rounded-xl transition-all duration-300 ${backupActive ? 'bg-[#1F8243]/10 text-[#1F8243]' : 'bg-[#F4F1EA]/5 text-[#F4F1EA]/40'}`}>
+                <Database size={20} />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-[#F4F1EA]">Backup Database</p>
+                <p className="text-xs text-[#F4F1EA]/50 mt-0.5">
+                  {backupActive
+                    ? 'Backup otomatis berjalan tiap hari jam 02:00'
+                    : 'Backup otomatis sedang dinonaktifkan'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${backupActive ? 'text-[#1F8243] bg-[#1F8243]/10 border-[#1F8243]/20' : 'text-[#F4F1EA]/40 bg-[#F4F1EA]/5 border-[#F4F1EA]/10'}`}>
+                <span className={`w-2 h-2 rounded-full ${backupActive ? 'bg-[#1F8243] animate-pulse' : 'bg-[#F4F1EA]/30'}`} />
+                {backupActive ? 'Aktif' : 'Nonaktif'}
+              </span>
+              <button
+                onClick={handleToggleBackup}
+                disabled={backupLoading}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all active:scale-95 ${backupActive ? 'bg-[#D97A76]/10 text-[#D97A76] hover:bg-[#D97A76]/20 border border-[#D97A76]/20' : 'bg-[#1F8243] text-white hover:bg-[#1F8243]/90 shadow-lg shadow-[#1F8243]/20'}`}
+              >
+                {backupLoading ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Power size={16} />
+                )}
+                {backupActive ? 'Nonaktifkan' : 'Aktifkan'}
+              </button>
+            </div>
+          </div>
+          {backupMessage && (
+            <p className={`text-xs mt-2 px-1 transition-opacity ${backupMessage.includes('Gagal') ? 'text-[#D97A76]' : 'text-[#1F8243]'}`}>
+              {backupMessage}
+            </p>
+          )}
+        </Card>
+      )}
+
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <Card variant="glass" className="h-[450px] flex flex-col border-white/5">
+        <Card variant="glass" className="h-[450px] flex flex-col border-white/5" contentClassName="p-0 flex flex-1 min-h-0 flex-col">
           <div className="px-6 py-4 border-b border-white/5">
             <h3 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
               <BarChart2 size={16} className="text-[#EAD19B]" />
               {user?.role === 'ADMIN_KECAMATAN' ? "Perolehan per Ranting" : "Perolehan per Petugas"}
             </h3>
           </div>
-          <div className="flex-1 w-full mt-4 px-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={(user?.role === 'ADMIN_KECAMATAN' ? data.by_branch : data.by_officer) as Array<Record<string, unknown>>}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(244, 241, 234, 0.08)" />
-                <XAxis
-                  dataKey={user?.role === 'ADMIN_KECAMATAN' ? "branch_name" : "officer_name"}
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 10, fill: '#F4F1EA', fontWeight: 600 }}
-                  dy={10}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 10, fill: '#F4F1EA' }}
-                />
-                <Tooltip
-                  cursor={{ fill: 'rgba(244, 241, 234, 0.05)' }}
-                  contentStyle={{
-                    borderRadius: '12px',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    backgroundColor: '#2C473E',
-                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
-                    fontSize: '12px',
-                    color: '#F4F1EA'
-                  }}
-                  formatter={(value) => [`Rp ${Number(value || 0).toLocaleString('id-ID')}`, 'Nominal']}
-                />
-                <Bar
-                  dataKey="nominal"
-                  fill="#1F8243"
-                  radius={[6, 6, 0, 0]}
-                  barSize={user?.role === 'ADMIN_KECAMATAN' ? 48 : 24}
-                />
-              </BarChart>
-            </ResponsiveContainer>
+<div className="flex-1 w-full min-h-0 mt-4 px-2">
+            {(() => {
+              const chartData = user?.role === 'ADMIN_KECAMATAN' ? data.by_branch : data.by_officer;
+              const dataKey = user?.role === 'ADMIN_KECAMATAN' ? 'branch_name' : 'officer_name';
+              if (!chartData || chartData.length === 0) {
+                return (
+                  <div className="flex-1 flex items-center justify-center text-[#F4F1EA]/40">
+                    <p className="text-sm">Data per {user?.role === 'ADMIN_KECAMATAN' ? 'ranting' : 'petugas'} tidak tersedia</p>
+                  </div>
+                );
+              }
+              return (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={chartData as Array<Record<string, unknown>>}
+                    margin={{ top: 20, right: 20, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(244, 241, 234, 0.08)" />
+                    <XAxis
+                      dataKey={dataKey}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: '#F4F1EA', fontWeight: 600 }}
+                      dy={10}
+                      tickFormatter={(value) => (value.length > 12 ? value.substring(0, 12) + '…' : value)}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: '#F4F1EA' }}
+                      tickFormatter={(value) => value >= 1e6 ? (value / 1e6).toFixed(1) + 'M' : value >= 1e3 ? (value / 1e3).toFixed(0) + 'K' : value}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'rgba(244, 241, 234, 0.05)' }}
+                      contentStyle={{
+                        borderRadius: '12px',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        backgroundColor: '#2C473E',
+                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
+                        fontSize: '12px',
+                        color: '#F4F1EA'
+                      }}
+                      formatter={(value) => [`Rp ${Number(value || 0).toLocaleString('id-ID')}`, 'Nominal']}
+                    />
+                    <Bar
+                      dataKey="nominal"
+                      fill="#1F8243"
+                      radius={[6, 6, 0, 0]}
+                      barSize={user?.role === 'ADMIN_KECAMATAN' ? 48 : 24}
+                      minPointSize={2}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              );
+            })()}
           </div>
         </Card>
 
-        <Card variant="glass" className="h-[450px] flex flex-col border-white/5">
+        <Card variant="glass" className="h-[450px] flex flex-col border-white/5" contentClassName="p-0 flex flex-1 min-h-0 flex-col">
           <div className="px-6 py-4 border-b border-white/5">
             <h3 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
               <TrendingUp size={16} className="text-[#EAD19B]" />
               Tren Infaq Harian (Minggu Ini)
             </h3>
           </div>
-          <div className="flex-1 w-full mt-4 px-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data.daily_trends || []}>
-                <defs>
-                  <linearGradient id="colorNominal" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#DE6F4A" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#DE6F4A" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(244, 241, 234, 0.08)" />
-                <XAxis
-                  dataKey="day"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 11, fill: '#F4F1EA', fontWeight: 600 }}
-                  dy={10}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 11, fill: '#F4F1EA' }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: '12px',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    backgroundColor: '#2C473E',
-                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
-                    fontSize: '12px',
-                    color: '#F4F1EA'
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="nominal"
-                  stroke="#DE6F4A"
-                  strokeWidth={4}
-                  fillOpacity={1}
-                  fill="url(#colorNominal)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+          <div className="flex-1 w-full min-h-0 mt-4 px-2">
+            {data.daily_trends && data.daily_trends.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={data.daily_trends}
+                  margin={{ top: 20, right: 20, left: 0, bottom: 0 }}
+                >
+                  <defs>
+                    <linearGradient id="colorNominal" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#DE6F4A" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#DE6F4A" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(244, 241, 234, 0.08)" />
+                  <XAxis
+                    dataKey="day"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 11, fill: '#F4F1EA', fontWeight: 600 }}
+                    dy={10}
+                  />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 11, fill: '#F4F1EA' }}
+                    tickFormatter={(value) => value >= 1e6 ? (value / 1e6).toFixed(1) + 'M' : value >= 1e3 ? (value / 1e3).toFixed(0) + 'K' : value}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: '12px',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      backgroundColor: '#2C473E',
+                      boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
+                      fontSize: '12px',
+                      color: '#F4F1EA'
+                    }}
+                    formatter={(value) => [`Rp ${Number(value || 0).toLocaleString('id-ID')}`, 'Nominal']}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="nominal"
+                    stroke="#DE6F4A"
+                    strokeWidth={4}
+                    fillOpacity={1}
+                    fill="url(#colorNominal)"
+                    isAnimationActive={false}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-[#F4F1EA]/40">
+                <p className="text-sm">Data tren minggu ini tidak tersedia</p>
+              </div>
+            )}
           </div>
         </Card>
       </div>
@@ -502,16 +614,16 @@ export default function OverviewPage() {
 
           {/* District Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <Card variant="glass" className="h-[450px] flex flex-col border-white/5">
+            <Card variant="glass" className="h-[450px] flex flex-col border-white/5" contentClassName="p-0 flex flex-1 min-h-0 flex-col">
               <div className="px-6 py-4 border-b border-white/5">
                 <h3 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
                   <BarChart2 size={16} className="text-[#EAD19B]" />
                   Perolehan per Ranting (Kecamatan)
                 </h3>
               </div>
-              <div className="flex-1 w-full mt-4 px-2">
+              <div className="flex-1 w-full min-h-0 mt-4 px-2">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.district.by_branch || []}>
+                  <BarChart data={data.district.by_branch || []} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(244, 241, 234, 0.08)" />
                     <XAxis
                       dataKey="branch_name"
@@ -524,6 +636,7 @@ export default function OverviewPage() {
                       axisLine={false}
                       tickLine={false}
                       tick={{ fontSize: 10, fill: '#F4F1EA' }}
+                      tickFormatter={(value) => value >= 1e6 ? (value / 1e6).toFixed(1) + 'M' : value >= 1e3 ? (value / 1e3).toFixed(0) + 'K' : value}
                     />
                     <Tooltip
                       cursor={{ fill: 'rgba(244, 241, 234, 0.05)' }}
@@ -542,22 +655,26 @@ export default function OverviewPage() {
                       fill="#EAD19B"
                       radius={[6, 6, 0, 0]}
                       barSize={48}
+                      minPointSize={2}
                     />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </Card>
 
-            <Card variant="glass" className="h-[450px] flex flex-col border-white/5">
+            <Card variant="glass" className="h-[450px] flex flex-col border-white/5" contentClassName="p-0 flex flex-1 min-h-0 flex-col">
               <div className="px-6 py-4 border-b border-white/5">
                 <h3 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
                   <TrendingUp size={16} className="text-[#EAD19B]" />
                   Tren Infaq Harian (Kecamatan)
                 </h3>
               </div>
-              <div className="flex-1 w-full mt-4 px-2">
+              <div className="flex-1 w-full min-h-0 mt-4 px-2">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={data.district.daily_trends || []}>
+                  <AreaChart
+                    data={data.district.daily_trends || []}
+                    margin={{ top: 20, right: 20, left: 0, bottom: 0 }}
+                  >
                     <defs>
                       <linearGradient id="colorDistrict" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#EAD19B" stopOpacity={0.2} />
@@ -576,6 +693,7 @@ export default function OverviewPage() {
                       axisLine={false}
                       tickLine={false}
                       tick={{ fontSize: 11, fill: '#F4F1EA' }}
+                      tickFormatter={(value) => value >= 1e6 ? (value / 1e6).toFixed(1) + 'M' : value >= 1e3 ? (value / 1e3).toFixed(0) + 'K' : value}
                     />
                     <Tooltip
                       contentStyle={{
@@ -594,6 +712,7 @@ export default function OverviewPage() {
                       strokeWidth={4}
                       fillOpacity={1}
                       fill="url(#colorDistrict)"
+                      isAnimationActive={false}
                     />
                   </AreaChart>
                 </ResponsiveContainer>

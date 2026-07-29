@@ -2,35 +2,60 @@
 
 import React, { useState, useEffect } from 'react';
 import { Table } from '@/components/ui/Table';
-import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { ColumnDef } from '@tanstack/react-table';
 import { format, isValid } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { ShieldAlert, RefreshCw, Eye, Search, ChevronLeft, ChevronRight, RotateCcw, History, Clock, User, Database } from 'lucide-react';
+import { ShieldAlert, RefreshCw, Eye, Search, ChevronLeft, ChevronRight, RotateCcw, History, Clock, User, Database, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
 import { PeriodPicker } from '@/components/ui/PeriodPicker';
 import { ApiResponse } from '@lazisnu/shared-types';
+import {
+  formatAuditAction,
+  formatAuditEntity,
+  getAuditActionTone,
+  summarizeAuditLog,
+  AuditLog as IAuditLog
+} from '@/lib/audit-log-formatters';
 
-interface AuditLog {
+interface AuditLogResponse {
   id: string;
-  actionType: string;
-  entityType: string;
-  createdAt: string;
-  user?: { fullName: string; role: string };
-  officer?: { fullName: string };
-  oldData: unknown;
-  newData: unknown;
+  action_type: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  created_at: string;
+  user?: { full_name: string; role: string };
+  officer?: { full_name: string };
+  old_data: unknown;
+  new_data: unknown;
+}
+
+function mapAuditLog(log: AuditLogResponse): IAuditLog {
+  return {
+    id: log.id,
+    actionType: log.action_type,
+    entityType: log.entity_type,
+    entityId: log.entity_id,
+    createdAt: log.created_at,
+    user: log.user
+      ? { fullName: log.user.full_name, role: log.user.role }
+      : undefined,
+    officer: log.officer
+      ? { fullName: log.officer.full_name }
+      : undefined,
+    oldData: log.old_data,
+    newData: log.new_data,
+  };
 }
 
 export default function AuditLogPage() {
-  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [logs, setLogs] = useState<IAuditLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const [selectedLog, setSelectedLog] = useState<IAuditLog | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -38,6 +63,7 @@ export default function AuditLogPage() {
   const [pageSize, setPageSize] = useState(20);
   const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
   const [year, setYear] = useState<number>(new Date().getFullYear());
+  const [months, setMonths] = useState<number[]>([new Date().getMonth() + 1]);
 
   const fetchLogs = async (currentPage = page, searchQuery = search, m = month, y = year, limit = pageSize) => {
     try {
@@ -54,9 +80,9 @@ export default function AuditLogPage() {
           start_date: startOfMonth,
           end_date: endOfMonth
         }
-      }) as unknown as ApiResponse<{ logs: AuditLog[]; pagination: { total: number; total_pages: number } }>;
+      }) as unknown as ApiResponse<{ logs: AuditLogResponse[]; pagination: { total: number; total_pages: number } }>;
       if (response.success && response.data) {
-        setLogs(response.data.logs);
+        setLogs(response.data.logs.map(mapAuditLog));
         setTotalPages(response.data.pagination.total_pages);
         setTotalItems(response.data.pagination.total);
       }
@@ -88,9 +114,7 @@ export default function AuditLogPage() {
     fetchLogs(newPage, search, month, year);
   };
 
-
-
-  const columns: ColumnDef<AuditLog>[] = [
+  const columns: ColumnDef<IAuditLog>[] = [
     {
       id: 'createdAt',
       accessorKey: 'createdAt',
@@ -104,28 +128,9 @@ export default function AuditLogPage() {
         const date = new Date(row.original.createdAt);
         return (
           <span className="text-xs font-medium text-[#F4F1EA]/60">
-            {isValid(date) ? format(date, 'PPP HH:mm', { locale: id }) : '-'}
+            {isValid(date) ? format(date, 'HH:mm dd/MM/yyyy', { locale: id }) : 'Waktu tidak valid'}
           </span>
         );
-      },
-    },
-    {
-      id: 'actionType',
-      accessorKey: 'actionType',
-      header: () => (
-        <div className="flex items-center gap-1.5">
-          <ShieldAlert size={12} className="text-[#EAD19B]" />
-          <span>Aksi</span>
-        </div>
-      ),
-      cell: ({ row }) => {
-        const type = row.original.actionType || 'UNKNOWN';
-        let color = 'text-[#F4F1EA]/60';
-        if (type.includes('POST')) color = 'text-[#1F8243]';
-        else if (type.includes('PUT') || type.includes('PATCH')) color = 'text-[#EAD19B]';
-        else if (type.includes('DELETE')) color = 'text-[#D97A76]';
-
-        return <span className={`text-[10px] font-bold uppercase tracking-widest ${color}`}>{type}</span>;
       },
     },
     {
@@ -138,10 +143,32 @@ export default function AuditLogPage() {
       ),
       cell: ({ row }) => (
         <div>
-          <p className="font-bold text-[#F4F1EA]">{row.original.user?.fullName || row.original.officer?.fullName || 'System'}</p>
-          <p className="text-[10px] text-[#F4F1EA]/40 uppercase font-black">{row.original.user?.role || 'System'}</p>
+          <p className="font-bold text-[#F4F1EA]">{row.original.user?.fullName || row.original.officer?.fullName || 'Sistem'}</p>
+          <p className="text-[10px] text-[#F4F1EA]/40 uppercase font-black">{row.original.user?.role || 'Sistem'}</p>
         </div>
       ),
+    },
+    {
+      id: 'actionType',
+      accessorKey: 'actionType',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <ShieldAlert size={12} className="text-[#EAD19B]" />
+          <span>Aksi</span>
+        </div>
+      ),
+      cell: ({ row }) => {
+        const type = row.original.actionType;
+        const label = formatAuditAction(type);
+        const tone = getAuditActionTone(type);
+        
+        let color = 'text-[#F4F1EA]/60';
+        if (tone === 'success') color = 'text-[#1F8243]';
+        else if (tone === 'warning') color = 'text-[#EAD19B]';
+        else if (tone === 'danger') color = 'text-[#D97A76]';
+
+        return <span className={`text-[10px] font-bold uppercase tracking-widest ${color}`}>{label}</span>;
+      },
     },
     {
       id: 'entityType',
@@ -152,11 +179,30 @@ export default function AuditLogPage() {
           <span>Entitas</span>
         </div>
       ),
-      cell: ({ row }) => <span className="font-mono text-xs uppercase text-[#F4F1EA]/60">{row.original.entityType || '-'}</span>,
+      cell: ({ row }) => <span className="font-sans text-xs font-semibold text-[#F4F1EA]/85">{formatAuditEntity(row.original.entityType)}</span>,
+    },
+    {
+      id: 'summary',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <FileText size={12} className="text-[#EAD19B]" />
+          <span>Detail Aktivitas</span>
+        </div>
+      ),
+      cell: ({ row }) => (
+        <span className="text-xs font-medium text-[#F4F1EA]/80 leading-relaxed max-w-[280px] xl:max-w-[400px] block text-wrap">
+          {summarizeAuditLog(row.original)}
+        </span>
+      ),
     },
     {
       id: 'actions',
-      header: '',
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <Eye size={12} className="text-[#EAD19B]" />
+          <span>Detail</span>
+        </div>
+      ),
       cell: ({ row }) => (
         <Button
           variant="outline"
@@ -209,10 +255,11 @@ export default function AuditLogPage() {
           </button>
 
           <PeriodPicker
-            month={month}
+            months={months}
             year={year}
             onChange={(m, y) => {
-              setMonth(m);
+              setMonths(m);
+              setMonth(m[0] || new Date().getMonth() + 1);
               setYear(y);
               setPage(1);
             }}
@@ -307,27 +354,63 @@ export default function AuditLogPage() {
       <Modal
         isOpen={!!selectedLog}
         onClose={() => setSelectedLog(null)}
-        title="Detail Perubahan Data"
+        title="Detail Aktivitas & Perubahan Data"
         className="max-w-4xl"
+        variant="glass"
       >
-        <div className="grid grid-cols-2 gap-6">
-          <div className="space-y-2">
-            <Badge variant="resubmit">Data Sebelum (Old)</Badge>
-            <div className="bg-slate-900 rounded-xl p-4 overflow-auto max-h-[400px]">
-              <pre className="text-[10px] text-red-400 font-mono">
-                {selectedLog?.oldData ? JSON.stringify(selectedLog.oldData, null, 2) : '// Tidak ada data sebelumnya (Aksi Penambahan)'}
-              </pre>
+        {selectedLog && (
+          <div className="space-y-6">
+            {/* Section 1: Ringkasan Manusiawi */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-4">
+              <h3 className="text-sm font-bold text-[#EAD19B] tracking-wider uppercase">Ringkasan Aktivitas</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div className="space-y-2">
+                  <p className="text-[#F4F1EA]/60 font-medium">Waktu: <span className="text-[#F4F1EA] font-bold">{isValid(new Date(selectedLog.createdAt)) ? format(new Date(selectedLog.createdAt), 'PPP HH:mm', { locale: id }) : 'Waktu tidak valid'}</span></p>
+                  <p className="text-[#F4F1EA]/60 font-medium">Operator: <span className="text-[#F4F1EA] font-bold">{selectedLog.user?.fullName || selectedLog.officer?.fullName || 'Sistem'} <span className="text-[10px] text-[#EAD19B] px-1.5 py-0.5 rounded bg-[#EAD19B]/10 font-mono ml-1 uppercase">{selectedLog.user?.role || 'Sistem'}</span></span></p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-[#F4F1EA]/60 font-medium">Tindakan: <span className="text-[#F4F1EA] font-bold">{formatAuditAction(selectedLog.actionType)}</span></p>
+                  <p className="text-[#F4F1EA]/60 font-medium">Entitas: <span className="text-[#F4F1EA] font-bold">{formatAuditEntity(selectedLog.entityType)} {selectedLog.entityId ? `(ID: ${selectedLog.entityId})` : ''}</span></p>
+                </div>
+              </div>
+              <div className="border-t border-white/5 pt-4">
+                <p className="text-xs font-bold text-[#F4F1EA]/40 uppercase tracking-widest mb-1.5">Deskripsi Perubahan</p>
+                <div className="p-3.5 bg-white/5 rounded-xl border border-white/5 text-[#F4F1EA] text-sm leading-relaxed font-semibold">
+                  {summarizeAuditLog(selectedLog)}
+                </div>
+              </div>
+            </div>
+
+            {/* Section 2: Detail Teknis */}
+            <div>
+              <h3 className="text-sm font-bold text-[#EAD19B] tracking-wider uppercase mb-3">Detail Perubahan Data</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#D97A76] uppercase tracking-wide">Data Sebelum</span>
+                    <span className="text-[10px] text-[#F4F1EA]/40 font-mono">old_data</span>
+                  </div>
+                  <div className="bg-[#1C2421] border border-white/5 rounded-xl p-4 overflow-auto max-h-[300px] shadow-inner">
+                    <pre className="text-[11px] text-[#D97A76] font-mono leading-relaxed">
+                      {selectedLog.oldData ? JSON.stringify(selectedLog.oldData, null, 2) : '// Tidak ada data sebelum.'}
+                    </pre>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#1F8243] uppercase tracking-wide">Data Sesudah</span>
+                    <span className="text-[10px] text-[#F4F1EA]/40 font-mono">new_data</span>
+                  </div>
+                  <div className="bg-[#1C2421] border border-white/5 rounded-xl p-4 overflow-auto max-h-[300px] shadow-inner">
+                    <pre className="text-[11px] text-[#1F8243] font-mono leading-relaxed">
+                      {selectedLog.newData ? JSON.stringify(selectedLog.newData, null, 2) : '// Tidak ada data sesudah.'}
+                    </pre>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-          <div className="space-y-2">
-            <Badge variant="sent">Data Sesudah (New)</Badge>
-            <div className="bg-slate-900 rounded-xl p-4 overflow-auto max-h-[400px]">
-              <pre className="text-[10px] text-green-400 font-mono">
-                {selectedLog?.newData ? JSON.stringify(selectedLog.newData, null, 2) : '// Tidak ada data baru (Aksi Penghapusan)'}
-              </pre>
-            </div>
-          </div>
-        </div>
+        )}
       </Modal>
     </div>
   );

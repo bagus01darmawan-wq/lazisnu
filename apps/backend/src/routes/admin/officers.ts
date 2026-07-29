@@ -7,6 +7,7 @@ import { sendSuccess, sendError, sendInternalError } from '../../utils/response'
 import { getPaginationParams, formatPaginatedResponse } from '../../utils/pagination';
 import { getRoleScope } from '../../utils/role-scope';
 import { createOfficerSchema, updateOfficerSchema } from './schemas';
+import { getOfficerDetailWithStats } from '../../services/officerService';
 import { z } from 'zod';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
@@ -63,6 +64,47 @@ export async function officersRoutes(fastify: FastifyInstance) {
       ]);
 
       return sendSuccess(reply, formatPaginatedResponse(officers, total, page, limit));
+    } catch (error) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  fastify.get('/officers/:id', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const user = request.currentUser!;
+      const query = request.query as { year?: string; month?: string; months?: string };
+
+      const existing = await db.query.officers.findFirst({
+        where: eq(schema.officers.id, id),
+        columns: { id: true, branchId: true, districtId: true },
+      });
+
+      if (!existing) {
+        return sendError(reply, 404, 'NOT_FOUND', 'Petugas tidak ditemukan');
+      }
+
+      if (user.role === 'ADMIN_RANTING' && existing.branchId !== user.branchId) {
+        return sendError(reply, 404, 'NOT_FOUND', 'Petugas tidak ditemukan');
+      }
+      if (user.role === 'ADMIN_KECAMATAN' && existing.districtId !== user.districtId) {
+        return sendError(reply, 404, 'NOT_FOUND', 'Petugas tidak ditemukan');
+      }
+
+      const year = query.year ? parseInt(query.year) : new Date().getFullYear();
+      const months = query.months
+        ? query.months.split(',').map(Number).filter(n => n >= 1 && n <= 12)
+        : query.month
+          ? [parseInt(query.month)]
+          : undefined;
+
+      const officer = await getOfficerDetailWithStats(id, { year, months });
+
+      if (!officer) {
+        return sendError(reply, 404, 'NOT_FOUND', 'Petugas tidak ditemukan');
+      }
+
+      return sendSuccess(reply, officer);
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
     }

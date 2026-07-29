@@ -39,8 +39,3 @@ export const createAssignmentSchema = z.object({
   period_year: z.number().min(2020).max(2100),
   period_month: z.number().min(1).max(12),
 });
-
-export const resubmitCollectionSchema = z.object({
-  nominal: z.number().positive(),
-  alasan_resubmit: z.string().min(5),
-});

@@ -11,7 +11,10 @@
   "scripts": {
     "dev:backend": "pnpm --filter lazisnu-backend dev",
     "dev:web": "pnpm --filter web dev",
+    "dev:mobile": "pnpm start:mobile",
+    "run:mobile": "pnpm android:mobile",
     "start:mobile": "pnpm --filter lazisnu-collector-app start",
+    "android:mobile": "pnpm --filter lazisnu-collector-app android",
     "build:backend": "pnpm --filter lazisnu-backend build",
     "build:web": "pnpm --filter web build",
     "build:shared": "pnpm --filter @lazisnu/shared-types build",

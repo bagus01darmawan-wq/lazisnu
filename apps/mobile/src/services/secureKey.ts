@@ -65,7 +65,7 @@ function bufferToBase64(buffer: Uint8Array): string {
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export type GetKeyResult =
-  | { ok: true; key: string; source: 'cache' | 'keychain' }
+  | { ok: true; key: string; source: 'cache' | 'keychain' | 'generated' }
   | { ok: false; reason: 'keychain_unavailable' | 'unknown' };
 
 /**
@@ -112,7 +112,7 @@ export async function getOrCreateEncryptionKey(): Promise<GetKeyResult> {
     });
 
     cachedKey = keyBase64;
-    return { ok: true, key: keyBase64, source: 'keychain' };
+    return { ok: true, key: keyBase64, source: 'generated' };
   } catch (error) {
     console.warn('[secureKey] Failed to get/create encryption key:', error);
     return { ok: false, reason: 'keychain_unavailable' };

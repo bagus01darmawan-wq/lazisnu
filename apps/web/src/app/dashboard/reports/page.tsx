@@ -1,6 +1,6 @@
 import React, { Suspense } from 'react';
 import { Card } from '@/components/ui/Card';
-import { FileSpreadsheet, Wallet, FileText } from 'lucide-react';
+import { FileSpreadsheet, Wallet, FileText, Users, AlertCircle, PackageOpen } from 'lucide-react';
 import { cookies } from 'next/headers';
 import { decodeJwt } from 'jose';
 import ReportsClient from './ReportsClient';
@@ -9,17 +9,18 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import FilterDropdown from './FilterDropdown';
 import ExportButton from './ExportButton';
 
-async function getStatsData(month: string, year: string, branch: string, officer: string) {
+async function getStatsData(month: string, months: string, year: string, branch: string, officer: string) {
   const cookieStore = await cookies();
   const token = cookieStore.get('lazisnu_token')?.value;
 
   if (!token) return null;
 
   try {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    const API_URL = process.env.API_URL || 'http://localhost:3001';
     const url = new URL(`${API_URL}/v1/bendahara/reports/summary`);
-    url.searchParams.append('month', month);
     url.searchParams.append('year', year);
+    if (months) url.searchParams.append('months', months);
+    else if (month) url.searchParams.append('month', month);
     if (branch) url.searchParams.append('branch_id', branch);
     if (officer) url.searchParams.append('officer_id', officer);
 
@@ -37,7 +38,35 @@ async function getStatsData(month: string, year: string, branch: string, officer
   }
 }
 
-async function TransactionList({ month, year, branch, officer, search, page, limit }: { month: string, year: string, branch: string, officer: string, search: string, page: string, limit: string }) {
+async function getAdditionalStats(month: string, months: string, year: string, branch: string) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('lazisnu_token')?.value;
+
+  if (!token) return null;
+
+  try {
+    const API_URL = process.env.API_URL || 'http://localhost:3001';
+    const url = new URL(`${API_URL}/v1/bendahara/reports/stats`);
+    url.searchParams.append('year', year);
+    if (months) url.searchParams.append('months', months);
+    else if (month) url.searchParams.append('month', month);
+    if (branch) url.searchParams.append('branch_id', branch);
+
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    });
+
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.data || null;
+  } catch (error) {
+    console.error('Additional stats fetch error:', error);
+    return null;
+  }
+}
+
+async function TransactionList({ month, months, year, branch, officer, search, page, limit }: { month: string, months: string, year: string, branch: string, officer: string, search: string, page: string, limit: string }) {
   const cookieStore = await cookies();
   const token = cookieStore.get('lazisnu_token')?.value;
 
@@ -47,9 +76,27 @@ async function TransactionList({ month, year, branch, officer, search, page, lim
   let paginationData: { page: number; limit: number; total: number; total_pages: number } | undefined;
 
   try {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-    const startDate = new Date(Number(year), Number(month) - 1, 1).toISOString();
-    const endDate = new Date(Number(year), Number(month), 0, 23, 59, 59, 999).toISOString();
+    const API_URL = process.env.API_URL || 'http://localhost:3001';
+
+    let startDate: string;
+    let endDate: string;
+
+    if (months) {
+      const monthNums = months.split(',').map(Number).filter(n => n >= 1 && n <= 12);
+      if (monthNums.length > 0) {
+        startDate = new Date(Number(year), monthNums[0] - 1, 1).toISOString();
+        endDate = new Date(Number(year), monthNums[monthNums.length - 1], 0, 23, 59, 59, 999).toISOString();
+      } else {
+        startDate = new Date(Number(year), 0, 1).toISOString();
+        endDate = new Date(Number(year), 12, 0, 23, 59, 59, 999).toISOString();
+      }
+    } else if (month) {
+      startDate = new Date(Number(year), Number(month) - 1, 1).toISOString();
+      endDate = new Date(Number(year), Number(month), 0, 23, 59, 59, 999).toISOString();
+    } else {
+      startDate = new Date(Number(year), 0, 1).toISOString();
+      endDate = new Date(Number(year), 12, 0, 23, 59, 59, 999).toISOString();
+    }
 
     const url = new URL(`${API_URL}/v1/bendahara/collections`);
     url.searchParams.append('start_date', startDate);
@@ -87,7 +134,7 @@ function TableSkeleton() {
   );
 }
 
-export default async function ReportsPage(props: { searchParams: Promise<{ month?: string; year?: string; branch?: string; officer?: string; search?: string; page?: string; limit?: string }> }) {
+export default async function ReportsPage(props: { searchParams: Promise<{ month?: string; months?: string; year?: string; branch?: string; officer?: string; search?: string; page?: string; limit?: string }> }) {
   const cookieStore = await cookies();
   const token = cookieStore.get('lazisnu_token')?.value;
 
@@ -105,7 +152,9 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
   const isRanting = userRole === 'ADMIN_RANTING';
 
   const searchParams = await props.searchParams;
-  const month = searchParams.month || (new Date().getMonth() + 1).toString();
+  const hasPeriodParam = !!(searchParams.month || searchParams.months);
+  const month = searchParams.month || (hasPeriodParam ? '' : (new Date().getMonth() + 1).toString());
+  const months = searchParams.months || '';
   const year = searchParams.year || new Date().getFullYear().toString();
   const branch = isRanting && userBranchId ? userBranchId : (searchParams.branch || '');
   const officer = searchParams.officer || '';
@@ -113,12 +162,20 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
   const page = searchParams.page || '1';
   const limit = searchParams.limit || '10';
 
-  const stats = await getStatsData(month, year, branch, officer);
+  const stats = await getStatsData(month, months, year, branch, officer);
+  const additionalStats = await getAdditionalStats(month, months, year, branch);
 
   // Calculate Average Per Can
   const totalAmount = Number(stats?.total_amount || 0);
   const totalCount = Number(stats?.total_count || 0);
   const averagePerCan = totalCount > 0 ? totalAmount / totalCount : 0;
+
+  const officersAssigned = Number(additionalStats?.officers_assigned || 0);
+  const officersTotal = Number(additionalStats?.officers_total || 0);
+  const zeroNominalCount = Number(additionalStats?.zero_nominal_count || 0);
+  const uncollectedCount = Number(additionalStats?.uncollected_count || 0);
+  const totalCollectedCans = Number(additionalStats?.total_collected_cans || 0);
+  const totalAssignments = Number(additionalStats?.total_assignments || 0);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
@@ -180,6 +237,72 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
             </div>
           </div>
         </Card>
+
+        <Card variant="glass" className="relative overflow-hidden group border-white/5">
+          <div className="bg-white/3 -m-6 p-6">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Petugas Ditugaskan</p>
+                <h3 className="text-2xl font-black text-[#F4F1EA] mt-1.5 tracking-tight">
+                  {officersAssigned} / {officersTotal}
+                </h3>
+              </div>
+              <div className="p-3 bg-[#DE6F4A]/10 text-[#DE6F4A] rounded-2xl group-hover:bg-[#DE6F4A] group-hover:text-white transition-all duration-500 shadow-lg">
+                <Users size={20} />
+              </div>
+            </div>
+            <div className="mt-6 flex items-center gap-3">
+              <span className="flex items-center text-[10px] font-black text-[#F4F1EA]/40 bg-white/5 px-2.5 py-1.5 rounded-xl border border-white/5 uppercase tracking-wider">
+                Berjalan
+              </span>
+              <span className="text-xs text-[#DE6F4A] font-bold">{officersAssigned} dari {officersTotal} petugas</span>
+            </div>
+          </div>
+        </Card>
+
+        <Card variant="glass" className="relative overflow-hidden group border-white/5">
+          <div className="bg-white/3 -m-6 p-6">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Kaleng Kosong</p>
+                <h3 className="text-2xl font-black text-[#F4F1EA] mt-1.5 tracking-tight">
+                  {zeroNominalCount}
+                </h3>
+              </div>
+              <div className="p-3 bg-[#6B9E9F]/10 text-[#6B9E9F] rounded-2xl group-hover:bg-[#6B9E9F] group-hover:text-[#2C473E] transition-all duration-500 shadow-lg">
+                <PackageOpen size={20} />
+              </div>
+            </div>
+            <div className="mt-6 flex items-center gap-3">
+              <span className="flex items-center text-[10px] font-black text-[#F4F1EA]/40 bg-white/5 px-2.5 py-1.5 rounded-xl border border-white/5 uppercase tracking-wider">
+                Nominal Rp0
+              </span>
+              <span className="text-xs text-[#6B9E9F] font-bold">{zeroNominalCount} dari total {totalCollectedCans} kaleng dijemput</span>
+            </div>
+          </div>
+        </Card>
+
+        <Card variant="glass" className="relative overflow-hidden group border-white/5">
+          <div className="bg-white/3 -m-6 p-6">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Kaleng Tidak Terjemput</p>
+                <h3 className="text-2xl font-black text-[#F4F1EA] mt-1.5 tracking-tight">
+                  {uncollectedCount}
+                </h3>
+              </div>
+              <div className="p-3 bg-[#F59E0B]/10 text-[#F59E0B] rounded-2xl group-hover:bg-[#F59E0B] group-hover:text-[#2C473E] transition-all duration-500 shadow-lg">
+                <AlertCircle size={20} />
+              </div>
+            </div>
+            <div className="mt-6 flex items-center gap-3">
+              <span className="flex items-center text-[10px] font-black text-[#F4F1EA]/40 bg-white/5 px-2.5 py-1.5 rounded-xl border border-white/5 uppercase tracking-wider">
+                Status Terlewat
+              </span>
+              <span className="text-xs text-[#F59E0B] font-bold">{uncollectedCount} dari {totalAssignments} kaleng aktif</span>
+            </div>
+          </div>
+        </Card>
       </div>
 
       {/* Transparent Toolbar Section */}
@@ -190,7 +313,7 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
       {/* Recent Collections Table as a Report */}
       <div className="space-y-4">
         <Suspense fallback={<TableSkeleton />}>
-          <TransactionList month={month} year={year} branch={branch} officer={officer} search={search} page={page} limit={limit} />
+          <TransactionList month={month} months={months} year={year} branch={branch} officer={officer} search={search} page={page} limit={limit} />
         </Suspense>
       </div>
     </div>

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "tokenrouter": {
+      "options": {
+        "apiKey": "sk-RSt5T5lV904h0mNgM98YckNFEVSZrHWWH4jRsuCKietlGWtR",
+        "baseURL": "https://api.tokenrouter.com/v1"
+      }
+    }
+  },
+  "model": "tokenrouter/z-ai/glm-5.2-free"
+}

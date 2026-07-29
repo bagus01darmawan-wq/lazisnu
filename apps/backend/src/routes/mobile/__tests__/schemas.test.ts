@@ -5,8 +5,7 @@ describe('collectionSchema', () => {
     assignment_id: '00000000-0000-0000-0000-000000000001',
     can_id: '00000000-0000-0000-0000-000000000002',
     nominal: 50000,
-    payment_method: 'CASH' as const,
-    collected_at: '2026-05-17T10:00:00.000Z',
+          collected_at: '2026-05-17T10:00:00.000Z',
   };
 
   it('menerima body valid', () => {
@@ -22,14 +21,6 @@ describe('collectionSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('menerima body dengan TRANSFER + receipt URL', () => {
-    const result = collectionSchema.safeParse({
-      ...validBody,
-      payment_method: 'TRANSFER',
-      transfer_receipt_url: 'https://example.com/receipt.jpg',
-    });
-    expect(result.success).toBe(true);
-  });
 
   it('menolak nominal 0 atau negatif', () => {
     const r1 = collectionSchema.safeParse({ ...validBody, nominal: 0 });
@@ -55,13 +46,6 @@ describe('collectionSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('menolak payment_method tidak valid', () => {
-    const result = collectionSchema.safeParse({
-      ...validBody,
-      payment_method: 'CREDIT_CARD',
-    });
-    expect(result.success).toBe(false);
-  });
 
   it('menolak collected_at bukan ISO datetime', () => {
     const result = collectionSchema.safeParse({
@@ -82,7 +66,6 @@ describe('resubmitSchema', () => {
   it('menerima body valid', () => {
     const result = resubmitSchema.safeParse({
       nominal: 75000,
-      payment_method: 'CASH',
       alasan_resubmit: 'salah input nominal sebelumnya',
     });
     expect(result.success).toBe(true);
@@ -91,7 +74,6 @@ describe('resubmitSchema', () => {
   it('menolak alasan_resubmit kurang dari 5 karakter', () => {
     const result = resubmitSchema.safeParse({
       nominal: 75000,
-      payment_method: 'CASH',
       alasan_resubmit: 'sala',
     });
     expect(result.success).toBe(false);
@@ -100,7 +82,6 @@ describe('resubmitSchema', () => {
   it('menolak nominal negatif', () => {
     const result = resubmitSchema.safeParse({
       nominal: -100,
-      payment_method: 'CASH',
       alasan_resubmit: 'salah input nominal',
     });
     expect(result.success).toBe(false);
@@ -116,7 +97,6 @@ describe('batchCollectionSchema', () => {
           assignment_id: '00000000-0000-0000-0000-000000000001',
           can_id: '00000000-0000-0000-0000-000000000002',
           nominal: 50000,
-          payment_method: 'CASH',
           collected_at: '2026-05-17T10:00:00.000Z',
         },
       ],
@@ -138,11 +118,78 @@ describe('batchCollectionSchema', () => {
           assignment_id: '00000000-0000-0000-0000-000000000001',
           can_id: '00000000-0000-0000-0000-000000000002',
           nominal: 0,
-          payment_method: 'CASH',
           collected_at: '2026-05-17T10:00:00.000Z',
         },
       ],
     });
     expect(result.success).toBe(false);
+  });
+
+  it('menerima item dengan device_info valid', () => {
+    const result = batchCollectionSchema.safeParse({
+      collections: [
+        {
+          offline_id: 'loc-1',
+          assignment_id: '00000000-0000-0000-0000-000000000001',
+          can_id: '00000000-0000-0000-0000-000000000002',
+          nominal: 50000,
+          collected_at: '2026-05-17T10:00:00.000Z',
+          device_info: {
+            model: 'Pixel 6',
+            os_version: 'Android 13',
+            app_version: '1.0.0',
+          },
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('menolak item dengan metadata lokal atau field payment_method', () => {
+    // 1. Menolak retry_attempts
+    const r1 = batchCollectionSchema.safeParse({
+      collections: [
+        {
+          offline_id: 'loc-1',
+          assignment_id: '00000000-0000-0000-0000-000000000001',
+          can_id: '00000000-0000-0000-0000-000000000002',
+          nominal: 50000,
+          collected_at: '2026-05-17T10:00:00.000Z',
+          retry_attempts: 1,
+        },
+      ],
+    });
+    expect(r1.success).toBe(false);
+
+    // 2. Menolak error_message
+    const r2 = batchCollectionSchema.safeParse({
+      collections: [
+        {
+          offline_id: 'loc-1',
+          assignment_id: '00000000-0000-0000-0000-000000000001',
+          can_id: '00000000-0000-0000-0000-000000000002',
+          nominal: 50000,
+          collected_at: '2026-05-17T10:00:00.000Z',
+          error_message: 'Some error',
+        },
+      ],
+    });
+    expect(r2.success).toBe(false);
+
+    // 3. Menolak payment_method dan transfer_receipt_url
+    const r3 = batchCollectionSchema.safeParse({
+      collections: [
+        {
+          offline_id: 'loc-1',
+          assignment_id: '00000000-0000-0000-0000-000000000001',
+          can_id: '00000000-0000-0000-0000-000000000002',
+          nominal: 50000,
+          collected_at: '2026-05-17T10:00:00.000Z',
+          payment_method: 'CASH',
+          transfer_receipt_url: 'https://...',
+        },
+      ],
+    });
+    expect(r3.success).toBe(false);
   });
 });

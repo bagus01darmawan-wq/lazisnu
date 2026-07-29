@@ -18,10 +18,9 @@ if (useMock) {
   redisConnection = new RedisMock();
 } else {
   const redisUrl = config.REDIS_URL as string;
-  redisConnection = new Redis({
-    host: new URL(redisUrl).hostname,
-    port: parseInt(new URL(redisUrl).port || '6379'),
-    password: new URL(redisUrl).password || undefined,
+  // Keep the full URL so ioredis can honor `rediss://` (TLS), username,
+  // password, port, and optional database number from managed Redis providers.
+  redisConnection = new Redis(redisUrl, {
     maxRetriesPerRequest: null, // Required by BullMQ
   });
 }

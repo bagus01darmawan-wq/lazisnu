@@ -11,13 +11,10 @@ type Transaction = PgTransaction<
   ExtractTablesWithRelations<typeof schema>
 >;
 
-type PaymentMethod = 'CASH' | 'TRANSFER';
-
 type ResubmitCollectionInput = {
   collectionId: string;
   nominal: number;
   alasanResubmit: string;
-  paymentMethod?: PaymentMethod;
   requiredOfficerId?: string;
   requiredBranchId?: string;
 };
@@ -102,8 +99,6 @@ export async function submitCollection(
     canId: string;
     officerId: string;
     nominal: number;
-    paymentMethod: PaymentMethod;
-    transferReceiptUrl?: string | null;
     collectedAt: Date;
     latitude?: string | null;
     longitude?: string | null;
@@ -118,8 +113,6 @@ export async function submitCollection(
     canId: data.canId,
     officerId: data.officerId,
     nominal: BigInt(data.nominal),
-    paymentMethod: data.paymentMethod,
-    transferReceiptUrl: data.transferReceiptUrl,
     collectedAt: data.collectedAt,
     submittedAt: new Date(),
     syncedAt: new Date(),
@@ -155,7 +148,11 @@ export async function resubmitCollection(
 ) {
   const oldCollection = await tx.query.collections.findFirst({
     where: eq(schema.collections.id, input.collectionId),
-    with: { can: true },
+    with: {
+      can: {
+        with: { branch: true }
+      }
+    },
   });
 
   if (!oldCollection) {
@@ -189,7 +186,6 @@ export async function resubmitCollection(
     canId: oldCollection.canId,
     officerId: oldCollection.officerId,
     nominal: newNominal,
-    paymentMethod: input.paymentMethod ?? oldCollection.paymentMethod,
     collectedAt: oldCollection.collectedAt,
     submittedAt: new Date(),
     syncedAt: new Date(),

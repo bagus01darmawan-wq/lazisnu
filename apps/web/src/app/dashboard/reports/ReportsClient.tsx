@@ -31,7 +31,7 @@ export default function ReportsClient({ data, pagination }: { data: CollectionRe
       ),
       cell: ({ row }) => (
         <span className="text-xs font-medium text-[#F4F1EA]/60">
-          {format(new Date(row.original.collected_at), 'PPP', { locale: id })}
+          {format(new Date(row.original.collected_at), 'HH:mm dd/MM/yyyy', { locale: id })}
         </span>
       ),
     },
@@ -50,7 +50,7 @@ export default function ReportsClient({ data, pagination }: { data: CollectionRe
       header: () => (
         <div className="flex items-center gap-1.5">
           <User size={12} className="text-[#EAD19B]" />
-          <span>Penyumbang</span>
+          <span>Pemilik</span>
         </div>
       ),
       cell: ({ row }) => <span className="text-sm font-bold text-[#F4F1EA]">{row.original.owner_name}</span>,

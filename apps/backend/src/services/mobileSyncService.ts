@@ -11,6 +11,7 @@ import { eq } from 'drizzle-orm';
 import { validateAssignmentForSubmit, submitCollection } from './collectionSubmission';
 import { getErrorMessage } from '../utils/error-guards';
 import { isAppError } from '../utils/AppError';
+import { sendWhatsAppNotification } from './whatsapp';
 
 /** Satu item batch dari request mobile */
 export interface BatchCollectionItem {
@@ -18,10 +19,14 @@ export interface BatchCollectionItem {
   assignment_id: string;
   can_id: string;
   nominal: number;
-  payment_method: 'CASH' | 'TRANSFER';
   collected_at: string;
   latitude?: number;
   longitude?: number;
+  device_info?: {
+    model: string;
+    os_version: string;
+    app_version: string;
+  };
 }
 
 /** Hasil per item dalam batch */
@@ -90,13 +95,32 @@ async function processSyncItem(
       canId: item.can_id,
       officerId,
       nominal: item.nominal,
-      paymentMethod: item.payment_method,
       collectedAt: new Date(item.collected_at),
       latitude: item.latitude?.toString(),
       longitude: item.longitude?.toString(),
       offlineId: item.offline_id,
+      deviceInfo: item.device_info,
     });
   });
+
+  const [can, officer] = await Promise.all([
+    db.query.cans.findFirst({ 
+      where: eq(schema.cans.id, item.can_id),
+      with: { branch: true }
+    }),
+    db.query.officers.findFirst({ where: eq(schema.officers.id, officerId) }),
+  ]);
+  if (can?.ownerWhatsapp) {
+    try {
+      await sendWhatsAppNotification(can.ownerWhatsapp, can.ownerName, item.nominal, officer?.fullName || 'Petugas Lazisnu', {
+        collectionId: collection.id, 
+        collectedAt: item.collected_at,
+        branchName: can.branch?.name
+      });
+    } catch {
+      // Kegagalan antrean tidak membatalkan transaksi koleksi yang sudah valid.
+    }
+  }
 
   return {
     offline_id: item.offline_id,
@@ -124,7 +148,6 @@ export async function syncCollectionsBatch(
       succeeded++;
     } catch (err) {
       const classification = classifySyncError(err);
-      const isValidation = classification.error_type === 'VALIDATION';
 
       results.push({
         offline_id: item.offline_id,
@@ -132,11 +155,8 @@ export async function syncCollectionsBatch(
         ...classification,
       });
 
-      if (isValidation) {
-        succeeded++; // validation error dihitung selesai (tidak perlu retry)
-      } else {
-        failed++;
-      }
+      // Validation error tetap gagal: client memasukkannya ke quarantine untuk ditinjau.
+      failed++;
     }
   }
 

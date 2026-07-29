@@ -1,0 +1,6 @@
+PS C:\Users\user> Get-Content "C:\Users\user\.codex\.sandbox\sandbox.2026-07-04.log" -Tail 5
+Get-Content "C:\Users\user\.codex\.sandbox\sandbox.2026-07-04
+[2026-07-04 09:27:15.115 codex.exe] START: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -Command try { [Console]::OutputEncoding=[System.Text.Encoding]::UTF8 } catch {}
+Get-ChildItem -Force | Select-Object Mode, LastWriteTime, Len
+[2026-07-04 09:30:38.881 codex.exe] SUCCESS: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -Command try { [Console]::OutputEncoding=[System.Text.Encoding]::UTF8 } catch {}
+Get-ChildItem -Force | Select-Object Mode, LastWriteTime, Len

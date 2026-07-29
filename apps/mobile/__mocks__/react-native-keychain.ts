@@ -14,12 +14,15 @@ interface MockState {
   shouldThrow: Error | null;
   // Track call history
   calls: { method: string; args: unknown }[];
+  // Biometric support control
+  biometryType: string | null;
 }
 
 let state: MockState = {
   value: null,
   shouldThrow: null,
   calls: [],
+  biometryType: 'Fingerprint',
 };
 
 export const ACCESSIBLE = {
@@ -28,6 +31,25 @@ export const ACCESSIBLE = {
   AFTER_FIRST_UNLOCK: 'AccessibleAfterFirstUnlock',
   AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 'AccessibleAfterFirstUnlockThisDeviceOnly',
 };
+
+export const ACCESS_CONTROL = {
+  USER_PRESENCE: 'UserPresence',
+  BIOMETRY_ANY: 'BiometryAny',
+  BIOMETRY_CURRENT_SET: 'BiometryCurrentSet',
+  DEVICE_PASSCODE: 'DevicePasscode',
+  APPLICATION_PASSWORD: 'ApplicationPassword',
+  BIOMETRY_ANY_OR_DEVICE_PASSCODE: 'BiometryAnyOrDevicePasscode',
+  BIOMETRY_CURRENT_SET_OR_DEVICE_PASSCODE: 'BiometryCurrentSetOrDevicePasscode',
+};
+
+export enum BIOMETRY_TYPE {
+  TOUCH_ID = 'TouchID',
+  FACE_ID = 'FaceID',
+  OPTIC_ID = 'OpticID',
+  FINGERPRINT = 'Fingerprint',
+  FACE = 'Face',
+  IRIS = 'Iris',
+}
 
 export const STORAGE_TYPE = {
   AES: 'KeystoreAESCBC',
@@ -64,6 +86,11 @@ export async function resetGenericPassword(options?: { service?: string }): Prom
   return false;
 }
 
+export async function getSupportedBiometryType(): Promise<string | null> {
+  state.calls.push({ method: 'getSupportedBiometryType', args: undefined });
+  return state.biometryType;
+}
+
 // Test helpers
 export const __setMockValue = (value: MockState['value']) => {
   state.value = value;
@@ -73,8 +100,12 @@ export const __setMockError = (error: Error | null) => {
   state.shouldThrow = error;
 };
 
+export const __setBiometryType = (type: string | null) => {
+  state.biometryType = type;
+};
+
 export const __resetMock = () => {
-  state = { value: null, shouldThrow: null, calls: [] };
+  state = { value: null, shouldThrow: null, calls: [], biometryType: 'Fingerprint' };
 };
 
 export const __getCalls = () => [...state.calls];

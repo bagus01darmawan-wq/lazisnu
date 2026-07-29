@@ -8,7 +8,6 @@ import * as schema from '../database/schema';
 import { eq } from 'drizzle-orm';
 import { PDFDocument, rgb, StandardFonts, PDFFont } from 'pdf-lib';
 import QRCode from 'qrcode';
-import { signQRCode } from '../utils/qr';
 import { uploadToR2, getSignedDownloadUrl } from './r2';
 import { Errors } from '../utils/errorCatalog';
 
@@ -33,11 +32,10 @@ export interface QRCanData {
 
 /**
  * Generate single QR PDF untuk satu kaleng.
- * Return signedToken, qrDataUrl (PNG preview), dan PDF buffer + R2 URL.
+ * Return qrDataUrl (PNG preview), dan PDF buffer + R2 URL.
  */
 export async function generateSingleQRPDF(canId: string): Promise<{
   qr_code: string;
-  signed_token: string;
   qr_image_url: string;
   print_url: string;
   r2_url: string | null;
@@ -51,8 +49,7 @@ export async function generateSingleQRPDF(canId: string): Promise<{
   if (!can.qrCode) throw Errors.VALIDATION_ERROR('Kaleng tidak memiliki nomor QR');
 
   const qrCode = can.qrCode;
-  const signedToken = signQRCode(qrCode);
-  const qrDataUrl = await QRCode.toDataURL(signedToken, {
+  const qrDataUrl = await QRCode.toDataURL(qrCode, {
     width: 300, margin: 2, color: { dark: '#000000', light: '#ffffff' },
   });
 
@@ -65,7 +62,7 @@ export async function generateSingleQRPDF(canId: string): Promise<{
   const x = MARGIN_X;
   const y = A4_HEIGHT - MARGIN_Y - cellHeight;
 
-  const qrPngBuffer = await QRCode.toBuffer(signedToken, { type: 'png', margin: 1, width: 100 });
+  const qrPngBuffer = await QRCode.toBuffer(qrCode, { type: 'png', margin: 1, width: 100 });
   const qrImage = await pdfDoc.embedPng(qrPngBuffer);
 
   const qrX = x + 10;
@@ -118,7 +115,6 @@ export async function generateSingleQRPDF(canId: string): Promise<{
 
   return {
     qr_code: qrCode,
-    signed_token: signedToken,
     qr_image_url: qrDataUrl,
     print_url: printUrl,
     r2_url: r2SignedUrl || null,
@@ -154,8 +150,7 @@ export async function generateBatchQRPDF(
     const x = MARGIN_X + (col * cellWidth);
     const y = A4_HEIGHT - MARGIN_Y - ((row + 1) * cellHeight);
 
-    const signedToken = signQRCode(can.qrCode);
-    const qrPngBuffer = await QRCode.toBuffer(signedToken, { type: 'png', margin: 1, width: 100 });
+    const qrPngBuffer = await QRCode.toBuffer(can.qrCode, { type: 'png', margin: 1, width: 100 });
     const qrImage = await pdfDoc.embedPng(qrPngBuffer);
 
     const qrX = x + 10;

@@ -26,7 +26,7 @@ CREATE TYPE collection_status AS ENUM (
 );
 
 CREATE TYPE payment_method AS ENUM (
-    'CASH',
+    'CASH',        -- Default & only method supported in offline batch sync
     'TRANSFER'
 );
 

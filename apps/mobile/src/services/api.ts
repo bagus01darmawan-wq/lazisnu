@@ -1,47 +1,106 @@
 // Mobile API Service - Lazisnu Collector App
 
 import { MMKV } from 'react-native-mmkv';
-import { ApiResponse, Task, AuthLoginResponse, MeResponse, DashboardResponse, TaskListResponse, ProfileResponse, HistoryResponse, BatchSyncResponse } from '@lazisnu/shared-types';
+import { Platform } from 'react-native';
+import { ApiResponse, Task, AuthLoginResponse, MeResponse, DashboardResponse, TaskListResponse, ProfileResponse, HistoryResponse, BatchSyncResponse, BatchCollectionRequestItem } from '@lazisnu/shared-types';
 import { captureAuthEvent } from '../config/crashlytics';
 
-// Instance MMKV untuk menyimpan token autentikasi (access + refresh).
-// ID eksplisit mencegah collision accidental jika ada module lain yang
-// juga `new MMKV()` tanpa ID. Berbeda dengan `@lazisnu/offline-queue`
-// yang dipakai untuk antrean sinkronisasi.
-export const storage = new MMKV({ id: '@lazisnu/auth-token' });
+// Instance dibuat setelah encryption key tersedia. Membuka file terenkripsi
+// tanpa key lebih dulu dapat membuat MMKV menganggap file corrupt dan meresetnya.
+const AUTH_STORAGE_ID = '@lazisnu/auth-token';
+let storage: MMKV | null = null;
 
-const getApiBaseUrl = (): string => {
-  if (__DEV__) {
-    // Android emulator accessing host machine via 10.0.2.2
-    return 'http://10.0.2.2:3001/v1';
+export function initializeAuthStorage(
+  encryptionKey: string,
+  migrateUnencrypted = false,
+): MMKV {
+  const instance = new MMKV(
+    migrateUnencrypted
+      ? {id: AUTH_STORAGE_ID}
+      : {id: AUTH_STORAGE_ID, encryptionKey},
+  );
+
+  if (migrateUnencrypted) {
+    instance.recrypt(encryptionKey);
   }
-  return 'https://api.lazisnu.app/v1'; // Production
+
+  storage = instance;
+  return instance;
+}
+
+export function getAuthStorage(): MMKV {
+  if (!storage) {
+    throw new Error('Auth storage belum diinisialisasi');
+  }
+  return storage;
+}
+
+const getApiOrigin = (): string => {
+  // API_URL di-inject oleh EAS Build per profile (eas.json).
+  // development: http://10.0.2.2:3001
+  // preview:     https://staging-api.lazisnu.site
+  // production:  https://api.lazisnu.site
+  if (process.env.API_URL) {
+    return process.env.API_URL;
+  }
+  // Fallback: local dev (React Native CLI tanpa EAS)
+  if (__DEV__) {
+    return 'http://10.0.2.2:3001';
+  }
+  return 'https://api.lazisnu.site';
 };
 
-export const API_BASE_URL = getApiBaseUrl();
+export const API_ORIGIN = getApiOrigin();
+export const API_BASE_URL = `${API_ORIGIN}/v1`;
 
 // ── Token Management (MMKV is synchronous) ──────────────────────────────────
 
 export const getToken = async (): Promise<string | null> => {
-  return storage.getString('access_token') || null;
+  return getAuthStorage().getString('access_token') || null;
 };
 
 export const setToken = async (token: string): Promise<void> => {
-  storage.set('access_token', token);
+  getAuthStorage().set('access_token', token);
 };
 
 export const getRefreshToken = (): string | null => {
-  return storage.getString('refresh_token') || null;
+  return getAuthStorage().getString('refresh_token') || null;
 };
 
 export const setRefreshToken = (token: string): void => {
-  storage.set('refresh_token', token);
+  getAuthStorage().set('refresh_token', token);
 };
 
 export const clearToken = async (): Promise<void> => {
-  storage.delete('access_token');
-  storage.delete('refresh_token');
+  getAuthStorage().delete('access_token');
+  getAuthStorage().delete('refresh_token');
 };
+
+// ── Device ID — identifikasi sesi per perangkat (Sub-bab 04 + 05) ─────────────
+
+const DEVICE_ID_KEY = 'device_id';
+
+function generateUUID(): string {
+  // react-native-get-random-values polyfills crypto.getRandomValues
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+export function getOrCreateDeviceId(): string {
+  const existing = getAuthStorage().getString(DEVICE_ID_KEY);
+  if (existing) return existing;
+
+  const newId = generateUUID();
+  getAuthStorage().set(DEVICE_ID_KEY, newId);
+  return newId;
+}
+
+export function getDeviceLabel(): string {
+  // Platform.OS = 'android' | 'ios', Platform.Version = versi OS
+  return `${Platform.OS === 'ios' ? 'iPhone' : 'Android'} ${Platform.Version}`;
+}
 
 // ── Token Refresh Logic ──────────────────────────────────────────────────────
 
@@ -83,9 +142,11 @@ function onRefreshFailed() {
   refreshSubscribers = [];
 }
 
-async function refreshAccessToken(): Promise<string | null> {
+type RefreshResult = { token: string | null; networkError: boolean };
+
+async function refreshAccessToken(): Promise<RefreshResult> {
   const refreshToken = getRefreshToken();
-  if (!refreshToken) {return null;}
+  if (!refreshToken) {return { token: null, networkError: false };}
 
   try {
     const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
@@ -102,7 +163,7 @@ async function refreshAccessToken(): Promise<string | null> {
       if (data.data.refresh_token) {
         setRefreshToken(data.data.refresh_token);
       }
-      return newToken;
+      return { token: newToken, networkError: false };
     }
     // Refresh gagal: hanya bersihkan token jika server secara eksplisit
     // menolak kredensial (401/403). Untuk 5xx/network, biarkan token
@@ -110,11 +171,11 @@ async function refreshAccessToken(): Promise<string | null> {
     if (response.status === 401 || response.status === 403) {
       await clearToken();
     }
-    return null;
+    return { token: null, networkError: response.status >= 500 };
   } catch {
     // Network error / JSON parse error — JANGAN clearToken di sini.
     // Token masih bisa valid; user bisa retry saat online.
-    return null;
+    return { token: null, networkError: true };
   }
 }
 
@@ -138,8 +199,9 @@ const apiRequest = async <T>(
       headers,
     });
 
-    // ── Handle 401: coba refresh token, lalu retry ──
-    if (response.status === 401 && !_isRetry) {
+    // ── Handle 401: coba refresh token, lalu retry (kecuali endpoint auth/login/otp) ──
+    const isAuthEndpoint = endpoint.includes('/auth/login') || endpoint.includes('/auth/request-otp') || endpoint.includes('/auth/verify-otp');
+    if (response.status === 401 && !_isRetry && !isAuthEndpoint) {
       if (isRefreshing) {
         // Tunggu refresh yang sedang berjalan — Daftarkan 2 jalur callback
         // agar subscriber tidak hang saat refresh gagal.
@@ -158,7 +220,7 @@ const apiRequest = async <T>(
                 const retryData = await retryResponse.json();
                 if (retryResponse.ok) {
                   resolve({ success: true, data: retryData.data || retryData });
-                } else {
+        } else {
                   resolve({ success: false, error: { code: 'UNAUTHORIZED', message: 'Sesi telah berakhir' } });
                 }
               } catch {
@@ -184,13 +246,16 @@ const apiRequest = async <T>(
       }
 
       isRefreshing = true;
-      const newToken = await refreshAccessToken();
+      const refreshResult = await refreshAccessToken();
       isRefreshing = false;
 
-      if (newToken) {
-        onRefreshed(newToken);
+      if (refreshResult.token) {
+        onRefreshed(refreshResult.token);
         // Retry original request dengan token baru
         return apiRequest<T>(endpoint, options, true);
+      } else if (refreshResult.networkError) {
+        onRefreshFailed();
+        return { success: false, error: { code: 'NETWORK_ERROR', message: 'Tidak ada koneksi internet' } };
       } else {
         // Refresh gagal — flush semua subscriber yang menunggu agar
         // tidak menggantung, lalu broadcast SESSION_EXPIRED agar UI
@@ -235,28 +300,45 @@ export const authService = {
   login: async (identifier: string, password: string): Promise<ApiResponse<AuthLoginResponse>> => {
     return apiRequest<AuthLoginResponse>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ identifier, password }),
+      body: JSON.stringify({
+        identifier,
+        password,
+        device_id: getOrCreateDeviceId(),
+        device_label: getDeviceLabel(),
+      }),
     });
   },
 
   requestOTP: async (phone: string): Promise<ApiResponse<{ message: string; expires_in: number }>> => {
     return apiRequest('/auth/request-otp', {
       method: 'POST',
-      body: JSON.stringify({ phone }),
+      body: JSON.stringify({
+        phone,
+        device_id: getOrCreateDeviceId(),
+        device_label: getDeviceLabel(),
+      }),
     });
   },
 
   verifyOTP: async (phone: string, otp: string): Promise<ApiResponse<AuthLoginResponse>> => {
     return apiRequest<AuthLoginResponse>('/auth/verify-otp', {
       method: 'POST',
-      body: JSON.stringify({ phone, otp }),
+      body: JSON.stringify({
+        phone,
+        otp,
+        device_id: getOrCreateDeviceId(),
+        device_label: getDeviceLabel(),
+      }),
     });
   },
 
   refresh: async (refreshToken: string): Promise<ApiResponse<{ access_token: string; refresh_token: string }>> => {
     return apiRequest('/auth/refresh', {
       method: 'POST',
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      body: JSON.stringify({
+        refresh_token: refreshToken,
+        device_id: getOrCreateDeviceId(),
+      }),
     });
   },
 
@@ -313,8 +395,6 @@ export const collectionService = {
     assignment_id: string;
     can_id: string;
     nominal: number;
-    payment_method: 'CASH' | 'TRANSFER';
-    transfer_receipt_url?: string;
     collected_at: string;
     latitude?: number;
     longitude?: number;
@@ -331,16 +411,9 @@ export const collectionService = {
     });
   },
 
-  batchSubmit: async (collections: Array<{
-    offline_id: string;
-    assignment_id: string;
-    can_id: string;
-    nominal: number;
-    payment_method: 'CASH' | 'TRANSFER';
-    collected_at: string;
-    latitude?: number;
-    longitude?: number;
-  }>): Promise<ApiResponse<BatchSyncResponse>> => {
+  batchSubmit: async (
+    collections: BatchCollectionRequestItem[]
+  ): Promise<ApiResponse<BatchSyncResponse>> => {
     return apiRequest<BatchSyncResponse>('/mobile/collections/batch', {
       method: 'POST',
       body: JSON.stringify({ collections }),
@@ -361,11 +434,27 @@ export const collectionService = {
 
   resubmitCollection: async (
     id: string,
-    data: { nominal: number; payment_method: 'CASH' | 'TRANSFER'; alasan_resubmit: string }
+    data: { nominal: number; alasan_resubmit: string }
   ): Promise<ApiResponse<{ id: string; submit_sequence: number; whatsapp_status: string; message: string }>> => {
     return apiRequest(`/mobile/collections/${id}/resubmit`, {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  },
+
+  skipAssignment: async (
+    id: string,
+    notes?: string,
+  ): Promise<ApiResponse<{ id: string; status: string; message: string }>> => {
+    return apiRequest(`/mobile/assignments/${id}/skip`, {
+      method: 'POST',
+      body: JSON.stringify(notes ? { notes } : {}),
+    });
+  },
+
+  completePeriod: async (): Promise<ApiResponse<{ period: string; skipped_count: number; message: string }>> => {
+    return apiRequest('/mobile/periods/complete', {
+      method: 'POST',
     });
   },
 };
@@ -378,7 +467,7 @@ export const networkService = {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      const response = await fetch(`${API_BASE_URL}/health`, {
+      const response = await fetch(`${API_ORIGIN}/health`, {
         method: 'GET',
         signal: controller.signal,
       });

@@ -13,15 +13,11 @@ export enum UserRole {
 }
 
 export enum AssignmentStatus {
-  ACTIVE     = 'ACTIVE',
-  COMPLETED  = 'COMPLETED',
-  POSTPONED  = 'POSTPONED',
-  REASSIGNED = 'REASSIGNED',
-}
-
-export enum PaymentMethod {
-  CASH     = 'CASH',
-  TRANSFER = 'TRANSFER',
+  ACTIVE      = 'ACTIVE',
+  COMPLETED   = 'COMPLETED',
+  POSTPONED   = 'POSTPONED',
+  REASSIGNED  = 'REASSIGNED',
+  UNCOLLECTED = 'UNCOLLECTED',
 }
 
 export enum SyncStatus {
@@ -138,8 +134,6 @@ export interface Collection {
   can_id: string;
   officer_id: string;
   nominal: number;
-  payment_method: PaymentMethod;
-  transfer_receipt_url?: string;
   collected_at: string;
   submitted_at?: string;
   synced_at?: string;
@@ -147,6 +141,8 @@ export interface Collection {
   whatsapp_status?: string;
   submit_sequence?: number;
   alasan_resubmit?: string | null;
+  retry_attempts?: number;
+  error_message?: string;
   // joined / computed fields
   can?: {
     qr_code: string;
@@ -191,10 +187,6 @@ export interface CollectionSummary {
   officer_id?: string;
   total_amount: number;
   collection_count: number;
-  cash_count: number;
-  cash_amount: number;
-  transfer_count: number;
-  transfer_amount: number;
 }
 
 // ─── Task (for mobile display – joined view) ─────────────────────────────────
@@ -255,8 +247,6 @@ export interface OfflineCollection {
   assignment_id: string;
   can_id: string;
   nominal: number;
-  payment_method: PaymentMethod;
-  transfer_receipt_url?: string;
   collected_at: string;
   latitude?: number;
   longitude?: number;
@@ -275,7 +265,6 @@ export interface CollectionReport {
   id: string;
   collected_at: string;
   nominal: number;
-  payment_method: PaymentMethod;
   sync_status: SyncStatus;
   officer_name: string;
   officer_code: string;
@@ -352,6 +341,7 @@ export interface RecentCollectionSummary {
 // GET /mobile/tasks — paginated
 export interface TaskListResponse {
   tasks: Task[];
+  total_nominal?: number;
   pagination: {
     page: number;
     limit: number;
@@ -373,16 +363,35 @@ export interface ProfileResponse {
   stats: { total_collections: number; total_amount: number };
 }
 
+export interface ResubmitTrackerItem {
+  id: string;
+  collected_at: string;
+  corrected_at?: string | null;
+  submit_sequence: number;
+  original_nominal: number;
+  corrected_nominal: number;
+  difference: number;
+  alasan_resubmit: string;
+  officer_name: string;
+  officer_code: string;
+  qr_code: string;
+  owner_name: string;
+  branch_name: string;
+  district_name: string;
+}
 // GET /mobile/collections (history) — paginated
 export interface HistoryItem {
   id: string;
+  offline_id?: string | null;
+  assignment_id: string;
+  can_id: string;
   qr_code: string;
   owner_name: string;
   owner_address: string;
   nominal: number;
-  payment_method: PaymentMethod;
   collected_at: string;
   sync_status: SyncStatus;
+  submit_sequence?: number;
 }
 
 export interface HistoryResponse {
@@ -393,6 +402,17 @@ export interface HistoryResponse {
     total: number;
     total_pages: number;
   };
+}
+
+export interface BatchCollectionRequestItem {
+  offline_id: string;
+  assignment_id: string;
+  can_id: string;
+  nominal: number;
+  collected_at: string;
+  latitude?: number;
+  longitude?: number;
+  device_info?: DeviceInfo;
 }
 
 // POST /mobile/collections/batch — batch sync

@@ -1,0 +1,92 @@
+groups:
+  - name: lazisnu-backend
+    interval: 15s
+    rules:
+
+      # ──────────────────────────────────────────
+      # CPU > 80% selama 5 menit
+      # Metric: process_cpu_seconds_total (rate = CPU usage fraction)
+      # ──────────────────────────────────────────
+      - alert: HighCpuUsage
+        expr: rate(process_cpu_seconds_total{job="lazisnu-backend"}[1m]) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU usage tinggi ({{ $value | printf \"%.1f\" }}%)"
+          description: >
+            Backend Lazisnu menggunakan CPU lebih dari 80% selama 5 menit.
+            Instance: {{ $labels.instance }}
+
+      # ──────────────────────────────────────────
+      # Memory (Heap) > 85% dari heap_size_limit
+      # Metric: nodejs_heap_size_used_bytes / nodejs_heap_size_total_bytes
+      # ──────────────────────────────────────────
+      - alert: HighHeapMemoryUsage
+        expr: >
+          (nodejs_heap_size_used_bytes{job="lazisnu-backend"}
+          / nodejs_heap_size_total_bytes{job="lazisnu-backend"}) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Heap memory tinggi ({{ $value | printf \"%.1f\" }}%)"
+          description: >
+            Heap memory backend Lazisnu melebihi 85% dari total heap selama 5 menit.
+            Pertimbangkan restart atau investigasi memory leak.
+            Instance: {{ $labels.instance }}
+
+      # ──────────────────────────────────────────
+      # HTTP error rate > 5% dalam 5 menit terakhir
+      # Metric: http_request_duration_seconds_count (label: status_code)
+      # Fallback: process_resident_memory_bytes sebagai proxy jika HTTP metric tidak ada
+      # Catatan: prom-client collectDefaultMetrics() tidak expose HTTP req metric secara default.
+      # Jika backend tidak menambah custom HTTP counter, rule ini akan tetap inactive (tidak firing).
+      # Uncomment dan sesuaikan jika custom metric http_requests_total ditambahkan.
+      # ──────────────────────────────────────────
+      - alert: HighHttpErrorRate
+        expr: >
+          (
+            sum(rate(http_request_duration_ms_count{job="lazisnu-backend", statusCode=~"5.."}[5m]))
+            /
+            sum(rate(http_request_duration_ms_count{job="lazisnu-backend"}[5m]))
+          ) * 100 > 5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "HTTP error rate tinggi ({{ $value | printf \"%.1f\" }}%)"
+          description: >
+            Lebih dari 5% request ke backend Lazisnu mengembalikan error 5xx
+            dalam 5 menit terakhir.
+            Instance: {{ $labels.instance }}
+
+      # ──────────────────────────────────────────
+      # Event Loop Lag > 100ms
+      # Metric: nodejs_eventloop_lag_seconds (prom-client default)
+      # ──────────────────────────────────────────
+      - alert: HighEventLoopLag
+        expr: nodejs_eventloop_lag_seconds{job="lazisnu-backend"} * 1000 > 100
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Event loop lag tinggi ({{ $value | printf \"%.0f\" }}ms)"
+          description: >
+            Event loop backend Lazisnu mengalami lag lebih dari 100ms selama 2 menit.
+            Kemungkinan penyebab: blocking I/O, query lambat, atau CPU spike.
+            Instance: {{ $labels.instance }}
+
+      # ──────────────────────────────────────────
+      # Backend Down — tidak merespons (target up == 0)
+      # ──────────────────────────────────────────
+      - alert: BackendDown
+        expr: up{job="lazisnu-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backend Lazisnu tidak merespons"
+          description: >
+            Target {{ $labels.instance }} tidak bisa di-scrape selama lebih dari 1 menit.
+            Cek: docker ps, docker logs lazisnu-backend-1

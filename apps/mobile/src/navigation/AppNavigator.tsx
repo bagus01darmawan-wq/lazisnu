@@ -2,7 +2,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import React from 'react';
-import { Text, View } from 'react-native';
+import { View, ActivityIndicator, Image } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 // Screens
@@ -12,20 +12,29 @@ import DashboardScreen from '../screens/DashboardScreen';
 import TasksScreen from '../screens/TasksScreen';
 import ScanScreen from '../screens/ScanScreen';
 import CollectionScreen from '../screens/CollectionScreen';
+import HistoryScreen from '../screens/HistoryScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 
 // Types
 import { RootStackParamList, MainTabParamList } from './types';
 import { useAuthStore } from '../stores';
+import { Colors, ComponentSizes, Spacing } from '../theme';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
+const logo = require('../assets/branding/logo-lazisnu-putih.png');
+
 // Splash ringan selama initializeAuth() berjalan. Tanpa ini, UI akan
 // flash ke LoginScreen lalu ke MainTabs pada cold start dengan token valid.
 const SplashScreen = () => (
-  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F4F1EA' }}>
-    <Text style={{ color: '#2C473E', fontSize: 18, fontWeight: '600' }}>Lazisnu</Text>
+  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.brand.deepGreen }}>
+    <Image
+      source={logo}
+      style={{ width: 180, height: 96, marginBottom: Spacing.xl }}
+      resizeMode="contain"
+    />
+    <ActivityIndicator size="large" color={Colors.brand.emerald} />
   </View>
 );
 
@@ -39,7 +48,7 @@ const getScreenOptions = ({ route }: { route: any }) => ({
       iconName = focused ? 'clipboard-text-clock' : 'clipboard-text-clock-outline';
     } else if (route.name === 'Scan') {
       iconName = 'qrcode';
-    } else if (route.name === 'Collection') {
+    } else if (route.name === 'History') {
       iconName = 'history';
     } else if (route.name === 'Profile') {
       iconName = focused ? 'account-circle' : 'account-circle-outline';
@@ -47,12 +56,45 @@ const getScreenOptions = ({ route }: { route: any }) => ({
 
     return <Icon name={iconName} size={size} color={color} />;
   },
-  tabBarActiveTintColor: '#10B981',
-  tabBarInactiveTintColor: 'gray',
-  headerStyle: {
-    backgroundColor: '#1E88E5',
+  tabBarActiveTintColor: Colors.brand.emerald,
+  tabBarInactiveTintColor: Colors.text.muted,
+  headerShown: false,
+  tabBarStyle: {
+    height: ComponentSizes.bottomTabHeight,
+    paddingTop: 4,
+    backgroundColor: Colors.surface.card,
+    borderTopColor: Colors.border.warm,
   },
-  headerTintColor: '#fff',
+  tabBarItemStyle:
+    route.name === 'Scan'
+      ? {
+          marginTop: -14,
+          height: 62,
+          borderRadius: 31,
+          backgroundColor: Colors.brand.emerald,
+        }
+      : undefined,
+  tabBarActiveBackgroundColor:
+    route.name === 'Scan' ? Colors.brand.emerald : undefined,
+  tabBarIconStyle:
+    route.name === 'Scan' ? {marginTop: 5} : undefined,
+  tabBarLabelStyle:
+    route.name === 'Scan'
+      ? {
+          color: Colors.text.white,
+          fontSize: 11,
+          fontWeight: '700' as const,
+          marginBottom: 5,
+        }
+      : {
+          fontSize: 11,
+          fontWeight: '600' as const,
+          marginBottom: 6,
+        },
+  headerStyle: {
+    backgroundColor: Colors.brand.deepGreen,
+  },
+  headerTintColor: Colors.text.white,
   headerTitleStyle: {
     fontWeight: 'bold' as const,
   },
@@ -75,11 +117,11 @@ const MainTabs = () => {
       <Tab.Screen
         name="Scan"
         component={ScanScreen}
-        options={{ title: 'Scan', headerShown: false }}
+        options={{ title: 'Scan', headerShown: false, unmountOnBlur: true }}
       />
       <Tab.Screen
-        name="Collection"
-        component={CollectionScreen}
+        name="History"
+        component={HistoryScreen}
         options={{ title: 'Riwayat' }}
       />
       <Tab.Screen
@@ -88,6 +130,18 @@ const MainTabs = () => {
         options={{ title: 'Profil' }}
       />
     </Tab.Navigator>
+  );
+};
+
+// Authenticated Stack
+// MainTabs adalah layar utama, sedangkan Collection hanya dapat dibuka
+// melalui alur scan dengan parameter task yang valid.
+const MainStack = () => {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Main" component={MainTabs} />
+      <Stack.Screen name="Collection" component={CollectionScreen} />
+    </Stack.Navigator>
   );
 };
 
@@ -121,7 +175,7 @@ const AppNavigator = () => {
 
   return (
     <NavigationContainer>
-      {isAuthenticated ? <MainTabs /> : <AuthStack />}
+      {isAuthenticated ? <MainStack /> : <AuthStack />}
     </NavigationContainer>
   );
 };

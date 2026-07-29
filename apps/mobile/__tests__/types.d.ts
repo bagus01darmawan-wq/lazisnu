@@ -13,6 +13,7 @@ declare module 'react-native-keychain' {
     value: { service: string; username: string; password: string } | null,
   ): void;
   export function __setMockError(error: Error | null): void;
+  export function __setBiometryType(type: string | null): void;
   export function __resetMock(): void;
   export function __getCalls(): { method: string; args: unknown }[];
 }

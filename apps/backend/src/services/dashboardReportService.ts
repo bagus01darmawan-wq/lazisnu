@@ -68,7 +68,7 @@ export async function getBendaharaDashboard() {
     by_district: districtRes.map(d => ({ district_id: d.districtId, district_name: d.districtName, total: Number(d.total), count: Number(d.count) })),
     by_officer: officerRes.map(o => ({ officer_id: o.officerId, officer_name: o.officerName, total: Number(o.total), count: Number(o.count) })),
     recent_transactions: recent.map(c => ({
-      id: c.id, nominal: Number(c.nominal), payment_method: c.paymentMethod,
+      id: c.id, nominal: Number(c.nominal),
       collected_at: c.collectedAt, officer_name: c.officer.fullName, owner_name: c.can.ownerName,
     })),
   };

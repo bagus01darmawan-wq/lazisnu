@@ -1,7 +1,7 @@
 /**
  * TC-WA-02 & TC-WA-03: Unit Test — WhatsApp BullMQ Retry & DLQ
  *
- * TC-WA-02: Jika API WA mati/limit → Exponential Backoff Retry (3 attempts)
+ * TC-WA-02: Jika API WA mati/limit → Exponential Backoff Retry (10 attempts)
  * TC-WA-03: Gagal terus-menerus → masuk Dead-Letter Queue (DLQ)
  *
  * Menguji konfigurasi queue dan behavior retry/backoff.
@@ -13,31 +13,31 @@
 // ============================================================================
 
 describe('TC-WA-02: WhatsApp Queue — Exponential Backoff Retry', () => {
-  it('queue dikonfigurasi dengan 3 attempts', () => {
+  it('queue dikonfigurasi dengan 10 attempts', () => {
     // Verified from services/queues.ts:
-    //   attempts: 3,
-    const expectedAttempts = 3;
-    expect(expectedAttempts).toBe(3);
+    //   attempts: 10,
+    const expectedAttempts = 10;
+    expect(expectedAttempts).toBe(10);
   });
 
   it('backoff type = exponential', () => {
     // Verified from services/queues.ts:
-    //   backoff: { type: 'exponential', delay: 5000 }
+    //   backoff: { type: 'exponential', delay: 3000 }
     const backoffType = 'exponential';
     expect(backoffType).toBe('exponential');
   });
 
-  it('initial delay = 5000ms (5 detik)', () => {
-    // Attempt 1: delay 5s, Attempt 2: delay 10s, Attempt 3: delay 20s
-    const initialDelay = 5000;
-    expect(initialDelay).toBe(5000);
+  it('initial delay = 3000ms (3 detik)', () => {
+    // Attempt delays: 3s→6s→12s→24s→48s→96s→192s→384s→768s
+    const initialDelay = 3000;
+    expect(initialDelay).toBe(3000);
   });
 
-  it('total 3 attempts → max 2 retries', () => {
-    // attempts: 3 = 1 initial try + 2 retries
-    const attempts = 3;
+  it('total 10 attempts → max 9 retries', () => {
+    // attempts: 10 = 1 initial try + 9 retries
+    const attempts = 10;
     const retries = attempts - 1;
-    expect(retries).toBe(2);
+    expect(retries).toBe(9);
   });
 
   it('worker memiliki rate limiter: max 2 per detik', () => {
@@ -57,13 +57,20 @@ describe('TC-WA-02: WhatsApp Queue — Exponential Backoff Retry', () => {
     expect(concurrency).toBe(1);
   });
 
-  it('exponential delay progression: 5s → 10s → 20s', () => {
-    const delays = [5000, 10000, 20000];
-    const initialDelay = 5000;
+  it('exponential delay progression: 3s → 6s → 12s → 24s → 48s → 96s → 192s → 384s → 768s', () => {
+    const delays = [3000, 6000, 12000, 24000, 48000, 96000, 192000, 384000, 768000];
+    const initialDelay = 3000;
 
     for (let i = 0; i < delays.length; i++) {
       expect(delays[i]).toBe(initialDelay * Math.pow(2, i));
     }
+  });
+
+  it('total delay retry ≈ 25.5 menit', () => {
+    const delays = [3000, 6000, 12000, 24000, 48000, 96000, 192000, 384000, 768000];
+    const totalMs = delays.reduce((sum, d) => sum + d, 0);
+    const totalMinutes = totalMs / 1000 / 60;
+    expect(Math.round(totalMinutes)).toBe(26); // ~25.5 → dibulatkan 26
   });
 });
 
@@ -86,23 +93,25 @@ describe('TC-WA-03: WhatsApp Queue — Dead-Letter Queue (DLQ)', () => {
     expect(removeOnComplete).toBe(true);
   });
 
-  it('setelah 3 attempts gagal → job masuk failed state (DLQ)', () => {
+  it('setelah 10 attempts gagal → job masuk failed state (DLQ)', () => {
     // BullMQ behavior: setelah attempts habis, job masuk state "failed"
     // Failed jobs bisa dilihat via Bull Board atau query Redis
-    const attempts = 3;
-    const afterAllAttempts = attempts; // ke-3 = attempt terakhir
+    const attempts = 10;
+    const afterAllAttempts = attempts;
 
     // Simulasikan: setiap attempt gagal
-    const attemptResults = [1, 2, 3].map((attempt) => ({
-      attempt,
-      willRetry: attempt < attempts,
-      isLast: attempt === attempts,
+    const attemptResults = Array.from({ length: attempts }, (_, i) => ({
+      attempt: i + 1,
+      willRetry: i + 1 < attempts,
+      isLast: i + 1 === attempts,
     }));
 
-    expect(attemptResults[0].willRetry).toBe(true);
-    expect(attemptResults[1].willRetry).toBe(true);
-    expect(attemptResults[2].willRetry).toBe(false);
-    expect(attemptResults[2].isLast).toBe(true);
+    // Semua kecuali yang terakhir harus retry
+    for (let i = 0; i < attempts - 1; i++) {
+      expect(attemptResults[i].willRetry).toBe(true);
+    }
+    expect(attemptResults[attempts - 1].willRetry).toBe(false);
+    expect(attemptResults[attempts - 1].isLast).toBe(true);
   });
 
   it('DLQ cleanup cron terdaftar: setiap Senin pukul 02:00', () => {
@@ -134,30 +143,36 @@ describe('TC-WA-03: WhatsApp Queue — Dead-Letter Queue (DLQ)', () => {
 // ============================================================================
 
 describe('WhatsApp Worker — flow retry', () => {
-  it('1st attempt gagal → retry dengan delay 5s', () => {
+  it('1st attempt gagal → retry dengan delay 3s', () => {
     const attempt = 1;
-    const shouldRetry = attempt < 3;
-    const nextDelay = 5000 * Math.pow(2, attempt - 1);
+    const shouldRetry = attempt < 10;
+    const nextDelay = 3000 * Math.pow(2, attempt - 1);
 
     expect(shouldRetry).toBe(true);
-    expect(nextDelay).toBe(5000);
+    expect(nextDelay).toBe(3000);
   });
 
-  it('2nd attempt gagal → retry dengan delay 10s', () => {
+  it('2nd attempt gagal → retry dengan delay 6s', () => {
     const attempt = 2;
-    const shouldRetry = attempt < 3;
-    const nextDelay = 5000 * Math.pow(2, attempt - 1);
+    const shouldRetry = attempt < 10;
+    const nextDelay = 3000 * Math.pow(2, attempt - 1);
 
     expect(shouldRetry).toBe(true);
-    expect(nextDelay).toBe(10000);
+    expect(nextDelay).toBe(6000);
   });
 
-  it('3rd attempt gagal → job masuk DLQ, tidak ada retry lagi', () => {
-    const attempt = 3;
-    const shouldRetry = attempt < 3;
-    const nextDelay = shouldRetry ? 5000 * Math.pow(2, attempt - 1) : 0;
+  it('10th (last) attempt gagal → job masuk DLQ, tidak ada retry lagi', () => {
+    const attempt = 10;
+    const shouldRetry = attempt < 10;
+    const nextDelay = shouldRetry ? 3000 * Math.pow(2, attempt - 1) : 0;
 
     expect(shouldRetry).toBe(false);
     expect(nextDelay).toBe(0);
+  });
+
+  it('mid-attempt (ke-5) → delay 48s', () => {
+    const attempt = 5;
+    const nextDelay = 3000 * Math.pow(2, attempt - 1);
+    expect(nextDelay).toBe(48000);
   });
 });

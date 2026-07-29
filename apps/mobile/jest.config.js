@@ -12,6 +12,10 @@ module.exports = {
     '**/__tests__/**/*.test.ts',
     '**/__tests__/**/*.test.tsx',
   ],
+  transformIgnorePatterns: [
+    'node_modules/(?!(jest-)?react-native|@react-native|react-native-vector-icons)/',
+    '\\.pnpm/(?!(jest-)?react-native|@react-native|react-native-vector-icons)/',
+  ],
   // Redirect @react-native/js-polyfills/error-guard ke mock karena file
   // tersebut berisi Flow type syntax yang gagal di-transform oleh babel-jest
   // di environment pnpm (symlink path tidak match transformIgnorePatterns).

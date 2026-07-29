@@ -4,8 +4,7 @@ import { relations, sql } from 'drizzle-orm';
 // Enums
 export const userRoleEnum = pgEnum('user_role', ['ADMIN_KECAMATAN', 'ADMIN_RANTING', 'BENDAHARA', 'PETUGAS']);
 export const collectionStatusEnum = pgEnum('collection_status', ['PENDING', 'COMPLETED', 'FAILED', 'CANCELLED']);
-export const paymentMethodEnum = pgEnum('payment_method', ['CASH', 'TRANSFER']);
-export const assignmentStatusEnum = pgEnum('assignment_status', ['ACTIVE', 'COMPLETED', 'POSTPONED', 'REASSIGNED']);
+export const assignmentStatusEnum = pgEnum('assignment_status', ['ACTIVE', 'COMPLETED', 'POSTPONED', 'REASSIGNED', 'UNCOLLECTED']);
 
 // Districts
 export const districts = pgTable('districts', {
@@ -39,6 +38,7 @@ export const users = pgTable('users', {
   branchId: uuid('branch_id').references(() => branches.id),
   isActive: boolean('is_active').default(true).notNull(),
   lastLogin: timestamp('last_login'),
+  fcmToken: varchar('fcm_token', { length: 255 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -117,8 +117,6 @@ export const collections = pgTable('collections', {
   canId: uuid('can_id').references(() => cans.id).notNull(),
   officerId: uuid('officer_id').references(() => officers.id).notNull(),
   nominal: bigint('nominal', { mode: 'bigint' }).notNull(),
-  paymentMethod: paymentMethodEnum('payment_method').default('CASH').notNull(),
-  transferReceiptUrl: varchar('transfer_receipt_url', { length: 500 }),
   collectedAt: timestamp('collected_at').notNull(),
   submittedAt: timestamp('submitted_at'),
   syncedAt: timestamp('synced_at'),
@@ -170,20 +168,6 @@ export const activityLogs = pgTable('activity_logs', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
-// Sync Queue
-export const syncQueues = pgTable('sync_queues', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  officerId: uuid('officer_id').references(() => officers.id).notNull(),
-  entityType: varchar('entity_type', { length: 50 }).notNull(),
-  entityData: json('entity_data').notNull(),
-  localId: varchar('local_id', { length: 100 }).notNull(),
-  status: varchar('status', { length: 20 }).default('PENDING').notNull(),
-  attempts: integer('attempts').default(0).notNull(),
-  lastError: text('last_error'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  processedAt: timestamp('processed_at'),
-});
-
 // Collection Summary
 export const collectionSummaries = pgTable('collection_summaries', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -194,10 +178,6 @@ export const collectionSummaries = pgTable('collection_summaries', {
   officerId: uuid('officer_id').references(() => officers.id),
   totalAmount: bigint('total_amount', { mode: 'bigint' }).default(sql`0`).notNull(),
   collectionCount: integer('collection_count').default(0).notNull(),
-  cashCount: integer('cash_count').default(0).notNull(),
-  cashAmount: bigint('cash_amount', { mode: 'bigint' }).default(sql`0`).notNull(),
-  transferCount: integer('transfer_count').default(0).notNull(),
-  transferAmount: bigint('transfer_amount', { mode: 'bigint' }).default(sql`0`).notNull(),
   calculatedAt: timestamp('calculated_at').defaultNow().notNull(),
 }, (t) => ({
   unq: uniqueIndex('summary_period_dist_br_off_unq').on(t.periodYear, t.periodMonth, t.districtId, t.branchId, t.officerId),
@@ -230,7 +210,6 @@ export const officersRelations = relations(officers, ({ one, many }) => ({
   assignments: many(assignments, { relationName: 'PrimaryOfficer' }),
   backupAssignments: many(assignments, { relationName: 'BackupOfficer' }),
   collections: many(collections),
-  syncQueues: many(syncQueues),
 }));
 
 export const cansRelations = relations(cans, ({ one, many }) => ({
@@ -274,6 +253,7 @@ export const userSessions = pgTable('user_sessions', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   jti: varchar('jti', { length: 255 }).unique().notNull(),
+  deviceId: varchar('device_id', { length: 100 }),
   deviceLabel: varchar('device_label', { length: 100 }),
   userAgent: text('user_agent'),
   ipAddress: varchar('ip_address', { length: 45 }),

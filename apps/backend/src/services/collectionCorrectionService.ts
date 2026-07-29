@@ -15,14 +15,13 @@ import * as schema from '../database/schema';
 import { resubmitCollection } from './collectionSubmission';
 import type { InferSelectModel } from 'drizzle-orm';
 
-type Can = InferSelectModel<typeof schema.cans>;
+type Can = InferSelectModel<typeof schema.cans> & { branch?: InferSelectModel<typeof schema.branches> | null };
 type Collection = InferSelectModel<typeof schema.collections>;
 
 export interface CorrectionInput {
   collectionId: string;
   nominal: number;
   alasanResubmit: string;
-  paymentMethod?: 'CASH' | 'TRANSFER';
   requiredOfficerId?: string;
   requiredBranchId?: string;
 }
@@ -53,21 +52,8 @@ export async function correctCollection(
       collectionId: input.collectionId,
       nominal: input.nominal,
       alasanResubmit: input.alasanResubmit,
-      paymentMethod: input.paymentMethod,
       requiredOfficerId: input.requiredOfficerId,
       requiredBranchId: input.requiredBranchId,
-    });
-
-    await tx.insert(schema.activityLogs).values({
-      userId: ctx.userId,
-      officerId: ctx.officerId || null,
-      actionType: 'RESUBMIT_COLLECTION',
-      entityType: 'collections',
-      entityId: newCollection.id,
-      oldData: oldCollection as any,
-      newData: newCollection as any,
-      ipAddress: ctx.ipAddress || null,
-      userAgent: ctx.userAgent || null,
     });
 
     return { oldCollection, newCollection };

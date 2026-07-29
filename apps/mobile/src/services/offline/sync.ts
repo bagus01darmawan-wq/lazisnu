@@ -1,6 +1,20 @@
 import NetInfo from '@react-native-community/netinfo';
 import { offlineQueue, QueuedCollection } from './queue';
 import { collectionService } from '../api';
+import { BatchCollectionRequestItem } from '@lazisnu/shared-types';
+
+function toBatchPayload(item: QueuedCollection): BatchCollectionRequestItem {
+  return {
+    offline_id: item.offline_id,
+    assignment_id: item.assignment_id,
+    can_id: item.can_id,
+    nominal: item.nominal,
+    collected_at: item.collected_at,
+    latitude: item.latitude,
+    longitude: item.longitude,
+    device_info: item.device_info as any,
+  };
+}
 
 // Console.log hanya aktif di dev — mencegah log detail transaksi
 // bocor ke logcat di production build.
@@ -36,7 +50,8 @@ export const syncService = {
       let totalFailed = 0;
       // Batch-level iteration cap — mencegah infinite loop jika ada item yg selalu gagal 5xx
       // tanpa melebihi retry_attempts per-item.
-      const MAX_BATCH_ITERATIONS = 3;
+      // Batch-level retry dinonaktifkan (MAX_BATCH_ITERATIONS=1). Per-item backoff via next_retry_at sudah cukup.
+      const MAX_BATCH_ITERATIONS = 1;
       let batchIteration = 0;
 
       while (batchIteration < MAX_BATCH_ITERATIONS) {
@@ -61,11 +76,13 @@ export const syncService = {
         // Ambil queue fresh setelah moveToFailedPermanent
         const remaining = offlineQueue.getRetryableQueue();
         if (remaining.length === 0) {
-          return { success: true, synced: totalSynced, failed: totalFailed, remaining: 0 };
+          const queuedCount = offlineQueue.getQueueCount();
+          return { success: queuedCount === 0, synced: totalSynced, failed: totalFailed, remaining: queuedCount };
         }
 
         try {
-          const response = await collectionService.batchSubmit(remaining);
+          const payload = remaining.map(toBatchPayload);
+          const response = await collectionService.batchSubmit(payload);
 
           if (response.success && response.data) {
             // response.data bertipe BatchSyncResponse — akses langsung
@@ -73,6 +90,7 @@ export const syncService = {
 
             const syncedIds: string[] = [];
             const permanentFailures: QueuedCollection[] = [];
+            const retryableFailures: QueuedCollection[] = [];
 
             for (const item of remaining) {
               const result = results.find((r) => r.offline_id === item.offline_id);
@@ -87,6 +105,8 @@ export const syncService = {
                   can_retry: false,
                   error_message: result.error,
                 });
+              } else {
+                retryableFailures.push(item);
               }
               // item yg tidak masuk kedua kategori = server error (5xx) —
               // tetap di queue, retry_attempts sudah di-increment oleh caller
@@ -100,6 +120,9 @@ export const syncService = {
             if (permanentFailures.length > 0) {
               offlineQueue.moveToFailedPermanent(permanentFailures);
             }
+            if (retryableFailures.length > 0) {
+              offlineQueue.incrementRetryAttempts(retryableFailures);
+            }
 
             totalSynced += syncedIds.length;
             totalFailed += permanentFailures.length;
@@ -109,7 +132,8 @@ export const syncService = {
             // kita bisa langsung return — tidak perlu loop lagi.
             const stillQueued = offlineQueue.getRetryableQueue();
             if (stillQueued.length === 0) {
-              return { success: true, synced: totalSynced, failed: totalFailed, remaining: 0 };
+              const queuedCount = offlineQueue.getQueueCount();
+              return { success: queuedCount === 0, synced: totalSynced, failed: totalFailed, remaining: queuedCount };
             }
 
             // Masih ada item di queue (kemungkinan 5xx dari batch ini) —
@@ -119,29 +143,17 @@ export const syncService = {
             // P2: Increment retry_attempts pada SEMUA item di batch ini.
             offlineQueue.incrementRetryAttempts(remaining);
             devLog(`[Sync] Batch gagal, retry_attempts di-increment untuk ${remaining.length} item.`);
-
-            if (batchIteration < MAX_BATCH_ITERATIONS) {
-              const delay = Math.pow(2, batchIteration - 1) * 1000;
-              devLog(`[Sync] Mencoba ulang dalam ${delay}ms... (Iterasi ${batchIteration})`);
-              await new Promise(res => { setTimeout(() => res(undefined), delay); });
-            }
           }
         } catch (error) {
           // Network error (5xx, timeout, dll)
           // P2: Increment retry_attempts pada semua item di batch.
           offlineQueue.incrementRetryAttempts(remaining);
           devLog(`[Sync] Network error, retry_attempts di-increment untuk ${remaining.length} item.`);
-
-          if (batchIteration < MAX_BATCH_ITERATIONS) {
-            const delay = Math.pow(2, batchIteration - 1) * 1000;
-            devLog(`[Sync] Gagal, mencoba ulang dalam ${delay}ms... (Iterasi ${batchIteration})`);
-            await new Promise(res => { setTimeout(() => res(undefined), delay); });
-          }
         }
       }
 
       // Batch-level cap tercapai — ada item yang belum terselesaikan.
-      const finalRemaining = offlineQueue.getRetryableQueue().length;
+      const finalRemaining = offlineQueue.getQueueCount();
       return {
         success: finalRemaining === 0,
         synced: totalSynced,
@@ -158,7 +170,13 @@ export const syncService = {
     // Tidak perlu syncInProgress lokal — guard ada di autoSync().
     return NetInfo.addEventListener(async (state) => {
       if (state.isConnected && state.isInternetReachable) {
-        await syncService.autoSync();
+        try {
+          // Dynamic import useSyncStore to prevent circular dependency
+          const { useSyncStore } = require('../../stores/useSyncStore');
+          await useSyncStore.getState().triggerSync();
+        } catch {
+          await syncService.autoSync();
+        }
       }
     });
   },
