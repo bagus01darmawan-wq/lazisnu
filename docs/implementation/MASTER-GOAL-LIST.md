@@ -4,7 +4,7 @@
 > Setiap task terhubung ke dokumen sub-bab yang berisi detail implementasi.
 > Update [ ] menjadi [x] saat task selesai.
 
-> Terakhir diperbarui: 2026-07-29 (Sesi 29 — 07-G3-5/backup control E2E selesai, 132/134 = 99%)
+> Terakhir diperbarui: 2026-07-30 (07-A2-2 CI hijau + PR #17 merged, db:migrate production terverifikasi; sisa: 08-C3, 08-D1)
 
 ---
 
@@ -70,7 +70,7 @@
 - [x] **07-A1-2**: Seragamkan strategi generator sesuai D-06 (Hapus Total, selesai)
 - [x] **07-A1-3**: HTTP /v1/scheduler/* tetap dipertahankan sebagai fallback manual
 - [x] **07-A2-1**: ci.yml — tambah step unit test backend + mobile
-- [ ] **07-A2-2**: Push PR -> CI menjalankan unit test (🔲 perlu push ke GitHub)
+- [x] **07-A2-2**: Push PR -> CI menjalankan unit test (✅ PR #17 merged; CI hijau + deploy-staging live)
 - [x] **07-A3-1**: pnpm --filter lazisnu-backend add prom-client
 - [x] **07-A3-2**: curl /metrics -> output Prometheus (bukan 501)
 - [x] **07-A4-1**: git log --all -- apps/backend/.env -> cek kredensial pernah ter-commit
