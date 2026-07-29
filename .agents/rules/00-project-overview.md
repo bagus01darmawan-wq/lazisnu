@@ -64,6 +64,38 @@ Officer opens app
 
 ---
 
+## Auth & Session Architecture
+
+| Layer | Detail |
+|---|---|
+| Access Token | JWT, TTL 15 menit, signed with `JWT_ACCESS_SECRET` |
+| Refresh Token | JWT, TTL 365 hari (semua role), signed with `JWT_REFRESH_SECRET` |
+| Session Model | Multi-device — login ulang di perangkat sama menimpa key lama |
+| Revocation | Per-device via Redis key + `revokedAt` di `user_sessions` |
+| Redis Fallback | Fail-closed di production (503); fallback + warning di dev |
+| Biometrik Mobile | Opsional — sidik jari sebagai gate ke refresh token di Keystore |
+| OTP Login | Dikirim via WhatsApp (Fonnte/Meta API) |
+| Blacklist AT | Tidak digunakan — terima window revoke 15 menit (D-07) |
+
+## Container Architecture
+
+| Service | Port | Deskripsi |
+|---|---|---|
+| `redis` | 6379 | Cache & queue (Redis 7-alpine, `volatile-lru`) |
+| `backend` | 3001 | Fastify API server |
+| `worker` | — | WhatsApp worker (BullMQ, proses terpisah) |
+| `web` | 3000 | Next.js dashboard |
+| `nginx` | 80/443 | Reverse proxy + SSL termination |
+
+**Environments:**
+- **Staging**: auto-deploy dari push main (`docker-compose.staging.yml`, port 4000/4001)
+- **Production**: deploy via tag `v*` (docker-compose.yml, port 80/443)
+
+**Mobile build profiles** (`eas.json`):
+- `development`: API → `http://10.0.2.2:3001`
+- `preview`: API → `https://staging-api.lazisnu.site`
+- `production`: API → `https://api.lazisnu.site`
+
 ## User Roles
 
 | Role | Platform | Access |
@@ -74,5 +106,4 @@ Officer opens app
 | `BENDAHARA` | Web Dashboard | Read-only reports + operational data |
 
 ---
-
 *Lazisnu Infaq Collection System — rules/00-project-overview.md*

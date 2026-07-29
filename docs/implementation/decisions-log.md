@@ -4,7 +4,7 @@
 > Setiap sub-bab implementation plan mereferensikan dokumen ini untuk keputusan yang belum final.
 > Update status kolom **Keputusan** segera setelah ada kesepakatan, lalu sesuaikan task di sub-bab terkait.
 
-Terakhir diperbarui: 2026-07-22
+Terakhir diperbarui: 2026-07-29
 
 ---
 

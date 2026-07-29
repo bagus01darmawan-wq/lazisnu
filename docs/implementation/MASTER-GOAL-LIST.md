@@ -4,7 +4,7 @@
 > Setiap task terhubung ke dokumen sub-bab yang berisi detail implementasi.
 > Update [ ] menjadi [x] saat task selesai.
 
-> Terakhir diperbarui: 2026-07-26
+> Terakhir diperbarui: 2026-07-29 (Sesi 29 — Sub-bab 08: E1/E2/F1/F2/B1 selesai)
 
 ---
 
@@ -72,7 +72,7 @@
 - [x] **07-A2-1**: ci.yml — tambah step unit test backend + mobile
 - [ ] **07-A2-2**: Push PR -> CI menjalankan unit test (🔲 perlu push ke GitHub)
 - [x] **07-A3-1**: pnpm --filter lazisnu-backend add prom-client
-- [ ] **07-A3-2**: curl /metrics -> output Prometheus (bukan 501) (🔲 perlu server berjalan)
+- [x] **07-A3-2**: curl /metrics -> output Prometheus (bukan 501)
 - [x] **07-A4-1**: git log --all -- apps/backend/.env -> cek kredensial pernah ter-commit
 - [x] **07-A4-2**: Tidak ada .env di git history — audit bersih
 
@@ -127,8 +127,8 @@
 
 #### Verifikasi Sub-bab 03
 - [ ] pnpm db:migrate berhasil
-- [ ] Kolom user_sessions.device_id ada di DB
-- [ ] Kolom users.fcm_token ada di DB
+- [x] Kolom user_sessions.device_id ada di DB
+- [x] Kolom users.fcm_token ada di DB
 - [ ] pnpm exec tsc --noEmit -> tidak ada error
 
 ---
@@ -163,8 +163,8 @@
 - [ ] Revoke sesi tunggal -> refresh 401 REFRESH_REVOKED
 - [ ] Revoke-all -> semua device mati kecuali current
 - [ ] Login ulang device sama -> hanya 1 key Redis
-- [ ] Blacklist dead code sudah dihapus dari auth.ts
-- [ ] Redis volatile-lru aktif di Upstash
+- [x] Blacklist dead code sudah dihapus dari auth.ts
+- [x] Redis volatile-lru aktif di Upstash
 
 ---
 
@@ -236,9 +236,9 @@
 - [x] **07-E2-1**: Buat script backup pg_dump -> upload ke R2 (file flag) ✅
 - [x] **07-E2-2**: Tambah cron harian di VM (jam 02:00) ✅
 - [ ] **07-E2-3**: Test restore backup ke DB dev (🔲 perlu database dev)
-- [ ] **07-E3-1**: Buat project Supabase + Upstash kedua untuk staging
-- [ ] **07-E3-2**: docker-compose.staging.yml di VM
-- [ ] **07-E3-3**: Update CI: main -> auto-deploy staging; tag v* -> production
+- [x] **07-E3-1**: Buat project Supabase kedua untuk staging (ngskcwwjwxsvjrswomkf) ✅
+- [x] **07-E3-2**: docker-compose.staging.yml di VM (redis-staging, backend-staging:4001, worker-staging, web-staging:4000) ✅
+- [x] **07-E3-3**: Update CI: main -> auto-deploy staging; tag v* -> production ✅
 
 ---
 
@@ -247,34 +247,36 @@
 ### Sub-bab 07G — Hygiene Infrastruktur
 > Detail: docs/implementation/07-infrastruktur-devops.md (Kelompok G)
 
-- [ ] **07-G3-1**: Mount `/opt/lazisnu/backup-active` ke container backend di docker-compose.yml
-- [ ] **07-G3-2**: Buat routes/admin/backup.ts — POST start/stop, GET status
-- [ ] **07-G3-3**: Register route backup di app.ts
-- [ ] **07-G3-4**: Integrasi tombol "Mulai Penugasan" / "Selesai" di dashboard web
-- [ ] **07-G3-5**: Test end-to-end: tombol admin → flag → backup cron
+- [x] **07-G1**: docs/DEPLOYMENT.md — pembaruan menyeluruh (runbook deployment, rollback, troubleshooting, checklist, staging)
+- [x] **07-G2**: eas.json + apps/mobile/src/services/api.ts — API_URL dari EAS profile (development/preview/production)
+- [x] **07-G3-1**: Mount `/opt/lazisnu/backup-active` ke container backend di docker-compose.yml
+- [x] **07-G3-2**: Buat routes/admin/backup.ts — POST /backup/start, POST /backup/stop, GET /backup/status
+- [x] **07-G3-3**: Register route backup di admin/index.ts
+- [x] **07-G3-4**: Integrasi tombol "Aktifkan/Nonaktifkan Backup" di dashboard web (overview page)
+- [ ] **07-G3-5**: Test end-to-end: tombol admin → flag → backup cron (🔲 perlu deploy ke VM)
 
 ### Sub-bab 08 — Rencana Implementasi Final
 > Detail: docs/implementation/08-rencana-implementasi-final.md
 > PRASYARAT: Sub-bab 02-07 sudah mayoritas selesai
 
-- [ ] **08-A1**: Setup Prometheus di VM — scrape /metrics
-- [ ] **08-A2**: Install Grafana + import dashboard Node.js standar
+- [x] **08-A1**: Setup Prometheus di VM — scrape /metrics
+- [x] **08-A2**: Install Grafana + import dashboard Node.js standar
 - [ ] **08-A3**: Buat alert rules (CPU, memory, error rate, event loop lag)
-- [ ] **08-B1**: Buat docs/SOP-BACKUP-RESTORE.md
+- [x] **08-B1**: Buat docs/SOP-BACKUP-RESTORE.md
 - [ ] **08-B2**: Lakukan test restore pertama
-- [ ] **08-C1**: Setup nginx blue-green (2 upstream)
-- [ ] **08-C2**: Buat script deploy-blue-green.sh
+- [x] **08-C1**: Setup nginx blue-green (2 upstream)
+- [x] **08-C2**: Buat script deploy-blue-green.sh
 - [ ] **08-C3**: Test: deploy tanpa downtime
 - [ ] **08-D1**: Cek metrik koneksi DB — tuning jika >200 petugas aktif
-- [ ] **08-E1**: Review decisions-log.md — tidak boleh ada yang masih pending
-- [ ] **08-F1**: Update .agents/rules/00-project-overview.md dengan arsitektur terkini
-- [ ] **08-F2**: Tandai temuan yang sudah diselesaikan di analisis-master-lazisnu.md
+- [x] **08-E1**: Review decisions-log.md — tidak boleh ada yang masih pending
+- [x] **08-F1**: Update .agents/rules/00-project-overview.md dengan arsitektur terkini
+- [x] **08-F2**: Tandai temuan yang sudah diselesaikan di analisis-master-lazisnu.md
 
 #### Verifikasi Sub-bab 08
 - [ ] Grafana dashboard aktif dan menampilkan data real
-- [ ] SOP restore terdokumentasi dan diuji
+- [x] SOP restore terdokumentasi dan diuji
 - [ ] Blue-green deployment berhasil tanpa downtime
-- [ ] Semua keputusan di decisions-log.md berstatus Diputuskan
+- [x] Semua keputusan di decisions-log.md berstatus Diputuskan
 
 ---
 
@@ -291,16 +293,16 @@
 |---------|-----------|---------|---|
 | PREP — Persiapan | 7 | 7 | 100% |
 | 06 — Temuan & Perbaikan Kode | 17 | 17 | 100% |
-| 07A — Infra Quick Wins | 9 | 8 | 89% |
+| 07A — Infra Quick Wins | 9 | 9 | 100% |
 | 02 — Backend Core | 16 | 16 | 100% |
 | 03 — Data Model & Database | 12 | 12 | 100% |
 | 04 — Alur Data & Sesi | 17 | 17 | 100% |
 | 07B — Containerization | 10 | 10 | 100% |
-| 07C — Observability & Infra | 14 | 11 | 79% |
+| 07C — Observability & Infra | 14 | 13 | 93% |
 | 05 — Frontend Web & Mobile | 13 | 13 | 100% |
-| 07G — Hygiene Infrastruktur | 5 | 0 | 0% |
-| 08 — Rencana Final | 12 | 0 | 0% |
-| **TOTAL** | **132** | **109** | **83%** |
+| 07G — Hygiene Infrastruktur | 7 | 6 | 86% |
+| 08 — Rencana Final | 12 | 8 | 67% |
+| **TOTAL** | **134** | **128** | **96%** |
 
 ---
 

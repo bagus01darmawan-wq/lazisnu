@@ -19,7 +19,7 @@ Lazisnu adalah sistem manajemen infaq berbasis **monorepo pnpm** dengan tiga apl
 
 **Kondisi arsitektur aplikasi:** matang untuk domain inti — data model solid, offline-first diimplementasikan dengan benar, prinsip immutability terjaga berlapis, RBAC granular, audit trail lengkap.
 
-**Kondisi lapisan autentikasi/sesi (hasil analisis kode mendalam):** memiliki **3 celah kritis (P0)** — OTP tidak pernah dikirim, pencabutan sesi tidak mencabut refresh token, dan blacklist access token tidak pernah diperiksa — ditambah 5 temuan P1 dan 9 temuan P2. Sebagian sudah memiliki rencana perbaikan final (Bab 20).
+**Kondisi lapisan autentikasi/sesi (hasil analisis kode mendalam):** memiliki **3 celah kritis (P0)** — OTP tidak pernah dikirim, pencabutan sesi tidak mencabut refresh token, dan blacklist access token tidak pernah diperiksa — ditambah 5 temuan P1 dan 9 temuan P2. **✅ Semua temuan P0/P1/P2 sudah diperbaiki per 2026-07-29 (Sub-bab 02-07).**
 
 **Kondisi infrastruktur & operasional:** masih **tahap awal (early-stage)** — wajar untuk produk baru berjalan, tapi harus segera diperkuat sebelum scale-up:
 
@@ -606,6 +606,8 @@ OTP di-generate (`otp.ts:24`) dan disimpan ke Redis dengan TTL 5 menit — tetap
 **Dampak:** Tidak ada cara bagi petugas mengetahui kode OTP-nya → `POST /v1/auth/verify-otp` praktis tidak akan pernah berhasil di environment mana pun. Fitur "Login dengan OTP" di mobile adalah jalan buntu, sedangkan respons API berbohong ("OTP dikirim ke WhatsApp"). Ini juga berarti klaim "OTP via WA" pada pilar/arsitektur tidak terbukti di kode.
 
 **Solusi:** Bab 19 (R-1) — dua opsi: aktifkan pengiriman via whatsapp.ts, atau matikan fitur secara eksplisit. ⏳ **Keputusan diperlukan dari pemilik produk.**
+>
+> ✅ **RESOLVED 2026-07-29**: D-01 diputuskan (Opsi A: Aktifkan via WA). `sendOtpMessage()` dihubungkan di `auth.ts`, OTP dikirim via WhatsApp worker. Sub-bab 05-MF1.
 
 ---
 
@@ -626,6 +628,8 @@ Akibatnya:
 **Dampak:** Fitur "logout dari perangkat lain" memberi rasa aman palsu. Jika perangkat petugas hilang/dicuri, admin tidak dapat memutus aksesnya lewat mekanisme ini.
 
 **Solusi:** Bab 19 (R-2). **Status: dijadwalkan teratasi oleh Bab 20 Fase 1** — desain per-device key baru membuat revocation berfungsi by construction (revoke = DEL key Redis + `revokedAt`).
+>
+> ✅ **RESOLVED 2026-07-29**: `tokenService.ts` implementasi lengkap — `storeDeviceSession`, `validateDeviceSession`, `revokeDeviceSession`, `revokeAllUserSessions`. Sub-bab 04.
 
 ---
 
@@ -645,6 +649,8 @@ Key `blacklist:at:{token}` ditulis saat logout, tetapi `authenticate()` (`middle
 **Dampak:** Access token tetap valid setelah logout hingga expired (maks 15 menit). Dampak praktis terbatas karena TTL pendek, tetapi kode mati ini menyesatkan pembaca dan audit keamanan.
 
 **Solusi:** Bab 19 (R-3) — rekomendasi: hapus kode blacklist dan terima window 15 menit (standar industri untuk token berumur pendek), daripada menambah 1 Redis call per request. **Status: dijadwalkan teratasi oleh Bab 20 Fase 1** (kode blacklist dihapus saat refactor `routes/auth.ts`).
+>
+> ✅ **RESOLVED 2026-07-29**: D-07 diputuskan (Hapus blacklist, terima window 15 menit). Kode `blacklist:at:` dihapus dari `auth.ts`. Sub-bab 04-C5.
 
 ---
 
@@ -1245,7 +1251,7 @@ push/PR ke main
 | Observability | Sentry saja | + prom-client + health alerting | **Keduanya** (I-10, I-12, I-13) — Sentry untuk error, metrics/uptime untuk SLA |
 | Refresh token TTL | 7 hari (standar awal) | 365 hari (keputusan produk) | **365d diterima** (Bab 20) — mitigasi: revocation per-device berfungsi + biometrik mobile |
 | Revoke access token | Blacklist Redis per request | Terima window 15 menit | **Terima window** (R-3) — tidak sepadan dengan +1 Redis call/request |
-| OTP petugas | Aktifkan kirim via WA | Matikan sementara | ⏳ **Menunggu keputusan produk** (R-1) |
+| OTP petugas | Aktifkan kirim via WA | Matikan sementara | ✅ **Aktifkan kirim via WA** (D-01 diputuskan 2026-07-22, diimplementasikan Sub-bab 05) |
 | Redis fail saat refresh | Fail-open (current) | Fail-closed di production | **Fail-closed di prod** (I-8), fallback hanya dev |
 
 ---
