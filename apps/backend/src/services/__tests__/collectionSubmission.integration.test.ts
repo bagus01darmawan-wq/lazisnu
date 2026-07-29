@@ -1,8 +1,23 @@
 import { db, closeDbConnection } from '../../config/database';
 import * as schema from '../../database/schema';
 import { submitCollection, resubmitCollection, validateAssignmentForSubmit } from '../collectionSubmission';
-import { eq, like } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { ErrorCode } from '../../utils/errorCatalog';
+
+/**
+ * RULE immutable koleksi (migration 0004) memblokir DELETE/UPDATE pada collections.
+ * Untuk kebutuhan cleanup data test, rules dinonaktifkan sementara lalu dibuat ulang.
+ */
+async function withImmutableRulesDisabled(fn: () => Promise<void>) {
+  await db.execute(sql`DROP RULE IF EXISTS disable_delete_koleksi ON collections`);
+  await db.execute(sql`DROP RULE IF EXISTS disable_update_nominal_koleksi ON collections`);
+  try {
+    await fn();
+  } finally {
+    await db.execute(sql`CREATE OR REPLACE RULE disable_delete_koleksi AS ON DELETE TO collections DO INSTEAD NOTHING`);
+    await db.execute(sql`CREATE OR REPLACE RULE disable_update_nominal_koleksi AS ON UPDATE TO collections WHERE NEW.nominal <> OLD.nominal DO INSTEAD NOTHING`);
+  }
+}
 
 describe('Collection Submission Integration Test', () => {
   let branchId: string;
@@ -16,36 +31,37 @@ describe('Collection Submission Integration Test', () => {
   beforeAll(async () => {
     // ── Bersihkan sisa data dari test run sebelumnya (idempotent) ──
     // Urutan: child → parent (karena foreign key constraints)
+    await withImmutableRulesDisabled(async () => {
+      // 1. Hapus collections & assignments terkait can 'TEST-QR-INT'
+      const oldCans = await db.query.cans.findMany({
+        where: eq(schema.cans.qrCode, 'TEST-QR-INT'),
+        columns: { id: true },
+      });
+      for (const c of oldCans) {
+        await db.delete(schema.collections).where(eq(schema.collections.canId, c.id));
+        await db.delete(schema.assignments).where(eq(schema.assignments.canId, c.id));
+        await db.delete(schema.cans).where(eq(schema.cans.id, c.id));
+      }
 
-    // 1. Hapus collections & assignments terkait can 'TEST-QR-INT'
-    const oldCans = await db.query.cans.findMany({
-      where: eq(schema.cans.qrCode, 'TEST-QR-INT'),
-      columns: { id: true },
+      // 2. Hapus officers dengan employeeCode 'EMP-001'
+      const oldOfficers = await db.query.officers.findMany({
+        where: eq(schema.officers.employeeCode, 'EMP-001'),
+        columns: { id: true },
+      });
+      for (const o of oldOfficers) {
+        await db.delete(schema.assignments).where(eq(schema.assignments.officerId, o.id));
+        await db.delete(schema.officers).where(eq(schema.officers.id, o.id));
+      }
+
+      // 3. Hapus users dengan email test
+      await db.delete(schema.users).where(eq(schema.users.email, 'officer-int@test.com'));
+
+      // 4. Hapus branches dengan code 'BTI'
+      await db.delete(schema.branches).where(eq(schema.branches.code, 'BTI'));
+
+      // 5. Hapus districts dengan code 'DTI'
+      await db.delete(schema.districts).where(eq(schema.districts.code, 'DTI'));
     });
-    for (const c of oldCans) {
-      await db.delete(schema.collections).where(eq(schema.collections.canId, c.id));
-      await db.delete(schema.assignments).where(eq(schema.assignments.canId, c.id));
-      await db.delete(schema.cans).where(eq(schema.cans.id, c.id));
-    }
-
-    // 2. Hapus officers dengan employeeCode 'EMP-001'
-    const oldOfficers = await db.query.officers.findMany({
-      where: eq(schema.officers.employeeCode, 'EMP-001'),
-      columns: { id: true },
-    });
-    for (const o of oldOfficers) {
-      await db.delete(schema.assignments).where(eq(schema.assignments.officerId, o.id));
-      await db.delete(schema.officers).where(eq(schema.officers.id, o.id));
-    }
-
-    // 3. Hapus users dengan email test
-    await db.delete(schema.users).where(eq(schema.users.email, 'officer-int@test.com'));
-
-    // 4. Hapus branches dengan code 'BTI'
-    await db.delete(schema.branches).where(eq(schema.branches.code, 'BTI'));
-
-    // 5. Hapus districts dengan code 'DTI'
-    await db.delete(schema.districts).where(eq(schema.districts.code, 'DTI'));
 
     // ── Insert data baru ──
 
@@ -108,13 +124,15 @@ describe('Collection Submission Integration Test', () => {
 
   afterAll(async () => {
     // cleanup
-    await db.delete(schema.collections).where(eq(schema.collections.canId, canId));
-    await db.delete(schema.assignments).where(eq(schema.assignments.id, assignmentId));
-    await db.delete(schema.officers).where(eq(schema.officers.id, officerId));
-    await db.delete(schema.users).where(eq(schema.users.id, userId));
-    await db.delete(schema.cans).where(eq(schema.cans.id, canId));
-    await db.delete(schema.branches).where(eq(schema.branches.id, branchId));
-    await db.delete(schema.districts).where(eq(schema.districts.id, districtId));
+    await withImmutableRulesDisabled(async () => {
+      await db.delete(schema.collections).where(eq(schema.collections.canId, canId));
+      await db.delete(schema.assignments).where(eq(schema.assignments.id, assignmentId));
+      await db.delete(schema.officers).where(eq(schema.officers.id, officerId));
+      await db.delete(schema.users).where(eq(schema.users.id, userId));
+      await db.delete(schema.cans).where(eq(schema.cans.id, canId));
+      await db.delete(schema.branches).where(eq(schema.branches.id, branchId));
+      await db.delete(schema.districts).where(eq(schema.districts.id, districtId));
+    });
     await closeDbConnection();
   });
 
