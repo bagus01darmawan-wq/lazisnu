@@ -16,6 +16,22 @@ jobs:
   lint-and-typecheck:
     runs-on: ubuntu-latest
 
+    # Postgres service untuk test integrasi (kredensial match apps/backend/.env.test)
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: lazisnu_test_2026
+          POSTGRES_DB: lazisnu_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
@@ -45,6 +61,11 @@ jobs:
 
     - name: Run type check
       run: pnpm -r exec tsc --noEmit
+
+    - name: Run DB migrations di test database
+      run: pnpm --filter lazisnu-backend db:migrate
+      env:
+        DATABASE_URL: postgresql://postgres:lazisnu_test_2026@localhost:5432/lazisnu_test
 
     - name: Run unit tests
       run: |
