@@ -15,10 +15,9 @@ services:
   redis-staging:
     image: redis:7-alpine
     restart: unless-stopped
-    command: redis-server /usr/local/etc/redis/redis.conf
+    command: redis-server --protected-mode no --appendonly yes --appendfsync everysec --save 300 1 --save 60 10 --maxmemory 50mb --maxmemory-policy volatile-lru
     volumes:
       - ./redis-data-staging:/data
-      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
     networks: [lazisnu_default]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -46,6 +45,7 @@ services:
       - NODE_ENV=production
       - PORT=4001
       - REDIS_URL=redis://redis-staging:6379
+      - NODE_OPTIONS=--dns-result-order=ipv4first
     logging:
       driver: json-file
       options:
@@ -67,6 +67,7 @@ services:
     environment:
       - NODE_ENV=production
       - REDIS_URL=redis://redis-staging:6379
+      - NODE_OPTIONS=--dns-result-order=ipv4first
     logging:
       driver: json-file
       options:

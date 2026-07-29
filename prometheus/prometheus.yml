@@ -1,0 +1,18 @@
+# Prometheus Configuration — Lazisnu
+# Scrape interval: 15 detik (sesuai spec 08-A1)
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Lazisnu Backend
+  - job_name: "lazisnu-backend"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["backend:3001"]

@@ -1,0 +1,247 @@
+{
+  "title": "Lazisnu Overview",
+  "description": "Metrik utama backend Lazisnu — CPU, memory, event loop, koneksi",
+  "tags": ["lazisnu", "backend"],
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "type": "stat",
+      "title": "Memory RSS",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 200000000 },
+              { "color": "red", "value": 400000000 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "process_resident_memory_bytes{job=\"lazisnu-backend\"}",
+          "refId": "A"
+        }
+      ],
+      "options": { "colorMode": "background", "graphMode": "area" }
+    },
+    {
+      "id": 2,
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "type": "stat",
+      "title": "Heap Used",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 100000000 },
+              { "color": "red", "value": 200000000 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "nodejs_heap_size_used_bytes{job=\"lazisnu-backend\"}",
+          "refId": "A"
+        }
+      ],
+      "options": { "colorMode": "background", "graphMode": "area" }
+    },
+    {
+      "id": 3,
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "type": "stat",
+      "title": "CPU Usage",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 50 },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "rate(process_cpu_seconds_total{job=\"lazisnu-backend\"}[1m]) * 100",
+          "refId": "A"
+        }
+      ],
+      "options": { "colorMode": "background", "graphMode": "area" }
+    },
+    {
+      "id": 4,
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "type": "stat",
+      "title": "Event Loop Lag",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.05 },
+              { "color": "red", "value": 0.1 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "nodejs_eventloop_lag_seconds{job=\"lazisnu-backend\"}",
+          "refId": "A"
+        }
+      ],
+      "options": { "colorMode": "background", "graphMode": "area" }
+    },
+    {
+      "id": 10,
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 4 },
+      "type": "timeseries",
+      "title": "Memory Usage (Time Series)",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "custom": { "fillOpacity": 20, "lineWidth": 2, "spanNulls": true }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "process_resident_memory_bytes{job=\"lazisnu-backend\"}",
+          "legendFormat": "RSS",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "nodejs_heap_size_used_bytes{job=\"lazisnu-backend\"}",
+          "legendFormat": "Heap Used",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "nodejs_heap_size_total_bytes{job=\"lazisnu-backend\"}",
+          "legendFormat": "Heap Total",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 4 },
+      "type": "timeseries",
+      "title": "CPU & Event Loop",
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "fillOpacity": 20, "lineWidth": 2, "spanNulls": true }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "rate(process_cpu_seconds_total{job=\"lazisnu-backend\"}[1m]) * 100",
+          "legendFormat": "CPU %",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "nodejs_eventloop_lag_seconds{job=\"lazisnu-backend\"}",
+          "legendFormat": "Event Loop Lag (s)",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 14 },
+      "type": "timeseries",
+      "title": "Active Handles",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "fillOpacity": 20, "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "nodejs_active_handles{job=\"lazisnu-backend\"}",
+          "legendFormat": "Handles",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 14 },
+      "type": "timeseries",
+      "title": "Active Requests",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "fillOpacity": 20, "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "nodejs_active_requests{job=\"lazisnu-backend\"}",
+          "legendFormat": "Requests",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 14 },
+      "type": "timeseries",
+      "title": "Open File Descriptors",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "fillOpacity": 20, "lineWidth": 2 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 500 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "process_open_fds{job=\"lazisnu-backend\"}",
+          "legendFormat": "FDs",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

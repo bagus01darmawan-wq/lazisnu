@@ -1,0 +1,12 @@
+# Grafana Provisioning — Dashboard Provider
+apiVersion: 1
+
+providers:
+  - name: "Lazisnu"
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards

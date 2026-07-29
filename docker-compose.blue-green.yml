@@ -1,0 +1,69 @@
+# ============================================
+# Lazisnu Blue-Green Deployment Compose
+# ============================================
+# Digunakan oleh scripts/deploy-blue-green.sh
+# Variable ${COLOR} di-set oleh script sebagai "blue" atau "green"
+#
+# Environment ini bergabung ke network lazisnu_default (external)
+# sehingga nginx production bisa me-reverse-proxy ke container ini.
+# Redis TIDAK diduplikasi — blue dan green berbagi Redis yang sama.
+# ============================================
+
+networks:
+  lazisnu_default:
+    external: true
+
+services:
+  backend:
+    image: ghcr.io/${GHCR_REPO}/backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    container_name: ${COLOR}-backend
+    networks: [lazisnu_default]
+    env_file:
+      - apps/backend/.env
+    environment:
+      - NODE_ENV=production
+      - PORT=${BACKEND_PORT}
+      - REDIS_URL=redis://redis:6379
+      - BACKUP_FLAG_PATH=/app/backup-active
+    volumes:
+      - ./backup-active:/app/backup-active
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  worker:
+    image: ghcr.io/${GHCR_REPO}/backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    container_name: ${COLOR}-worker
+    networks: [lazisnu_default]
+    entrypoint: ["node", "apps/backend/dist/worker.js"]
+    env_file:
+      - apps/backend/.env
+    environment:
+      - NODE_ENV=production
+      - REDIS_URL=redis://redis:6379
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  web:
+    image: ghcr.io/${GHCR_REPO}/web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    container_name: ${COLOR}-web
+    networks: [lazisnu_default]
+    env_file:
+      - apps/backend/.env
+    environment:
+      - NODE_ENV=production
+      - PORT=${WEB_PORT}
+      - API_URL=http://${COLOR}-backend:${BACKEND_PORT}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

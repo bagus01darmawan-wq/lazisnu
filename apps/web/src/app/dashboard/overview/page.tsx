@@ -26,7 +26,9 @@ import {
   BarChart2,
   AlertTriangle,
   LogIn,
-  Building2
+  Building2,
+  Database,
+  Power,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -101,6 +103,25 @@ export default function OverviewPage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
+  // Backup flag state
+  const [backupActive, setBackupActive] = React.useState(false);
+  const [backupLoading, setBackupLoading] = React.useState(false);
+
+  const handleToggleBackup = async () => {
+    try {
+      setBackupLoading(true);
+      const endpoint = backupActive ? '/admin/backup/stop' : '/admin/backup/start';
+      const res = await api.post(endpoint) as unknown as ApiResponse<{ active: boolean }>;
+      if (res.success && res.data) {
+        setBackupActive(res.data.active);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
 
 
   const fetchStats = async () => {
@@ -150,6 +171,16 @@ export default function OverviewPage() {
     };
     void loadStats();
   }, [user]);
+
+  // Fetch backup status on mount
+  React.useEffect(() => {
+    api.get('/admin/backup/status')
+      .then((res: unknown) => {
+        const r = res as ApiResponse<{ active: boolean }>;
+        if (r.success && r.data) setBackupActive(r.data.active);
+      })
+      .catch(() => { /* optional infra, silent fail */ });
+  }, []);
 
   if (loading) {
     return (
@@ -309,6 +340,45 @@ export default function OverviewPage() {
           </div>
         </Card>
       </div>
+
+      {/* Backup Control — only for ADMIN_KECAMATAN */}
+      {user?.role === 'ADMIN_KECAMATAN' && (
+        <Card variant="glass" className="border-white/5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className={`p-3 rounded-xl transition-all duration-300 ${backupActive ? 'bg-[#1F8243]/10 text-[#1F8243]' : 'bg-[#F4F1EA]/5 text-[#F4F1EA]/40'}`}>
+                <Database size={20} />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-[#F4F1EA]">Backup Database</p>
+                <p className="text-xs text-[#F4F1EA]/50 mt-0.5">
+                  {backupActive
+                    ? 'Backup otomatis berjalan tiap hari jam 02:00'
+                    : 'Backup otomatis sedang dinonaktifkan'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${backupActive ? 'text-[#1F8243] bg-[#1F8243]/10 border-[#1F8243]/20' : 'text-[#F4F1EA]/40 bg-[#F4F1EA]/5 border-[#F4F1EA]/10'}`}>
+                <span className={`w-2 h-2 rounded-full ${backupActive ? 'bg-[#1F8243] animate-pulse' : 'bg-[#F4F1EA]/30'}`} />
+                {backupActive ? 'Aktif' : 'Nonaktif'}
+              </span>
+              <button
+                onClick={handleToggleBackup}
+                disabled={backupLoading}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all active:scale-95 ${backupActive ? 'bg-[#D97A76]/10 text-[#D97A76] hover:bg-[#D97A76]/20 border border-[#D97A76]/20' : 'bg-[#1F8243] text-white hover:bg-[#1F8243]/90 shadow-lg shadow-[#1F8243]/20'}`}
+              >
+                {backupLoading ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Power size={16} />
+                )}
+                {backupActive ? 'Nonaktifkan' : 'Aktifkan'}
+              </button>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

@@ -18,6 +18,7 @@ WORKDIR /app
 RUN apk add --no-cache tzdata
 ENV TZ=Asia/Jakarta
 ENV NODE_ENV=production
+ENV NODE_OPTIONS=--dns-result-order=ipv4first
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable && corepack prepare pnpm@10 --activate

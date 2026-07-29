@@ -9,6 +9,7 @@ import { dukuhsRoutes } from './dukuhs';
 import { districtRoutes } from './district';
 import { waRoutes } from './wa';
 import { auditRoutes } from './audit';
+import { backupRoutes } from './backup';
 
 export default async function adminRoutes(fastify: FastifyInstance) {
   // Apply auth middleware to all routes in this plugin
@@ -23,4 +24,5 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   await fastify.register(districtRoutes);
   await fastify.register(waRoutes);
   await fastify.register(auditRoutes);
+  await fastify.register(backupRoutes);
 }
