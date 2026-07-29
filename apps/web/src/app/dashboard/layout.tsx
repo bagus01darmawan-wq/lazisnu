@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from '@/components/Sidebar';
 import { useAuthStore } from '@/store/useAuthStore';
 import { usePathname } from 'next/navigation';
+import api from '@/lib/api';
+import type { User } from '@lazisnu/shared-types';
 import { Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -12,8 +14,25 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user } = useAuthStore();
+  const { user, setUser } = useAuthStore();
   const pathname = usePathname();
+
+  // Hidrasi profil: sessionStorage (zustand persist) kosong di tab baru,
+  // padahal cookie token masih valid. Tanpa ini Sidebar spinner selamanya.
+  // Kegagalan 401 ditangani interceptor api (refresh → redirect /login).
+  useEffect(() => {
+    if (user) return;
+    let cancelled = false;
+    api
+      .get<{ success: boolean; data: User }>('/auth/me')
+      .then((res) => {
+        if (!cancelled) setUser(res.data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [user, setUser]);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isDesktopSidebarVisible, setIsDesktopSidebarVisible] = useState(true);
 
