@@ -295,7 +295,11 @@ describe('offline collection regression', () => {
     expect(updatePendingCollectionNominal(item.offline_id, 75000)).toBe(true);
     expect(offlineQueue.getQueue()[0].nominal).toBe(75000);
     expect(resubmitSpy).not.toHaveBeenCalled();
-    expect(updatePendingCollectionNominal(item.offline_id, 0)).toBe(false);
+    // Nominal 0 diizinkan (sesuai backend: min(0) + metrik zero_nominal_count)
+    expect(updatePendingCollectionNominal(item.offline_id, 0)).toBe(true);
+    expect(offlineQueue.getQueue()[0].nominal).toBe(0);
+    // Nominal negatif tetap ditolak
+    expect(updatePendingCollectionNominal(item.offline_id, -1)).toBe(false);
   });
 
   it('refresh offline tidak menghitung ulang transaksi optimistis yang sama', async () => {
