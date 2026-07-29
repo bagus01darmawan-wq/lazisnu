@@ -106,19 +106,25 @@ export default function OverviewPage() {
   // Backup flag state
   const [backupActive, setBackupActive] = React.useState(false);
   const [backupLoading, setBackupLoading] = React.useState(false);
+  const [backupMessage, setBackupMessage] = React.useState<string | null>(null);
 
   const handleToggleBackup = async () => {
     try {
       setBackupLoading(true);
+      setBackupMessage(null);
       const endpoint = backupActive ? '/admin/backup/stop' : '/admin/backup/start';
-      const res = await api.post(endpoint) as unknown as ApiResponse<{ active: boolean }>;
+      const res = await api.post(endpoint) as unknown as ApiResponse<{ active: boolean; message?: string }>;
       if (res.success && res.data) {
         setBackupActive(res.data.active);
+        setBackupMessage(res.data.message ?? (res.data.active ? 'Backup diaktifkan' : 'Backup dinonaktifkan'));
       }
-    } catch {
-      // silently fail
+    } catch (err) {
+      console.error('Backup toggle error:', err);
+      setBackupMessage('Gagal mengubah status backup. Coba lagi.');
     } finally {
       setBackupLoading(false);
+      // Auto-clear message after 4 seconds
+      setTimeout(() => setBackupMessage(null), 4000);
     }
   };
 
@@ -377,6 +383,11 @@ export default function OverviewPage() {
               </button>
             </div>
           </div>
+          {backupMessage && (
+            <p className={`text-xs mt-2 px-1 transition-opacity ${backupMessage.includes('Gagal') ? 'text-[#D97A76]' : 'text-[#1F8243]'}`}>
+              {backupMessage}
+            </p>
+          )}
         </Card>
       )}
 
