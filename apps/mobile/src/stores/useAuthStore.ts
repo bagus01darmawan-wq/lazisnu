@@ -65,7 +65,12 @@ const CACHED_USER_KEY = 'cached_user_profile';
 const BIOMETRIC_ENABLED_KEY = 'biometric_enabled';
 
 function loadBiometricEnabled(): boolean {
-  return getAuthStorage().getBoolean(BIOMETRIC_ENABLED_KEY) ?? false;
+  try {
+    return getAuthStorage().getBoolean(BIOMETRIC_ENABLED_KEY) ?? false;
+  } catch {
+    // Storage belum diinisialisasi (import time / test) — default aman: biometrik nonaktif
+    return false;
+  }
 }
 
 function saveBiometricEnabled(enabled: boolean): void {

@@ -95,7 +95,7 @@ export const offlineQueue = {
    * Mengembalikan true jika item ditemukan dan diperbarui.
    */
   updateNominal: (offline_id: string, newNominal: number): boolean => {
-    if (!Number.isSafeInteger(newNominal) || newNominal < 0) { return false; }
+    if (!Number.isSafeInteger(newNominal) || newNominal <= 0) { return false; }
     const queue = offlineQueue.getQueue();
     const idx = queue.findIndex(item => item.offline_id === offline_id);
     if (idx === -1) { return false; }
