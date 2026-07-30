@@ -16,7 +16,7 @@ Audit VM `lazisnu` per 2026-07-30 menunjukkan disk `/` sudah **94%** (18G dari 2
 | 4 | `/var/log/journal` | 193M | 🟢 Aman di-vacuum |
 | 5 | `/opt/lazisnu/backups/` placeholder 20B (7 file) | ~140B | 🟢 Hapus saja |
 | 6 | `/opt/lazisnu/scratch/` (testing artifact) | ~1K | 🟢 Hapus |
-| 7 | `/opt/lazisnu/nopeAGENTS.md` (typo) | 8K | 🟢 Hapus |
+| 7 | `/opt/lazisnu/nopeAGENTS.md` (file panduan agent) | 4.4K | 🔴 **JANGAN HAPUS** (lihat Catatan di bawah) |
 | 8 | `/opt/lazisnu/penggalan riwayat.txt` (Codex log) | 52K | 🟢 Hapus |
 | 9 | `/opt/lazisnu/.env.backup*` (kredensial) | ~1.5K | 🟡 Pindah ke folder aman |
 | 10 | Redis warning `vm.overcommit_memory` | — | 🟢 Tambah sysctl |
@@ -28,6 +28,15 @@ Audit VM `lazisnu` per 2026-07-30 menunjukkan disk `/` sudah **94%** (18G dari 2
 |----------|---------|-----------|---|
 | **Konservatif** (tanpa #2) | ~4.3GB | 13.7G | 68% ✅ |
 | **Agresif** (dengan #2) | ~8.1GB | 9.9G | 50% ✅ |
+
+### Catatan Penting (Hasil Audit 2026-07-30 review-2)
+
+1. **`nopeAGENTS.md` BUKAN testing artifact.** Inspeksi isi (2026-07-30) menunjukkan file ini berisi **panduan perilaku AI agent untuk proyek Lazisnu**: routing rule, konvensi kode (collections, cans, assignments, paymentMethod, nominal), protokol debugging, protokol review, standar penalaran, mode belajar developer pemula. **JANGAN DIHAPUS** dari rencana. Opsi pasca-audit:
+   - (a) Rename `nopeAGENTS.md` → `AGENTS.md` (nama proper) jika memang duplikat dengan `.agents/rules/00-workflow-guarantee.md`
+   - (b) Keep di `/opt/lazisnu/nopeAGENTS.md` jika berbeda dengan rules/ folder
+   - **Tindak lanjut**: bandingkan dengan `.agents/rules/00-workflow-guarantee.md` sebelum eksekusi Phase 1.2.
+
+2. **`.env.backup` & `.env.backup-2026-07-24` berisi PRODUCTION CREDENTIALS** (R2_SECRET_ACCESS_KEY, DATABASE_URL, dll). **Move ke `secrets/` (Phase 5) TETAP JALAN**, plus tambah backup off-site ke R2 sebelum move.
 
 ## Prinsip Pelaksanaan
 
@@ -78,20 +87,26 @@ sudo journalctl --disk-usage
 # Backup dulu ke /tmp (just in case)
 mkdir -p /tmp/cleanup-2026-07-30
 cp -r /opt/lazisnu/scratch /tmp/cleanup-2026-07-30/
-cp /opt/lazisnu/nopeAGENTS.md /tmp/cleanup-2026-07-30/
 cp "/opt/lazisnu/penggalan riwayat.txt" /tmp/cleanup-2026-07-30/
+
+# CATATAN: nopeAGENTS.md JANGAN di-backup atau dihapus — itu panduan agent.
+# Tindak lanjut: bandingkan /opt/lazisnu/nopeAGENTS.md dengan .agents/rules/00-workflow-guarantee.md
+# Jika duplikat, rename nopeAGENTS.md → AGENTS.md (proper name)
+# Jika unik, keep di tempatnya
 
 # Hapus
 rm -rf /opt/lazisnu/scratch
-rm -f /opt/lazisnu/nopeAGENTS.md
 rm -f "/opt/lazisnu/penggalan riwayat.txt"
 
 # Verifikasi
-ls -la /opt/lazisnu/ | grep -E '(scratch|nopeAGENTS|penggalan)'
+ls -la /opt/lazisnu/ | grep -E '(scratch|penggalan)'
 # Expected: no output
+# nopeAGENTS.md harus masih ada
+ls -la /opt/lazisnu/nopeAGENTS.md
+# Expected: file ada, size 4.4K
 ```
 
-**Risiko**: Rendah. File sudah di-backup ke `/tmp`. Jika ternyata perlu, ada di `/tmp/cleanup-2026-07-30/`.
+**Risiko**: Rendah. File testing sudah di-backup ke `/tmp`. `nopeAGENTS.md` di-keep (lihat Catatan Penting).
 
 ### 1.3 Set `vm.overcommit_memory = 1`
 
@@ -118,7 +133,15 @@ cat /proc/sys/vm/overcommit_memory
 ### 1.4 apt cleanup
 
 ```bash
-# Hapus package yang tidak dipakai
+# STEP 1: Dry-run dulu — review list package yang akan dihapus
+sudo apt autoremove --purge --dry-run
+# Output: daftar package yang akan di-remove
+# WAJIB REVIEW manual:
+#   - Apakah ada package yang dipakai Docker image (libssl, ca-certificates, dll)?
+#   - Apakah ada package yang dipakai service (nginx, postgresql-client, jq, dll)?
+#   - Skip eksekusi jika ragu — bisa jalan nanti
+
+# STEP 2: Eksekusi (hanya setelah review OK)
 sudo apt autoremove --purge -y
 
 # Bersihkan cache .deb
@@ -126,9 +149,10 @@ sudo apt autoclean
 
 # Verifikasi
 du -sh /var/cache/apt/
+# Expected: turun dari sebelumnya
 ```
 
-**Risiko**: Rendah. Hanya hapus package yang tidak ada dependensi aktif.
+**Risiko**: Sedang tanpa dry-run (bisa hapus package transitif yang ternyata dipakai). Mitigasi: wajib dry-run + review dulu.
 
 ### 1.5 Hapus file backup placeholder 20-byte
 
@@ -220,11 +244,12 @@ sudo docker image prune -af --dry-run
 ### 3.2 Prune dengan filter umur (lebih aman)
 
 ```bash
-# Hanya prune image yang dibuat >7 hari lalu
-sudo docker image prune -af --filter "until=168h"
+# Hanya prune image yang dibuat >30 hari lalu (saat ini ada 18 image, beberapa >30 hari)
+# Image blue/green aktif (rolling deployment baru) tetap aman untuk rollback immediate
+sudo docker image prune -af --filter "until=720h"
 ```
 
-**Risiko**: Rollback ke image <7 hari tetap aman. Image lama (>7 hari) akan terhapus.
+**Risiko**: Rollback ke image <30 hari tetap aman (termasuk image blue/green terbaru). Image >30 hari akan terhapus, butuh pull dari GHCR untuk rollback.
 
 ### 3.3 Verifikasi image penting masih ada
 
@@ -250,7 +275,9 @@ sudo docker images | wc -l
 
 ---
 
-## Phase 4 — Backup Retention di `scripts/backup.sh` (Risiko Rendah)
+## Phase 4 — Backup Retention di `scripts/backup.sh` (Risiko Sedang — Diubah)
+
+> ⚠️ **Revisi (2026-07-30 review-2)**: Retention dinaikkan dari 30 hari ke **90 hari** untuk compliance audit. Backup >90 hari di-archive ke R2 bucket terpisah sebelum dihapus lokal.
 
 Modifikasi `scripts/backup.sh` untuk auto-cleanup backup placeholder dan tambah retention eksplisit.
 
@@ -263,36 +290,50 @@ Tambah block di akhir `scripts/backup.sh` (sebelum exit):
 # Hapus file backup placeholder (test gagal <1KB)
 find "$BACKUP_DIR" -name "*.sql.gz" -size -1k -mmin +60 -delete
 
-# Retention policy:
+# Retention policy (REVISI: 30 → 90 hari, archive ke R2):
 # - Keep 7 backup harian terakhir
 # - Keep 4 backup mingguan terakhir (backup hari Minggu)
 # - Keep 3 backup bulanan terakhir (backup tanggal 1)
-# File backup yang lebih lama dari 30 hari dihapus
-find "$BACKUP_DIR" -name "*.sql.gz" -mtime +30 -delete
+# - File backup yang lebih lama dari 90 hari: ARCHIVE ke R2 dulu, baru hapus lokal
+RCLONE_BUCKET="r2:lazisnu-backup-archive"  # off-site archive bucket
+find "$BACKUP_DIR" -name "*.sql.gz" -mtime +90 -print0 | while IFS= read -r -d '' f; do
+  echo "Archiving to R2: $f"
+  rclone copyto "$f" "$RCLONE_BUCKET/$(basename $f)" --progress 2>&1 | tail -3
+  if [ $? -eq 0 ]; then
+    rm -f "$f"
+    echo "  -> archived & local removed"
+  else
+    echo "  -> R2 upload FAILED, keep local"
+  fi
+done
 
-echo "$(date -Iseconds) Cleanup: placeholder + retention done" >> "$BACKUP_LOG"
+echo "$(date -Iseconds) Cleanup: placeholder + retention (90d + R2 archive) done" >> "$BACKUP_LOG"
 ```
 
 ### 4.2 Test logic (tanpa execute)
 
 ```bash
-# Dry-run: lihat apa yang akan dihapus
-find /opt/lazisnu/backups -name "*.sql.gz" -size -1k -mmin +60
-find /opt/lazisnu/backups -name "*.sql.gz" -mtime +30
+# Dry-run: lihat apa yang akan di-archive
+find /opt/lazisnu/backups -name "*.sql.gz" -mtime +90
+
+# Test rclone connectivity ke R2 (jangan eksekusi dulu)
+rclone lsd r2: --max-depth 1
 ```
 
 ### 4.3 Commit & deploy
 
 ```bash
 git add scripts/backup.sh
-git commit -m "feat(backup): tambah retention policy + auto-cleanup placeholder"
+git commit -m "feat(backup): retention 90 hari + archive ke R2 (compliance audit)"
 git push origin main
 # CI auto deploy-staging
 ```
 
 ---
 
-## Phase 5 — Move `.env.backup` ke Folder Khusus (Risiko Rendah)
+## Phase 5 — Move `.env.backup` ke Folder Khusus (Risiko Rendah — Diubah)
+
+> ⚠️ **Revisi (2026-07-30 review-2)**: Tambahan langkah **backup off-site ke R2** SEBELUM move. Credential production (R2_SECRET_ACCESS_KEY, Supabase password) — kalau hilang butuh regenerate dari dashboard.
 
 ### 5.1 Buat folder khusus dengan permission ketat
 
@@ -302,7 +343,27 @@ sudo chown ubuntu:ubuntu /opt/lazisnu/secrets
 sudo chmod 700 /opt/lazisnu/secrets
 ```
 
-### 5.2 Pindahkan file
+### 5.2 BACKUP OFF-SITE KE R2 DULU (BARU — revisi-2)
+
+```bash
+# Rclone config sudah ada (sudah dipakai untuk backup DB harian)
+# Archive folder khusus untuk env backups
+RCLONE_BUCKET="r2:lazisnu-secrets"
+
+# Backup .env.backup ke R2
+rclone copyto /opt/lazisnu/.env.backup "$RCLONE_BUCKET/env.backup-2026-07-27.bak" --progress
+
+# Backup apps/backend/.env.backup-2026-07-24 ke R2
+rclone copyto /opt/lazisnu/apps/backend/.env.backup-2026-07-24 "$RCLONE_BUCKET/env.backup-2026-07-24.bak" --progress
+
+# Verifikasi R2
+rclone ls "$RCLONE_BUCKET/" | grep env.backup
+# Expected: 2 file terupload
+
+# CATATAN: skip step 5.3 jika R2 upload FAILED
+```
+
+### 5.3 Pindahkan file ke /opt/lazisnu/secrets/
 
 ```bash
 sudo mv /opt/lazisnu/.env.backup /opt/lazisnu/secrets/env.backup-2026-07-27
@@ -311,19 +372,31 @@ sudo chown ubuntu:ubuntu /opt/lazisnu/secrets/*
 sudo chmod 600 /opt/lazisnu/secrets/*
 ```
 
-### 5.3 Verifikasi
+### 5.4 Verifikasi
 
 ```bash
+# 1. File ada di secrets/ dengan permission 600
 ls -la /opt/lazisnu/secrets/
 # Expected: 2 file, mode 600, owner ubuntu
+
+# 2. File asal sudah tidak ada
 ls -la /opt/lazisnu/.env.backup /opt/lazisnu/apps/backend/.env.backup-2026-07-24 2>&1
 # Expected: 'No such file or directory'
+
+# 3. R2 archive ada
+rclone ls r2:lazisnu-secrets/ | grep env.backup
+# Expected: 2 file
+
+# 4. .env aktif masih berfungsi
+ls -la /opt/lazisnu/apps/backend/.env
+# Expected: file ada, isinya sama dengan .env.backup (Supabase DATABASE_URL visible)
 ```
 
-**Risiko**: Tidak ada. Hanya move file. `.env` aktif tetap di `apps/backend/.env`.
-**Alasan**: Konsolidasi secret ke satu folder dengan permission 600, sesuai best practice.
+**Risiko**: Sangat rendah (dengan backup R2). Worst case: R2 upload gagal → keep local + ulangi manual.
 
-### 5.4 Update `.gitignore` (di repo)
+**Alasan**: Konsolidasi secret ke satu folder dengan permission 600 + off-site backup, sesuai best practice.
+
+### 5.5 Update `.gitignore` (di repo)
 
 ```gitignore
 # Secrets (jangan commit)
@@ -352,15 +425,21 @@ Buat `docs/SOP-HOUSEKEEPING-VM.md` dengan checklist bulanan.
 - [ ] Docker build cache: `docker builder prune -af`
 - [ ] Journal vacuum: `sudo journalctl --vacuum-size=50M`
 - [ ] Backup file cek: `ls -la /opt/lazisnu/backups/`
-- [ ] apt cleanup: `sudo apt autoremove --purge && sudo apt autoclean`
+- [ ] apt cleanup: `sudo apt autoremove --purge --dry-run` dulu, review list, baru eksekusi
+- [ ] Inspect `/opt/lazisnu/` untuk file unreferenced:
+      `ls -la /opt/lazisnu/ | grep -vE 'docs|app|backups|redis|prom|grafana|nginx|secrets'`
+      **JANGAN hapus file panduan (AGENTS.md, nopeAGENTS.md, README*, CHANGELOG*, LICENSE)**
 
 ## Checklist Kuartalan
-- [ ] Phase 3 (unused image prune dengan filter 30 hari)
-- [ ] Review retention policy backup
-- [ ] Review /opt/lazisnu untuk file unreferenced
+- [ ] Phase 3 (unused image prune dengan filter 30 hari / 720h)
+- [ ] Review retention policy backup (90 hari + R2 archive)
+- [ ] Review `/opt/lazisnu/secrets/` permission (chmod 600, owner ubuntu)
+- [ ] Test rclone connectivity ke R2
 
 ## Insiden & Recovery
 - Lihat `RENCANA-CLEANUP-HOUSEKEEPING.md` untuk rollback tiap phase
+- **JANGAN PERNAH** hapus file di `/opt/lazisnu/` tanpa cek isinya dulu
+- **JANGAN PERNAH** hapus folder `/opt/lazisnu/secrets/` (recovery credential)
 ```
 
 ---
@@ -399,7 +478,8 @@ curl -s http://127.0.0.1:9090/api/v1/targets | python3 -c "import sys, json; d=j
 | Phase | Rollback | Effort |
 |-------|----------|--------|
 | 1.1 Journal | `sudo journalctl --vacuum-size=200M` (restore) | 1 menit |
-| 1.2 Scratch/nopeAGENTS | `cp -r /tmp/cleanup-2026-07-30/* /opt/lazisnu/` | 1 menit |
+| 1.2 Scratch/penggalan | `cp -r /tmp/cleanup-2026-07-30/* /opt/lazisnu/` | 1 menit |
+| 1.2 nopeAGENTS.md (jika terhapus) | **TIDAK BOLEH TERHAPUS** (lihat Catatan). Backup: `/opt/lazisnu/.agents/rules/00-workflow-guarantee.md` | 1 menit |
 | 1.3 Sysctl | `sudo sed -i '/overcommit_memory/d' /etc/sysctl.conf && sudo sysctl -w vm.overcommit_memory=0` | 1 menit |
 | 1.4 apt | `sudo apt install <package>` per package | 5-10 menit |
 | 1.5 Backup placeholder | Backup sudah dihapus, tidak ada di tempat lain (file test gagal, tidak ada recovery point) | ❌ Tidak bisa |
@@ -416,8 +496,8 @@ curl -s http://127.0.0.1:9090/api/v1/targets | python3 -c "import sys, json; d=j
 | File | Aksi | Phase |
 |------|------|-------|
 | `/opt/lazisnu/scratch/` | hapus | 1.2 |
-| `/opt/lazisnu/nopeAGENTS.md` | hapus | 1.2 |
 | `/opt/lazisnu/penggalan riwayat.txt` | hapus | 1.2 |
+| `/opt/lazisnu/nopeAGENTS.md` | **TINDAK LANJUT: rename ke AGENTS.md atau bandingkan dengan .agents/rules/** | 1.2 |
 | `/etc/sysctl.conf` | tambah `vm.overcommit_memory = 1` | 1.3 |
 | `/opt/lazisnu/backups/lazisnu_20260727_*.sql.gz` (placeholder) | hapus | 1.5 |
 | `/opt/lazisnu/.env.backup` | pindah ke `secrets/` | 5 |
@@ -439,3 +519,12 @@ Setelah semua phase selesai, update:
 ---
 
 *Rencana ini akan dieksekusi menyusul (menurut keputusan user 2026-07-30). Phase 1+2+4+5+6 adalah default. Phase 3 opsional, butuh persetujuan ulang saat eksekusi.*
+
+---
+
+## Riwayat Revisi
+
+| Tanggal | Versi | Perubahan |
+|---------|-------|-----------|
+| 2026-07-30 | 1.0 | Initial: 6 phase, 11 item cleanup, target disk <70% |
+| 2026-07-30 | 1.1 (review-2) | **5 revisi:** (1) `nopeAGENTS.md` ditandai 🔴 JANGAN HAPUS; (2) Phase 1.4 tambah `--dry-run`; (3) Phase 3 filter diubah 168h→720h (7→30 hari); (4) Phase 4 retention 30→90 hari + R2 archive; (5) Phase 5 tambah backup R2 off-site sebelum move |
