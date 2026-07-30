@@ -488,3 +488,38 @@ describe('Session Management (04-F1)', () => {
     expect(refreshB.status).toBe(200);
   });
 });
+
+describe('Rate Limit (Backlog Sesi 31 #1)', () => {
+  it('harus return 429 (bukan 500) saat /v1/auth/login kena rate limit', async () => {
+    // /v1/auth/login punya config rateLimit max 5/menit (lihat auth.ts:44)
+    // Bombard 7x — request ke-6 dan seterusnya harus 429, BUKAN 500.
+    // Bug: errorResponseBuilder return plain object tanpa statusCode,
+    // branch error.statusCode === 429 di setErrorHandler tidak match,
+    // jatuh ke fallback 500.
+    const app = await getApp();
+    const results: Array<{ status: number; code?: string }> = [];
+
+    for (let i = 0; i < 7; i++) {
+      const res = await request(app.server)
+        .post('/v1/auth/login')
+        .send(VALID_ADMIN);
+      results.push({
+        status: res.status,
+        code: res.body?.error?.code,
+      });
+    }
+
+    // Request 1-5: bukan 429 (mungkin 200/401, tergantung mock)
+    // Request 6-7: HARUS 429 dengan body TOO_MANY_REQUESTS
+    const rateLimited = results.slice(5);
+    expect(rateLimited.length).toBe(2);
+    for (const r of rateLimited) {
+      expect(r.status).toBe(429);  // BUKAN 500
+      expect(r.code).toBe('TOO_MANY_REQUESTS');
+    }
+
+    // Verifikasi: tidak ada yang 500
+    const anyServerError = results.find(r => r.status >= 500);
+    expect(anyServerError).toBeUndefined();
+  });
+});

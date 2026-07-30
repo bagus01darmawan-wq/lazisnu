@@ -163,7 +163,18 @@ export async function buildApp() {
     }
 
     // 5. Rate limit error (from @fastify/rate-limit)
-    if ((error as unknown as Record<string, unknown>).statusCode === 429) {
+    // errorResponseBuilder di app.ts return plain object {success:false, error:{code:'TOO_MANY_REQUESTS',...}}
+    // yang dilempar sebagai error. Object ini TIDAK punya statusCode, jadi
+    // branch lama `error.statusCode === 429` tidak match dan jatuh ke fallback 500.
+    // Fix: deteksi via `error.error.code === 'TOO_MANY_REQUESTS'` (object shape
+    // dari errorResponseBuilder) ATAU `error.statusCode === 429` (default behavior
+    // dari @fastify/rate-limit jika errorResponseBuilder tidak di-set).
+    const errAny = error as unknown as Record<string, unknown>;
+    const innerError = errAny.error as { code?: string } | undefined;
+    const isRateLimit =
+      errAny.statusCode === 429 ||
+      innerError?.code === 'TOO_MANY_REQUESTS';
+    if (isRateLimit) {
       return reply.status(429).send({
         success: false,
         error: {
