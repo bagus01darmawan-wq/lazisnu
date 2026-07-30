@@ -18,6 +18,31 @@ export async function getApp(): Promise<FastifyInstance> {
   return appInstance;
 }
 
+/**
+ * Tutup instance Fastify yang ada dan buat ulang.
+ * Berguna untuk reset state internal plugin (e.g. @fastify/rate-limit
+ * LocalStore yang menyimpan counter request in-memory).
+ *
+ * TD-05: Session Management + Rate Limit test saling menumpuk
+ * counter rate limit. resetApp() di beforeEach/ beforeAll describe
+ * memastikan counter kembali ke 0 sehingga tiap test dapat jatah
+ * penuh sesuai konfigurasi rate limit route.
+ *
+ * Redis/DB mock di module level (jest.mock) tetap persisten —
+ * hanya instance Fastify yang di-rebuild.
+ */
+export async function resetApp(): Promise<FastifyInstance> {
+  if (appInstance) {
+    try {
+      await appInstance.close();
+    } catch {
+      // Abaikan error close — rebuild tetap dilakukan
+    }
+    appInstance = null;
+  }
+  return getApp();
+}
+
 export async function closeApp(): Promise<void> {
   if (appInstance) {
     await appInstance.close();

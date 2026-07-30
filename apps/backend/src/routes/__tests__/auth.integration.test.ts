@@ -5,14 +5,14 @@
 
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
-import { getApp, closeApp } from './helpers/app-helper';
+import { getApp, closeApp, resetApp } from './helpers/app-helper';
 import { db } from '../../config/database';
 
 // Mock DB configuration completely so it doesn't try to connect to a real Postgres database
 jest.mock('../../config/database', () => {
   const mockFindFirstUser = jest.fn();
   const mockFindFirstOfficer = jest.fn();
-  
+
   const mockLimit = jest.fn().mockImplementation(async () => []);
   const mockWhere = jest.fn().mockImplementation(() => ({
     limit: mockLimit,
@@ -56,6 +56,42 @@ jest.mock('../../config/database', () => {
   };
 });
 
+/**
+ * Re-establish default mock implementations untuk DB setelah jest.resetAllMocks().
+ *
+ * jest.clearAllMocks() HANYA hapus call history, BUKAN reset implementation.
+ * jest.resetAllMocks() hapus keduanya, tapi mock jadi return undefined
+ * (memutus chain db.select().from().where()).
+ *
+ * Helper ini dipanggil di setiap beforeEach setelah resetAllMocks()
+ * agar default chain kembali tersedia — test bisa langsung call db.*()
+ * tanpa harus override implementation terlebih dahulu.
+ */
+const setupDefaultDbMocks = () => {
+  // Default: chain select().from().where() mengembalikan array kosong (awaitable)
+  (db.select as jest.Mock).mockImplementation(() => ({
+    from: jest.fn().mockImplementation(() => ({
+      where: jest.fn().mockImplementation(async () => []),
+    })),
+  }));
+
+  // Default: update().set().where() mengembalikan object kosong
+  (db.update as jest.Mock).mockImplementation(() => ({
+    set: jest.fn().mockImplementation(() => ({
+      where: jest.fn().mockImplementation(async () => [{}]),
+    })),
+  }));
+
+  // Default: insert().values() mengembalikan object kosong
+  (db.insert as jest.Mock).mockImplementation(() => ({
+    values: jest.fn().mockImplementation(async () => [{}]),
+  }));
+
+  // query.users.findFirst / query.officers.findFirst: default return undefined
+  (db.query.users.findFirst as jest.Mock).mockReset();
+  (db.query.officers.findFirst as jest.Mock).mockReset();
+};
+
 const VALID_ADMIN = {
   identifier: 'admin@lazisnu.test',
   password: 'Admin123!',
@@ -87,7 +123,8 @@ afterAll(async () => {
 
 describe('[POST] /v1/auth/login', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+    setupDefaultDbMocks();
   });
 
   it('should return 400 when body is empty', async () => {
@@ -160,30 +197,32 @@ describe('[POST] /v1/auth/login', () => {
 
 describe('[POST] /v1/auth/request-otp', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+    setupDefaultDbMocks();
   });
 
-  it('should always return 200 regardless of whether phone is registered (anti-enumeration)', async () => {
+  it('should return 404 when phone is not registered (TD-04)', async () => {
+    // TD-04: Route request-otp di auth.ts line 244 pakai db.query.officers.findFirst
+    // (relational query, dengan `with: { user: true }`), BUKAN db.select() (SQL builder).
+    // Test lama mock db.select — mock tidak pernah terpanggil route, route jalan
+    // dengan default state (findFirst returns undefined) dan return 404.
+    //
+    // Test ini di-rewrite agar:
+    // 1. Mock target benar: db.query.officers.findFirst
+    // 2. Ekspektasi sesuai route behavior: 404 USER_NOT_FOUND (route TIDAK anti-enumeration
+    //    by design — lihat auth.ts:249-251, eksplisit return 404 jika officer tidak ada)
     const app = await getApp();
-    
-    // Mock user not found
-    const mockLimit = jest.fn().mockResolvedValue([]);
-    const mockWhere = jest.fn().mockImplementation(() => ({
-      limit: mockLimit,
-    }));
-    const mockFrom = jest.fn().mockImplementation(() => ({
-      where: mockWhere,
-    }));
-    (db.select as jest.Mock).mockImplementation(() => ({
-      from: mockFrom,
-    }));
+
+    // Mock officer not found — return undefined (eksplisit untuk kejelasan)
+    (db.query.officers.findFirst as jest.Mock).mockResolvedValue(undefined);
 
     const res = await request(app.server)
       .post('/v1/auth/request-otp')
       .send({ phone: '08999999999' });
-      
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
+
+    expect(res.status).toBe(404);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe('USER_NOT_FOUND');
   });
 
   it('should return 400 when phone is missing', async () => {
@@ -217,7 +256,8 @@ describe('[POST] /v1/auth/verify-otp', () => {
 
 describe('[GET] /v1/auth/me', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+    setupDefaultDbMocks();
   });
 
   it('should return 401 when no token is provided', async () => {
@@ -256,7 +296,8 @@ describe('[GET] /v1/auth/me', () => {
 
 describe('[POST] /v1/auth/refresh', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+    setupDefaultDbMocks();
   });
 
   it('should return 401 when refresh_token is invalid', async () => {
@@ -296,6 +337,11 @@ describe('[POST] /v1/auth/refresh', () => {
 });
 
 describe('[POST] /v1/auth/logout', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    setupDefaultDbMocks();
+  });
+
   it('should return 200 on logout', async () => {
     const app = await getApp();
     const res = await request(app.server)
@@ -311,13 +357,20 @@ describe('[POST] /v1/auth/logout', () => {
 describe('Session Management (04-F1)', () => {
   let sessionToken: string | null = null;
   let sessionRefresh: string | null = null;
-  
+
   // Impor jwt untuk decode token
   const jwt = require('jsonwebtoken');
   const { revokeDeviceSession, revokeAllUserSessions } = require('../../services/tokenService');
 
-  beforeEach(() => {
-    jest.clearAllMocks();
+  beforeEach(async () => {
+    // TD-05: Reset Fastify instance agar @fastify/rate-limit LocalStore
+    // (in-memory counter) kembali ke 0. Tanpa reset ini, counter
+    // terakumulasi lintas test dalam describe (3 test × 2 login = 6)
+    // ditambah dari outer describe (1 login) = 7, melebihi limit
+    // 5/minute di /v1/auth/login → test gagal dengan 429.
+    await resetApp();
+    jest.resetAllMocks();
+    setupDefaultDbMocks();
   });
 
   afterEach(async () => {
@@ -490,6 +543,14 @@ describe('Session Management (04-F1)', () => {
 });
 
 describe('Rate Limit (Backlog Sesi 31 #1)', () => {
+  beforeAll(async () => {
+    // TD-05: Reset Fastify instance untuk memastikan rate limit
+    // counter mulai dari 0. Tanpa reset, counter terakumulasi dari
+    // Session Management tests sebelumnya (~5 login) sehingga
+    // request pertama Rate Limit test sudah kena 429, gagal verifikasi.
+    await resetApp();
+  });
+
   it('harus return 429 (bukan 500) saat /v1/auth/login kena rate limit', async () => {
     // /v1/auth/login punya config rateLimit max 5/menit (lihat auth.ts:44)
     // Bombard 7x — request ke-6 dan seterusnya harus 429, BUKAN 500.
