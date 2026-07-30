@@ -53,7 +53,7 @@ Audit VM `lazisnu` per 2026-07-30 menunjukkan disk `/` sudah **94%** (18G dari 2
 | Phase | Target | Estimasi Reclaim | Risiko | Bisa di-skip? |
 |-------|--------|------------------|--------|---------------|
 | **Phase 1** | Safe cleanup (log, scratch, sysctl) | ~200MB | 🟢 Rendah | Tidak |
-| **Phase 2** | Docker build cache + dangling | ~4.2GB | 🟢 Rendah | Tidak |
+| **Phase 2** | Docker build cache + dangling | ~4.2GB (actual 7.2GB) | 🟢 Rendah | ~~Tidak~~ ✅ SELESAI 2026-07-30 |
 | **Phase 3** | Docker unused images (blue/green lama) | ~3.8GB | 🟡 Sedang | Ya, optional |
 | **Phase 4** | Backup script retention | ~10MB/bulan | 🟢 Rendah | Tidak |
 | **Phase 5** | Move `.env.backup` ke folder khusus | 0 | 🟢 Rendah | Tidak |
