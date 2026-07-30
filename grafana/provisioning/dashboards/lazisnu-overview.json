@@ -242,6 +242,56 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "id": 9,
+      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 8 },
+      "type": "timeseries",
+      "title": "HTTP Request Rate (req/s)",
+      "description": "Jumlah request HTTP per detik, di-aggregate by status code. Memungkinkan identifikasi spike 5xx secara real-time.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "fillOpacity": 20, "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum by (statusCode) (rate(http_requests_total{job=\"lazisnu-backend\"}[1m]))",
+          "legendFormat": "{{statusCode}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 8 },
+      "type": "stat",
+      "title": "HTTP Error Rate (5xx, %)",
+      "description": "Persentase request yang mengembalikan HTTP 5xx dalam 5 menit terakhir. Threshold > 5% akan trigger alert HighHttpErrorRate.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "(sum(rate(http_request_duration_ms_count{job=\"lazisnu-backend\", statusCode=~\"5..\"}[5m])) / sum(rate(http_request_duration_ms_count{job=\"lazisnu-backend\"}[5m]))) * 100",
+          "refId": "A"
+        }
+      ],
+      "options": { "colorMode": "background", "graphMode": "area" }
     }
   ]
 }
