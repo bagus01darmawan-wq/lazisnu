@@ -15,6 +15,7 @@ services:
   redis-staging:
     image: redis:7-alpine
     restart: unless-stopped
+    user: "999:999"  # redis user default di redis:7-alpine (lihat scripts/fix-volume-ownership.sh)
     command: redis-server --protected-mode no --appendonly yes --appendfsync everysec --save 300 1 --save 60 10 --maxmemory 50mb --maxmemory-policy volatile-lru
     volumes:
       - ./redis-data-staging:/data

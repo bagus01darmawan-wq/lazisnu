@@ -2,6 +2,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    user: "999:999"  # redis user default di redis:7-alpine (lihat scripts/fix-volume-ownership.sh)
     command: redis-server /usr/local/etc/redis/redis.conf
     volumes:
       - ./redis-data:/data
@@ -63,6 +64,7 @@ services:
   prometheus:
     image: prom/prometheus
     restart: unless-stopped
+    user: "65534:65534"  # nobody user default di prom/prometheus (lihat scripts/fix-volume-ownership.sh)
     ports:
       - "127.0.0.1:9090:9090"
     volumes:
@@ -84,6 +86,7 @@ services:
   grafana:
     image: grafana/grafana
     restart: unless-stopped
+    user: "472:472"  # grafana user default di grafana/grafana (lihat scripts/fix-volume-ownership.sh)
     ports:
       - "127.0.0.1:3030:3000"
     environment:

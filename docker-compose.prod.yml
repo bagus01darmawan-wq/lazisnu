@@ -9,6 +9,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    user: "999:999"  # redis user default di redis:7-alpine (lihat scripts/fix-volume-ownership.sh)
     command: redis-server /usr/local/etc/redis/redis.conf
     volumes:
       - ./redis-data:/data
