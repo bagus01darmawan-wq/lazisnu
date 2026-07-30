@@ -22,7 +22,11 @@ scrape_configs:
       - targets: ["localhost:9090"]
 
   # Lazisnu Backend
+  # Scrape blue (port 3001) + green (port 3101) — saat blue-green deploy,
+  # kedua container running sampai teardown. Setelah blue di-teardown,
+  # target blue jadi down dan Prometheus berhenti scrape otomatis.
   - job_name: "lazisnu-backend"
     metrics_path: /metrics
     static_configs:
-      - targets: ["backend:3001"]
+      - targets: ["backend:3001"]        # blue (lazisnu-backend-1)
+      - targets: ["green-backend:3101"]  # green (blue-green deploy)

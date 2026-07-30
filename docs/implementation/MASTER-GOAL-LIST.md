@@ -4,7 +4,7 @@
 > Setiap task terhubung ke dokumen sub-bab yang berisi detail implementasi.
 > Update [ ] menjadi [x] saat task selesai.
 
-> Terakhir diperbarui: 2026-07-30 (07-A2-2 + db:migrate production + 08-D1 selesai; sisa 1 task: 08-C3 blue-green deploy)
+> Terakhir diperbarui: 2026-07-30 (07-A2-2 + db:migrate production + 08-D1 + 08-C3 blue-green selesai — MASTER 100%)
 
 ---
 
@@ -273,9 +273,9 @@
 - [x] **08-F2**: Tandai temuan yang sudah diselesaikan di analisis-master-lazisnu.md
 
 #### Verifikasi Sub-bab 08
-- [ ] Grafana dashboard aktif dan menampilkan data real
+- [x] Grafana dashboard aktif dan menampilkan data real
 - [x] SOP restore terdokumentasi dan diuji
-- [ ] Blue-green deployment berhasil tanpa downtime
+- [x] Blue-green deployment berhasil tanpa downtime
 - [x] Semua keputusan di decisions-log.md berstatus Diputuskan
 
 ---
@@ -301,8 +301,8 @@
 | 07C — Observability & Infra | 14 | 14 | 100% |
 | 05 — Frontend Web & Mobile | 13 | 13 | 100% |
 | 07G — Hygiene Infrastruktur | 7 | 7 | 100% |
-| 08 — Rencana Final | 12 | 10 | 83% |
-| **TOTAL** | **134** | **132** | **99%** |
+| 08 — Rencana Final | 12 | 12 | 100% |
+| **TOTAL** | **134** | **134** | **100%** |
 
 ---
 
