@@ -196,6 +196,10 @@ jobs:
           docker compose -f docker-compose.staging.yml down
           docker compose -f docker-compose.staging.yml up -d
 
+          # Reload nginx: muat nginx.conf terbaru dari checkout + re-resolve upstream
+          # (container staging baru = IP baru; nginx cache DNS saat startup)
+          docker exec lazisnu-nginx-1 nginx -s reload || true
+
           # Smoke test (07-E3-5): lewat URL publik (end-to-end via nginx)
           # + retry loop — cold start Next.js bisa >10 detik
           ok=0
