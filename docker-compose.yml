@@ -141,3 +141,28 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  # Uptime Kuma — self-hosted monitoring (Lapis 3, Sesi 31)
+  # Bind mount data ke host untuk backup langsung (lihat scripts/backup-kuma.sh)
+  # Port 127.0.0.1 only — akses via SSH tunnel atau nginx reverse proxy (Lapis 4b)
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma
+    restart: unless-stopped
+    user: "1000:1000"  # node user default di louislam/uptime-kuma image
+    ports:
+      - "127.0.0.1:3002:3001"
+    volumes:
+      - ./uptime-kuma/data:/app/data
+      - /etc/localtime:/etc/localtime:ro
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
