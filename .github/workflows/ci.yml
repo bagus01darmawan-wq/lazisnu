@@ -178,7 +178,7 @@ jobs:
         username: ${{ secrets.VM_USER }}
         key: ${{ secrets.VM_SSH_KEY }}
         script: |
-          set -eo pipefail
+          set -e
           cd /opt/lazisnu
 
           # Sinkronkan source ke main terbaru (ops lokal di-stash agar tidak konflik)
