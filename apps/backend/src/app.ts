@@ -12,6 +12,7 @@ import { bendaharaRoutes } from './routes/bendahara';
 import { schedulerRoutes } from './routes/scheduler';
 import { healthRoutes } from './routes/health';
 import { metricsRoutes } from './routes/metrics';
+import { httpRequestDurationMs, httpRequestsTotal } from './routes/metrics';
 import { correlationIdHook } from './middleware/correlationId';
 import { auditLogger } from './middleware/audit-logger';
 import { initSentry } from './config/sentry';
@@ -87,6 +88,22 @@ export async function buildApp() {
   }
 
   server.addHook('onResponse', auditLogger);
+
+  // Hook terpisah untuk HTTP metrics — observe Histogram & inc Counter.
+  // Dipisah dari auditLogger agar concerns tetap single-responsibility.
+  // routeOptions.url berisi TEMPLATE (mis. /v1/users/:id) bukan instance
+  // (mis. /v1/users/123) untuk mencegah cardinality explosion.
+  server.addHook('onResponse', async (request, reply) => {
+    const route =
+      (request.routeOptions?.url as string | undefined) ?? 'unmatched';
+    const labels = {
+      method: request.method,
+      route,
+      statusCode: String(reply.statusCode),
+    };
+    httpRequestDurationMs.labels(labels).observe(reply.elapsedTime);
+    httpRequestsTotal.labels(labels).inc();
+  });
 
   // Error handler — satu pintu final untuk semua error
   server.setErrorHandler((error, request, reply) => {

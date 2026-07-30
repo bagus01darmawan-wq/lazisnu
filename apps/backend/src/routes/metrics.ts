@@ -1,23 +1,31 @@
 /**
  * Metrics route — menyediakan endpoint Prometheus /metrics.
  *
- * Menggunakan prom-client jika terinstall, fallback ke metrics minimal
- * jika package tidak tersedia.
+ * prom-client sudah di-declare sebagai dependency (lihat 07-A3-1),
+ * sehingga di-import sebagai ES module (bukan require dengan try/catch).
  */
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import promClient from 'prom-client';
 
-let metricsEnabled = false;
-let register: any = null;
+promClient.collectDefaultMetrics();
+export const register = promClient.register;
 
-try {
-  const promClient = require('prom-client');
-  promClient.collectDefaultMetrics();
-  register = promClient.register;
-  metricsEnabled = true;
-  console.log('✅ Prometheus metrics enabled');
-} catch {
-  console.warn('⚠️ prom-client not installed, metrics disabled');
-}
+// Custom HTTP metrics — di-observe di onResponse hook (lihat app.ts).
+// Naming mengikuti konvensi Prometheus: _seconds / _ms suffix untuk unit.
+// Alert rule HighHttpErrorRate (prometheus/alert.rules.yml) sudah query
+// metric ini dengan label `statusCode` (sesuai keputusan Sesi 30).
+export const httpRequestDurationMs = new promClient.Histogram({
+  name: 'http_request_duration_ms',
+  help: 'Duration of HTTP requests in ms',
+  labelNames: ['method', 'route', 'statusCode'],
+  buckets: [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000],
+});
+
+export const httpRequestsTotal = new promClient.Counter({
+  name: 'http_requests_total',
+  help: 'Total HTTP requests',
+  labelNames: ['method', 'route', 'statusCode'],
+});
 
 export async function metricsRoutes(fastify: FastifyInstance) {
   fastify.get('/metrics', {
@@ -27,16 +35,6 @@ export async function metricsRoutes(fastify: FastifyInstance) {
       hide: true,
     },
   }, async (_request: FastifyRequest, reply: FastifyReply) => {
-    if (!metricsEnabled || !register) {
-      return reply.status(501).send({
-        success: false,
-        error: {
-          code: 'NOT_IMPLEMENTED',
-          message: 'Metrics belum diaktifkan (install prom-client)',
-        },
-      });
-    }
-
     const metrics = await register.metrics();
     return reply
       .header('Content-Type', register.contentType)
