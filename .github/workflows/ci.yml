@@ -196,7 +196,13 @@ jobs:
           docker compose -f docker-compose.staging.yml down
           docker compose -f docker-compose.staging.yml up -d
 
-          # Smoke test (07-E3-5)
-          sleep 10
-          curl -sf http://localhost:4001/health && echo "✅ Staging Backend healthy" || { echo "❌ Staging Backend DOWN"; exit 1; }
-          curl -sf http://localhost:4000 && echo "✅ Staging Web healthy" || { echo "❌ Staging Web DOWN"; exit 1; }
+          # Smoke test (07-E3-5): lewat URL publik (end-to-end via nginx)
+          # + retry loop — cold start Next.js bisa >10 detik
+          ok=0
+          i=0
+          while [ $i -lt 12 ]; do
+            if curl -sf https://staging-api.lazisnu.site/health >/dev/null && curl -sf https://staging.lazisnu.site >/dev/null; then ok=1; break; fi
+            i=$((i+1))
+            sleep 5
+          done
+          if [ "$ok" = "1" ]; then echo "✅ Staging healthy"; else echo "❌ Staging DOWN"; exit 1; fi
