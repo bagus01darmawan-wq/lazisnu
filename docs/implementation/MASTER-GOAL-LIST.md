@@ -266,8 +266,8 @@
 - [x] **08-B2**: Lakukan test restore pertama ✅
 - [x] **08-C1**: Setup nginx blue-green (2 upstream)
 - [x] **08-C2**: Buat script deploy-blue-green.sh
-- [ ] **08-C3**: Test: deploy tanpa downtime
-- [ ] **08-D1**: Cek metrik koneksi DB — tuning jika >200 petugas aktif
+- [x] **08-C3**: Test: deploy tanpa downtime ✅ (2026-07-30 — blue-green switch, 381 request 0 gagal)
+- [x] **08-D1**: Cek metrik koneksi DB — tuning jika >200 petugas aktif
 - [x] **08-E1**: Review decisions-log.md — tidak boleh ada yang masih pending
 - [x] **08-F1**: Update .agents/rules/00-project-overview.md dengan arsitektur terkini
 - [x] **08-F2**: Tandai temuan yang sudah diselesaikan di analisis-master-lazisnu.md
