@@ -71,7 +71,7 @@
 - [x] **B1-5**: `docker compose up` di VM → semua service healthy ✅
 - [ ] **B2-3**: Push ke main → image ter-build dan ter-push ke GHCR
 - [x] **B4-5**: Test restart service backend → worker tetap berjalan ✅
-- [ ] **D1-1/D1-2/D1-3**: Uptime Kuma aktif + monitor /health/ready + notifikasi Discord
+- [x] **D1-1/D1-2/D1-3**: Uptime Kuma aktif + monitor /health/ready + notifikasi Discord ✅ (Sesi 30 Lanjutan 6: 4 monitor + Discord binding)
 - [ ] **D2-4**: Verifikasi DSN backend aktif di Sentry dashboard
 - [x] **E1-4**: Security headers (X-Frame-Options, HSTS) di nginx.conf ✅
 - [ ] **E2-1**: Cek Supabase daily backup di dashboard

@@ -226,6 +226,7 @@
 
 - [x] **07-D1-1**: Install Uptime Kuma di VM -> monitor /health/ready tiap 60 detik ✅
 - [x] **07-D1-2**: Konfigurasi notifikasi Discord saat down ✅
+- [x] **07-D1-3**: Bind 4 monitor (API, Web, Staging API, Staging Web) ke Discord notification + idempotent script `scripts/kuma-setup-monitors.sh` ✅ (Sesi 30 Lanjutan 6)
 - [x] **07-D2-1**: backend/package.json — verifikasi @sentry/node di dependencies (bukan devDependencies) ✅
 - [x] **07-D2-2**: config/sentry.ts — hapus lazy require, import langsung ✅
 - [x] **07-D3-1**: docker-compose.yml — logging config max-size + max-file (sudah ada) ✅
