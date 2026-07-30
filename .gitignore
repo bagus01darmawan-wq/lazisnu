@@ -42,5 +42,8 @@ apps/mobile/apps/mobile/android/app/src/main/assets/index.android.bundle
 # SSL certificates (generated at runtime by certbot, NOT for git)
 nginx/certbot/
 
+# Active upstream state (runtime — dikelola deploy-blue-green.sh di VM, BUKAN untuk git)
+nginx/upstream.conf
+
 # Redis persistence data (generated at runtime)
 redis-data/
