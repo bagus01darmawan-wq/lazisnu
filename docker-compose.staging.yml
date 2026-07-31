@@ -45,7 +45,7 @@ services:
       - PORT=4001
       - REDIS_URL=redis://redis-staging:6379
       - NODE_OPTIONS=--dns-result-order=ipv4first
-    command: ["node", "apps/backend/dist/server.js"]
+    # CMD dari Dockerfile: node apps/backend/dist/index.js — jangan override
     logging:
       driver: json-file
       options:
