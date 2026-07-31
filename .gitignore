@@ -8,6 +8,8 @@ node_modules/
 .env.local
 .env.*.local
 *.env
+.env.backup*
+**/.env.backup*
 
 # Build outputs
 dist/

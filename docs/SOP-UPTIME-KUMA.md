@@ -129,7 +129,7 @@ User/pengurus/admin cabang saat ini harus chat admin untuk tanya "apakah sistem 
 ### Prasyarat
 
 - ✅ Uptime Kuma sudah berjalan (Lapis 1-2 selesai)
-- ✅ Subdomain `status.lazisnu.site` tersedia (DNS di Cloudflare)
+- ✅ Subdomain `status.lazisnu.site` tersedia (DNS di **Hostinger** — nameserver `*.dns-parking.com`, BUKAN Cloudflare)
 - ✅ nginx + certbot sudah setup (sudah untuk `api.lazisnu.site` dan `dashboard.lazisnu.site`)
 - ✅ SSL certificate akan otomatis ter-generate oleh certbot untuk subdomain baru
 
@@ -211,22 +211,30 @@ docker compose exec nginx nginx -t  # validasi konfigurasi
 docker compose restart nginx
 ```
 
+> ⚠️ **PENTING (pengalaman 2026-08-01)**: Jika nginx.conf di host sudah di-update tapi container masih baca config LAMA (`grep -c 'status.lazisnu.site' <(docker exec nginx cat /etc/nginx/nginx.conf)` = 0), maka `restart`/`reload` TIDAK cukup — container bind-mount file memegang **inode lama**. Solusi: recreate container (`docker compose up -d nginx`), bukan restart. Juga pastikan cert SSL sudah ter-generate SEBELUM recreate (config baru punya `ssl_certificate` yang mereferensikan file cert — jika cert belum ada, nginx gagal start).
+
 #### Step 3: Setup SSL dengan Certbot
 
 ```bash
-sudo certbot --nginx -d status.lazisnu.site \
+# Opsional A — webroot (jika nginx sudah jalan dgn acme-challenge location):
+docker compose exec nginx nginx -t
+# Opsional B — standalone (pola crontab renewal: stop nginx dulu):
+cd /opt/lazisnu && docker compose stop nginx
+docker run --rm -p 80:80 \
+  -v /opt/lazisnu/nginx/certbot/conf:/etc/letsencrypt \
+  certbot/certbot certonly --standalone -d status.lazisnu.site \
   --non-interactive --agree-tos -m admin@lazisnu.site
+docker compose up -d nginx
 ```
 
 Certbot akan otomatis edit config nginx untuk tambah SSL + redirect HTTP → HTTPS.
 
 #### Step 4: DNS — tambah A record
 
-Di Cloudflare dashboard:
+Di **Hostinger** dashboard (bukan Cloudflare — nameserver `*.dns-parking.com`):
 - Type: `A`
 - Name: `status`
 - Content: `<IP-VM>` (mis. `43.128.98.52`)
-- Proxy: ✅ Proxied (orange cloud)
 - TTL: Auto
 
 #### Step 5: Verifikasi
@@ -368,16 +376,16 @@ curl -I http://127.0.0.1:3002
 curl -I https://status.lazisnu.site/status/lazisnu
 ```
 
-#### Step 5: Cleanup container lama
+#### Step 5: Cleanup volume named lama
 
 ```bash
 # Hanya setelah compose confirmed jalan minimal 24 jam
+# (container lama SUDAH dihapus saat migrasi Step 2 — jangan jalankan docker rm uptime-kuma lagi,
+#  nama itu sekarang dipakai container compose yang aktif!)
 
-# 1. Remove container lama
-docker rm uptime-kuma
-
-# 2. Remove named volume (data sudah di bind-mount, sudah aman)
-docker volume rm uptime-kuma
+# Hapus volume named LAMA (data sudah di bind-mount, sudah aman)
+# NAMA VOLUME = uptime-kuma-data (BUKAN uptime-kuma)
+docker volume rm uptime-kuma-data
 ```
 
 #### Step 6: Update backup script

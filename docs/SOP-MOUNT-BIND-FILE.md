@@ -261,18 +261,25 @@ sudo docker compose restart <service>
 
 ### 5.5 Container Bisa Start tapi Config Tidak Kena
 
-**Penyebab**: Service cache config lama, atau config file ada tapi di-bind ke path yang salah.
+**Penyebab**: Service cache config lama, config file di-bind ke path yang salah, **atau container memegang inode lama** dari file yang dihost diganti.
 
 **Diagnosa**:
 ```bash
 # Cek file benar-benar ter-mount dengan path yang benar
 sudo docker exec <container> cat <container_path>
 # Output harus match dengan cat <host_path>
+# Bandingkan:
+docker exec <container> grep -c '<keyword-baru>' <container_path>
+grep -c '<keyword-baru>' <host_path>
+# Kalau container = 0 tapi host > 0 → container baca inode LAMA
 ```
 
 **Solusi**:
 - Perbaiki path di docker-compose
-- Restart container untuk force re-read
+- **Biasanya cukup**: `docker compose restart <service>` (force re-read)
+- **Jika config tetap tidak kena (inode lama)**: `restart`/`reload` TIDAK cukup — harus **recreate container**: `docker compose up -d <service>` (atau `--force-recreate`). Ini karena bind-mount file memegang inode file lama; container yang sama tetap baca file lama meski di-reload.
+
+> ⚠️ **Penting**: Kalau file config yang di-recreate mereferensikan resource belum ada (mis. `ssl_certificate` sebelum certbot), recreate akan GAGAL start. Buat resource dulu (certbot), baru recreate.
 
 ---
 

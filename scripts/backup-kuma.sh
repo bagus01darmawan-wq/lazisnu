@@ -60,8 +60,10 @@ if ! docker ps --format '{{.Names}}' | grep -qx "$KUMA_CONTAINER"; then
   exit 1
 fi
 
-log "START backup Uptime Kuma"
+# Pastikan direktori backup ada SEBELUM log pertama (tee butuh dir)
 mkdir -p "$BACKUP_DIR"
+
+log "START backup Uptime Kuma"
 
 # Strategi 1 (preferred): sqlite3 .backup untuk online consistent backup
 # Strategi 2 (fallback): docker cp

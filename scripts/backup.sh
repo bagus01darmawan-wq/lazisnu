@@ -25,7 +25,8 @@ BACKUP_DIR="/opt/lazisnu/backups"
 LOG_FILE="$BACKUP_DIR/backup.log"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 BACKUP_FILE="$BACKUP_DIR/lazisnu_$TIMESTAMP.sql.gz"
-KEEP_DAYS=30
+# Retention: 90 hari (compliance audit, revisi RENCANA-CLEANUP Phase 4)
+KEEP_DAYS=90
 
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
@@ -66,10 +67,31 @@ else
   log "WARNING: R2 credentials not set, skipping upload"
 fi
 
-# Cleanup old backups (>30 days)
-DELETED=$(find "$BACKUP_DIR" -name "*.sql.gz" -mtime +$KEEP_DAYS -delete -print | wc -l)
-if [ "$DELETED" -gt 0 ]; then
-  log "Cleaned up $DELETED old backup(s)"
+# --- Cleanup ---
+# Hapus file backup placeholder (dump gagal <1KB, dari test sebelum fix --schema=public)
+find "$BACKUP_DIR" -name "*.sql.gz" -size -1k -mmin +60 -delete
+
+# Retention policy (90 hari — RENCANA-CLEANUP Phase 4):
+# File > 90 hari: ARCHIVE dulu ke R2 (bucket yang sama, prefix archive/), baru hapus lokal.
+# Pakai aws s3 (rclone tidak terinstall di VM).
+if [ -n "$R2_ACCOUNT_ID" ] && [ -n "$R2_BUCKET_NAME" ]; then
+  find "$BACKUP_DIR" -name "*.sql.gz" -mtime +$KEEP_DAYS -print0 | while IFS= read -r -d '' f; do
+    ARCHIVE_KEY="archive/$(basename "$f")"
+    echo "Archiving to R2: $f -> $ARCHIVE_KEY"
+    if aws s3 cp "$f" "s3://$R2_BUCKET_NAME/$ARCHIVE_KEY" \
+        --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
+        >> "$LOG_FILE" 2>&1; then
+      rm -f "$f"
+      echo "  -> archived & local removed"
+    else
+      echo "  -> R2 upload FAILED, keep local"
+    fi
+  done
+else
+  # Fallback: hapus lokal langsung jika R2 creds tidak tersedia
+  find "$BACKUP_DIR" -name "*.sql.gz" -mtime +$KEEP_DAYS -delete
 fi
+
+echo "$(date -Iseconds) Cleanup: placeholder + retention (${KEEP_DAYS}d + R2 archive) done" >> "$LOG_FILE"
 
 log "DONE"
