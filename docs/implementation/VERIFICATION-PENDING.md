@@ -53,7 +53,14 @@
 ## Sub-bab 06 — Temuan & Perbaikan Kode (4 ⚠️ + 4 ✅)
 
 - [x] **P0-A4**: `CORS_ORIGINS` di `.env` production — `https://dashboard.lazisnu.site` ✅
-- [ ] **P0-A5**: Test CORS: request dari origin asing → 403
+- [x] **P0-A5**: Test CORS: request dari origin asing → ditolak (Sesi 31 Lanjutan) ✅
+  - File: `apps/backend/src/routes/__tests__/cors.integration.test.ts` (6 test, all PASSED)
+  - Verifikasi: preflight dari 2 whitelisted origins (200/204 + Allow-Origin header) +
+    3 non-whitelisted origins (evil.example.com, null, subdomain spoof) +
+    1 actual request (no Allow-Origin)
+  - Catatan: @fastify/cors tidak return 403 server-side, melainkan omit
+    Access-Control-Allow-Origin header (browser block client-side).
+    Absence of header = server-side rejection yang valid sesuai CORS spec.
 - [x] **P0-B4**: Test scheduler tanpa `INTERNAL_API_KEY` → `FORBIDDEN` ✅
 - [x] **P0-B5**: Test scheduler dengan API key salah → `FORBIDDEN` ✅
 - [ ] **P1-B3**: Test `sendTemplateMessage` dengan `WA_PROVIDER=fonnte` → throw `UNSUPPORTED_OPERATION`
