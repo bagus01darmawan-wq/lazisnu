@@ -145,7 +145,7 @@ jobs:
           # Sinkronkan source ke versi tag (ops lokal di-stash agar tidak konflik)
           git stash push -m "pre-deploy $(date -Iseconds)" || true
           git fetch origin --tags
-          git checkout ${{ github.sha }}
+          git checkout -f ${{ github.sha }}
           echo "✓ Repository updated to ${{ github.sha }}"
 
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
@@ -184,7 +184,7 @@ jobs:
           # Sinkronkan source ke main terbaru (ops lokal di-stash agar tidak konflik)
           git stash push -m "pre-staging-deploy $(date -Iseconds)" || true
           git fetch origin
-          git checkout origin/main
+          git checkout -f origin/main
           echo "✓ Repository updated"
 
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
