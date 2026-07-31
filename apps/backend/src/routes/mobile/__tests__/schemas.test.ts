@@ -22,12 +22,18 @@ describe('collectionSchema', () => {
   });
 
 
-  it('menolak nominal 0 atau negatif', () => {
-    const r1 = collectionSchema.safeParse({ ...validBody, nominal: 0 });
-    expect(r1.success).toBe(false);
+  // BR-06: nominal: 0 VALID — hak pemilik kaleng memberi nominal berapapun
+  // (termasuk 0 jika kaleng kosong/tidak ada donasi). Pisah test:
+  // - "menerima nominal 0" -> success: true
+  // - "menolak nominal negatif" -> success: false (donasi tidak mungkin negatif)
+  it('menerima nominal 0 (BR-06: hak pemilik kaleng memberi nominal berapapun)', () => {
+    const result = collectionSchema.safeParse({ ...validBody, nominal: 0 });
+    expect(result.success).toBe(true);
+  });
 
-    const r2 = collectionSchema.safeParse({ ...validBody, nominal: -100 });
-    expect(r2.success).toBe(false);
+  it('menolak nominal negatif (donasi tidak mungkin negatif)', () => {
+    const result = collectionSchema.safeParse({ ...validBody, nominal: -100 });
+    expect(result.success).toBe(false);
   });
 
   it('menolak assignment_id bukan UUID', () => {
@@ -110,7 +116,7 @@ describe('batchCollectionSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('menolak item dengan nominal 0', () => {
+  it('menerima item dengan nominal 0 (BR-06: hak pemilik kaleng memberi nominal berapapun)', () => {
     const result = batchCollectionSchema.safeParse({
       collections: [
         {
@@ -122,7 +128,7 @@ describe('batchCollectionSchema', () => {
         },
       ],
     });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
   it('menerima item dengan device_info valid', () => {

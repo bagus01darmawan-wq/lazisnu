@@ -110,4 +110,44 @@ if (user.role === 'PETUGAS') {
 
 ---
 
+## BR-06: `nominal: 0` Adalah VALID untuk Collection Submission
+
+```
+RULE: submitCollection, batchCollection, dan resubmit HARUS menerima
+      nominal = 0. DILARANG mengubah schema menjadi .positive() atau
+      .gt(0) yang menolak 0.
+
+SCHEMA: z.number().min(0)  ← benar, JANGAN diubah ke .positive()
+
+REASON: nominal adalah jumlah donasi sukarela. Pemilik kaleng (tempat
+        donasi) berhak memberikan nominal berapapun — termasuk Rp 0.
+        "Berapapun" tidak mengecualikan 0. Collection dengan nominal 0
+        adalah record sah yang menandakan petugas sudah mengunjungi
+        lokasi namun kaleng kosong / tidak ada donasi masuk.
+
+AUDIT VALUE: nominal: 0 MEMBANTU audit trail:
+  - Tanpa record → petugas TIDAK PERNAH ke lokasi
+  - Dengan record nominal: 0 → petugas PERGI, kaleng kosong/tidak ada donasi
+  - Dengan record nominal > 0 → normal collection
+
+  Perbedaan ini penting untuk evaluasi: lokasi mana yang perlu perhatian
+  khusus (rendah donasi / tidak ada donasi), petugas mana yang rajin
+  kunjungan, dan lain-lain.
+
+NEGATIVE: nominal negatif TETAP ditolak. Donasi tidak mungkin negatif
+          (tidak ada konteks "berhutang donasi" di Lazisnu). Schema
+          .min(0) sudah benar menangani ini.
+
+APPLIES TO:
+  - collectionSchema.nominal       (apps/backend/src/routes/mobile/schemas.ts:6)
+  - batchCollectionSchema.*.nominal (apps/backend/src/routes/mobile/schemas.ts:23)
+  - resubmitSchema.nominal         (apps/backend/src/routes/mobile/schemas.ts:36)
+
+HISTORY: Sebelum BR-06 ini didefinisikan, ada 2 test di schemas.test.ts
+         yang outdated (menolak nominal: 0). Test sudah di-update untuk
+         match business intent — menerima 0, tetap menolak negatif.
+```
+
+---
+
 *Lazisnu Infaq Collection System — rules/04-business-rules.md*

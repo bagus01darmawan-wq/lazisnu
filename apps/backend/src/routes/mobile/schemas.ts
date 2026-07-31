@@ -3,6 +3,9 @@ import { z } from 'zod';
 export const collectionSchema = z.object({
   assignment_id: z.string().uuid(),
   can_id: z.string().uuid(),
+  // BR-06: nominal: 0 VALID — hak pemilik kaleng memberi nominal berapapun
+  // (termasuk 0 jika kaleng kosong). min(0) mengizinkan 0, hanya menolak negatif.
+  // JANGAN ubah ke .positive() / .gt(0) — itu akan reject use case yang sah.
   nominal: z.number().min(0),
   collected_at: z.string().datetime(),
   latitude: z.number().optional(),
@@ -20,6 +23,7 @@ export const batchCollectionSchema = z.object({
     offline_id: z.string(),
     assignment_id: z.string().uuid(),
     can_id: z.string().uuid(),
+    // BR-06: nominal: 0 VALID (lihat collectionSchema.nominal)
     nominal: z.number().min(0),
     collected_at: z.string().datetime(),
     latitude: z.number().optional(),
@@ -33,6 +37,7 @@ export const batchCollectionSchema = z.object({
 }).strict();
 
 export const resubmitSchema = z.object({
+  // BR-06: nominal: 0 VALID (lihat collectionSchema.nominal)
   nominal: z.number().min(0),
   alasan_resubmit: z.string().min(5, "Alasan resubmit minimal 5 karakter"),
 }).strict();
