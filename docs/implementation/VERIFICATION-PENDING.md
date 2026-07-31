@@ -31,10 +31,15 @@
 
 > Catatan: Redis key format `refresh:{userId}:{deviceId}` + registry `refresh:devices:{userId}` terkonfirmasi di Redis production. Per-device session berfungsi.
 
-- [ ] **F2**: `pnpm --filter lazisnu-backend test:integration` — semua hijau
-- [ ] **Verifikasi**: Revoke sesi tunggal → refresh sesi itu 401 `REFRESH_REVOKED`
-- [ ] **Verifikasi**: Revoke-all → semua device mati kecuali current
-- [ ] **Verifikasi**: Login ulang device sama → hanya 1 key Redis untuk device itu
+- [x] **F2**: `pnpm --filter lazisnu-backend test:integration` — semua hijau (Sesi 31) ✅
+  - 17/17 test PASSED (`auth.integration.test.ts`)
+  - TD-01 mock isolation + TD-04 mock target + TD-05 rate limit reset
+    (commit `bc009a7`)
+- [x] **Verifikasi**: Revoke sesi tunggal → refresh sesi itu 401 `REFRESH_REVOKED` ✅
+  - Test: `Session Management (04-F1) > Revoke sesi tunggal` PASS
+- [x] **Verifikasi**: Revoke-all → semua device mati kecuali current ✅
+  - Test: `Session Management (04-F1) > Revoke semua sesi` PASS
+- [ ] **Verifikasi**: Login ulang device sama → hanya 1 key Redis untuk device itu (butuh Redis running)
 - [x] **Verifikasi**: `docs/DEPLOYMENT.md` diupdate — langkah Upstash diganti Redis container
 
 ---
