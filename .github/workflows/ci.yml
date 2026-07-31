@@ -31,6 +31,15 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
     - name: Checkout Code
@@ -68,6 +77,12 @@ jobs:
       run: |
         pnpm --filter lazisnu-backend test:unit
         pnpm --filter lazisnu-collector-app test
+
+    - name: Run integration tests
+      run: pnpm --filter lazisnu-backend test:integration
+      env:
+        DATABASE_URL: postgresql://postgres:lazisnu_test_2026@localhost:5432/lazisnu_test
+        REDIS_URL: redis://localhost:6379
 
   # ─── 07-B2-1: Build & Push Docker Images ke GHCR ───
   build-image:
