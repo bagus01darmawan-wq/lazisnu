@@ -113,6 +113,7 @@
 | Password admin Grafana | 🚫 SKIP | Keputusan user (SESSION-30 Lanjutan 8) — single-user env |
 | Mount bind-file SOP | ✅ SELESAI | `docs/SOP-MOUNT-BIND-FILE.md` (commit `d322fd0`) |
 | Disk Phase 2 (build cache + dangling) | ✅ SELESAI | SESSION-30 Lanjutan 7 (96% → 81%) |
+| CI GitHub Actions upgrade ke Node 24 | ✅ SELESAI | `RENCANA-V2-CI-ACTION-UPGRADE.md` — Batch A+B merged (PR #18/#19), Gate 1-3 lulus, 0 annotation deprecation, staging OK (2026-08-01) |
 
 ---
 

@@ -1,0 +1,8 @@
+# Dependabot: pantau versi GitHub Actions otomatis
+# Bagian dari migrasi CI node24 (RENCANA-V2-CI-ACTION-UPGRADE.md, keputusan D5)
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
