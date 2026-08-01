@@ -9,7 +9,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "jest",
-    "test:unit": "jest --testPathPattern='src/services/__tests__'",
+    "test:unit": "jest --testPathPattern='src/(services|middleware)/__tests__'",
     "test:integration": "NODE_ENV=test jest --testPathPattern='src/routes/__tests__' --runInBand",
     "test:all": "NODE_ENV=test jest --runInBand",
     "lint": "tsc --noEmit",

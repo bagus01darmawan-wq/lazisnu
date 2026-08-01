@@ -39,8 +39,18 @@ whatsappWorker.on('completed', (job) => {
 
 whatsappWorker.on('failed', (job, err) => {
   logger.error({ jobId: job?.id, errMsg: err.message }, 'WhatsApp job failed');
+  if (job) {
+    void handleJobFailure(job, err);
+  }
+});
 
-  if (job && job.attemptsMade >= (job.opts.attempts || 1)) {
+/**
+ * Catat kegagalan job ke tabel notifications — HANYA pada attempt terakhir
+ * (attemptsMade >= opts.attempts). Retry BullMQ memicu event 'failed' berulang,
+ * tapi baris FAILED hanya boleh muncul 1x per job (P2-C3).
+ */
+export async function handleJobFailure(job: Job, err?: Error): Promise<void> {
+  if (job.attemptsMade >= (job.opts.attempts || 1)) {
     const { phone, ownerName, nominal, officerName, collectionId } = job.data;
     const formattedPhone = phone;
     const formattedAmount = new Intl.NumberFormat('id-ID', {
@@ -50,17 +60,17 @@ whatsappWorker.on('failed', (job, err) => {
     }).format(BigInt(nominal));
     const messageContent = `Notifikasi gagal: ${formattedAmount}`;
 
-    db.insert(schema.notifications).values({
+    await db.insert(schema.notifications).values({
       collectionId: collectionId ?? null,
       recipientPhone: formattedPhone,
       recipientName: ownerName,
       messageTemplate: 'collection_receipt',
       messageContent,
       status: 'FAILED',
-      errorMessage: err.message || 'Provider rejected or could not deliver the message',
+      errorMessage: err?.message || 'Provider rejected or could not deliver the message',
     }).catch(() => {});
   }
-});
+}
 
 logger.info('WhatsApp Worker initialized and ready');
 
