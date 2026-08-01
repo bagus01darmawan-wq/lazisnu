@@ -172,6 +172,11 @@ jobs:
           curl -sf https://api.lazisnu.site/health/ready && echo "✅ Backend healthy" || { echo "❌ Backend DOWN"; exit 1; }
           curl -sf https://dashboard.lazisnu.site && echo "✅ Web healthy" || { echo "❌ Web DOWN"; exit 1; }
 
+          # Housekeeping otomatis: hapus image unused/dangling pasca deploy
+          # (image container yang berjalan otomatis dilindungi; digest lama + lokal legacy dibersihkan)
+          docker image prune -af >/dev/null 2>&1 || true
+          docker builder prune -f >/dev/null 2>&1 || true
+
   # ─── 07-E3-4: Deploy ke Staging (auto dari push main) ───
   deploy-staging:
     needs: build-image
@@ -222,3 +227,7 @@ jobs:
             sleep 5
           done
           if [ "$ok" = "1" ]; then echo "✅ Staging healthy"; else echo "❌ Staging DOWN"; exit 1; fi
+
+          # Housekeeping otomatis: hapus image unused/dangling pasca deploy staging
+          docker image prune -af >/dev/null 2>&1 || true
+          docker builder prune -f >/dev/null 2>&1 || true
