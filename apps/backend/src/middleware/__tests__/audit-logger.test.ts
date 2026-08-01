@@ -168,6 +168,22 @@ describe('auditLogger — skip response error', () => {
     );
   });
 
+  it('P2-F3: 403 + _auditCode FORBIDDEN_SCOPE → actionType OWNERSHIP_DENIED', async () => {
+    const req = mockRequest({ method: 'POST', url: '/v1/admin/officers/officer-456' });
+    const rep = mockReply(403) as any;
+    rep._auditCode = 'FORBIDDEN_SCOPE';
+
+    await auditLogger(req as any, rep as any);
+
+    expect(mockedDb.insert).toHaveBeenCalledTimes(1);
+    expect(valuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionType: 'OWNERSHIP_DENIED',
+        entityType: 'officers',
+      })
+    );
+  });
+
   it('TIDAK mencatat saat response.statusCode = 500', async () => {
     const req = mockRequest({ method: 'PUT', url: '/v1/admin/officers/abc' });
     const rep = mockReply(500);
