@@ -2,9 +2,12 @@
 #   cp nginx/upstream.conf.example nginx/upstream.conf
 # Setelah itu file dikelola oleh scripts/deploy-blue-green.sh saat switch blue/green.
 #
-# Nilai di sini adalah variable nginx, bukan upstream block. nginx.conf memakai
-# proxy_pass http://$backend_upstream dengan resolver, sehingga nama host
-# di-resolve per-request dan IP container yang berubah tidak memerlukan restart.
+# Nilai di sini adalah variable nginx (`set`), bukan upstream block, dan hanya
+# valid di dalam blok server — nginx.conf meng-include file ini di tiap server
+# block production. nginx.conf memakai proxy_pass $backend_upstream (tanpa
+# scheme — scheme sudah ada di nilai variable) dengan resolver, sehingga nama
+# host di-resolve per-request dan IP container yang berubah tidak memerlukan
+# restart.
 # Default aman: arahkan ke service docker-compose.yml utama (backend/web).
 set $backend_upstream "http://backend:3001";
 set $web_upstream "http://web:3000";
