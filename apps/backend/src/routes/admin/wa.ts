@@ -35,7 +35,7 @@ export async function getSafeWhatsAppQueueStats(request: FastifyRequest) {
 }
 
 export async function waRoutes(fastify: FastifyInstance) {
-  const adminOnly = authorize('ADMIN_KECAMATAN', 'ADMIN_RANTING', 'BENDAHARA');
+  const adminOnly = authorize('ADMIN_KECAMATAN', 'ADMIN_RANTING');
 
   // GET /admin/wa/logs - Real Notification Logs from DB
   fastify.get('/wa/logs', { preHandler: [adminOnly] }, async (request: FastifyRequest, reply: FastifyReply) => {

@@ -1,5 +1,7 @@
 # Analisis Master Lazisnu — Arsitektur, Kode, Infrastruktur & Roadmap
 
+> ⚠️ **PEMBARUAN 2026-08-03 (D-11):** Role `BENDAHARA` **dihapus total** dari sistem (enum `user_role`, guard role, shared-types) sesuai rencana organisasi terbaru yang tidak memiliki posisi bendahara. Seluruh referensi `BENDAHARA` di dokumen ini (Bagian role matrix, route `/v1/bendahara/*`, dll.) adalah **kondisi sebelum penghapusan** dan tidak lagi berlaku untuk kode aktual. Path `/v1/bendahara/*` dipertahankan dan kini diakses oleh `ADMIN_KECAMATAN` + `ADMIN_RANTING`.
+
 > Tanggal konsolidasi: 2026-07-21
 > Dokumen ini adalah **satu-satunya sumber kebenaran (single source of truth)** hasil konsolidasi 3 dokumen:
 > 1. `analisis-arsitektur-infrastruktur-lazisnu-gabungan.md` — analisis arsitektur + infrastruktur (sudah **dikoreksi** di sini)

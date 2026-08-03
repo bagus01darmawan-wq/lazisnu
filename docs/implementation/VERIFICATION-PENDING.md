@@ -21,7 +21,7 @@
 
 - [x] **C3**: `pnpm db:migrate` berhasil dijalankan di database ✅ (2026-08-01: step "Run DB migrations di test database" hijau di semua run CI hari ini, e.g. 30662371949; juga sukses lokal di Sesi 30)
 - [x] **C4**: Kolom `user_sessions.device_id` ada di DB — `character varying`
-- [x] **E1**: Enum `user_role` hanya 4 nilai — `ADMIN_KECAMATAN, ADMIN_RANTING, PETUGAS, BENDAHARA`
+- [x] **E1**: Enum `user_role` hanya 3 nilai — `ADMIN_KECAMATAN, ADMIN_RANTING, PETUGAS` (BENDAHARA dihapus per D-11, 2026-08-03)
 - [x] **F2**: `pnpm install --frozen-lockfile` berhasil setelah penghapusan `package-lock.json` ✅ (2026-08-01: sukses lokal — "Lockfile is up to date", Done 12.4s; root `package-lock.json` sudah tidak ada)
 - [x] **Verifikasi**: `sync_queues` sudah di-DROP — `EXISTS: false`
 

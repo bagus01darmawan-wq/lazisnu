@@ -11,7 +11,7 @@ import { insertActivityLog } from '../services/auditLogService';
 
 export async function bendaharaRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', authenticate);
-  fastify.addHook('preHandler', authorize('BENDAHARA', 'ADMIN_KECAMATAN', 'ADMIN_RANTING'));
+  fastify.addHook('preHandler', authorize('ADMIN_KECAMATAN', 'ADMIN_RANTING'));
 
   fastify.get('/dashboard', async (request: FastifyRequest, reply: FastifyReply) => {
     try {

@@ -11,7 +11,7 @@ import {
   LucideIcon
 } from 'lucide-react';
 
-export type UserRole = 'ADMIN_KECAMATAN' | 'ADMIN_RANTING' | 'BENDAHARA' | 'PETUGAS';
+export type UserRole = 'ADMIN_KECAMATAN' | 'ADMIN_RANTING' | 'PETUGAS';
 
 export interface MenuItem {
   title: string;
@@ -25,7 +25,7 @@ export const MENU_ITEMS: MenuItem[] = [
     title: 'Overview',
     path: '/dashboard/overview',
     icon: BarChart3,
-    roles: ['ADMIN_KECAMATAN', 'ADMIN_RANTING', 'BENDAHARA'],
+    roles: ['ADMIN_KECAMATAN', 'ADMIN_RANTING'],
   },
   {
     title: 'Kelola Kaleng',
@@ -49,13 +49,13 @@ export const MENU_ITEMS: MenuItem[] = [
     title: 'Laporan',
     path: '/dashboard/reports',
     icon: FileText,
-    roles: ['ADMIN_KECAMATAN', 'ADMIN_RANTING', 'BENDAHARA'],
+    roles: ['ADMIN_KECAMATAN', 'ADMIN_RANTING'],
   },
   {
     title: 'Re-submit',
     path: '/dashboard/resubmit',
     icon: History,
-    roles: ['ADMIN_KECAMATAN', 'ADMIN_RANTING', 'BENDAHARA'],
+    roles: ['ADMIN_KECAMATAN', 'ADMIN_RANTING'],
   },
   {
     title: 'Log Aktivitas',
@@ -67,7 +67,7 @@ export const MENU_ITEMS: MenuItem[] = [
     title: 'WA Monitor',
     path: '/dashboard/wa-monitor',
     icon: MessageSquare,
-    roles: ['ADMIN_KECAMATAN', 'ADMIN_RANTING', 'BENDAHARA'],
+    roles: ['ADMIN_KECAMATAN', 'ADMIN_RANTING'],
   },
   {
     title: 'Data Master',

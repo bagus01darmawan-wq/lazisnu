@@ -6,7 +6,7 @@ import { sendSuccess, sendError, sendInternalError } from '../../utils/response'
 const FLAG_PATH = process.env.BACKUP_FLAG_PATH || '/app/backup-active';
 
 export async function backupRoutes(fastify: FastifyInstance) {
-  const adminOnly = authorize('ADMIN_KECAMATAN', 'ADMIN_RANTING', 'BENDAHARA');
+  const adminOnly = authorize('ADMIN_KECAMATAN', 'ADMIN_RANTING');
 
   // GET /admin/backup/status — cek apakah flag backup aktif
   fastify.get('/backup/status', { preHandler: [adminOnly] }, async (_request: FastifyRequest, reply: FastifyReply) => {

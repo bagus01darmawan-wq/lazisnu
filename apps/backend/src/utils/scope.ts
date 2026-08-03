@@ -15,7 +15,7 @@ export interface RoleScope {
 /**
  * Dapatkan scope role user untuk digunakan dalam filter query.
  * - ADMIN_KECAMATAN: districtId miliknya
- * - ADMIN_RANTING/BENDAHARA: branchId miliknya
+ * - ADMIN_RANTING: branchId miliknya
  * - PETUGAS: officerId miliknya + branchId miliknya
  */
 export function getRoleScope(user: JWTPayload): RoleScope {
@@ -32,7 +32,6 @@ export function getRoleScope(user: JWTPayload): RoleScope {
       if (user.districtId) scope.districtIds = [user.districtId];
       break;
     case 'ADMIN_RANTING':
-    case 'BENDAHARA':
       if (user.branchId) scope.branchIds = [user.branchId];
       break;
     case 'PETUGAS':

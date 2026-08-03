@@ -4,7 +4,7 @@
 > Setiap sub-bab implementation plan mereferensikan dokumen ini untuk keputusan yang belum final.
 > Update status kolom **Keputusan** segera setelah ada kesepakatan, lalu sesuaikan task di sub-bab terkait.
 
-Terakhir diperbarui: 2026-07-29
+Terakhir diperbarui: 2026-08-03
 
 ---
 
@@ -144,6 +144,19 @@ Terakhir diperbarui: 2026-07-29
 
 ---
 
+### D-11 — Role BENDAHARA: Hapus dari Sistem?
+
+| Atribut | Detail |
+|---------|--------|
+| **ID** | D-11 |
+| **Status** | ✅ Diputuskan |
+| **Direferensikan di** | Sub-bab 02 (C4/C6), Sub-bab 03 (E1) |
+| **Konteks** | Rencana organisasi terbaru tidak memiliki posisi bendahara (0 akun di production & staging). Role ini tersisa dari desain PRD lama dan membuat verifikasi route (D7) terhambat. |
+| **Keputusan** | **Opsi A: Hapus total** — hapus nilai `BENDAHARA` dari enum `user_role` (migrasi 0005), semua guard role di backend/web/mobile, shared-types, dan docs. Path `/v1/bendahara/*` **dipertahankan** dan tetap diakses oleh `ADMIN_KECAMATAN` + `ADMIN_RANTING` (fungsi laporan keuangan tidak hilang; rename path = breaking change tanpa nilai tambah). |
+| **Diputuskan oleh** | Product Owner — 2026-08-03 |
+
+---
+
 ## Ringkasan Status
 
 | ID | Topik | Status | Sub-bab |
@@ -158,5 +171,6 @@ Terakhir diperbarui: 2026-07-29
 | D-08 | Redis Fallback | ✅ Diputuskan | 04, 07 |
 | D-09 | Biometrik Mobile | ✅ Diputuskan | 05, 08 |
 | D-10 | sync_queues Schema | ✅ Diputuskan (DROP Opsi A) | 03, 07 |
+| D-11 | Role BENDAHARA | ✅ Diputuskan (Hapus Total) | 02, 03 |
 
-> 🎉 **SEMUA 10 KEPUTUSAN SUDAH DIPUTUSKAN!** Bebas hambatan untuk memulai pengerjaan sub-bab.
+> 🎉 **SEMUA 11 KEPUTUSAN SUDAH DIPUTUSKAN!** Bebas hambatan untuk memulai pengerjaan sub-bab.

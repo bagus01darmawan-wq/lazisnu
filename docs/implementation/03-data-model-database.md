@@ -107,10 +107,10 @@ Referensi analisis: `analisis-master-lazisnu.md` **Bab 6, 14 (P2 #10), 18 (INFRA
 
 ### E — Verifikasi Enum Roles di Database
 
-- [ ] **E1** Verifikasi enum `user_role` di database production hanya berisi 4 nilai:
+- [ ] **E1** Verifikasi enum `user_role` di database production hanya berisi 3 nilai (BENDAHARA dihapus per D-11):
   ```sql
   SELECT unnest(enum_range(NULL::user_role));
-  -- Expected: ADMIN_KECAMATAN, ADMIN_RANTING, BENDAHARA, PETUGAS
+  -- Expected: ADMIN_KECAMATAN, ADMIN_RANTING, PETUGAS
   ```
 - [ ] **E2** Pastikan tidak ada token JWT aktif yang membawa role `ADMIN_PUSAT` atau `ADMIN_KABUPATEN` (setelah JWT secret dirotasi di Sub-bab 02 task B, ini otomatis teratasi)
 

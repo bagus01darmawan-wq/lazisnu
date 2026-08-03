@@ -47,7 +47,7 @@ export async function middleware(request: NextRequest) {
 
       // Restricted routes: wa-monitor only for Kecamatan, Ranting, and Bendahara
       if (path.includes('/wa-monitor') && 
-          userRole !== 'ADMIN_KECAMATAN' && userRole !== 'ADMIN_RANTING' && userRole !== 'BENDAHARA') {
+          userRole !== 'ADMIN_KECAMATAN' && userRole !== 'ADMIN_RANTING') {
         return NextResponse.redirect(new URL('/dashboard/overview', request.url));
       }
       
@@ -58,7 +58,7 @@ export async function middleware(request: NextRequest) {
 
       // Re-submit tracker is read-only and available to all dashboard reporting roles.
       if (path.includes('/resubmit') && 
-          userRole !== 'ADMIN_KECAMATAN' && userRole !== 'ADMIN_RANTING' && userRole !== 'BENDAHARA') {
+          userRole !== 'ADMIN_KECAMATAN' && userRole !== 'ADMIN_RANTING') {
         return NextResponse.redirect(new URL('/dashboard/overview', request.url));
       }
     } catch {

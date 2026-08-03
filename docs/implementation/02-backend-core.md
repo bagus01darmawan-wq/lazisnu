@@ -61,9 +61,9 @@ Referensi analisis: `analisis-master-lazisnu.md` **Bab 5, 8, 13 (P1-4, P1-8), 19
 - [ ] **C1** Buka `apps/backend/src/middleware/auth.ts:12` — hapus `ADMIN_PUSAT` dan `ADMIN_KABUPATEN` dari type `JWTPayload.role`
 - [ ] **C2** Buka `apps/backend/src/middleware/ownership.ts:29` — hapus/ubah `case 'ADMIN_PUSAT'` yang bypass semua scope
 - [ ] **C3** Buka `apps/backend/src/middleware/ownership.ts:62` — hapus/ubah `assertDistrictAccess` untuk `ADMIN_KABUPATEN`
-- [ ] **C4** Pastikan hanya 4 role valid: `ADMIN_KECAMATAN`, `ADMIN_RANTING`, `BENDAHARA`, `PETUGAS` (sesuai `schema.ts:5`)
+- [ ] **C4** Pastikan hanya 3 role valid: `ADMIN_KECAMATAN`, `ADMIN_RANTING`, `PETUGAS` (sesuai `schema.ts:5`) — `BENDAHARA` dihapus per D-11
 - [ ] **C5** Run TypeScript check: `pnpm --filter lazisnu-backend exec tsc --noEmit`
-- [ ] **C6** Test: pastikan semua route masih berfungsi dengan 4 role yang valid
+- [ ] **C6** Test: pastikan semua route masih berfungsi dengan 3 role yang valid
 
 **Effort**: 2 jam
 **Referensi**: P2 #10 (Bab 14) + R-9/#10 (Bab 19)

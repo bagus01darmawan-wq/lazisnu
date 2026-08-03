@@ -4,7 +4,6 @@
  * Aturan akses:
  * - ADMIN_KECAMATAN: hanya districtId miliknya.
  * - ADMIN_RANTING: hanya branchId miliknya.
- * - BENDAHARA: hanya branchId miliknya.
  * - PETUGAS: hanya collection miliknya (officerId).
  *
  * Gunakan di route handler (bukan middleware Express) karena butuh DB lookup.
@@ -26,7 +25,6 @@ export async function assertBranchAccess(ctx: AuthContext, branchId: string): Pr
 
   switch (ctx.role) {
     case 'ADMIN_RANTING':
-    case 'BENDAHARA':
       if (ctx.branchId !== branchId) {
         throw Errors.FORBIDDEN_SCOPE('Tidak punya akses ke ranting ini');
       }
@@ -60,7 +58,7 @@ export async function assertDistrictAccess(ctx: AuthContext, districtId: string)
       }
       return;
     default:
-      // ADMIN_RANTING, BENDAHARA, PETUGAS — tidak boleh akses district lain
+      // ADMIN_RANTING, PETUGAS — tidak boleh akses district lain
       if (ctx.districtId && ctx.districtId !== districtId) {
         throw Errors.FORBIDDEN_SCOPE('Tidak punya akses ke kecamatan ini');
       }
@@ -71,7 +69,7 @@ export async function assertDistrictAccess(ctx: AuthContext, districtId: string)
 /**
  * Lempar FORBIDDEN_SCOPE jika user tidak punya akses ke collectionId.
  * PETUGAS hanya bisa lihat collection miliknya.
- * BENDAHARA/ADMIN_RANTING hanya bisa lihat collection di branch-nya.
+ * ADMIN_RANTING hanya bisa lihat collection di branch-nya.
  * ADMIN_KECAMATAN hanya bisa lihat collection di district-nya.
  */
 export async function assertCollectionAccess(ctx: AuthContext, collectionId: string): Promise<void> {
@@ -97,7 +95,6 @@ export async function assertCollectionAccess(ctx: AuthContext, collectionId: str
       }
       return;
     case 'ADMIN_RANTING':
-    case 'BENDAHARA':
       if (collection.can.branchId !== ctx.branchId) {
         throw Errors.FORBIDDEN_SCOPE('Tidak punya akses ke perolehan ini');
       }
