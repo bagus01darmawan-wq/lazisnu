@@ -16,6 +16,7 @@ import { httpRequestDurationMs, httpRequestsTotal } from './routes/metrics';
 import { correlationIdHook } from './middleware/correlationId';
 import { auditLogger } from './middleware/audit-logger';
 import { initSentry } from './config/sentry';
+import { initRollbar, captureError } from './config/rollbar';
 import { AppError, isAppError } from './utils/AppError';
 import { isJwtErrorLike } from './utils/error-guards';
 import { z } from 'zod';
@@ -23,6 +24,8 @@ import { z } from 'zod';
 export async function buildApp() {
   // Inisialisasi Sentry (no-op jika SENTRY_DSN tidak diset)
   initSentry();
+  // Inisialisasi Rollbar (no-op jika ROLLBAR_ACCESS_TOKEN tidak diset)
+  initRollbar();
 
   const server = Fastify({
     logger: {
@@ -196,6 +199,12 @@ export async function buildApp() {
     }
 
     // 7. Unknown error — sanitize: log detail di server, response generik
+    captureError(error, {
+      requestId: request.id,
+      method: request.method,
+      url: request.url,
+      statusCode: 500,
+    });
     return reply.status(500).send({
       success: false,
       error: {

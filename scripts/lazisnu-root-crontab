@@ -1,0 +1,11 @@
+# QCloud Stargate agent
+*/5 * * * * flock -xn /tmp/stargate.lock -c '/usr/local/qcloud/stargate/admin/start.sh > /dev/null 2>&1 &'
+
+# Weekly Let's Encrypt renewal without stopping nginx
+0 3 * * 1 /usr/bin/flock -n /run/lock/lazisnu-certbot-renew.lock /usr/bin/timeout --foreground 15m /opt/lazisnu/scripts/certbot-renew-safe.sh
+
+# Daily database backup with an external lock and timeout.
+0 2 * * * /usr/bin/flock -n /run/lock/lazisnu-backup.lock /usr/bin/timeout --foreground 15m /opt/lazisnu/scripts/backup.sh
+
+# Uptime Kuma database backup
+0 3 * * * bash /opt/lazisnu/scripts/backup-kuma.sh

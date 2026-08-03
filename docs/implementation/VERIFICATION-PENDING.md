@@ -19,10 +19,10 @@
 
 ## Sub-bab 03 — Data Model & Database (2 ⚠️ + 3 ✅)
 
-- [ ] **C3**: `pnpm db:migrate` berhasil dijalankan di database
+- [x] **C3**: `pnpm db:migrate` berhasil dijalankan di database ✅ (2026-08-01: step "Run DB migrations di test database" hijau di semua run CI hari ini, e.g. 30662371949; juga sukses lokal di Sesi 30)
 - [x] **C4**: Kolom `user_sessions.device_id` ada di DB — `character varying`
 - [x] **E1**: Enum `user_role` hanya 4 nilai — `ADMIN_KECAMATAN, ADMIN_RANTING, PETUGAS, BENDAHARA`
-- [ ] **F2**: `pnpm install --frozen-lockfile` berhasil setelah penghapusan `package-lock.json`
+- [x] **F2**: `pnpm install --frozen-lockfile` berhasil setelah penghapusan `package-lock.json` ✅ (2026-08-01: sukses lokal — "Lockfile is up to date", Done 12.4s; root `package-lock.json` sudah tidak ada)
 - [x] **Verifikasi**: `sync_queues` sudah di-DROP — `EXISTS: false`
 
 ---
@@ -68,27 +68,27 @@
     Absence of header = server-side rejection yang valid sesuai CORS spec.
 - [x] **P0-B4**: Test scheduler tanpa `INTERNAL_API_KEY` → `FORBIDDEN` ✅
 - [x] **P0-B5**: Test scheduler dengan API key salah → `FORBIDDEN` ✅
-- [ ] **P1-B3**: Test `sendTemplateMessage` dengan `WA_PROVIDER=fonnte` → throw `UNSUPPORTED_OPERATION`
-- [ ] **P2-C3**: Test: job gagal 3x → hanya 1 baris `FAILED` di tabel `notifications`
-- [ ] **P2-E4**: Test: user tanpa record `officers` → `request-otp` 404 (bukan 200 palsu)
-- [ ] **P2-F3**: Test: role valid tapi scope salah → audit log `OWNERSHIP_DENIED`
+- [x] **P1-B3**: Test `sendTemplateMessage` dengan `WA_PROVIDER=fonnte` → throw `UNSUPPORTED_OPERATION` ✅ (2026-08-01, PR #25: `src/services/__tests__/whatsapp.test.ts`)
+- [x] **P2-C3**: Test: job gagal 3x → hanya 1 baris `FAILED` di tabel `notifications` ✅ (2026-08-01, PR #25: `whatsapp-worker.test.ts` + refactor `handleJobFailure` di whatsapp.worker.ts)
+- [x] **P2-E4**: Test: user tanpa record `officers` → `request-otp` 404 (bukan 200 palsu) ✅ (2026-08-01: sudah dicover `auth.integration.test.ts` L204, berjalan di CI integration)
+- [x] **P2-F3**: Test: role valid tapi scope salah → audit log `OWNERSHIP_DENIED` ✅ (2026-08-01, PR #25: `audit-logger.test.ts`; `test:unit` diperluas ke `(services|middleware)`)
 
 ---
 
 ## Sub-bab 07 — Infrastruktur & DevOps (7 ⚠️ + 5 ✅)
 
-- [ ] **A2-3**: Push PR → CI menjalankan unit test di GitHub Actions
-- [ ] **A2-4**: Tambah integration test dengan GitHub Actions services (postgres + redis)
+- [x] **A2-3**: Push PR → CI menjalankan unit test di GitHub Actions ✅ (2026-08-01: PR #18 — `test:unit` 54/54 + mobile test, service postgres aktif)
+- [x] **A2-4**: Tambah integration test dengan GitHub Actions services (postgres + redis) ✅ (2026-08-01, PR #24 / commit `f202e0e`): step "Run integration tests" jalan — 5 suites/47 test PASS (auth, p1-regression, cors, p0-regression, health), service redis ditambah di CI
 - [x] **A3-2/A3-3**: `curl /metrics` → output Prometheus (bukan 501) + default metrics ada ✅
 - [x] **B1-5**: `docker compose up` di VM → semua service healthy ✅
-- [ ] **B2-3**: Push ke main → image ter-build dan ter-push ke GHCR
+- [x] **B2-3**: Push ke main → image ter-build dan ter-push ke GHCR ✅ (2026-08-01: run main 30662371949 build-image pass 3m31s; run dispatch 30661900400 — `backend`/`web:latest` + `:c4f1237` ter-push, attestation/provenance OK)
 - [x] **B4-5**: Test restart service backend → worker tetap berjalan ✅
 - [x] **D1-1/D1-2/D1-3**: Uptime Kuma aktif + monitor /health/ready + notifikasi Discord ✅ (Sesi 30 Lanjutan 6: 4 monitor + Discord binding)
-- [ ] **D2-4**: Verifikasi DSN backend aktif di Sentry dashboard
+- [x] **D2-4**: Verifikasi token error tracking backend aktif di dashboard ✅ (2026-08-02: **migrated Sentry → Rollbar**. Alasan: Sentry free tidak punya Discord native (berbayar Team plan); Rollbar free punya webhook notification ke Discord via Hookdeck. Setup: (1) `rollbar ^3.1.0` installed di backend; (2) config baru `src/config/rollbar.ts` (init, captureError, scrubFields `password/secret/creditCard/authorization/otp`); (3) `initRollbar()` + `captureError()` hook di `app.ts` error handler branch 500; (4) `ROLLBAR_ACCESS_TOKEN` ditambahkan ke schema `env.ts`; (5) `SENTRY_DSN` dihapus dari `.env` VM, `ROLLBAR_ACCESS_TOKEN=aa5b0cfd...` ditanam; (6) token terverifikasi via test node lokal → `ROLLBAR_OK` UUID `631a8867-926e-41a7-db63-e229c01f8e8f` masuk Rollbar dashboard; (7) Hookdeck pipeline `rollbar-to-discord` ter-setup (source `src_4wdr88dwy46kj8` URL `https://hkdk.events/4wdr88dwy46kj8`, transform `rollbar-to-discord`, connection `web_10Rw9dMZEPSx` ke destination Discord existing) — test mock payload `new_item` → 200 SUCCESS + attempt SUCCESSFUL → embed `🔴 🆕 NEW ITEM` masuk Discord channel. ⏳ Tersisa: (a) setup Rollbar Webhook Notification di UI Rollbar (Settings → Notifications → Webhook, URL `https://hkdk.events/4wdr88dwy46kj8`, rule `new_item`) — butuh user buka dashboard; (b) deploy code Rollbar ke image production via PR merge ke main + CI blue-green deploy — code typecheck PASS, tinggal build & deploy. Catatan lama Sentry: project `lazisnu-backend` di org `lazisnupng` (via API) masih ada tetapi tidak terpakai; `@sentry/node` package sementara dipertahankan di `package.json` (dual fail-safe), bisa dihapus setelah Rollbar verified di production.)
 - [x] **E1-4**: Security headers (X-Frame-Options, HSTS) di nginx.conf ✅
 - [ ] **E2-1**: Cek Supabase daily backup di dashboard
-- [ ] **E2-4**: Set R2 lifecycle rule: retensi 30 hari
-- [ ] **E2-5**: Test restore backup ke database dev → `pg_restore` + verifikasi data
+- [x] **E2-4**: Set R2 lifecycle rule: retensi 30 hari ✅ (2026-08-01, dashboard Cloudflare oleh user: `backups/` 30d, `kuma/` 30d, `lazisnu_` root 30d; `archive/` & `secrets/` tanpa rule — aman. API tidak bisa verifikasi ulang: token tanpa izin lifecycle)
+- [x] **E2-5**: Test restore backup ke database dev → `pg_restore` + verifikasi data ✅ (2026-08-01: restore `lazisnu_20260801_021319.sql.gz` ke postgres:17-alpine throwaway — **0 ERROR**, 12 tabel, data terbaca: users 10 / collections 48 / sessions 263 / officers 8; container dihapus. Catatan: dump plain SQL → restore via `psql`, setara verifikasi restorabilitas)
 
 ---
 

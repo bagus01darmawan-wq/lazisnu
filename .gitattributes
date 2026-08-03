@@ -4,6 +4,7 @@
 # (VM core.autocrlf=true akan konversi ke CRLF tanpa ini).
 *.sh text eol=lf
 *.bash text eol=lf
+*.conf.example text eol=lf
 *.ts text eol=lf
 *.tsx text eol=lf
 *.js text eol=lf

@@ -90,17 +90,17 @@
 
 | Kode | Item | Sub-bab |
 |------|------|---------|
-| D1 | 07-B2-3: Push main → image build & push ke GHCR | 07 — **de facto SELESAI** via CI (Sesi 32), tinggal centang |
-| D2 | 07-A2-3 / A2-4: CI unit + integration test (services postgres+redis) | 07 |
-| D3 | 07-D2-4: Verifikasi DSN backend aktif di Sentry dashboard | 07 |
+| D1 | 07-B2-3: Push main → image build & push ke GHCR | 07 — ✅ **SELESAI 2026-08-01** (build-image pass run 30662371949; dispatch 30661900400 — `:latest`+`:c4f1237` ter-push, attestation OK) |
+| D2 | 07-A2-3 / A2-4: CI unit + integration test (services postgres+redis) | 07 — ✅ **SELESAI 2026-08-01** (PR #24): unit 54/54 + mobile 73 + integration 47 test PASS; service redis ditambah di CI |
+| D3 | 07-D2-4: Verifikasi DSN backend aktif di Sentry dashboard | 07 — ✅ **SELESAI 2026-08-02** (migrated Sentry → Rollbar free + Discord via Hookdeck. Token `aa5b0cfd...` terverifikasi via test node lokal (UUID `631a8867-...` masuk dashboard). Code: `rollbar ^3.1.0` installed, `src/config/rollbar.ts` dibuat (initRollbar + captureError + scrubFields), `app.ts` `captureError()` di error handler branch 500, `env.ts` schema +`ROLLBAR_ACCESS_TOKEN`. VM `.env`: `SENTRY_DSN` dihapus, `ROLLBAR_ACCESS_TOKEN` ditanam. Hookdeck pipeline `rollbar-to-discord` ter-setup (source `src_4wdr88dwy46kj8`, transform `rollbar-to-discord`, connection `web_10Rw9dMZEPSx` ke Discord existing) — test mock `new_item` → 200 + embed `🔴 🆕 NEW ITEM` masuk Discord. ⏳ Tersisa: (a) setup Rollbar Webhook Notification di UI (URL `https://hkdk.events/4wdr88dwy46kj8`, rule `new_item`) — butuh user buka dashboard Rollbar; (b) deploy code Rollbar via PR merge ke main + CI blue-green deploy. Sentry project `lazisnu-backend` di org `lazisnupng` masih ada (idle), `@sentry/node` sementara dipertahankan (dual fail-safe) — bisa dihapus setelah Rollbar terverifikasi di production.) |
 | D4 | 07-E2-1: Cek Supabase daily backup di dashboard | 07 |
-| D5 | 07-E2-4: Set R2 lifecycle rule retensi 30 hari | 07 |
-| D6 | 07-E2-5: Test restore backup ke DB dev (`pg_restore`) | 07 |
+| D5 | 07-E2-4: Set R2 lifecycle rule retensi 30 hari | 07 — ✅ **SELESAI 2026-08-01** (3 rule di dashboard Cloudflare: `backups/` 30d, `kuma/` 30d, `lazisnu_` root 30d; `archive/` & `secrets/` tidak di-rule). ⚠️ Catatan: semua objek DB di prefix `backups/` → rule `lazisnu_` root **no-op** (tidak berbahaya). **Verifikasi behavioral** (via Object Read, bukan config API): baseline 01-08-2026 semua objek <30 hari; checkpoint ~26-08-2026 → `backups/lazisnu_20260727_*` harus hilang, `secrets/`/`archive/` tetap. Perintah: `aws s3 ls s3://lazisnu-backups/ --recursive --human-readable --endpoint-url https://<ACCOUNT_ID>.r2.cloudflarestorage.com` |
+| D6 | 07-E2-5: Test restore backup ke DB dev (`pg_restore`) | 07 — ✅ **SELESAI 2026-08-01** (restore `20260801_021319` → postgres:17 throwaway: 0 ERROR, 12 tabel, data terbaca; dump plain SQL → via `psql`) |
 | D7 | 02-C6: Semua route berfungsi dengan 4 role | 02 |
-| D8 | 03-C3: `pnpm db:migrate` (de facto berhasil di Sesi 30, tinggal centang) | 03 |
-| D9 | 03-F2: `pnpm install --frozen-lockfile` setelah hapus package-lock.json | 03 |
+| D8 | 03-C3: `pnpm db:migrate` (de facto berhasil di Sesi 30, tinggal centang) | 03 — ✅ **SELESAI 2026-08-01** (step migrate hijau di semua run CI hari ini, e.g. 30662371949) |
+| D9 | 03-F2: `pnpm install --frozen-lockfile` setelah hapus package-lock.json | 03 — ✅ **SELESAI 2026-08-01** (install sukses lokal — root lockfile npm sudah hilang, `pnpm-lock.yaml` up to date) |
 | D10 | 04/05: Redis key per-device, OTP E2E, biometrik login/toggle/REFRESH_REVOKED | 04/05 |
-| D11 | 06: P1-B3 (fonnte), P2-C3 (job gagal 3x), P2-E4 (request-otp 404), P2-F3 (OWNERSHIP_DENIED) | 06 |
+| D11 | 06: P1-B3 (fonnte), P2-C3 (job gagal 3x), P2-E4 (request-otp 404), P2-F3 (OWNERSHIP_DENIED) | 06 — ✅ **SELESAI 2026-08-01** (PR #25: 3 test baru + 1 sudah ada; CI hijau; `test:unit` diperluas ke middleware) |
 
 ---
 
@@ -123,8 +123,8 @@
 
 | # | Item | Status | Sumber |
 |---|------|:---:|--------|
-| F1 | **`JWT_SECRET` placeholder staging** — `.env.staging` line 17 masih `staging-legacy-deprecated-key-replace-soon` (Sesi 27 Bug 3: env.ts masih me-require `JWT_SECRET` deprecated sebagai fallback). Staging memakai secret yang diketahui publik → perlu diganti dengan random value | ⏳ | SESSION-2026-07-27.md (Bug 3) |
-| F2 | **Verifikasi CI secrets GitHub** (`VM_HOST`, `VM_USER`, `VM_SSH_KEY`, `NEXT_PUBLIC_API_URL`) — prasyarat job `deploy` Sesi 25. CI deploy-staging sudah jalan (Sesi 30-32) → kemungkinan sudah terpenuhi, tinggal konfirmasi di repo Settings | ⏳ (verif) | SESSION-2026-07-25.md (07-B2-2) |
+| F1 | **`JWT_SECRET` placeholder staging** — `.env.staging` line 17 masih `staging-legacy-deprecated-key-replace-soon` (Sesi 27 Bug 3: env.ts masih me-require `JWT_SECRET` deprecated sebagai fallback). Staging memakai secret yang diketahui publik → perlu diganti dengan random value | ✅ **SELESAI 2026-08-01** — random 43-char diterapkan: repo (commit `39787ab`, origin/main) + VM (`/opt/lazisnu/apps/backend/.env.staging`), backend-staging recreate, verifikasi env container (baru=1, lama=0), staging 200 | SESSION-2026-07-27.md (Bug 3) |
+| F2 | **Verifikasi CI secrets GitHub** (`VM_HOST`, `VM_USER`, `VM_SSH_KEY`, `NEXT_PUBLIC_API_URL`) — prasyarat job `deploy` Sesi 25. CI deploy-staging sudah jalan (Sesi 30-32) → kemungkinan sudah terpenuhi, tinggal konfirmasi di repo Settings | ✅ **SELESAI 2026-08-01** — `VM_HOST`/`VM_USER`/`VM_SSH_KEY` ada di environment **staging** & **Production** (dibuat 2026-07-29; verifikasi via `gh secret list`). `NEXT_PUBLIC_API_URL` tidak di-set — **opsional** (fallback `https://api.lazisnu.site` di ci.yml, build web terbukti jalan) | SESSION-2026-07-25.md (07-B2-2) |
 | F3 | **Catatan Sesi 27 (kosmetik)**: BullMQ rekomendasi `noeviction` untuk Redis staging (sudah di-set `--maxmemory-policy noeviction` di compose) + orphan container warning (pakai `-p staging`) | ℹ️ sudah teratasi | SESSION-2026-07-27.md |
 
 ---

@@ -1,10 +1,10 @@
 # Template awal — copy ke nginx/upstream.conf saat setup VM pertama kali:
 #   cp nginx/upstream.conf.example nginx/upstream.conf
 # Setelah itu file dikelola oleh scripts/deploy-blue-green.sh saat switch blue/green.
+#
+# Nilai di sini adalah variable nginx, bukan upstream block. nginx.conf memakai
+# proxy_pass http://$backend_upstream dengan resolver, sehingga nama host
+# di-resolve per-request dan IP container yang berubah tidak memerlukan restart.
 # Default aman: arahkan ke service docker-compose.yml utama (backend/web).
-upstream backend_active {
-    server backend:3001;
-}
-upstream web_active {
-    server web:3000;
-}
+set $backend_upstream "http://backend:3001";
+set $web_upstream "http://web:3000";

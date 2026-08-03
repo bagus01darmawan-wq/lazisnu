@@ -60,6 +60,9 @@ const envSchema = z.object({
   // Sentry
   SENTRY_DSN: z.string().optional(),
 
+  // Rollbar
+  ROLLBAR_ACCESS_TOKEN: z.string().optional(),
+
 });
 
 const parseResult = envSchema.safeParse(process.env);

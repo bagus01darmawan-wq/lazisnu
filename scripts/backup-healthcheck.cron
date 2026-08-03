@@ -1,0 +1,2 @@
+# Verify the latest R2 backup independently from the daily backup job.
+17 * * * * root /usr/bin/flock -n /run/lock/lazisnu-backup-health.lock /usr/bin/timeout --foreground 5m /opt/lazisnu/scripts/backup-healthcheck.sh

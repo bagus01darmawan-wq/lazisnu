@@ -216,7 +216,9 @@ certbot certonly --webroot -w /opt/lazisnu/nginx/certbot/www \
 docker compose restart nginx
 
 # Auto-renewal (cron, setiap Senin jam 03:00)
-echo "0 3 * * 1 certbot renew --quiet --webroot -w /opt/lazisnu/nginx/certbot/www && docker compose restart nginx" | crontab -
+# Tidak menghentikan nginx: challenge memakai webroot, lalu nginx di-reload graceful.
+chmod +x /opt/lazisnu/scripts/certbot-renew-safe.sh
+# 0 3 * * 1 /usr/bin/flock -n /run/lock/lazisnu-certbot-renew.lock /usr/bin/timeout --foreground 15m /opt/lazisnu/scripts/certbot-renew-safe.sh
 ```
 
 ### 9. Setup backup cron
@@ -225,16 +227,27 @@ echo "0 3 * * 1 certbot renew --quiet --webroot -w /opt/lazisnu/nginx/certbot/ww
 # Backup database setiap hari jam 02:00 WIB
 # Script: scripts/backup.sh
 chmod +x /opt/lazisnu/scripts/backup.sh
+chmod +x /opt/lazisnu/scripts/backup-healthcheck.sh
 
 # Backup hanya berjalan jika file flag ada:
-touch /opt/lazisnu/backup-active
+touch /opt/lazisnu/backup-data/active
 
-# Tambah cron
-echo "0 2 * * * /opt/lazisnu/scripts/backup.sh" | crontab -
+# Tambahkan baris berikut ke crontab root tanpa menghapus job cron lain:
+# 0 2 * * * /usr/bin/flock -n /run/lock/lazisnu-backup.lock /usr/bin/timeout --foreground 15m /opt/lazisnu/scripts/backup.sh
+
+# Health-check independen setiap jam pada menit 17
+# Memeriksa marker sukses dan object backup aktual di R2.
+install -m 0644 scripts/backup-healthcheck.cron /etc/cron.d/lazisnu-backup-health
 
 # Verifikasi cron terdaftar
 crontab -l
+cat /etc/cron.d/lazisnu-backup-health
 ```
+
+Backup menulis log ke `/opt/lazisnu/backups/backup.log` dan health-check ke
+`/opt/lazisnu/backups/backup-health.log`. Setelah upload database diverifikasi,
+script menulis marker `backup-status/lazisnu-latest.json` di R2. Webhook alert
+opsional dikonfigurasi melalui `BACKUP_ALERT_WEBHOOK_URL` di env backup.
 
 ### 10. Verifikasi Production
 
