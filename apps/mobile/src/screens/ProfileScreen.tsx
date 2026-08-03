@@ -11,7 +11,6 @@ const roleLabels: Record<string, string> = {
   PETUGAS: 'Petugas Penjemputan',
   ADMIN_RANTING: 'Admin Ranting',
   ADMIN_KECAMATAN: 'Admin Kecamatan',
-  BENDAHARA: 'Bendahara',
 };
 
 const ProfileScreen: React.FC = () => {

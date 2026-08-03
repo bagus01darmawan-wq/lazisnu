@@ -14,7 +14,6 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE TYPE user_role AS ENUM (
     'ADMIN_KECAMATAN',
     'ADMIN_RANTING',
-    'BENDAHARA',
     'PETUGAS'
 );
 
@@ -70,7 +69,7 @@ CREATE INDEX idx_branches_code ON branches(code);
 -- TABLES: Users
 -- ============================================
 
--- Tabel Admin (Kecamatan & Ranting) & Bendahara
+-- Tabel Admin (Kecamatan & Ranting)
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email VARCHAR(255) UNIQUE NOT NULL,
@@ -78,7 +77,7 @@ CREATE TABLE users (
     full_name VARCHAR(100) NOT NULL,
     phone VARCHAR(20) UNIQUE NOT NULL,
     role user_role NOT NULL,
-    district_id UUID REFERENCES districts(id),  -- Untuk ADMIN_KECAMATAN & BENDAHARA
+    district_id UUID REFERENCES districts(id),  -- Untuk ADMIN_KECAMATAN
     branch_id UUID REFERENCES branches(id),       -- Untuk ADMIN_RANTING
     is_active BOOLEAN DEFAULT true,
     last_login TIMESTAMP,

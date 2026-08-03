@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 // JWT Payload type
 export interface JWTPayload {
   userId: string;
-  role: 'ADMIN_KECAMATAN' | 'ADMIN_RANTING' | 'BENDAHARA' | 'PETUGAS';
+  role: 'ADMIN_KECAMATAN' | 'ADMIN_RANTING' | 'PETUGAS';
   officerId?: string;
   branchId?: string;
   districtId?: string;

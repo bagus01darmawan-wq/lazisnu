@@ -88,11 +88,11 @@ describe('TC-AUTH-06: Petugas akses endpoint admin — 403 Forbidden', () => {
     expect(reply.send).not.toHaveBeenCalled();
   });
 
-  it('BENDAHARA ditolak akses route khusus admin_kecamatan saja', async () => {
+  it('PETUGAS ditolak akses route khusus admin_kecamatan saja', async () => {
     const guard = authorize('ADMIN_KECAMATAN');
     const reply = mockReply();
 
-    await guard(mockRequest('BENDAHARA') as any, reply as any);
+    await guard(mockRequest('PETUGAS') as any, reply as any);
 
     expect(reply.status).toHaveBeenCalledWith(403);
   });

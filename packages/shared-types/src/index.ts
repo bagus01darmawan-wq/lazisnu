@@ -8,7 +8,6 @@
 export enum UserRole {
   ADMIN_KECAMATAN = 'ADMIN_KECAMATAN',
   ADMIN_RANTING   = 'ADMIN_RANTING',
-  BENDAHARA       = 'BENDAHARA',
   PETUGAS         = 'PETUGAS',
 }
 

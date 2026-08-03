@@ -2,7 +2,7 @@ import { pgTable, uuid, varchar, text, timestamp, boolean, decimal, integer, jso
 import { relations, sql } from 'drizzle-orm';
 
 // Enums
-export const userRoleEnum = pgEnum('user_role', ['ADMIN_KECAMATAN', 'ADMIN_RANTING', 'BENDAHARA', 'PETUGAS']);
+export const userRoleEnum = pgEnum('user_role', ['ADMIN_KECAMATAN', 'ADMIN_RANTING', 'PETUGAS']);
 export const collectionStatusEnum = pgEnum('collection_status', ['PENDING', 'COMPLETED', 'FAILED', 'CANCELLED']);
 export const assignmentStatusEnum = pgEnum('assignment_status', ['ACTIVE', 'COMPLETED', 'POSTPONED', 'REASSIGNED', 'UNCOLLECTED']);
 
