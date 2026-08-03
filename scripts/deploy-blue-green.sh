@@ -189,9 +189,14 @@ reload_nginx() {
 # ─── Fungsi: teardown warna lama ───
 teardown_color() {
   local color=$1
+  local backend_port
+  local web_port
+  backend_port=$(get_backend_port "$color")
+  web_port=$(get_web_port "$color")
   info "Tearing down old ${YELLOW}${color}${NC}..."
   cd "$PROJECT_DIR"
-  docker compose -p "$color" -f docker-compose.blue-green.yml down
+  COLOR="$color" BACKEND_PORT="$backend_port" WEB_PORT="$web_port" \
+    docker compose -p "$color" -f docker-compose.blue-green.yml down
   ok "Old ${color} torn down"
 }
 
