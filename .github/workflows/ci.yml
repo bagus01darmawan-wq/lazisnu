@@ -133,6 +133,19 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
+    - name: Build & Push Web Image (Staging)
+      uses: docker/build-push-action@v7
+      with:
+        context: .
+        file: apps/web/Dockerfile
+        push: true
+        build-args: |
+          NEXT_PUBLIC_API_URL=https://staging-api.lazisnu.site
+        tags: |
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:staging
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
   # ─── 07-B2-2: Deploy ke Production (tag v*) — blue-green (08-C3, zero downtime) ───
   deploy:
     needs: build-image
@@ -208,6 +221,7 @@ jobs:
 
           docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:latest
           docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:latest
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:staging
 
           # Deploy staging
           docker compose -f docker-compose.staging.yml down

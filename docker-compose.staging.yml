@@ -73,7 +73,7 @@ services:
         max-file: "3"
 
   web-staging:
-    image: ghcr.io/bagus01darmawan-wq/lazisnu/web:latest
+    image: ghcr.io/bagus01darmawan-wq/lazisnu/web:staging
     restart: unless-stopped
     networks: [lazisnu_default]
     env_file:

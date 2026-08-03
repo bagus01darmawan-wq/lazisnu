@@ -7,6 +7,7 @@
 | Item | Detail |
 |------|--------|
 | Backup otomatis | Setiap hari jam 02:00 WIB (cron) |
+| Health-check | Setiap jam pada menit 17; memeriksa marker dan object R2 |
 | Test restore | Setiap tanggal 1 bulan berjalan |
 | Retensi backup | 30 hari (lokal + R2) |
 | Penanggung jawab | Tim DevOps / Admin Kecamatan |
@@ -18,16 +19,26 @@
 Script `scripts/backup.sh` dijalankan cron harian:
 
 ```bash
-0 2 * * * /opt/lazisnu/scripts/backup.sh
+0 2 * * * /usr/bin/flock -n /run/lock/lazisnu-backup.lock /usr/bin/timeout --foreground 15m /opt/lazisnu/scripts/backup.sh
 ```
 
 Alur backup:
 
 1. Cron trigger jam 02:00
-2. Script cek flag file `/opt/lazisnu/backup-active`
+2. Script cek flag file `/opt/lazisnu/backup-data/active`
 3. Jika flag **tidak ada** → SKIP (backup dinonaktifkan)
 4. Jika flag **ada** → `pg_dump` → gzip → upload ke R2
-5. Hapus backup lokal >30 hari
+5. Verifikasi ukuran object R2
+6. Tulis marker sukses `backup-status/lazisnu-latest.json`
+7. Hapus/archive backup lokal sesuai retention
+
+Jika dump, upload, atau verifikasi gagal, script menulis `FAILURE` dengan tahap
+kegagalan dan keluar dengan exit code non-zero. Timeout dump adalah 15 menit.
+
+Health-check independen membaca marker sukses dari R2, memeriksa object yang
+dirujuk marker, mencocokkan ukuran file, dan memberi status gagal jika backup
+terakhir lebih tua dari 26 jam. Webhook opsional memakai variable
+`BACKUP_ALERT_WEBHOOK_URL` di `/opt/lazisnu/.env.backup`.
 
 ### Cara mengaktifkan/menonaktifkan backup
 
@@ -38,13 +49,13 @@ Alur backup:
 **Via SSH** (jika dashboard tidak tersedia):
 ```bash
 # Aktifkan
-touch /opt/lazisnu/backup-active
+touch /opt/lazisnu/backup-data/active
 
 # Nonaktifkan
-rm /opt/lazisnu/backup-active
+rm /opt/lazisnu/backup-data/active
 
 # Cek status
-ls -la /opt/lazisnu/backup-active
+ls -la /opt/lazisnu/backup-data/active
 ```
 
 ---
@@ -159,7 +170,7 @@ curl -sf https://api.lazisnu.site/health/ready && echo "OK" || echo "FAIL"
 
 ### Backup gagal: "backup flag not active"
 
-Backup memang dinonaktifkan (normal). Aktifkan via dashboard atau `touch /opt/lazisnu/backup-active`.
+Backup memang dinonaktifkan (normal). Aktifkan via dashboard atau `touch /opt/lazisnu/backup-data/active`.
 
 ### Backup gagal: "pg_dump: command not found"
 
