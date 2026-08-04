@@ -15,6 +15,7 @@ import { eq, and, isNull } from 'drizzle-orm';
 export interface CreateSessionInput {
   userId: string;
   jti: string;
+  deviceId?: string;
   deviceLabel?: string;
   userAgent?: string;
   ipAddress?: string;
@@ -39,6 +40,7 @@ export async function createSession(input: CreateSessionInput): Promise<void> {
   await db.insert(schema.userSessions).values({
     userId: input.userId,
     jti: input.jti,
+    deviceId: input.deviceId || null,
     deviceLabel: input.deviceLabel || null,
     userAgent: input.userAgent || null,
     ipAddress: input.ipAddress || null,

@@ -189,6 +189,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       await createSession({
         userId: user.id,
         jti: tokens.refreshJti,
+        deviceId: tokens.did,
         deviceLabel,
         userAgent: request.headers['user-agent'] || undefined,
         ipAddress: request.ip,
@@ -412,6 +413,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       await createSession({
         userId: officer.user.id,
         jti: tokens.refreshJti,
+        deviceId: tokens.did,
         deviceLabel: body.device_label,
         userAgent: request.headers['user-agent'] || undefined,
         ipAddress: request.ip,
@@ -529,6 +531,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       await createSession({
         userId: user.id,
         jti: tokens.refreshJti,
+        deviceId,
         deviceLabel: undefined,
         userAgent: request.headers['user-agent'] || undefined,
         ipAddress: request.ip,

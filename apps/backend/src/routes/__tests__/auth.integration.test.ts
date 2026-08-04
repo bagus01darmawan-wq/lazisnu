@@ -160,6 +160,31 @@ describe('[POST] /v1/auth/login', () => {
     expect(res.body.error.message).toMatch(/salah/i);
   });
 
+  it('menyimpan device_id ke user_sessions saat login dengan device_id', async () => {
+    // Regresi temuan D10-A: kolom user_sessions.device_id tidak pernah diisi.
+    // createSession harus menerima deviceId (dari body device_id / claim did).
+    const app = await getApp();
+
+    (db.query.users.findFirst as jest.Mock).mockResolvedValue(mockUser);
+
+    // Capture db.insert(...).values(...) — values dipanggil terpisah dari insert
+    const valuesMock = jest.fn().mockResolvedValue([{}]);
+    (db.insert as jest.Mock).mockImplementation(() => ({ values: valuesMock }));
+
+    const res = await request(app.server)
+      .post('/v1/auth/login')
+      .send({ identifier: VALID_ADMIN.identifier, password: VALID_ADMIN.password, device_id: 'test-device-session-01' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    const sessionInserts = valuesMock.mock.calls
+      .map(call => call[0] as Record<string, unknown> | undefined)
+      .filter(v => v && typeof v.jti === 'string');
+    expect(sessionInserts.length).toBeGreaterThan(0);
+    expect(sessionInserts[sessionInserts.length - 1]?.deviceId).toBe('test-device-session-01');
+  });
+
   it('should return 200 and tokens when credentials are valid', async () => {
     const app = await getApp();
     
