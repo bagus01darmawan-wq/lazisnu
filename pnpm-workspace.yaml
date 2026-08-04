@@ -1,6 +1,16 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+
+# Overrides dipindah dari package.json field "pnpm" (diabaikan sejak pnpm 10,
+# dihapus di pnpm 11). Di sini pin diterapkan aktif oleh pnpm 10+.
+overrides:
+  '@types/react': 18.2.79
+  'shell-quote': 1.8.4
+  'joi': 17.13.4
+  '@babel/plugin-transform-modules-systemjs': 7.29.7
+  '@typescript-eslint/typescript-estree>minimatch': 9.0.7
+
 allowBuilds:
   '@firebase/util': true
   '@sentry/cli': true
