@@ -17,6 +17,7 @@ import { sendSuccess, sendError, sendInternalError } from '../utils/response';
 import { insertActivityLog } from '../services/auditLogService';
 import { config } from '../config/env';
 import { sendOtpMessage } from '../services/whatsapp';
+import { getPhoneLookupVariants } from '../utils/phone';
 
 // Request schemas
 const loginSchema = z.object({
@@ -59,12 +60,22 @@ export async function authRoutes(fastify: FastifyInstance) {
     try {
       const body = loginSchema.parse(request.body);
 
-      // Find user by email or phone with proper field mapping
+      // Find user by email or phone with proper field mapping.
+      // Identifier numerik dicocokkan dengan semua varian format (08xx / 62xx)
+      // karena `users.phone` disimpan format lokal sedangkan input bisa 62xx.
+      const lookupConditions = [
+        eq(users.email, body.identifier),
+        eq(users.phone, body.identifier),
+      ];
+      if (/^\d{9,15}$/.test(body.identifier)) {
+        for (const variant of getPhoneLookupVariants(body.identifier)) {
+          if (variant !== body.identifier) {
+            lookupConditions.push(eq(users.phone, variant));
+          }
+        }
+      }
       const user = await db.query.users.findFirst({
-        where: or(
-          eq(users.email, body.identifier),
-          eq(users.phone, body.identifier)
-        )
+        where: or(...lookupConditions)
       });
       let userOfficers: any[] = [];
       if (user) {
@@ -240,9 +251,11 @@ export async function authRoutes(fastify: FastifyInstance) {
     try {
       const body = requestOTPSchema.parse(request.body);
 
-      // Check if officer exists (OTP khusus petugas — lookup via officers join users)
+      // Check if officer exists (OTP khusus petugas — lookup via officers join users).
+      // `officers.phone` disimpan format 62xx; input user bisa 08xx — cocokkan
+      // semua varian format nomor (normalisasi di lookup, bukan di penyimpanan).
       const officer = await db.query.officers.findFirst({
-        where: eq(officers.phone, body.phone),
+        where: or(...getPhoneLookupVariants(body.phone).map(p => eq(officers.phone, p))),
         with: { user: true }
       });
 
@@ -350,9 +363,10 @@ export async function authRoutes(fastify: FastifyInstance) {
       // Reset attempt counter on success
       await redisConnection.del(attemptKey);
 
-      // Find officer and user (for petugas login with OTP)
+      // Find officer and user (for petugas login with OTP) — lookup phone
+      // via semua varian format (08xx / 62xx), lihat catatan request-otp.
       const officer = await db.query.officers.findFirst({
-        where: eq(officers.phone, body.phone),
+        where: or(...getPhoneLookupVariants(body.phone).map(p => eq(officers.phone, p))),
         with: { user: true }
       });
       
