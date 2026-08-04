@@ -9,6 +9,7 @@ import { addWhatsAppJob } from './queues';
 import { Errors } from '../utils/errorCatalog';
 import { AppError } from '../utils/AppError';
 import { logger } from '../config/logger';
+import { normalizePhoneTo62 } from '../utils/phone';
 
 interface WhatsAppResponse {
   message_id: string;
@@ -21,18 +22,10 @@ const PHONE_NUMBER_ID = config.WA_PHONE_NUMBER_ID;
 const ACCESS_TOKEN = config.WA_ACCESS_TOKEN;
 
 /**
- * Format phone number to WhatsApp international format (62xxx)
+ * Format phone number to WhatsApp international format (62xxx).
+ * Delegasi ke util bersama (dipakai juga untuk lookup OTP/login).
  */
-function formatPhoneNumber(phone: string): string {
-  let digits = phone.replace(/\D/g, '');
-  if (digits.startsWith('0')) {
-    digits = '62' + digits.slice(1);
-  }
-  if (!digits.startsWith('62')) {
-    digits = '62' + digits;
-  }
-  return digits;
-}
+const formatPhoneNumber = normalizePhoneTo62;
 
 /**
  * Construct Indonesian thank-you message for can collection

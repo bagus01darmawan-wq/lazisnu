@@ -233,6 +233,46 @@ describe('[POST] /v1/auth/request-otp', () => {
     expect(res.status).toBe(400);
   });
 
+  it('should match officer dengan format 08xx (normalisasi lookup, regresi D10-MF3a)', async () => {
+    // officers.phone disimpan format 62xx ("6282134536151") sedangkan user
+    // mengetik 08xx ("082134536151"). Lookup harus cocok dengan varian
+    // normalisasi — jika tidak, route return 404 USER_NOT_FOUND.
+    // resetApp: beri jatah rate limit penuh (route max 3/menit, TD-05).
+    const app = await resetApp();
+
+    (db.query.officers.findFirst as jest.Mock).mockResolvedValue({
+      id: 'officer-1',
+      phone: '6282134536151',
+      isActive: true,
+      user: { id: 'user-1', isActive: true },
+    });
+
+    const res = await request(app.server)
+      .post('/v1/auth/request-otp')
+      .send({ phone: '082134536151' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
+  it('should match officer dengan format 62xx (input langsung)', async () => {
+    const app = await resetApp();
+
+    (db.query.officers.findFirst as jest.Mock).mockResolvedValue({
+      id: 'officer-1',
+      phone: '6282134536151',
+      isActive: true,
+      user: { id: 'user-1', isActive: true },
+    });
+
+    const res = await request(app.server)
+      .post('/v1/auth/request-otp')
+      .send({ phone: '6282134536151' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
   it('should return 400 when phone is too short', async () => {
     const app = await getApp();
     const res = await request(app.server)
