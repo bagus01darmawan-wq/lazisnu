@@ -7,5 +7,9 @@
 # Daily database backup with an external lock and timeout.
 0 2 * * * /usr/bin/flock -n /run/lock/lazisnu-backup.lock /usr/bin/timeout --foreground 15m bash /opt/lazisnu/scripts/backup.sh
 
+# Staging database backup (Supabase project ngskcwwjwxsvjrswomkf) — 30 menit setelah production.
+# Env file staging: secrets/env.backup-staging (DIRECT_URL staging + R2 + prefix backups-staging).
+30 2 * * * /usr/bin/flock -n /run/lock/lazisnu-backup-staging.lock /usr/bin/timeout --foreground 15m bash -c 'BACKUP_ENV_FILE=/opt/lazisnu/secrets/env.backup-staging bash /opt/lazisnu/scripts/backup.sh'
+
 # Uptime Kuma database backup
 0 3 * * * bash /opt/lazisnu/scripts/backup-kuma.sh

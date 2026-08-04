@@ -2,3 +2,7 @@
 # Dipanggil via `bash script` agar kebal terhadap exec-bit (insiden 2026-08-04:
 # git checkout di VM menghilangkan +x → timeout gagal exec script secara senyap).
 17 * * * * root /usr/bin/flock -n /run/lock/lazisnu-backup-health.lock /usr/bin/timeout --foreground 5m bash /opt/lazisnu/scripts/backup-healthcheck.sh
+
+# Healthcheck staging backup (marker terpisah backup-status-staging/; log & alert
+# state terpisah di backups-staging/; alert Discord channel yang sama).
+18 * * * * root /usr/bin/flock -n /run/lock/lazisnu-backup-health-staging.lock /usr/bin/timeout --foreground 5m bash -c 'BACKUP_ENV_FILE=/opt/lazisnu/secrets/env.backup-staging bash /opt/lazisnu/scripts/backup-healthcheck.sh'

@@ -25,6 +25,8 @@ DUMP_TIMEOUT="${BACKUP_DUMP_TIMEOUT:-15m}"
 MIN_FREE_MB="${BACKUP_MIN_FREE_MB:-1024}"
 KEEP_DAYS="${BACKUP_KEEP_DAYS:-90}"
 R2_STATUS_KEY="${R2_STATUS_KEY:-backup-status/lazisnu-latest.json}"
+R2_PREFIX="${BACKUP_R2_PREFIX:-backups}"
+R2_ARCHIVE_PREFIX="${BACKUP_ARCHIVE_PREFIX:-archive}"
 
 # Allow the env file to use either R2_* or standard AWS credential names.
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-${R2_ACCESS_KEY_ID:-}}"
@@ -108,7 +110,7 @@ R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 BACKUP_FILE="$BACKUP_DIR/lazisnu_${TIMESTAMP}.sql.gz"
 TEMP_FILE="$BACKUP_FILE.part"
-R2_KEY="backups/$(basename "$BACKUP_FILE")"
+R2_KEY="$R2_PREFIX/$(basename "$BACKUP_FILE")"
 
 log "START backup timestamp=$TIMESTAMP free_before=${AVAILABLE_MB}MB"
 
@@ -197,7 +199,7 @@ fi
 
 # Retain the existing 90-day local policy and archive old local dumps to R2 first.
 while IFS= read -r -d '' file; do
-  ARCHIVE_KEY="archive/$(basename "$file")"
+  ARCHIVE_KEY="$R2_ARCHIVE_PREFIX/$(basename "$file")"
   if aws s3 cp "$file" "s3://$R2_BUCKET_NAME/$ARCHIVE_KEY" \
     --endpoint-url "$R2_ENDPOINT" \
     --only-show-errors >>"$LOG_FILE" 2>&1; then
