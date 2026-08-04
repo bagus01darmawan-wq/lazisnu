@@ -339,8 +339,16 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
-    // 1. Beritahu backend (best-effort, jangan gagalkan logout bila offline)
-    await authService.logout().catch(() => { });
+    // JANGAN revoke sesi di server jika biometrik aktif: refresh token yang
+    // tersimpan di Keychain (dilindungi sidik jari) harus tetap hidup agar
+    // "login biometrik setelah logout" berfungsi. Logout adalah aksi lokal;
+    // pencabutan sesi tetap bisa dilakukan dari web (logout semua perangkat)
+    // yang memicu REFRESH_REVOKED → biometrik nonaktif otomatis.
+    const biometricActive = useAuthStore.getState().biometricEnabled;
+    if (!biometricActive) {
+      // 1. Beritahu backend (best-effort, jangan gagalkan logout bila offline)
+      await authService.logout().catch(() => { });
+    }
     // 2. Bersihkan token + seluruh state klien
     await clearToken();
     resetAllClientState();
