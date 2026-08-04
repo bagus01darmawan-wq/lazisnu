@@ -47,6 +47,8 @@
 
 ## Sub-bab 05 — Frontend Web & Mobile (6 item)
 
+> Progres 2026-08-04: toggle biometrik ON sudah bekerja di Android fisik ✅ (PR #33 — keychain 8.2.0→10.0.0; sebelumnya gagal tanpa prompt). Fix logout-biometrik merged (PR #34). ⏳ Verifikasi 3 skenario (S1-S3) menunggu build APK EAS `internal-prod` (lihat SESSION-2026-08-04).
+
 - [x] **MA3**: Test login 2x dari device yang sama → hanya 1 key Redis `refresh:{userId}:{deviceId}` ✅ (2026-08-04, E2E staging: 2x verify-otp device_id sama → key user tetap 1, jti baru menimpa yang lama)
 - [x] **MF3a**: Test OTP end-to-end: request OTP → WA masuk → verify → dapat token ✅ (2026-08-04, staging) — bukti: OTP 640875 terkirim via Fonnte dan terbaca di WA user == nilai di Redis staging `otp:6282134536151`; verify-otp sukses → access+refresh token, refresh exp 2027-08-04 (365d), key `refresh:{uid}:{did}` dibuat. Artefak test dibersihkan (baseline 11 key pulih). Catatan: request pertama gagal `WA_SEND_FAILED` karena device Fonnte disconnected (error Fonnte: "request invalid on disconnected device") — teratasi setelah device di-reconnect di dashboard Fonnte; token sama antara production & staging
 - [x] **WB2**: Test: setelah login → key Redis `refresh:{userId}:{deviceId}` ada ✅ (2026-08-04 — diuji level API (staging): verify-otp dengan `device_id` → key muncul + claim `did` di refresh JWT; web login + refresh memakai endpoint yang sama dengan `device_id` dari cookie `lazisnu_device_id`, sudah diverifikasi di kode `apps/web/src/app/api/auth/refresh/route.ts`)
