@@ -23,6 +23,7 @@ ALERT_STATE_FILE="${BACKUP_ALERT_STATE_FILE:-$BACKUP_DIR/.backup-health-alert}"
 STATUS_KEY="${R2_STATUS_KEY:-backup-status/lazisnu-latest.json}"
 MAX_AGE_HOURS="${BACKUP_MAX_AGE_HOURS:-26}"
 ALERT_WEBHOOK_URL="${BACKUP_ALERT_WEBHOOK_URL:-}"
+R2_PREFIX="${BACKUP_R2_PREFIX:-backups}"
 
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-${R2_ACCESS_KEY_ID:-}}"
 export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-${R2_SECRET_ACCESS_KEY:-}}"
@@ -111,7 +112,7 @@ BACKUP_KEY="$(printf '%s' "$STATUS_JSON" | sed -n 's/.*"backup_key":"\([^"]*\)".
 BACKUP_SIZE="$(printf '%s' "$STATUS_JSON" | sed -n 's/.*"size_bytes":\([0-9][0-9]*\).*/\1/p')"
 COMPLETED_EPOCH="$(printf '%s' "$STATUS_JSON" | sed -n 's/.*"completed_at_epoch":\([0-9][0-9]*\).*/\1/p')"
 
-[[ "$BACKUP_KEY" == backups/*.sql.gz ]] || fail_health "invalid_backup_key"
+[[ "$BACKUP_KEY" == "$R2_PREFIX"/*.sql.gz ]] || fail_health "invalid_backup_key"
 [[ "$BACKUP_SIZE" =~ ^[0-9]+$ ]] || fail_health "invalid_backup_size"
 
 if ! REMOTE_SIZE="$(aws s3api head-object \
