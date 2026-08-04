@@ -88,7 +88,8 @@ export async function getOrCreateEncryptionKey(): Promise<GetKeyResult> {
   }
 
   try {
-    // 2. Cek Keychain
+    // 2. Cek Keychain. Entry lama (ditulis react-native-keychain 8.x AES-CBC)
+    //    tetap terbaca di v10 (fix v9.2.3) — jika gagal, fallback generate baru.
     const existing = await Keychain.getGenericPassword({ service: KEYCHAIN_SERVICE });
     if (existing && existing.password) {
       cachedKey = existing.password;
@@ -102,13 +103,12 @@ export async function getOrCreateEncryptionKey(): Promise<GetKeyResult> {
     crypto.getRandomValues(randomBytes);
     const keyBase64 = bufferToBase64(randomBytes);
 
-    // 4. Simpan ke Keychain (Android Keystore AES-CBC).
+    // 4. Simpan ke Keychain (Android Keystore, default cipher v10 = AES-GCM).
     //    `AFTER_FIRST_UNLOCK`: tersedia setelah device pertama kali unlock
     //    di boot. Penting untuk background task (mis. sync otomatis).
     await Keychain.setGenericPassword(KEYCHAIN_USERNAME, keyBase64, {
       service: KEYCHAIN_SERVICE,
       accessible: Keychain.ACCESSIBLE.AFTER_FIRST_UNLOCK,
-      storage: Keychain.STORAGE_TYPE.AES,
     });
 
     cachedKey = keyBase64;

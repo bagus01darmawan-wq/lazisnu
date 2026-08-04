@@ -58,7 +58,7 @@ export const STORAGE_TYPE = {
   RSA: 'KeystoreRSA',
 };
 
-export async function getGenericPassword(options?: { service?: string }): Promise<{ service: string; username: string; password: string } | null> {
+export async function getGenericPassword(options?: { service?: string; authenticationPrompt?: unknown }): Promise<{ service: string; username: string; password: string } | null> {
   state.calls.push({ method: 'getGenericPassword', args: options });
   if (state.shouldThrow) {throw state.shouldThrow;}
   return state.value;
@@ -67,7 +67,7 @@ export async function getGenericPassword(options?: { service?: string }): Promis
 export async function setGenericPassword(
   username: string,
   password: string,
-  options?: { service?: string; accessible?: string; storage?: string },
+  options?: { service?: string; accessible?: string; storage?: string; accessControl?: string; authenticationPrompt?: unknown },
 ): Promise<{ service: string }> {
   state.calls.push({ method: 'setGenericPassword', args: { username, options } });
   if (state.shouldThrow) {throw state.shouldThrow;}

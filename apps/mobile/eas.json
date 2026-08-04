@@ -22,6 +22,15 @@
         "API_URL": "https://staging-api.lazisnu.site"
       }
     },
+    "internal-prod": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "API_URL": "https://api.lazisnu.site"
+      }
+    },
     "production": {
       "android": {
         "buildType": "app-bundle"

@@ -65,10 +65,18 @@ export async function enableBiometric(refreshToken: string): Promise<boolean> {
         accessControl: Keychain.ACCESS_CONTROL.BIOMETRY_ANY,
         accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
         service: BIOMETRIC_SERVICE,
+        authenticationPrompt: {
+          title: 'Aktifkan Login Biometrik',
+          subtitle: 'Konfirmasi dengan sidik jari atau face ID',
+          cancel: 'Batal',
+        },
       },
     );
     return result !== false;
-  } catch {
+  } catch (error) {
+    // Diagnosa: error native (mis. E_CRYPTO_FAILED, KeyStoreException) —
+    // tampil di logcat / console, tidak membocorkan refresh token.
+    console.warn('[biometric] enableBiometric gagal:', error);
     return false;
   }
 }

@@ -97,7 +97,7 @@ describe('secureKey', () => {
         const args = setCall.args as { username: string; options: { service: string; accessible: string; storage: string } };
         expect(args.options.service).toBe(__TEST__.KEYCHAIN_SERVICE);
         expect(args.options.accessible).toBe(Keychain.ACCESSIBLE.AFTER_FIRST_UNLOCK);
-        expect(args.options.storage).toBe(Keychain.STORAGE_TYPE.AES);
+        // storage dihapus sejak v10 (default AES-GCM; AES-CBC deprecated)
       }
     });
   });
