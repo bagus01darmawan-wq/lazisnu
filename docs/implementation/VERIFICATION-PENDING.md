@@ -39,16 +39,17 @@
   - Test: `Session Management (04-F1) > Revoke sesi tunggal` PASS
 - [x] **Verifikasi**: Revoke-all → semua device mati kecuali current ✅
   - Test: `Session Management (04-F1) > Revoke semua sesi` PASS
-- [ ] **Verifikasi**: Login ulang device sama → hanya 1 key Redis untuk device itu (butuh Redis running)
+- [x] **Verifikasi**: Login ulang device sama → hanya 1 key Redis untuk device itu ✅ (2026-08-04, E2E di staging)
+  - Bukti: 2x login (request-otp → baca OTP dari Redis staging → verify-otp dengan `device_id=test-device-d10a-0001`) → key `refresh:39c4fc45-...:test-device-d10a-0001` tetap 1, value = jti baru (overwrite terbukti), TTL 31.535.991s ≈ 365 hari, registry `refresh:devices:{userId}` = set. Artefak test dibersihkan (key, registry member, 2 row `user_sessions`; baseline 11 key pulih)
 - [x] **Verifikasi**: `docs/DEPLOYMENT.md` diupdate — langkah Upstash diganti Redis container
 
 ---
 
 ## Sub-bab 05 — Frontend Web & Mobile (6 item)
 
-- [ ] **MA3**: Test login 2x dari device yang sama → hanya 1 key Redis `refresh:{userId}:{deviceId}`
-- [ ] **MF3a**: Test OTP end-to-end: request OTP → WA masuk → verify → dapat token
-- [ ] **WB2**: Test: setelah login → key Redis `refresh:{userId}:{deviceId}` ada
+- [x] **MA3**: Test login 2x dari device yang sama → hanya 1 key Redis `refresh:{userId}:{deviceId}` ✅ (2026-08-04, E2E staging: 2x verify-otp device_id sama → key user tetap 1, jti baru menimpa yang lama)
+- [x] **MF3a**: Test OTP end-to-end: request OTP → WA masuk → verify → dapat token ✅ (2026-08-04, staging) — bukti: OTP 640875 terkirim via Fonnte dan terbaca di WA user == nilai di Redis staging `otp:6282134536151`; verify-otp sukses → access+refresh token, refresh exp 2027-08-04 (365d), key `refresh:{uid}:{did}` dibuat. Artefak test dibersihkan (baseline 11 key pulih). Catatan: request pertama gagal `WA_SEND_FAILED` karena device Fonnte disconnected (error Fonnte: "request invalid on disconnected device") — teratasi setelah device di-reconnect di dashboard Fonnte; token sama antara production & staging
+- [x] **WB2**: Test: setelah login → key Redis `refresh:{userId}:{deviceId}` ada ✅ (2026-08-04 — diuji level API (staging): verify-otp dengan `device_id` → key muncul + claim `did` di refresh JWT; web login + refresh memakai endpoint yang sama dengan `device_id` dari cookie `lazisnu_device_id`, sudah diverifikasi di kode `apps/web/src/app/api/auth/refresh/route.ts`)
 - [ ] **Verifikasi**: Login biometrik → sidik jari → masuk app tanpa input password
 - [ ] **Verifikasi**: Toggle Off biometrik → entry Keychain terhapus
 - [ ] **Verifikasi**: `REFRESH_REVOKED` → biometrik nonaktif otomatis, arah ke login
