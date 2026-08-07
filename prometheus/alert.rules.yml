@@ -78,15 +78,18 @@ groups:
             Instance: {{ $labels.instance }}
 
       # ──────────────────────────────────────────
-      # Backend Down — tidak merespons (target up == 0)
+      # Backend Down — SEMUA target backend tidak merespons (up == 0)
+      # Blue-green: satu warna idle sengaja down (tidak di-scrape) → rule ini
+      # hanya firing jika kedua target (blue + green) down sekaligus.
       # ──────────────────────────────────────────
       - alert: BackendDown
-        expr: up{job="lazisnu-backend"} == 0
+        expr: sum(up{job="lazisnu-backend"}) == 0
         for: 1m
         labels:
           severity: critical
         annotations:
           summary: "Backend Lazisnu tidak merespons"
           description: >
-            Target {{ $labels.instance }} tidak bisa di-scrape selama lebih dari 1 menit.
-            Cek: docker ps, docker logs lazisnu-backend-1
+            Semua target backend (blue-backend:3001 + green-backend:3101) tidak
+            bisa di-scrape selama lebih dari 1 menit.
+            Cek: docker ps, docker logs blue-backend / green-backend

@@ -76,8 +76,28 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=15d"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  alertmanager:
+    image: prom/alertmanager
+    restart: unless-stopped
+    user: "65534:65534"  # nobody user default di prom/alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
+    env_file:
+      - .env.alertmanager   # DISCORD_WEBHOOK_PROMETHEUS (di VM, chmod 600, TIDAK di-commit)
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./alertmanager-data:/alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
     depends_on:
-      - backend
+      - prometheus
     logging:
       driver: json-file
       options:
