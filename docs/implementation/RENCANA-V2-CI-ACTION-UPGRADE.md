@@ -145,14 +145,14 @@ File: action #4, #5, #6
 
 Untuk tiap phase, SEMUA ini harus terpenuhi:
 
-- [ ] **Annotation hilang**: tidak ada lagi `Node.js 20 actions are deprecated` di log/annotation semua job
-- [ ] **CI hijau**: job yang terpengaruh pass (tidak boleh ada job merah baru)
-- [ ] **Tidak ada regresi test**: `lint-and-typecheck` — 54/54 backend unit + mobile test pass; migration orphan check pass
-- [ ] **Versi pnpm benar di log**: tepat `10.33.2` — diambil dari `packageManager` (v5.0.0 melarang `version:` eksplisit bersamaan, jadi tidak ada lagi opsi "10.x terbaru" dari input)
-- [ ] **Urutan setup terjaga**: tidak ada error `pnpm: command not found` / kegagalan `pnpm store path` di step setup-node
-- [ ] **Image GHCR benar**: `ghcr.io/.../backend:latest` & `:sha` ter-push, ukuran/waktu build wajar (tidak error attestation/provenance)
-- [ ] **Staging tetap hidup**: `staging-api.lazisnu.site/health` → 200, `staging.lazisnu.site` → 307
-- [ ] **Production tidak tersentuh**: tidak ada trigger tag `v*`, `deploy` job tetap skip
+- [x] **Annotation hilang**: tidak ada lagi `Node.js 20 actions are deprecated` di log/annotation semua job — **terverifikasi**: 0 annotation di run final 30662371949
+- [x] **CI hijau**: job yang terpengaruh pass (tidak boleh ada job merah baru) — **terverifikasi**: lint-and-typecheck 1m43s, build-image 3m31s, deploy-staging 54s, deploy skip
+- [x] **Tidak ada regresi test**: `lint-and-typecheck` — 54/54 backend unit + mobile test pass; migration orphan check pass
+- [x] **Versi pnpm benar di log**: tepat `10.33.2` — diambil dari `packageManager` (v5.0.0 melarang `version:` eksplisit bersamaan, jadi tidak ada lagi opsi "10.x terbaru" dari input)
+- [x] **Urutan setup terjaga**: tidak ada error `pnpm: command not found` / kegagalan `pnpm store path` di step setup-node — **terverifikasi di log**: `pnpm store path` ter-resolve, auto-cache hit
+- [x] **Image GHCR benar**: `ghcr.io/.../backend:latest` & `:sha` ter-push, ukuran/waktu build wajar (tidak error attestation/provenance)
+- [x] **Staging tetap hidup**: `staging-api.lazisnu.site/health` → 200, `staging.lazisnu.site` → 307 — **terverifikasi 2026-08-01**
+- [x] **Production tidak tersentuh**: tidak ada trigger tag `v*`, `deploy` job tetap skip
 
 ---
 
