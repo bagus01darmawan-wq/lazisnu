@@ -91,11 +91,15 @@ services:
     env_file:
       - .env.alertmanager   # DISCORD_WEBHOOK_PROMETHEUS (di VM, chmod 600, TIDAK di-commit)
     volumes:
-      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./alertmanager/alertmanager.yml.tmpl:/etc/alertmanager/alertmanager.yml.tmpl:ro
       - ./alertmanager-data:/alertmanager
+    # Alertmanager TIDAK me-substitusi env ${VAR} di config (v0.33) → template
+    # + sed di entrypoint: ganti placeholder __DISCORD_WEBHOOK__ dengan nilai
+    # env, tulis ke /tmp (writable oleh nobody), lalu jalankan alertmanager.
     command:
-      - "--config.file=/etc/alertmanager/alertmanager.yml"
-      - "--storage.path=/alertmanager"
+      - "sh"
+      - "-c"
+      - "sed 's|__DISCORD_WEBHOOK__|'\"$DISCORD_WEBHOOK_PROMETHEUS\"'|' /etc/alertmanager/alertmanager.yml.tmpl > /tmp/alertmanager.yml && exec alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager"
     depends_on:
       - prometheus
     logging:

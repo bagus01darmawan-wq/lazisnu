@@ -1,7 +1,8 @@
 # Alertmanager configuration — Lazisnu
-# Notifikasi alert Prometheus → Discord webhook (channel khusus Prometheus).
-# Webhook URL TIDAK di-commit: diambil dari env DISCORD_WEBHOOK_PROMETHEUS
-# (didefinisikan di /opt/lazisnu/.env.alertmanager di VM, chmod 600).
+# Template: placeholder __DISCORD_WEBHOOK__ diganti nilai env
+# DISCORD_WEBHOOK_PROMETHEUS oleh sed di entrypoint container
+# (Alertmanager v0.33 tidak me-substitusi ${VAR} di config file).
+# Webhook URL TIDAK di-commit — disimpan di /opt/lazisnu/.env.alertmanager (chmod 600).
 
 global:
   resolve_timeout: 5m
@@ -16,7 +17,7 @@ route:
 receivers:
   - name: 'discord'
     discord_configs:
-      - webhook_url: '${DISCORD_WEBHOOK_PROMETHEUS}'
+      - webhook_url: '__DISCORD_WEBHOOK__'
         # Title embed: [FIRING:1] AlertName (severity)
         title: '{{ template "discord.default.title" . }}'
         message: '{{ template "discord.default.message" . }}'
