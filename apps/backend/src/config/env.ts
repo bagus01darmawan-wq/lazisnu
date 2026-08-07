@@ -57,9 +57,6 @@ const envSchema = z.object({
   // Internal API Key (for scheduler/internal routes)
   INTERNAL_API_KEY: z.string().optional(),
 
-  // Sentry
-  SENTRY_DSN: z.string().optional(),
-
   // Rollbar
   ROLLBAR_ACCESS_TOKEN: z.string().optional(),
 

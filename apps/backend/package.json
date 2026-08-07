@@ -32,7 +32,6 @@
     "@fastify/swagger": "^8.14.0",
     "@fastify/swagger-ui": "^3.0.0",
     "@lazisnu/shared-types": "file:../../packages/shared-types",
-    "@sentry/node": "^10.68.0",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.74.1",
     "dotenv": "^16.4.5",
