@@ -5,7 +5,7 @@
 > Setiap item sudah dicek di kode dan **implementasinya benar** — hanya perlu konfirmasi runtime.
 > Centang `[x]` setelah diverifikasi langsung di VM.
 >
-> **Total: 25 ⚠️ + 14 ✅ verified** | Sub-bab 02: 1+2 | 03: 2+3 | 04: 5+0 | 05: 6+0 | 06: 4+4 | 07: 7+5
+> **Total: 25 ⚠️ + 17 ✅ verified** | Sub-bab 02: 1+2 | 03: 2+3 | 04: 5+0 | 05: 6+0 | 06: 4+4 | 07: 7+5 (+3 resolved 2026-08-07: cleanup volume Kuma, cron mingguan, hapus Sentry total)
 
 ---
 
@@ -114,3 +114,6 @@
 - [x] **08-B1**: `docs/SOP-BACKUP-RESTORE.md` — SOP backup & restore terdokumentasi
 - [x] **07-E2-3**: Test restore backup — SOP sudah ada di `docs/SOP-BACKUP-RESTORE.md`, eksekusi test restore perlu staging DB
 - [x] **07-C2-1**: `docs/SECURITY.md` — runbook rotasi secret sudah ada
+- [x] **A1-UptimeKuma**: Cleanup volume named `uptime-kuma-data` ✅ (verifikasi 2026-08-07 via SSH: `docker volume ls` kosong — volume sudah dihapus Sesi 05; container `uptime-kuma` up 6 days healthy)
+- [x] **Cron mingguan VM**: `vm-cleanup-weekly.sh` → `/etc/cron.weekly/lazisnu-cleanup` ✅ (verifikasi 2026-08-07: `diff` dengan repo IDENTIK; eksekusi pertama 2026-08-02 06:47 sukses — free disk 4632M → 4869M, delta **+237M**: apt 1M + snapd cache 509M + journal 8M)
+- [x] **Hapus Sentry total** ✅ (2026-08-07) — Rollbar sudah verified di production + Discord via Hookdeck, sehingga dual fail-safe Sentry dicabut penuh: backend (`@sentry/node` + `src/config/sentry.ts` + `SENTRY_DSN` di `env.ts` + `initSentry()` di `app.ts`) **dan** web (`@sentry/nextjs` + `next.config.ts:withSentryConfig` + 3 config `sentry.{client,server,edge}.config.ts` + `NEXT_PUBLIC_SENTRY_DSN`). Docs ikut dibersihkan (`DEPLOYMENT.md`, `.agents/rules/09-environment-variables.md`). Sisa ref `@sentry/*@7.77.0` di `pnpm-lock.yaml` adalah deps transitif **`eas-cli`** (mobile tooling), bukan aplikasi — tidak dihapus. Typecheck + build lolos.

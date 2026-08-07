@@ -36,7 +36,7 @@
 - **Fix `docker-compose.yml`**: (1) hapus `user: "1000:1000"` — image Kuma startup `chown` butuh root/CAP_CHOWN, non-root → restart loop; (2) healthcheck ganti `wget` → `curl` (wget tidak ada di image)
 - **Script baru**: `scripts/kuma-setup-status-page.sh` — idempotent setup status page (status_page + group + monitor_group)
 - **Konteks unik**: DNS domain di Hostinger (bukan Cloudflare); nginx container lama baca inode nginx.conf lama → butuh recreate container (bukan sekadar reload) — konsisten dgn backlog #6 mount bind-file
-- ⏳ **Pending kecil**: cleanup volume named lama `uptime-kuma-data` (≈2.7MB duplikat — data sudah di bind mount) mulai **2026-08-02 00:00 WIB** (24 jam setelah container compose start 2026-08-01 00:00 WIB). Perintah benar: `docker volume rm uptime-kuma-data`. ⚠️ JANGAN `docker rm uptime-kuma` — container lama sudah dihapus saat migrasi; nama itu sekarang dipakai container compose yang aktif. Plus: commit+push perubahan kode (user memilih "nanti saja")
+- ✅ **Pending kecil SELESAI** — cleanup volume named lama `uptime-kuma-data` (≈2.7MB duplikat, data sudah di bind mount): **sudah dihapus** (Sesi 05 line 51 + verifikasi 2026-08-07: `docker volume ls` kosong, container `uptime-kuma` up 6 days healthy). ⚠️ Catatan: JANGAN `docker rm uptime-kuma` — container lama sudah dihapus saat migrasi; nama itu dipakai container compose aktif. Commit+push perubahan kode (dulu "nanti saja") sudah tuntas di sesi-sesi berikutnya (PR #39, runbook migrasi, dsb — working tree bersih)
 
 ---
 

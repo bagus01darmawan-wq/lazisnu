@@ -175,7 +175,6 @@ WA_PROVIDER=fonnte
 WA_BUSINESS_API_URL=https://api.fonnte.com
 WA_ACCESS_TOKEN=<token>
 
-SENTRY_DSN=<dsn-url>
 ENVEOF
 
 # Backup credentials: /opt/lazisnu/.env.backup

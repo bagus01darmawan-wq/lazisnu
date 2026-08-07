@@ -65,8 +65,8 @@ PORT=3001
 NODE_ENV=development
 # nilai: development | staging | production
 
-# ── Sentry (backend error monitoring) ────────────────────────────
-SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
+# ── Error Monitoring (Rollbar) ───────────────────────────────────
+ROLLBAR_ACCESS_TOKEN=<rollbar-access-token>
 ```
 
 ---
@@ -107,11 +107,6 @@ API_URL=http://localhost:3001
 
 # ── App ───────────────────────────────────────────────────────────
 NEXT_PUBLIC_APP_NAME=Lazisnu Infaq System
-
-# ── Sentry (web error monitoring) ────────────────────────────────
-NEXT_PUBLIC_SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
-SENTRY_ORG=lazisnu
-SENTRY_PROJECT=lazisnu-web
 ```
 
 ---
