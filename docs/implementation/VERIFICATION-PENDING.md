@@ -5,13 +5,13 @@
 > Setiap item sudah dicek di kode dan **implementasinya benar** — hanya perlu konfirmasi runtime.
 > Centang `[x]` setelah diverifikasi langsung di VM.
 >
-> **Total: 25 ⚠️ + 17 ✅ verified** | Sub-bab 02: 1+2 | 03: 2+3 | 04: 5+0 | 05: 6+0 | 06: 4+4 | 07: 7+5 (+3 resolved 2026-08-07: cleanup volume Kuma, cron mingguan, hapus Sentry total)
+> **Total: 23 ⚠️ + 19 ✅ verified** | Sub-bab 02: 0+3 | 03: 2+3 | 04: 5+0 | 05: 6+0 | 06: 4+4 | 07: 6+5 (+3 resolved 2026-08-07: cleanup volume Kuma, cron mingguan, hapus Sentry total)
 
 ---
 
 ## Sub-bab 02 — Backend Core (1 ⚠️ + 2 ✅)
 
-- [ ] **C6**: Semua route masih berfungsi dengan 4 role valid
+- [x] **C6**: Semua route masih berfungsi dengan 3 role valid ✅ (2026-08-07 — teks dikoreksi dari "4 role" per D-11; verifikasi production sudah tuntas 2026-08-03 di Sesi 03/D7: matriks 13 endpoint 3 role sesuai RBAC, deploy staging + production v1.0.0)
 - [x] **D5**: Output log di production adalah JSON (bukan pretty-print)
 - [x] **D6**: Field `authorization`, `password`, `otp` tidak muncul di log
 
@@ -89,7 +89,7 @@
 - [x] **D1-1/D1-2/D1-3**: Uptime Kuma aktif + monitor /health/ready + notifikasi Discord ✅ (Sesi 30 Lanjutan 6: 4 monitor + Discord binding)
 - [x] **D2-4**: Verifikasi token error tracking backend aktif di dashboard ✅ (2026-08-02: **migrated Sentry → Rollbar**. Alasan: Sentry free tidak punya Discord native (berbayar Team plan); Rollbar free punya webhook notification ke Discord via Hookdeck. Setup: (1) `rollbar ^3.1.0` installed di backend; (2) config baru `src/config/rollbar.ts` (init, captureError, scrubFields `password/secret/creditCard/authorization/otp`); (3) `initRollbar()` + `captureError()` hook di `app.ts` error handler branch 500; (4) `ROLLBAR_ACCESS_TOKEN` ditambahkan ke schema `env.ts`; (5) `SENTRY_DSN` dihapus dari `.env` VM, `ROLLBAR_ACCESS_TOKEN=aa5b0cfd...` ditanam; (6) token terverifikasi via test node lokal → `ROLLBAR_OK` UUID `631a8867-926e-41a7-db63-e229c01f8e8f` masuk Rollbar dashboard; (7) Hookdeck pipeline `rollbar-to-discord` ter-setup (source `src_4wdr88dwy46kj8` URL `https://hkdk.events/4wdr88dwy46kj8`, transform `rollbar-to-discord`, connection `web_10Rw9dMZEPSx` ke destination Discord existing) — test mock payload `new_item` → 200 SUCCESS + attempt SUCCESSFUL → embed `🔴 🆕 NEW ITEM` masuk Discord channel. ⏳ Tersisa: (a) setup Rollbar Webhook Notification di UI Rollbar (Settings → Notifications → Webhook, URL `https://hkdk.events/4wdr88dwy46kj8`, rule `new_item`) — butuh user buka dashboard; (b) deploy code Rollbar ke image production via PR merge ke main + CI blue-green deploy — code typecheck PASS, tinggal build & deploy. Catatan lama Sentry: project `lazisnu-backend` di org `lazisnupng` (via API) masih ada tetapi tidak terpakai; `@sentry/node` package sementara dipertahankan di `package.json` (dual fail-safe), bisa dihapus setelah Rollbar verified di production.)
 - [x] **E1-4**: Security headers (X-Frame-Options, HSTS) di nginx.conf ✅
-- [ ] **E2-1**: Cek Supabase daily backup di dashboard
+- [x] **E2-1**: Cek Supabase daily backup di dashboard ✅ (2026-08-07 — **N/A**: Supabase free tier tidak punya managed backup/PITR; gap sudah ter-cover oleh `backup.sh` → R2 offsite harian + healthcheck + alert Discord + restore test teruji 2x, lihat Sesi 05)
 - [x] **E2-4**: Set R2 lifecycle rule: retensi 30 hari ✅ (2026-08-01, dashboard Cloudflare oleh user: `backups/` 30d, `kuma/` 30d, `lazisnu_` root 30d; `archive/` & `secrets/` tanpa rule — aman. API tidak bisa verifikasi ulang: token tanpa izin lifecycle)
 - [x] **E2-5**: Test restore backup ke database dev → `pg_restore` + verifikasi data ✅ (2026-08-01: restore `lazisnu_20260801_021319.sql.gz` ke postgres:17-alpine throwaway — **0 ERROR**, 12 tabel, data terbaca: users 10 / collections 48 / sessions 263 / officers 8; container dihapus. Catatan: dump plain SQL → restore via `psql`, setara verifikasi restorabilitas)
 
