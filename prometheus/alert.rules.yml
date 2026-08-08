@@ -19,22 +19,24 @@ groups:
             Instance: {{ $labels.instance }}
 
       # ──────────────────────────────────────────
-      # Memory (Heap) > 85% dari heap_size_limit
-      # Metric: nodejs_heap_size_used_bytes / nodejs_heap_size_total_bytes
+      # Memory (Heap) > ~85% dari heap_size_limit
+      # 2026-08-08: rumus lama used/total dihapus karena false positive —
+      # nodejs_heap_size_total_bytes = heap yang sedang di-commit V8 (bukan limit),
+      # sehingga rasio used/total hampir selalu 75-90% meski heap sehat.
+      # Dipakai ambang absolut: heap_size_limit V8 = ~2052MB, 85% ≈ 1700MB.
+      # Metric: nodejs_heap_size_used_bytes (prom-client default)
       # ──────────────────────────────────────────
       - alert: HighHeapMemoryUsage
-        expr: >
-          (nodejs_heap_size_used_bytes{job="lazisnu-backend"}
-          / nodejs_heap_size_total_bytes{job="lazisnu-backend"}) * 100 > 85
+        expr: nodejs_heap_size_used_bytes{job="lazisnu-backend"} > 1700e6
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "Heap memory tinggi ({{ $value | printf \"%.1f\" }}%)"
+          summary: "Heap memory tinggi ({{ $value | humanize1024 }})"
           description: >
-            Heap memory backend Lazisnu melebihi 85% dari total heap selama 5 menit.
-            Pertimbangkan restart atau investigasi memory leak.
-            Instance: {{ $labels.instance }}
+            Heap memory backend Lazisnu melebihi ~85% dari heap_size_limit
+            (~2GB) selama 5 menit. Pertimbangkan restart atau investigasi
+            memory leak. Instance: {{ $labels.instance }}
 
       # ──────────────────────────────────────────
       # HTTP error rate > 5% dalam 5 menit terakhir

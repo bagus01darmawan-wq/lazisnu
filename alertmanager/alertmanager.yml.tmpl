@@ -18,6 +18,21 @@ receivers:
   - name: 'discord'
     discord_configs:
       - webhook_url: '__DISCORD_WEBHOOK__'
-        # Title embed: [FIRING:1] AlertName (severity)
-        title: '{{ template "discord.default.title" . }}'
-        message: '{{ template "discord.default.message" . }}'
+        # Template custom (bukan default bawaan) — default menyertakan link
+        # generator Prometheus (http://<container-id>:9090) yang tidak bisa
+        # diakses publik. Diganti link dashboard Grafana.
+        title: '{{ if eq .Status "firing" }}[FIRING]{{ else }}[RESOLVED]{{ end }} {{ (index .Alerts 0).Labels.alertname }}'
+        message: |
+          Alerts {{ .Status }}:
+          {{ range .Alerts }}
+          Labels:
+          alertname = {{ .Labels.alertname }}
+          instance = {{ .Labels.instance }}
+          job = {{ .Labels.job }}
+          severity = {{ .Labels.severity }}
+          Annotations:
+          description = {{ .Annotations.description }}
+          summary = {{ .Annotations.summary }}
+
+          Dashboard: https://grafana.lazisnu.site/d/5e2062b3-7e43-456d-9b74-59a3a021fcda/lazisnu-overview
+          {{ end }}
