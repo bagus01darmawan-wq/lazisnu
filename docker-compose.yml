@@ -98,9 +98,12 @@ services:
     # env, tulis ke /tmp (writable oleh nobody), lalu jalankan alertmanager.
     # Wajib $$VAR (bukan $VAR) agar compose TIDAK meng-expand dari shell host —
     # nilai dibaca dari env_file .env.alertmanager oleh shell di dalam container.
-    command:
+    # Image prom/alertmanager punya ENTRYPOINT /bin/alertmanager → override
+    # entrypoint ke sh -c agar sed jalan dulu.
+    entrypoint:
       - "sh"
       - "-c"
+    command:
       - "sed 's|__DISCORD_WEBHOOK__|'\"$${DISCORD_WEBHOOK_PROMETHEUS}\"'|' /etc/alertmanager/alertmanager.yml.tmpl > /tmp/alertmanager.yml && exec alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager"
     depends_on:
       - prometheus
