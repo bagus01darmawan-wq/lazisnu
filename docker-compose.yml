@@ -175,8 +175,10 @@ services:
   # Uptime Kuma — self-hosted monitoring (Lapis 3, Sesi 31)
   # Bind mount data ke host untuk backup langsung (lihat scripts/backup-kuma.sh)
   # Port 127.0.0.1 only — akses via SSH tunnel atau nginx reverse proxy (Lapis 4b)
+  # Tag :2 (v2.x) sejak 2026-08-08 — v1.23.17 punya bug notifikasi hilang tanpa
+  # retry (louislam/uptime-kuma#6046); v2 memperbaiki pengiriman notif UP/DOWN.
   uptime-kuma:
-    image: louislam/uptime-kuma:1
+    image: louislam/uptime-kuma:2
     container_name: uptime-kuma
     restart: unless-stopped
     # JANGAN set `user:` — image ini startup chown ke node:node (butuh root/
