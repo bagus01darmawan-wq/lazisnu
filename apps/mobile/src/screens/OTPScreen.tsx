@@ -13,13 +13,14 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useAuthStore} from '../stores';
 import {AppButton, AppCard, AppHeader} from '../components/ui';
 import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
+import type {AuthNavigationProp} from '../navigation/types';
 
 type OTPRoute = RouteProp<{OTP: {phone: string}}, 'OTP'>;
 
 const EMPTY_OTP = ['', '', '', '', '', ''];
 
 const OTPScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<AuthNavigationProp>();
   const {phone} = useRoute<OTPRoute>().params;
   const {verifyOTP, requestOTP, isLoading, error, clearError} = useAuthStore();
   const [digits, setDigits] = useState([...EMPTY_OTP]);
@@ -98,11 +99,7 @@ const OTPScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <AppHeader
-        variant={'stack'}
-        title={'Verifikasi OTP'}
-        onBack={() => navigation.goBack()}
-      />
+      <AppHeader variant={'stack'} title={'Verifikasi OTP'} onBack={() => navigation.goBack()} />
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -111,9 +108,7 @@ const OTPScreen: React.FC = () => {
             <Icon name={'whatsapp'} size={38} color={Colors.brand.whatsapp} />
           </View>
           <Text style={styles.title}>Masukkan kode OTP</Text>
-          <Text style={styles.subtitle}>
-            Kode 6 digit telah dikirim melalui WhatsApp ke
-          </Text>
+          <Text style={styles.subtitle}>Kode 6 digit telah dikirim melalui WhatsApp ke</Text>
           <Text style={styles.phone}>{phone}</Text>
 
           <AppCard variant={'elevated'} style={styles.otpCard}>
@@ -179,9 +174,7 @@ const OTPScreen: React.FC = () => {
             )}
           </AppCard>
 
-          <Text style={styles.helpText}>
-            Jangan berikan kode OTP kepada siapa pun.
-          </Text>
+          <Text style={styles.helpText}>Jangan berikan kode OTP kepada siapa pun.</Text>
         </View>
       </KeyboardAvoidingView>
     </View>

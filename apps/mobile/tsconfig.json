@@ -2,10 +2,20 @@
   "extends": "@react-native/typescript-config/tsconfig.json",
   "compilerOptions": {
     "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
     "baseUrl": ".",
     "skipLibCheck": true,
     "types": ["jest", "node"]
   },
-  "include": ["src/**/*", "index.js", "__tests__/**/*.ts", "__tests__/**/*.tsx", "__tests__/**/*.d.ts", "__mocks__/**/*.ts"],
+  "include": [
+    "src/**/*",
+    "index.js",
+    "__tests__/**/*.ts",
+    "__tests__/**/*.tsx",
+    "__tests__/**/*.d.ts",
+    "__mocks__/**/*.ts"
+  ],
   "exclude": ["node_modules"]
 }

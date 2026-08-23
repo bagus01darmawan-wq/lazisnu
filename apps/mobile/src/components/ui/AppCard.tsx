@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle } from 'react-native';
-import { Colors, Radius, Shadows, Spacing } from '../../theme';
+import {View, StyleSheet, ViewStyle} from 'react-native';
+import {Colors, Radius, Shadows, Spacing} from '../../theme';
 
 type AppCardVariant = 'default' | 'elevated' | 'dark' | 'glass';
 
@@ -10,11 +10,7 @@ type AppCardProps = {
   style?: ViewStyle | ViewStyle[];
 };
 
-export const AppCard: React.FC<AppCardProps> = ({
-  children,
-  variant = 'default',
-  style,
-}) => {
+export const AppCard: React.FC<AppCardProps> = ({children, variant = 'default', style}) => {
   const getVariantStyle = () => {
     switch (variant) {
       case 'default':
@@ -28,11 +24,7 @@ export const AppCard: React.FC<AppCardProps> = ({
     }
   };
 
-  return (
-    <View style={[styles.container, getVariantStyle(), style]}>
-      {children}
-    </View>
-  );
+  return <View style={[styles.container, getVariantStyle(), style]}>{children}</View>;
 };
 
 const styles = StyleSheet.create({

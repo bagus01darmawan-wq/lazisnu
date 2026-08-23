@@ -1,4 +1,4 @@
-import { Colors } from './colors';
+import {Colors} from './colors';
 
 export const Typography = {
   display: {
@@ -47,33 +47,5 @@ export const Typography = {
     fontSize: 16,
     fontWeight: '700' as const,
     letterSpacing: 0.5,
-  },
-
-  // Alias sementara
-  h1: {
-    fontSize: 24,
-    fontWeight: '800' as const,
-    color: Colors.text.primary,
-    letterSpacing: -0.5,
-  },
-  h2: {
-    fontSize: 20,
-    fontWeight: '700' as const,
-    color: Colors.text.primary,
-  },
-  h3: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: Colors.text.primary,
-  },
-  body1: {
-    fontSize: 16,
-    fontWeight: '400' as const,
-    color: Colors.text.primary,
-  },
-  body2: {
-    fontSize: 14,
-    fontWeight: '400' as const,
-    color: Colors.text.secondary,
   },
 };

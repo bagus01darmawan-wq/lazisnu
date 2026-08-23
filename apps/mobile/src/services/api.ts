@@ -1,23 +1,30 @@
 // Mobile API Service - Lazisnu Collector App
 
-import { MMKV } from 'react-native-mmkv';
-import { Platform } from 'react-native';
-import { ApiResponse, Task, AuthLoginResponse, MeResponse, DashboardResponse, TaskListResponse, ProfileResponse, HistoryResponse, BatchSyncResponse, BatchCollectionRequestItem } from '@lazisnu/shared-types';
-import { captureAuthEvent } from '../config/crashlytics';
+import 'react-native-get-random-values';
+import {MMKV} from 'react-native-mmkv';
+import {Platform} from 'react-native';
+import {
+  ApiResponse,
+  Task,
+  AuthLoginResponse,
+  MeResponse,
+  DashboardResponse,
+  TaskListResponse,
+  ProfileResponse,
+  HistoryResponse,
+  BatchSyncResponse,
+  BatchCollectionRequestItem,
+} from '@lazisnu/shared-types';
+import {captureAuthEvent} from '../config/crashlytics';
 
 // Instance dibuat setelah encryption key tersedia. Membuka file terenkripsi
 // tanpa key lebih dulu dapat membuat MMKV menganggap file corrupt dan meresetnya.
 const AUTH_STORAGE_ID = '@lazisnu/auth-token';
 let storage: MMKV | null = null;
 
-export function initializeAuthStorage(
-  encryptionKey: string,
-  migrateUnencrypted = false,
-): MMKV {
+export function initializeAuthStorage(encryptionKey: string, migrateUnencrypted = false): MMKV {
   const instance = new MMKV(
-    migrateUnencrypted
-      ? {id: AUTH_STORAGE_ID}
-      : {id: AUTH_STORAGE_ID, encryptionKey},
+    migrateUnencrypted ? {id: AUTH_STORAGE_ID} : {id: AUTH_STORAGE_ID, encryptionKey},
   );
 
   if (migrateUnencrypted) {
@@ -80,17 +87,25 @@ export const clearToken = async (): Promise<void> => {
 
 const DEVICE_ID_KEY = 'device_id';
 
+/* eslint-disable no-bitwise */
 function generateUUID(): string {
-  // react-native-get-random-values polyfills crypto.getRandomValues
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = (Math.random() * 16) | 0;
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-  });
+  // crypto.getRandomValues dipasang oleh polyfill react-native-get-random-values.
+  // ID perangkat TIDAK boleh memakai Math.random() yang bisa diprediksi (standar Bab 2.2).
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  // Set versi 4 dan varian RFC 4122 agar formatnya UUID yang valid.
+  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
+  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+  const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
+/* eslint-enable no-bitwise */
 
 export function getOrCreateDeviceId(): string {
   const existing = getAuthStorage().getString(DEVICE_ID_KEY);
-  if (existing) return existing;
+  if (existing) {
+    return existing;
+  }
 
   const newId = generateUUID();
   getAuthStorage().set(DEVICE_ID_KEY, newId);
@@ -126,9 +141,13 @@ export function setSessionExpiredHandler(handler: (() => void) | null) {
 
 function notifySessionExpired() {
   // Telemetri post-rollout: lacak frekuensi SESSION_EXPIRED per user/device
-  captureAuthEvent('session_expired', { source: 'refresh_failed' });
+  captureAuthEvent('session_expired', {source: 'refresh_failed'});
   if (sessionExpiredHandler) {
-    try { sessionExpiredHandler(); } catch (e) { /* swallow */ }
+    try {
+      sessionExpiredHandler();
+    } catch (e) {
+      /* swallow */
+    }
   }
 }
 
@@ -142,17 +161,71 @@ function onRefreshFailed() {
   refreshSubscribers = [];
 }
 
-type RefreshResult = { token: string | null; networkError: boolean };
+export const DEFAULT_API_TIMEOUT_MS = 15_000;
+
+function createTimeoutSignal(timeoutMs: number, customSignal?: AbortSignal | null) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  if (customSignal) {
+    customSignal.addEventListener('abort', () => {
+      clearTimeout(timeoutId);
+      controller.abort();
+    });
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup: () => clearTimeout(timeoutId),
+  };
+}
+
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs = DEFAULT_API_TIMEOUT_MS,
+): Promise<Response> {
+  const {signal, cleanup} = createTimeoutSignal(timeoutMs, options.signal);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal,
+    });
+    return response;
+  } finally {
+    cleanup();
+  }
+}
+
+function isTimeoutError(error: unknown): boolean {
+  if (error instanceof Error) {
+    return (
+      error.name === 'AbortError' ||
+      error.message.toLowerCase().includes('timeout') ||
+      error.message.toLowerCase().includes('aborted')
+    );
+  }
+  return (
+    String(error).toLowerCase().includes('timeout') ||
+    String(error).toLowerCase().includes('aborted')
+  );
+}
+
+type RefreshResult = {token: string | null; networkError: boolean};
 
 async function refreshAccessToken(): Promise<RefreshResult> {
   const refreshToken = getRefreshToken();
-  if (!refreshToken) {return { token: null, networkError: false };}
+  if (!refreshToken) {
+    return {token: null, networkError: false};
+  }
 
   try {
-    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/auth/refresh`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({refresh_token: refreshToken}),
     });
 
     const data = await response.json();
@@ -163,19 +236,19 @@ async function refreshAccessToken(): Promise<RefreshResult> {
       if (data.data.refresh_token) {
         setRefreshToken(data.data.refresh_token);
       }
-      return { token: newToken, networkError: false };
+      return {token: newToken, networkError: false};
     }
     // Refresh gagal: hanya bersihkan token jika server secara eksplisit
-    // menolak kredensial (401/403). Untuk 5xx/network, biarkan token
+    // menolak kredensial (401/403). Untuk 5xx/network/timeout, biarkan token
     // agar retry berikutnya masih bisa mencoba (lihat review P3).
     if (response.status === 401 || response.status === 403) {
       await clearToken();
     }
-    return { token: null, networkError: response.status >= 500 };
+    return {token: null, networkError: response.status >= 500};
   } catch {
-    // Network error / JSON parse error — JANGAN clearToken di sini.
+    // Network error / timeout / JSON parse error — JANGAN clearToken di sini.
     // Token masih bisa valid; user bisa retry saat online.
-    return { token: null, networkError: true };
+    return {token: null, networkError: true};
   }
 }
 
@@ -184,32 +257,35 @@ async function refreshAccessToken(): Promise<RefreshResult> {
 const apiRequest = async <T>(
   endpoint: string,
   options: RequestInit = {},
-  _isRetry = false
+  _isRetry = false,
 ): Promise<ApiResponse<T>> => {
   try {
     const token = await getToken();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(token ? {Authorization: `Bearer ${token}`} : {}),
       ...(options.headers as Record<string, string> | undefined),
     };
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetchWithTimeout(`${API_BASE_URL}${endpoint}`, {
       ...options,
       headers,
     });
 
     // ── Handle 401: coba refresh token, lalu retry (kecuali endpoint auth/login/otp) ──
-    const isAuthEndpoint = endpoint.includes('/auth/login') || endpoint.includes('/auth/request-otp') || endpoint.includes('/auth/verify-otp');
+    const isAuthEndpoint =
+      endpoint.includes('/auth/login') ||
+      endpoint.includes('/auth/request-otp') ||
+      endpoint.includes('/auth/verify-otp');
     if (response.status === 401 && !_isRetry && !isAuthEndpoint) {
       if (isRefreshing) {
         // Tunggu refresh yang sedang berjalan — Daftarkan 2 jalur callback
         // agar subscriber tidak hang saat refresh gagal.
-        return new Promise<ApiResponse<T>>((resolve) => {
+        return new Promise<ApiResponse<T>>(resolve => {
           refreshSubscribers.push({
-            onSuccess: async (newToken) => {
+            onSuccess: async newToken => {
               try {
-                const retryResponse = await fetch(`${API_BASE_URL}${endpoint}`, {
+                const retryResponse = await fetchWithTimeout(`${API_BASE_URL}${endpoint}`, {
                   ...options,
                   headers: {
                     'Content-Type': 'application/json',
@@ -219,15 +295,23 @@ const apiRequest = async <T>(
                 });
                 const retryData = await retryResponse.json();
                 if (retryResponse.ok) {
-                  resolve({ success: true, data: retryData.data || retryData });
-        } else {
-                  resolve({ success: false, error: { code: 'UNAUTHORIZED', message: 'Sesi telah berakhir' } });
+                  resolve({success: true, data: retryData.data || retryData});
+                } else {
+                  resolve({
+                    success: false,
+                    error: {code: 'UNAUTHORIZED', message: 'Sesi telah berakhir'},
+                  });
                 }
-              } catch {
-                // Network drop / HTML 502 — JANGAN biarkan promise menggantung
+              } catch (error: unknown) {
+                const isTimeout = isTimeoutError(error);
                 resolve({
                   success: false,
-                  error: { code: 'NETWORK_ERROR', message: 'Tidak ada koneksi internet' },
+                  error: {
+                    code: 'NETWORK_ERROR',
+                    message: isTimeout
+                      ? 'Koneksi timeout. Jaringan internet lambat atau tidak stabil.'
+                      : 'Tidak ada koneksi internet',
+                  },
                 });
               }
             },
@@ -255,7 +339,13 @@ const apiRequest = async <T>(
         return apiRequest<T>(endpoint, options, true);
       } else if (refreshResult.networkError) {
         onRefreshFailed();
-        return { success: false, error: { code: 'NETWORK_ERROR', message: 'Tidak ada koneksi internet' } };
+        return {
+          success: false,
+          error: {
+            code: 'NETWORK_ERROR',
+            message: 'Tidak ada koneksi internet atau koneksi timeout',
+          },
+        };
       } else {
         // Refresh gagal — flush semua subscriber yang menunggu agar
         // tidak menggantung, lalu broadcast SESSION_EXPIRED agar UI
@@ -264,7 +354,7 @@ const apiRequest = async <T>(
         notifySessionExpired();
         return {
           success: false,
-          error: { code: 'SESSION_EXPIRED', message: 'Sesi telah berakhir. Silakan login kembali.' },
+          error: {code: 'SESSION_EXPIRED', message: 'Sesi telah berakhir. Silakan login kembali.'},
         };
       }
     }
@@ -282,13 +372,16 @@ const apiRequest = async <T>(
       };
     }
 
-    return { success: true, data: data.data || data };
-  } catch (error) {
+    return {success: true, data: data.data || data};
+  } catch (error: unknown) {
+    const isTimeout = isTimeoutError(error);
     return {
       success: false,
       error: {
         code: 'NETWORK_ERROR',
-        message: 'Tidak ada koneksi internet',
+        message: isTimeout
+          ? 'Koneksi timeout. Jaringan internet lambat atau tidak stabil.'
+          : 'Tidak ada koneksi internet. Periksa jaringan Anda.',
       },
     };
   }
@@ -309,7 +402,9 @@ export const authService = {
     });
   },
 
-  requestOTP: async (phone: string): Promise<ApiResponse<{ message: string; expires_in: number }>> => {
+  requestOTP: async (
+    phone: string,
+  ): Promise<ApiResponse<{message: string; expires_in: number}>> => {
     return apiRequest('/auth/request-otp', {
       method: 'POST',
       body: JSON.stringify({
@@ -332,7 +427,9 @@ export const authService = {
     });
   },
 
-  refresh: async (refreshToken: string): Promise<ApiResponse<{ access_token: string; refresh_token: string }>> => {
+  refresh: async (
+    refreshToken: string,
+  ): Promise<ApiResponse<{access_token: string; refresh_token: string}>> => {
     return apiRequest('/auth/refresh', {
       method: 'POST',
       body: JSON.stringify({
@@ -347,8 +444,8 @@ export const authService = {
     if (refreshToken) {
       await apiRequest('/auth/logout', {
         method: 'POST',
-        body: JSON.stringify({ refresh_token: refreshToken }),
-      }).catch(() => { });
+        body: JSON.stringify({refresh_token: refreshToken}),
+      }).catch(() => {});
     }
     await clearToken();
   },
@@ -373,11 +470,21 @@ export const dashboardService = {
 // ── Tasks Services ────────────────────────────────────────────────────────────
 
 export const tasksService = {
-  getTasks: async (params?: { status?: string; page?: number; limit?: number }): Promise<ApiResponse<TaskListResponse>> => {
+  getTasks: async (params?: {
+    status?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<ApiResponse<TaskListResponse>> => {
     const queryParams = new URLSearchParams();
-    if (params?.status) {queryParams.append('status', params.status);}
-    if (params?.page) {queryParams.append('page', params.page.toString());}
-    if (params?.limit) {queryParams.append('limit', params.limit.toString());}
+    if (params?.status) {
+      queryParams.append('status', params.status);
+    }
+    if (params?.page) {
+      queryParams.append('page', params.page.toString());
+    }
+    if (params?.limit) {
+      queryParams.append('limit', params.limit.toString());
+    }
 
     const query = queryParams.toString();
     return apiRequest<TaskListResponse>(`/mobile/tasks${query ? `?${query}` : ''}`);
@@ -404,7 +511,14 @@ export const collectionService = {
       app_version: string;
     };
     offline_id?: string;
-  }): Promise<ApiResponse<{ id: string; sync_status: 'COMPLETED' | 'ALREADY_SYNCED'; whatsapp_status: 'ENQUEUED' | 'FAILED' | 'SKIPPED'; message: string }>> => {
+  }): Promise<
+    ApiResponse<{
+      id: string;
+      sync_status: 'COMPLETED' | 'ALREADY_SYNCED';
+      whatsapp_status: 'ENQUEUED' | 'FAILED' | 'SKIPPED';
+      message: string;
+    }>
+  > => {
     return apiRequest('/mobile/collections', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -412,30 +526,41 @@ export const collectionService = {
   },
 
   batchSubmit: async (
-    collections: BatchCollectionRequestItem[]
+    collections: BatchCollectionRequestItem[],
   ): Promise<ApiResponse<BatchSyncResponse>> => {
     return apiRequest<BatchSyncResponse>('/mobile/collections/batch', {
       method: 'POST',
-      body: JSON.stringify({ collections }),
+      body: JSON.stringify({collections}),
     });
   },
 
-  getSyncStatus: async (): Promise<ApiResponse<{ pending_count: number; last_sync_at: string; oldest_pending: string | null }>> => {
+  getSyncStatus: async (): Promise<
+    ApiResponse<{pending_count: number; last_sync_at: string; oldest_pending: string | null}>
+  > => {
     return apiRequest('/mobile/sync/status');
   },
 
-  getHistory: async (params?: { page?: number; limit?: number }): Promise<ApiResponse<HistoryResponse>> => {
+  getHistory: async (params?: {
+    page?: number;
+    limit?: number;
+  }): Promise<ApiResponse<HistoryResponse>> => {
     const queryParams = new URLSearchParams();
-    if (params?.page) {queryParams.append('page', params.page.toString());}
-    if (params?.limit) {queryParams.append('limit', params.limit.toString());}
+    if (params?.page) {
+      queryParams.append('page', params.page.toString());
+    }
+    if (params?.limit) {
+      queryParams.append('limit', params.limit.toString());
+    }
     const query = queryParams.toString();
     return apiRequest<HistoryResponse>(`/mobile/history${query ? `?${query}` : ''}`);
   },
 
   resubmitCollection: async (
     id: string,
-    data: { nominal: number; alasan_resubmit: string }
-  ): Promise<ApiResponse<{ id: string; submit_sequence: number; whatsapp_status: string; message: string }>> => {
+    data: {nominal: number; alasan_resubmit: string},
+  ): Promise<
+    ApiResponse<{id: string; submit_sequence: number; whatsapp_status: string; message: string}>
+  > => {
     return apiRequest(`/mobile/collections/${id}/resubmit`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -445,14 +570,16 @@ export const collectionService = {
   skipAssignment: async (
     id: string,
     notes?: string,
-  ): Promise<ApiResponse<{ id: string; status: string; message: string }>> => {
+  ): Promise<ApiResponse<{id: string; status: string; message: string}>> => {
     return apiRequest(`/mobile/assignments/${id}/skip`, {
       method: 'POST',
-      body: JSON.stringify(notes ? { notes } : {}),
+      body: JSON.stringify(notes ? {notes} : {}),
     });
   },
 
-  completePeriod: async (): Promise<ApiResponse<{ period: string; skipped_count: number; message: string }>> => {
+  completePeriod: async (): Promise<
+    ApiResponse<{period: string; skipped_count: number; message: string}>
+  > => {
     return apiRequest('/mobile/periods/complete', {
       method: 'POST',
     });

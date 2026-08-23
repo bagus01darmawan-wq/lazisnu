@@ -56,7 +56,7 @@ let cachedKey: string | null = null;
 function bufferToBase64(buffer: Uint8Array): string {
   let binary = '';
   for (let i = 0; i < buffer.byteLength; i++) {
-    binary += String.fromCharCode(buffer[i]);
+    binary += String.fromCharCode(buffer[i] ?? 0);
   }
   // @ts-ignore — btoa ada di RN via polyfill
   return globalThis.btoa(binary);
@@ -65,8 +65,8 @@ function bufferToBase64(buffer: Uint8Array): string {
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export type GetKeyResult =
-  | { ok: true; key: string; source: 'cache' | 'keychain' | 'generated' }
-  | { ok: false; reason: 'keychain_unavailable' | 'unknown' };
+  | {ok: true; key: string; source: 'cache' | 'keychain' | 'generated'}
+  | {ok: false; reason: 'keychain_unavailable' | 'unknown'};
 
 /**
  * Ambil encryption key. Urutan:
@@ -84,16 +84,16 @@ export type GetKeyResult =
 export async function getOrCreateEncryptionKey(): Promise<GetKeyResult> {
   // 1. Cache hit
   if (cachedKey) {
-    return { ok: true, key: cachedKey, source: 'cache' };
+    return {ok: true, key: cachedKey, source: 'cache'};
   }
 
   try {
     // 2. Cek Keychain. Entry lama (ditulis react-native-keychain 8.x AES-CBC)
     //    tetap terbaca di v10 (fix v9.2.3) — jika gagal, fallback generate baru.
-    const existing = await Keychain.getGenericPassword({ service: KEYCHAIN_SERVICE });
+    const existing = await Keychain.getGenericPassword({service: KEYCHAIN_SERVICE});
     if (existing && existing.password) {
       cachedKey = existing.password;
-      return { ok: true, key: cachedKey, source: 'keychain' };
+      return {ok: true, key: cachedKey, source: 'keychain'};
     }
 
     // 3. Generate baru (12 byte cryptographic random)
@@ -112,10 +112,10 @@ export async function getOrCreateEncryptionKey(): Promise<GetKeyResult> {
     });
 
     cachedKey = keyBase64;
-    return { ok: true, key: keyBase64, source: 'generated' };
+    return {ok: true, key: keyBase64, source: 'generated'};
   } catch (error) {
     console.warn('[secureKey] Failed to get/create encryption key:', error);
-    return { ok: false, reason: 'keychain_unavailable' };
+    return {ok: false, reason: 'keychain_unavailable'};
   }
 }
 
@@ -142,7 +142,7 @@ export function generateEphemeralKey(): string {
 export async function clearEncryptionKey(): Promise<void> {
   cachedKey = null;
   try {
-    await Keychain.resetGenericPassword({ service: KEYCHAIN_SERVICE });
+    await Keychain.resetGenericPassword({service: KEYCHAIN_SERVICE});
   } catch (error) {
     console.warn('[secureKey] Failed to clear encryption key:', error);
   }

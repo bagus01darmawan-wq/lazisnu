@@ -1,35 +1,21 @@
 import NetInfo from '@react-native-community/netinfo';
-import {
-  AssignmentStatus,
-  Collection,
-  SyncStatus,
-  Task,
-} from '@lazisnu/shared-types';
+import {AssignmentStatus, Collection, SyncStatus, Task} from '@lazisnu/shared-types';
 import {getOfflineStorage, initializeOfflineStorage} from '../../src/services/offline/mmkv';
 import {offlineQueue, QueuedCollection} from '../../src/services/offline/queue';
 import {taskCache} from '../../src/services/offline/tasks';
 import {dashboardCache} from '../../src/services/offline/cache';
-import {
-  collectionService,
-  dashboardService,
-  tasksService,
-} from '../../src/services/api';
+import {collectionService, dashboardService, tasksService} from '../../src/services/api';
 import {syncService} from '../../src/services/offline/sync';
 import {useSyncStore, getTotalSyncIssueCount} from '../../src/stores/useSyncStore';
-import {
-  mergeCollectionsWithQueues,
-  useCollectionsStore,
-} from '../../src/stores/useCollectionStore';
+import {mergeCollectionsWithQueues, useCollectionsStore} from '../../src/stores/useCollectionStore';
 import {useTasksStore} from '../../src/stores/useTasksStore';
 import {useDashboardStore} from '../../src/stores/useDashboardStore';
-import {
-  updatePendingCollectionNominal,
-} from '../../src/screens/HistoryScreen';
+import {updatePendingCollectionNominal} from '../../src/screens/HistoryScreen';
 import api from '../../src/services/api';
 
 const mmkvMock = require('react-native-mmkv');
 
-const createDeferred = <T,>() => {
+const createDeferred = <T>() => {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>(promiseResolve => {
     resolve = promiseResolve;
@@ -39,18 +25,15 @@ const createDeferred = <T,>() => {
 
 const waitForMockCalls = async (mock: jest.Mock, count: number) => {
   for (let attempt = 0; attempt < 10; attempt += 1) {
-    if (mock.mock.calls.length >= count) {return;}
+    if (mock.mock.calls.length >= count) {
+      return;
+    }
     await Promise.resolve();
   }
-  throw new Error(
-    'Mock hanya dipanggil ' + mock.mock.calls.length + '/' + count + ' kali',
-  );
+  throw new Error('Mock hanya dipanggil ' + mock.mock.calls.length + '/' + count + ' kali');
 };
 
-const makeTask = (
-  id: string,
-  status: AssignmentStatus = AssignmentStatus.ACTIVE,
-): Task => ({
+const makeTask = (id: string, status: AssignmentStatus = AssignmentStatus.ACTIVE): Task => ({
   id,
   can_id: `can-${id}`,
   qr_code: `QR-${id}`,
@@ -74,9 +57,7 @@ const makeQueueItem = (
   collected_at: '2026-07-15T02:00:00.000Z',
 });
 
-const makeServerCollection = (
-  overrides: Partial<Collection> = {},
-): Collection => ({
+const makeServerCollection = (overrides: Partial<Collection> = {}): Collection => ({
   id: 'server-1',
   offline_id: 'server-offline-1',
   assignment_id: 'assignment-server-1',
@@ -142,9 +123,7 @@ describe('offline collection regression', () => {
   });
 
   it('memisahkan cache ACTIVE/COMPLETED dan memindahkan task secara lokal', () => {
-    const activeTasks = Array.from({length: 30}, (_, index) =>
-      makeTask(`assignment-${index + 1}`),
-    );
+    const activeTasks = Array.from({length: 30}, (_, index) => makeTask(`assignment-${index + 1}`));
     const completed = makeTask('completed-1', AssignmentStatus.COMPLETED);
 
     taskCache.saveTasks(activeTasks, 'ACTIVE');
@@ -194,26 +173,18 @@ describe('offline collection regression', () => {
     expect(taskCache.getTasks('ACTIVE').map(task => task.id)).toEqual(
       remainingTasks.map(task => task.id),
     );
-    expect(taskCache.getTasks('COMPLETED').map(task => task.id)).toContain(
-      queuedTask.id,
-    );
+    expect(taskCache.getTasks('COMPLETED').map(task => task.id)).toContain(queuedTask.id);
 
     (NetInfo.fetch as jest.Mock).mockResolvedValue({
       isConnected: false,
       isInternetReachable: false,
     });
     await useTasksStore.getState().fetchTasks('COMPLETED');
-    expect(useTasksStore.getState().tasks.map(task => task.id)).toContain(
-      queuedTask.id,
-    );
+    expect(useTasksStore.getState().tasks.map(task => task.id)).toContain(queuedTask.id);
   });
 
   it('tidak menghapus queue dari cache PENDING atau kecocokan can_id/QR', () => {
-    const local = makeQueueItem(
-      'offline-new',
-      'assignment-new',
-      'can-reused',
-    );
+    const local = makeQueueItem('offline-new', 'assignment-new', 'can-reused');
     offlineQueue.enqueue(local);
 
     const cachedPending = makeServerCollection({
@@ -226,9 +197,7 @@ describe('offline collection regression', () => {
     });
     const fromCache = mergeCollectionsWithQueues([cachedPending], false);
     expect(offlineQueue.getQueue()).toHaveLength(1);
-    expect(fromCache.find(item => item.id === local.offline_id)?.nominal).toBe(
-      local.nominal,
-    );
+    expect(fromCache.find(item => item.id === local.offline_id)?.nominal).toBe(local.nominal);
 
     const oldTransaction = makeServerCollection({
       id: 'server-old',
@@ -247,21 +216,27 @@ describe('offline collection regression', () => {
 
   it('menghapus queue hanya setelah ACK offline_id atau assignment_id yang sama', () => {
     offlineQueue.enqueue(makeQueueItem('offline-exact', 'assignment-1'));
-    mergeCollectionsWithQueues([
-      makeServerCollection({
-        offline_id: 'offline-exact',
-        assignment_id: 'assignment-server',
-      }),
-    ], true);
+    mergeCollectionsWithQueues(
+      [
+        makeServerCollection({
+          offline_id: 'offline-exact',
+          assignment_id: 'assignment-server',
+        }),
+      ],
+      true,
+    );
     expect(offlineQueue.getQueue()).toHaveLength(0);
 
     offlineQueue.enqueue(makeQueueItem('offline-local-2', 'assignment-exact'));
-    mergeCollectionsWithQueues([
-      makeServerCollection({
-        offline_id: 'offline-server-2',
-        assignment_id: 'assignment-exact',
-      }),
-    ], true);
+    mergeCollectionsWithQueues(
+      [
+        makeServerCollection({
+          offline_id: 'offline-server-2',
+          assignment_id: 'assignment-exact',
+        }),
+      ],
+      true,
+    );
     expect(offlineQueue.getQueue()).toHaveLength(0);
   });
 
@@ -293,11 +268,11 @@ describe('offline collection regression', () => {
     const resubmitSpy = jest.spyOn(api.collection, 'resubmitCollection');
 
     expect(updatePendingCollectionNominal(item.offline_id, 75000)).toBe(true);
-    expect(offlineQueue.getQueue()[0].nominal).toBe(75000);
+    expect(offlineQueue.getQueue()[0]!.nominal).toBe(75000);
     expect(resubmitSpy).not.toHaveBeenCalled();
     // Nominal 0 diizinkan (sesuai backend: min(0) + metrik zero_nominal_count)
     expect(updatePendingCollectionNominal(item.offline_id, 0)).toBe(true);
-    expect(offlineQueue.getQueue()[0].nominal).toBe(0);
+    expect(offlineQueue.getQueue()[0]!.nominal).toBe(0);
     // Nominal negatif tetap ditolak
     expect(updatePendingCollectionNominal(item.offline_id, -1)).toBe(false);
   });
@@ -417,18 +392,20 @@ describe('offline collection regression', () => {
     fresh.resolve({
       success: true,
       data: {
-        items: [{
-          id: 'server-fresh',
-          offline_id: 'offline-fresh',
-          assignment_id: 'assignment-fresh',
-          can_id: 'can-fresh',
-          qr_code: 'QR-FRESH',
-          owner_name: 'Donatur Fresh',
-          owner_address: 'Alamat Fresh',
-          nominal: 50000,
-          collected_at: new Date().toISOString(),
-          sync_status: SyncStatus.COMPLETED,
-        }],
+        items: [
+          {
+            id: 'server-fresh',
+            offline_id: 'offline-fresh',
+            assignment_id: 'assignment-fresh',
+            can_id: 'can-fresh',
+            qr_code: 'QR-FRESH',
+            owner_name: 'Donatur Fresh',
+            owner_address: 'Alamat Fresh',
+            nominal: 50000,
+            collected_at: new Date().toISOString(),
+            sync_status: SyncStatus.COMPLETED,
+          },
+        ],
         pagination: {page: 1, limit: 1000, total: 1, total_pages: 1},
       },
     });
@@ -474,9 +451,7 @@ describe('offline collection regression', () => {
     await waitForMockCalls(tasksSpy as jest.Mock, 4);
 
     freshActive.resolve(response([]));
-    freshCompleted.resolve(response([
-      {...task, status: AssignmentStatus.COMPLETED},
-    ], 50000));
+    freshCompleted.resolve(response([{...task, status: AssignmentStatus.COMPLETED}], 50000));
     await freshRequest;
     staleActive.resolve(response([task]));
     staleCompleted.resolve(response([]));
@@ -512,9 +487,12 @@ describe('offline collection regression', () => {
       .mockReturnValue(historyRefresh.promise);
 
     let completed = false;
-    const syncPromise = useSyncStore.getState().triggerSync().then(() => {
-      completed = true;
-    });
+    const syncPromise = useSyncStore
+      .getState()
+      .triggerSync()
+      .then(() => {
+        completed = true;
+      });
     await waitForMockCalls(dashboardSpy as jest.Mock, 1);
     await waitForMockCalls(tasksSpy as jest.Mock, 1);
     await waitForMockCalls(statsSpy as jest.Mock, 1);

@@ -1,11 +1,13 @@
-import type { NavigatorScreenParams } from '@react-navigation/native';
-import type { Task } from '@lazisnu/shared-types';
+import type {NavigatorScreenParams, CompositeNavigationProp} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import type {BottomTabNavigationProp} from '@react-navigation/bottom-tabs';
+import type {Task} from '@lazisnu/shared-types';
 
 export type RootStackParamList = {
   Login: undefined;
-  OTP: { phone: string };
+  OTP: {phone: string};
   Main: NavigatorScreenParams<MainTabParamList> | undefined;
-  Collection: { task: Task };
+  Collection: {task: Task};
 };
 
 export type MainTabParamList = {
@@ -15,3 +17,10 @@ export type MainTabParamList = {
   History: undefined;
   Profile: undefined;
 };
+
+export type MainNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+
+export type AuthNavigationProp = NativeStackNavigationProp<RootStackParamList>;

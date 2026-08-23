@@ -1,18 +1,27 @@
-import { create } from 'zustand';
-import { dashboardService } from '../services/api';
-import { TodayStats, WeekStats, DashboardTaskItem, RecentCollectionSummary } from '@lazisnu/shared-types';
+import {create} from 'zustand';
+import {dashboardService} from '../services/api';
+import {
+  TodayStats,
+  WeekStats,
+  DashboardTaskItem,
+  RecentCollectionSummary,
+  Task,
+} from '@lazisnu/shared-types';
 import NetInfo from '@react-native-community/netinfo';
-import { dashboardCache } from '../services/offline/cache';
-import { offlineQueue } from '../services/offline/queue';
+import {dashboardCache} from '../services/offline/cache';
+import {offlineQueue} from '../services/offline/queue';
+import {taskCache} from '../services/offline/tasks';
 
 let latestDashboardRequestId = 0;
 
 const isToday = (dateStr: string): boolean => {
   const d = new Date(dateStr);
   const now = new Date();
-  return d.getDate() === now.getDate() &&
-         d.getMonth() === now.getMonth() &&
-         d.getFullYear() === now.getFullYear();
+  return (
+    d.getDate() === now.getDate() &&
+    d.getMonth() === now.getMonth() &&
+    d.getFullYear() === now.getFullYear()
+  );
 };
 
 const isThisWeek = (dateStr: string): boolean => {
@@ -37,7 +46,7 @@ function mergeDashboardData(
   today_stats: TodayStats,
   week_stats: WeekStats,
   pending_tasks: DashboardTaskItem[],
-  recent_collections: RecentCollectionSummary[]
+  recent_collections: RecentCollectionSummary[],
 ) {
   const activeQueue = offlineQueue.getQueue();
   const failedQueue = offlineQueue.getFailedPermanent();
@@ -70,10 +79,10 @@ function mergeDashboardData(
 
   // 4. Merge recent collections
   const localRecent: RecentCollectionSummary[] = [];
-  const tasks = require('../services/offline/tasks').taskCache.getTasks();
+  const tasks = taskCache.getTasks();
 
   for (const item of allLocal) {
-    const task = tasks.find((t: any) => t.id === item.assignment_id);
+    const task = tasks.find((t: Task) => t.id === item.assignment_id);
     localRecent.push({
       id: item.offline_id,
       qr_code: task?.qr_code || 'Offline',
@@ -94,7 +103,9 @@ function mergeDashboardData(
   }
 
   const mergedRecent = Array.from(mergedRecentMap.values());
-  mergedRecent.sort((a, b) => new Date(b.collected_at).getTime() - new Date(a.collected_at).getTime());
+  mergedRecent.sort(
+    (a, b) => new Date(b.collected_at).getTime() - new Date(a.collected_at).getTime(),
+  );
 
   return {
     todayStats: {
@@ -138,7 +149,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const requestId = ++latestDashboardRequestId;
     const isLatestRequest = () => requestId === latestDashboardRequestId;
     const netInfo = await NetInfo.fetch();
-    if (!isLatestRequest()) {return;}
+    if (!isLatestRequest()) {
+      return;
+    }
 
     const isOnline = !!(netInfo.isConnected && netInfo.isInternetReachable);
 
@@ -148,17 +161,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         total_nominal: 0,
         remaining: 0,
       };
-      const cachedWeek = dashboardCache.getWeekStats() || { collected: 0, total_nominal: 0 };
+      const cachedWeek = dashboardCache.getWeekStats() || {collected: 0, total_nominal: 0};
       const cachedTasks = dashboardCache.getPendingTasks();
       const cachedRecent = dashboardCache.getRecentCollections();
 
-      const merged = mergeDashboardData(
-        cachedToday,
-        cachedWeek,
-        cachedTasks,
-        cachedRecent
-      );
-      if (!isLatestRequest()) {return;}
+      const merged = mergeDashboardData(cachedToday, cachedWeek, cachedTasks, cachedRecent);
+      if (!isLatestRequest()) {
+        return;
+      }
       set({
         ...merged,
         isLoading: false,
@@ -166,13 +176,15 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       return;
     }
 
-    set({ isLoading: true, error: null });
+    set({isLoading: true, error: null});
     try {
       const result = await dashboardService.getDashboard();
-      if (!isLatestRequest()) {return;}
+      if (!isLatestRequest()) {
+        return;
+      }
 
       if (result.success && result.data) {
-        const { today_stats, week_stats, pending_tasks, recent_collections } = result.data;
+        const {today_stats, week_stats, pending_tasks, recent_collections} = result.data;
 
         dashboardCache.setTodayStats(today_stats);
         dashboardCache.setWeekStats(week_stats);
@@ -183,7 +195,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           today_stats,
           week_stats,
           pending_tasks || [],
-          recent_collections || []
+          recent_collections || [],
         );
 
         set({
@@ -197,13 +209,15 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         });
       }
     } catch (error) {
-      if (!isLatestRequest()) {return;}
+      if (!isLatestRequest()) {
+        return;
+      }
       const message = error instanceof Error ? error.message : 'Terjadi kesalahan jaringan';
-      set({ error: message, isLoading: false });
+      set({error: message, isLoading: false});
     }
   },
   refreshStats: async () => {
-    const { fetchDashboard } = get();
+    const {fetchDashboard} = get();
     await fetchDashboard();
   },
 
@@ -213,34 +227,31 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       total_nominal: 0,
       remaining: 0,
     };
-    const cachedWeek = dashboardCache.getWeekStats() || { collected: 0, total_nominal: 0 };
+    const cachedWeek = dashboardCache.getWeekStats() || {collected: 0, total_nominal: 0};
     const cachedTasks = dashboardCache.getPendingTasks();
     const cachedRecent = dashboardCache.getRecentCollections();
 
-    const merged = mergeDashboardData(
-      cachedToday,
-      cachedWeek,
-      cachedTasks,
-      cachedRecent
-    );
+    const merged = mergeDashboardData(cachedToday, cachedWeek, cachedTasks, cachedRecent);
     set(merged);
   },
 
   optimisticUpdateStats: (nominal: number) => {
-    const { todayStats } = get();
-    if (!todayStats) { return; }
+    const {todayStats} = get();
+    if (!todayStats) {
+      return;
+    }
     const updated: TodayStats = {
       collected: todayStats.collected + 1,
       total_nominal: todayStats.total_nominal + nominal,
       remaining: Math.max(0, todayStats.remaining - 1),
     };
     // Cache tetap baseline server; transaksi lokal hanya digabung saat render/refresh.
-    set({ todayStats: updated });
+    set({todayStats: updated});
   },
 
   optimisticRemoveTask: (assignmentId: string) => {
-    const { pendingTasks } = get();
+    const {pendingTasks} = get();
     const updated = pendingTasks.filter(t => t.id !== assignmentId);
-    set({ pendingTasks: updated });
+    set({pendingTasks: updated});
   },
 }));

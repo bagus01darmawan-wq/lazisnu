@@ -10,10 +10,10 @@
 //   Keychain.__resetMock();
 
 interface MockState {
-  value: { service: string; username: string; password: string } | null;
+  value: {service: string; username: string; password: string} | null;
   shouldThrow: Error | null;
   // Track call history
-  calls: { method: string; args: unknown }[];
+  calls: {method: string; args: unknown}[];
   // Biometric support control
   biometryType: string | null;
 }
@@ -58,27 +58,42 @@ export const STORAGE_TYPE = {
   RSA: 'KeystoreRSA',
 };
 
-export async function getGenericPassword(options?: { service?: string; authenticationPrompt?: unknown }): Promise<{ service: string; username: string; password: string } | null> {
-  state.calls.push({ method: 'getGenericPassword', args: options });
-  if (state.shouldThrow) {throw state.shouldThrow;}
+export async function getGenericPassword(options?: {
+  service?: string;
+  authenticationPrompt?: unknown;
+}): Promise<{service: string; username: string; password: string} | null> {
+  state.calls.push({method: 'getGenericPassword', args: options});
+  if (state.shouldThrow) {
+    throw state.shouldThrow;
+  }
   return state.value;
 }
 
 export async function setGenericPassword(
   username: string,
   password: string,
-  options?: { service?: string; accessible?: string; storage?: string; accessControl?: string; authenticationPrompt?: unknown },
-): Promise<{ service: string }> {
-  state.calls.push({ method: 'setGenericPassword', args: { username, options } });
-  if (state.shouldThrow) {throw state.shouldThrow;}
+  options?: {
+    service?: string;
+    accessible?: string;
+    storage?: string;
+    accessControl?: string;
+    authenticationPrompt?: unknown;
+  },
+): Promise<{service: string}> {
+  state.calls.push({method: 'setGenericPassword', args: {username, options}});
+  if (state.shouldThrow) {
+    throw state.shouldThrow;
+  }
   const service = options?.service || 'mock';
-  state.value = { service, username, password };
-  return { service };
+  state.value = {service, username, password};
+  return {service};
 }
 
-export async function resetGenericPassword(options?: { service?: string }): Promise<boolean> {
-  state.calls.push({ method: 'resetGenericPassword', args: options });
-  if (state.shouldThrow) {throw state.shouldThrow;}
+export async function resetGenericPassword(options?: {service?: string}): Promise<boolean> {
+  state.calls.push({method: 'resetGenericPassword', args: options});
+  if (state.shouldThrow) {
+    throw state.shouldThrow;
+  }
   if (!options?.service || state.value?.service === options.service) {
     state.value = null;
     return true;
@@ -87,7 +102,7 @@ export async function resetGenericPassword(options?: { service?: string }): Prom
 }
 
 export async function getSupportedBiometryType(): Promise<string | null> {
-  state.calls.push({ method: 'getSupportedBiometryType', args: undefined });
+  state.calls.push({method: 'getSupportedBiometryType', args: undefined});
   return state.biometryType;
 }
 
@@ -105,7 +120,7 @@ export const __setBiometryType = (type: string | null) => {
 };
 
 export const __resetMock = () => {
-  state = { value: null, shouldThrow: null, calls: [], biometryType: 'Fingerprint' };
+  state = {value: null, shouldThrow: null, calls: [], biometryType: 'Fingerprint'};
 };
 
 export const __getCalls = () => [...state.calls];

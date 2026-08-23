@@ -1,8 +1,8 @@
-import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import {NavigationContainer, RouteProp, ParamListBase} from '@react-navigation/native';
+import {createNativeStackNavigator} from '@react-navigation/native-stack';
+import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import React from 'react';
-import { View, ActivityIndicator, Image } from 'react-native';
+import {View, ActivityIndicator, Image, StyleSheet} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 // Screens
@@ -16,30 +16,36 @@ import HistoryScreen from '../screens/HistoryScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 
 // Types
-import { RootStackParamList, MainTabParamList } from './types';
-import { useAuthStore } from '../stores';
-import { Colors, ComponentSizes, Spacing } from '../theme';
+import {RootStackParamList, MainTabParamList} from './types';
+import {useAuthStore} from '../stores';
+import {Colors, ComponentSizes, Spacing} from '../theme';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 const logo = require('../assets/branding/logo-lazisnu-putih.png');
 
+const splashStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.brand.deepGreen,
+  },
+  logo: {width: 180, height: 96, marginBottom: Spacing.xl},
+});
+
 // Splash ringan selama initializeAuth() berjalan. Tanpa ini, UI akan
 // flash ke LoginScreen lalu ke MainTabs pada cold start dengan token valid.
 const SplashScreen = () => (
-  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.brand.deepGreen }}>
-    <Image
-      source={logo}
-      style={{ width: 180, height: 96, marginBottom: Spacing.xl }}
-      resizeMode="contain"
-    />
-    <ActivityIndicator size="large" color={Colors.brand.emerald} />
+  <View style={splashStyles.container}>
+    <Image source={logo} style={splashStyles.logo} resizeMode="contain" />
+    <ActivityIndicator size="large" color={Colors.brand.accentGold} />
   </View>
 );
 
-const getScreenOptions = ({ route }: { route: any }) => ({
-  tabBarIcon: ({ focused, color, size }: { focused: boolean; color: string; size: number }) => {
+const getScreenOptions = ({route}: {route: RouteProp<ParamListBase>}) => ({
+  tabBarIcon: ({focused, color, size}: {focused: boolean; color: string; size: number}) => {
     let iconName = 'home';
 
     if (route.name === 'Dashboard') {
@@ -74,10 +80,8 @@ const getScreenOptions = ({ route }: { route: any }) => ({
           backgroundColor: Colors.brand.emerald,
         }
       : undefined,
-  tabBarActiveBackgroundColor:
-    route.name === 'Scan' ? Colors.brand.emerald : undefined,
-  tabBarIconStyle:
-    route.name === 'Scan' ? {marginTop: 5} : undefined,
+  tabBarActiveBackgroundColor: route.name === 'Scan' ? Colors.brand.emerald : undefined,
+  tabBarIconStyle: route.name === 'Scan' ? {marginTop: 5} : undefined,
   tabBarLabelStyle:
     route.name === 'Scan'
       ? {
@@ -104,31 +108,15 @@ const getScreenOptions = ({ route }: { route: any }) => ({
 const MainTabs = () => {
   return (
     <Tab.Navigator screenOptions={getScreenOptions}>
-      <Tab.Screen
-        name="Dashboard"
-        component={DashboardScreen}
-        options={{ title: 'Beranda' }}
-      />
-      <Tab.Screen
-        name="Tasks"
-        component={TasksScreen}
-        options={{ title: 'Tugas' }}
-      />
+      <Tab.Screen name="Dashboard" component={DashboardScreen} options={{title: 'Beranda'}} />
+      <Tab.Screen name="Tasks" component={TasksScreen} options={{title: 'Tugas'}} />
       <Tab.Screen
         name="Scan"
         component={ScanScreen}
-        options={{ title: 'Scan', headerShown: false, unmountOnBlur: true }}
+        options={{title: 'Scan', headerShown: false, unmountOnBlur: true}}
       />
-      <Tab.Screen
-        name="History"
-        component={HistoryScreen}
-        options={{ title: 'Riwayat' }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{ title: 'Profil' }}
-      />
+      <Tab.Screen name="History" component={HistoryScreen} options={{title: 'Riwayat'}} />
+      <Tab.Screen name="Profile" component={ProfileScreen} options={{title: 'Profil'}} />
     </Tab.Navigator>
   );
 };
@@ -138,7 +126,7 @@ const MainTabs = () => {
 // melalui alur scan dengan parameter task yang valid.
 const MainStack = () => {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenOptions={{headerShown: false}}>
       <Stack.Screen name="Main" component={MainTabs} />
       <Stack.Screen name="Collection" component={CollectionScreen} />
     </Stack.Navigator>
@@ -151,8 +139,7 @@ const AuthStack = () => {
     <Stack.Navigator
       screenOptions={{
         headerShown: false,
-      }}
-    >
+      }}>
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="OTP" component={OTPScreen} />
     </Stack.Navigator>
@@ -161,7 +148,7 @@ const AuthStack = () => {
 
 // Main App Navigator
 const AppNavigator = () => {
-  const { isAuthenticated, isInitializing } = useAuthStore();
+  const {isAuthenticated, isInitializing} = useAuthStore();
 
   // Selama initializeAuth() berjalan, tampilkan splash agar UI tidak
   // flash ke LoginScreen saat ternyata token masih valid.
@@ -174,9 +161,7 @@ const AppNavigator = () => {
   }
 
   return (
-    <NavigationContainer>
-      {isAuthenticated ? <MainStack /> : <AuthStack />}
-    </NavigationContainer>
+    <NavigationContainer>{isAuthenticated ? <MainStack /> : <AuthStack />}</NavigationContainer>
   );
 };
 

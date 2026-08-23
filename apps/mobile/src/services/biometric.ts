@@ -28,7 +28,9 @@ export async function isBiometricAvailable(): Promise<boolean> {
 export async function getBiometryType(): Promise<string | null> {
   try {
     const type = await Keychain.getSupportedBiometryType();
-    if (!type) return null;
+    if (!type) {
+      return null;
+    }
 
     // Normalisasi nama untuk UI
     switch (type) {
@@ -58,20 +60,16 @@ export async function getBiometryType(): Promise<string | null> {
  */
 export async function enableBiometric(refreshToken: string): Promise<boolean> {
   try {
-    const result = await Keychain.setGenericPassword(
-      BIOMETRIC_USERNAME,
-      refreshToken,
-      {
-        accessControl: Keychain.ACCESS_CONTROL.BIOMETRY_ANY,
-        accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-        service: BIOMETRIC_SERVICE,
-        authenticationPrompt: {
-          title: 'Aktifkan Login Biometrik',
-          subtitle: 'Konfirmasi dengan sidik jari atau face ID',
-          cancel: 'Batal',
-        },
+    const result = await Keychain.setGenericPassword(BIOMETRIC_USERNAME, refreshToken, {
+      accessControl: Keychain.ACCESS_CONTROL.BIOMETRY_ANY,
+      accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+      service: BIOMETRIC_SERVICE,
+      authenticationPrompt: {
+        title: 'Aktifkan Login Biometrik',
+        subtitle: 'Konfirmasi dengan sidik jari atau face ID',
+        cancel: 'Batal',
       },
-    );
+    });
     return result !== false;
   } catch (error) {
     // Diagnosa: error native (mis. E_CRYPTO_FAILED, KeyStoreException) —
@@ -122,7 +120,7 @@ export async function updateBiometricToken(refreshToken: string): Promise<boolea
  */
 export async function disableBiometric(): Promise<boolean> {
   try {
-    await Keychain.resetGenericPassword({ service: BIOMETRIC_SERVICE });
+    await Keychain.resetGenericPassword({service: BIOMETRIC_SERVICE});
     return true;
   } catch {
     return false;

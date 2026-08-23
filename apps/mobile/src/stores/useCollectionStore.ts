@@ -1,21 +1,22 @@
-import { create } from 'zustand';
-import { collectionService } from '../services/api';
-import { offlineQueue } from '../services/offline/queue';
-import { syncService } from '../services/offline/sync';
+import {create} from 'zustand';
+import {collectionService} from '../services/api';
+import {offlineQueue, generateOfflineId, QueuedCollection} from '../services/offline/queue';
+import {syncService} from '../services/offline/sync';
 import NetInfo from '@react-native-community/netinfo';
-import { getDeviceInfo } from '../utils/device';
-import { Collection, HistoryItem, SyncStatus } from '@lazisnu/shared-types';
-import { useTasksStore } from './useTasksStore';
-import { refreshSyncCounts } from './useSyncStore';
-import { useDashboardStore } from './useDashboardStore';
-import { collectionsCache } from '../services/offline/cache';
-import { taskCache } from '../services/offline/tasks';
+import {getDeviceInfo} from '../utils/device';
+import {Collection, HistoryItem, SyncStatus} from '@lazisnu/shared-types';
+import {useTasksStore} from './useTasksStore';
+import {refreshSyncCounts} from './useSyncStore';
+import {useDashboardStore} from './useDashboardStore';
+import {collectionsCache} from '../services/offline/cache';
+import {taskCache} from '../services/offline/tasks';
 
 let latestCollectionsRequestId = 0;
 
+// Batas nominal per penjemputan kotak infaq
+export const MAX_COLLECTION_NOMINAL = 10_000_000;
+
 // Tipe jujur untuk data yang disimpan setelah submit (sebelum sync ke server).
-// Tidak menggunakan `Collection` karena data belum punya field server-side
-// seperti `id`, `officer_id`, `sync_status`, atau nested `can`.
 interface SubmittedCollectionDraft {
   assignment_id: string;
   can_id: string;
@@ -38,55 +39,82 @@ interface CollectionState {
     collected_at: string;
     latitude?: number;
     longitude?: number;
-    offline_id: string;
-  }) => Promise<{ success: boolean; synced: boolean }>;
+    offline_id?: string;
+  }) => Promise<{success: boolean; synced: boolean; error?: string}>;
 
   reset: () => void;
 }
 
-export const useCollectionStore = create<CollectionState>((set) => ({
+export const useCollectionStore = create<CollectionState>(set => ({
   isSubmitting: false,
   lastSubmitted: null,
   error: null,
 
-  submitCollection: async (data) => {
-    set({ isSubmitting: true, error: null });
+  submitCollection: async data => {
+    set({isSubmitting: true, error: null});
+
+    // Validasi domain di level Store/Service
+    if (typeof data.nominal !== 'number' || isNaN(data.nominal)) {
+      const error = 'Nominal harus berupa angka valid.';
+      set({error, isSubmitting: false});
+      return {success: false, synced: false, error};
+    }
+    if (data.nominal < 0) {
+      const error = 'Nominal tidak boleh bernilai negatif.';
+      set({error, isSubmitting: false});
+      return {success: false, synced: false, error};
+    }
+    if (data.nominal > MAX_COLLECTION_NOMINAL) {
+      const error =
+        'Maksimal nominal per penjemputan adalah Rp10.000.000. Hubungi admin untuk penjemputan khusus.';
+      set({error, isSubmitting: false});
+      return {success: false, synced: false, error};
+    }
+
+    const offlineId = data.offline_id || generateOfflineId();
+    const preparedData: SubmittedCollectionDraft = {
+      ...data,
+      offline_id: offlineId,
+    };
+
     try {
       const alreadyQueued = offlineQueue
         .getQueue()
-        .some((item) => item.assignment_id === data.assignment_id);
+        .some(item => item.assignment_id === preparedData.assignment_id);
       const alreadyCached = useCollectionsStore
         .getState()
-        .collections.some((item) =>
-          item.assignment_id === data.assignment_id && item.sync_status === SyncStatus.PENDING,
+        .collections.some(
+          item =>
+            item.assignment_id === preparedData.assignment_id &&
+            item.sync_status === SyncStatus.PENDING,
         );
 
       if (alreadyQueued || alreadyCached) {
         refreshSyncCounts();
-        set({ isSubmitting: false, lastSubmitted: data });
-        return { success: true, synced: false };
+        set({isSubmitting: false, lastSubmitted: preparedData});
+        return {success: true, synced: false};
       }
 
       // 1. Simpan ke Queue lokal (MMKV)
       offlineQueue.enqueue({
-        ...data,
+        ...preparedData,
         device_info: getDeviceInfo(),
       });
 
       // Ambil metadata sebelum task dipindahkan dari daftar ACTIVE.
-      const task = useTasksStore.getState().tasks.find((t) => t.id === data.assignment_id);
+      const task = useTasksStore.getState().tasks.find(t => t.id === preparedData.assignment_id);
 
       // Optimistic updates for offline-first responsiveness
-      useTasksStore.getState().markTaskComplete(data.assignment_id, data.nominal);
-      useDashboardStore.getState().optimisticUpdateStats(data.nominal);
-      useDashboardStore.getState().optimisticRemoveTask(data.assignment_id);
+      useTasksStore.getState().markTaskComplete(preparedData.assignment_id, preparedData.nominal);
+      useDashboardStore.getState().optimisticUpdateStats(preparedData.nominal);
+      useDashboardStore.getState().optimisticRemoveTask(preparedData.assignment_id);
       const newCollection: Collection = {
-        id: data.offline_id,
-        assignment_id: data.assignment_id,
-        can_id: data.can_id,
+        id: preparedData.offline_id,
+        assignment_id: preparedData.assignment_id,
+        can_id: preparedData.can_id,
         officer_id: '',
-        nominal: data.nominal,
-        collected_at: data.collected_at,
+        nominal: preparedData.nominal,
+        collected_at: preparedData.collected_at,
         sync_status: SyncStatus.PENDING,
         can: {
           qr_code: task?.qr_code || 'Offline',
@@ -107,18 +135,18 @@ export const useCollectionStore = create<CollectionState>((set) => ({
         const syncResult = await syncService.autoSync();
         // SYNC_IN_PROGRESS: data sudah di queue MMKV, akan tertangani oleh sync yang sedang berjalan.
         if (syncResult.error === 'SYNC_IN_PROGRESS') {
-          set({ isSubmitting: false, lastSubmitted: data });
-          return { success: true, synced: false };
+          set({isSubmitting: false, lastSubmitted: preparedData});
+          return {success: true, synced: false};
         }
         if (!syncResult.success) {
           set({
             isSubmitting: false,
-            lastSubmitted: data,
+            lastSubmitted: preparedData,
             error: 'Gagal sinkronisasi. Data tersimpan offline.',
           });
-          return { success: true, synced: false };
+          return {success: true, synced: false};
         }
-        set({ isSubmitting: false, lastSubmitted: data });
+        set({isSubmitting: false, lastSubmitted: preparedData});
         // Re-fetch dari server setelah sync berhasil untuk merekonsiliasi data optimistis.
         setTimeout(() => {
           useDashboardStore.getState().fetchDashboard();
@@ -126,19 +154,19 @@ export const useCollectionStore = create<CollectionState>((set) => ({
           useTasksStore.getState().fetchStats();
           useCollectionsStore.getState().fetchCollections();
         }, 500);
-        return { success: true, synced: true };
+        return {success: true, synced: true};
       }
 
-      set({ isSubmitting: false, lastSubmitted: data });
-      return { success: true, synced: false };
+      set({isSubmitting: false, lastSubmitted: preparedData});
+      return {success: true, synced: false};
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Gagal menyimpan data';
-      set({ error: message, isSubmitting: false });
-      return { success: false, synced: false };
+      set({error: message, isSubmitting: false});
+      return {success: false, synced: false, error: message};
     }
   },
 
-  reset: () => set({ isSubmitting: false, lastSubmitted: null, error: null }),
+  reset: () => set({isSubmitting: false, lastSubmitted: null, error: null}),
 }));
 
 interface CollectionsHistoryState {
@@ -153,6 +181,12 @@ interface CollectionsHistoryState {
   loadMore: () => Promise<void>;
   hydrateFromCache: () => void;
   addOptimisticCollection: (collection: Collection) => void;
+  updatePendingNominal: (offlineId: string, newNominal: number) => boolean;
+  resubmitCollection: (
+    id: string,
+    payload: {nominal: number; alasan_resubmit: string},
+  ) => Promise<{success: boolean; error?: string}>;
+  retryFailedCollection: (offlineId: string) => Promise<boolean>;
 }
 
 /**
@@ -185,12 +219,9 @@ export function mergeCollectionsWithQueues(
 ): Collection[] {
   const activeQueue = offlineQueue.getQueue();
   const failedQueue = offlineQueue.getFailedPermanent();
-  const cacheTasks = [
-    ...taskCache.getTasks('ACTIVE'),
-    ...taskCache.getTasks('COMPLETED'),
-  ];
+  const cacheTasks = [...taskCache.getTasks('ACTIVE'), ...taskCache.getTasks('COMPLETED')];
 
-  const mapQueueToCollection = (item: any, isFailed: boolean): Collection => {
+  const mapQueueToCollection = (item: QueuedCollection, isFailed: boolean): Collection => {
     const task = cacheTasks.find(t => t.id === item.assignment_id);
     return {
       id: item.offline_id,
@@ -223,7 +254,9 @@ export function mergeCollectionsWithQueues(
   // Hanya record COMPLETED dari server/cache yang dianggap riwayat durable.
   // Cache PENDING lama tidak boleh menimpa queue atau menjadi self-ACK.
   for (const serverItem of serverMapped) {
-    if (serverItem.sync_status !== SyncStatus.COMPLETED) { continue; }
+    if (serverItem.sync_status !== SyncStatus.COMPLETED) {
+      continue;
+    }
 
     const localMatch = localCollections.find(localItem => {
       const offlineIdMatches = Boolean(
@@ -258,7 +291,9 @@ export function mergeCollectionsWithQueues(
   }
 
   const mergedList = Array.from(mergedMap.values());
-  mergedList.sort((a, b) => new Date(b.collected_at).getTime() - new Date(a.collected_at).getTime());
+  mergedList.sort(
+    (a, b) => new Date(b.collected_at).getTime() - new Date(a.collected_at).getTime(),
+  );
   return mergedList;
 }
 export const useCollectionsStore = create<CollectionsHistoryState>((set, get) => ({
@@ -273,34 +308,40 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
   hydrateFromCache: () => {
     const cached = collectionsCache.get();
     const merged = mergeCollectionsWithQueues(cached);
-    set({ collections: merged, total: merged.length });
+    set({collections: merged, total: merged.length});
   },
 
   fetchCollections: async () => {
     const requestId = ++latestCollectionsRequestId;
     const isLatestRequest = () => requestId === latestCollectionsRequestId;
     const netInfo = await NetInfo.fetch();
-    if (!isLatestRequest()) {return;}
+    if (!isLatestRequest()) {
+      return;
+    }
 
     const isOnline = !!(netInfo.isConnected && netInfo.isInternetReachable);
 
     if (!isOnline) {
       const cached = collectionsCache.get();
       const merged = mergeCollectionsWithQueues(cached);
-      if (!isLatestRequest()) {return;}
+      if (!isLatestRequest()) {
+        return;
+      }
       if (merged.length > 0) {
-        set({ collections: merged, total: merged.length, isLoading: false });
+        set({collections: merged, total: merged.length, isLoading: false});
       }
       return;
     }
 
-    set({ isLoading: true, error: null });
+    set({isLoading: true, error: null});
     try {
       // Fetch semua riwayat sekaligus (limit tinggi) agar cache offline lengkap.
       // Jika backend mengembalikan lebih dari 1 halaman, auto-paginate sampai habis.
       const PAGE_LIMIT = 1000;
-      const firstPage = await collectionService.getHistory({ page: 1, limit: PAGE_LIMIT });
-      if (!isLatestRequest()) {return;}
+      const firstPage = await collectionService.getHistory({page: 1, limit: PAGE_LIMIT});
+      if (!isLatestRequest()) {
+        return;
+      }
 
       if (firstPage.success && firstPage.data) {
         let allItems: HistoryItem[] = firstPage.data.items || [];
@@ -308,14 +349,13 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
 
         // Auto-paginate: fetch halaman 2..N di background agar cache lengkap
         if (totalPages > 1) {
-          const remainingPages = Array.from(
-            { length: totalPages - 1 },
-            (_, i) => i + 2,
-          );
+          const remainingPages = Array.from({length: totalPages - 1}, (_, i) => i + 2);
           const results = await Promise.allSettled(
-            remainingPages.map(p => collectionService.getHistory({ page: p, limit: PAGE_LIMIT })),
+            remainingPages.map(p => collectionService.getHistory({page: p, limit: PAGE_LIMIT})),
           );
-          if (!isLatestRequest()) {return;}
+          if (!isLatestRequest()) {
+            return;
+          }
           for (const res of results) {
             if (res.status === 'fulfilled' && res.value.success && res.value.data) {
               allItems = [...allItems, ...(res.value.data.items || [])];
@@ -323,7 +363,9 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
           }
         }
 
-        if (!isLatestRequest()) {return;}
+        if (!isLatestRequest()) {
+          return;
+        }
         const mapped = allItems.map(mapHistoryToCollection);
         collectionsCache.set(mapped);
 
@@ -331,7 +373,7 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
         set({
           collections: merged,
           page: 1,
-          totalPages: 1,  // Semua data sudah di-fetch
+          totalPages: 1, // Semua data sudah di-fetch
           total: firstPage.data.pagination.total || merged.length,
           isLoading: false,
         });
@@ -342,18 +384,22 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
         });
       }
     } catch (error) {
-      if (!isLatestRequest()) {return;}
+      if (!isLatestRequest()) {
+        return;
+      }
       const message = error instanceof Error ? error.message : 'Terjadi kesalahan jaringan';
-      set({ error: message, isLoading: false });
+      set({error: message, isLoading: false});
     }
   },
   loadMore: async () => {
-    const { page, totalPages, collections } = get();
-    if (page >= totalPages) { return; }
+    const {page, totalPages, collections} = get();
+    if (page >= totalPages) {
+      return;
+    }
 
-    set({ isLoading: true });
+    set({isLoading: true});
     try {
-      const result = await collectionService.getHistory({ page: page + 1, limit: 20 });
+      const result = await collectionService.getHistory({page: page + 1, limit: 20});
 
       if (result.success && result.data) {
         const items: HistoryItem[] = result.data.items || [];
@@ -366,21 +412,103 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
         });
       }
     } catch {
-      set({ isLoading: false });
+      set({isLoading: false});
     }
   },
 
-  addOptimisticCollection: (collection) => {
-    const { collections, total } = get();
-    const alreadyExists = collections.some((item) =>
-      item.id === collection.id ||
-      (!!item.assignment_id && item.assignment_id === collection.assignment_id),
+  addOptimisticCollection: collection => {
+    const {collections, total} = get();
+    const alreadyExists = collections.some(
+      item =>
+        item.id === collection.id ||
+        (!!item.assignment_id && item.assignment_id === collection.assignment_id),
     );
-    if (alreadyExists) { return; }
+    if (alreadyExists) {
+      return;
+    }
 
     const updated = [collection, ...collections];
     // Transaksi lokal persisten di queue MMKV. Cache riwayat hanya menyimpan
     // record server agar kartu PENDING tidak dapat menjadi self-ACK.
-    set({ collections: updated, total: total + 1 });
+    set({collections: updated, total: total + 1});
+  },
+
+  updatePendingNominal: (offlineId: string, newNominal: number): boolean => {
+    if (
+      typeof newNominal !== 'number' ||
+      isNaN(newNominal) ||
+      newNominal < 0 ||
+      newNominal > MAX_COLLECTION_NOMINAL
+    ) {
+      return false;
+    }
+    const updated = offlineQueue.updateNominal(offlineId, newNominal);
+    if (updated) {
+      const cached = collectionsCache.get();
+      const merged = mergeCollectionsWithQueues(cached);
+      set({collections: merged, total: merged.length});
+      refreshSyncCounts();
+    }
+    return updated;
+  },
+
+  resubmitCollection: async (id: string, payload: {nominal: number; alasan_resubmit: string}) => {
+    if (
+      typeof payload.nominal !== 'number' ||
+      isNaN(payload.nominal) ||
+      payload.nominal < 0 ||
+      payload.nominal > MAX_COLLECTION_NOMINAL
+    ) {
+      return {
+        success: false,
+        error: 'Nominal tidak valid atau melebihi batas maksimal Rp10.000.000.',
+      };
+    }
+    if (!payload.alasan_resubmit || payload.alasan_resubmit.trim().length < 5) {
+      return {success: false, error: 'Jelaskan alasan koreksi minimal 5 karakter.'};
+    }
+
+    try {
+      const response = await collectionService.resubmitCollection(id, {
+        nominal: payload.nominal,
+        alasan_resubmit: payload.alasan_resubmit.trim(),
+      });
+
+      if (response.success) {
+        await get().fetchCollections();
+        return {success: true};
+      }
+      return {success: false, error: response.error?.message || 'Data belum dapat dikoreksi.'};
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Terjadi kesalahan saat mengirim koreksi.';
+      return {success: false, error: message};
+    }
+  },
+
+  retryFailedCollection: async (offlineId: string): Promise<boolean> => {
+    const failedList = offlineQueue.getFailedPermanent();
+    const itemToRecover = failedList.find(i => i.offline_id === offlineId);
+    if (!itemToRecover) {
+      return false;
+    }
+
+    itemToRecover.retry_attempts = 0;
+    delete itemToRecover.error_message;
+    delete itemToRecover.error_type;
+    delete itemToRecover.can_retry;
+    delete itemToRecover.next_retry_at;
+
+    // Tulis active queue lebih dahulu; jika gagal, record tetap di quarantine.
+    offlineQueue.enqueue(itemToRecover);
+    offlineQueue.removeFromFailedPermanent([offlineId]);
+
+    const cached = collectionsCache.get();
+    const merged = mergeCollectionsWithQueues(cached);
+    set({collections: merged, total: merged.length});
+    refreshSyncCounts();
+
+    await syncService.autoSync();
+    return true;
   },
 }));

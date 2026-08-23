@@ -10,10 +10,20 @@ import {useCollectionsStore} from './src/stores/useCollectionStore';
 import {initEncryptedStorage} from './src/services/secureStorage';
 import {offlineQueue} from './src/services/offline/queue';
 import {setAuthTag} from './src/config/crashlytics';
-import {ActivityIndicator, StatusBar, View} from 'react-native';
+import {ActivityIndicator, StatusBar, StyleSheet, View} from 'react-native';
 import {Colors} from './src/theme';
 
 let networkUnsubscribe: (() => void) | null = null;
+
+const styles = StyleSheet.create({
+  root: {flex: 1},
+  splash: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface.page,
+  },
+});
 
 const App = () => {
   const [isStorageReady, setIsStorageReady] = useState(false);
@@ -31,11 +41,10 @@ const App = () => {
         }
 
         if (status.fallback === 'wiped') {
-          useAuthStore.getState().forceLogout(
-            'Tidak dapat membuka penyimpanan aman device. Silakan login kembali.',
-          );
+          useAuthStore
+            .getState()
+            .forceLogout('Tidak dapat membuka penyimpanan aman device. Silakan login kembali.');
         }
-
 
         await useAuthStore.getState().initializeAuth();
 
@@ -46,16 +55,18 @@ const App = () => {
         useCollectionsStore.getState().hydrateFromCache();
 
         if (status.fallback === 'ephemeral_default') {
-          useAuthStore.getState().setEncryptionWarning(
-            'Mode tidak aman: data antrian offline dihapus. Hubungkan ke internet dan login ulang untuk memulihkan.',
-          );
+          useAuthStore
+            .getState()
+            .setEncryptionWarning(
+              'Mode tidak aman: data antrian offline dihapus. Hubungkan ke internet dan login ulang untuk memulihkan.',
+            );
         }
 
         networkUnsubscribe = syncService.startNetworkListener();
       } catch {
-        useAuthStore.getState().forceLogout(
-          'Aplikasi gagal membuka penyimpanan lokal. Silakan login kembali.',
-        );
+        useAuthStore
+          .getState()
+          .forceLogout('Aplikasi gagal membuka penyimpanan lokal. Silakan login kembali.');
       } finally {
         if (isMounted) {
           setIsStorageReady(true);
@@ -74,9 +85,9 @@ const App = () => {
 
   if (!isStorageReady) {
     return (
-      <GestureHandlerRootView style={{flex: 1}}>
+      <GestureHandlerRootView style={styles.root}>
         <StatusBar backgroundColor={Colors.brand.heroStart} barStyle={'light-content'} />
-        <View style={{flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.surface.page}}>
+        <View style={styles.splash}>
           <ActivityIndicator color={Colors.brand.emerald} />
         </View>
       </GestureHandlerRootView>
@@ -84,7 +95,7 @@ const App = () => {
   }
 
   return (
-    <GestureHandlerRootView style={{flex: 1}}>
+    <GestureHandlerRootView style={styles.root}>
       <StatusBar backgroundColor={Colors.brand.heroStart} barStyle={'light-content'} />
       <SafeAreaProvider>
         <AppNavigator />

@@ -18,4 +18,3 @@ import {initCrashlytics} from './src/config/crashlytics';
 initCrashlytics();
 
 AppRegistry.registerComponent(appName, () => App);
-

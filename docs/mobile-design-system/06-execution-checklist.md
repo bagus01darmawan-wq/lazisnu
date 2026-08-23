@@ -4,68 +4,68 @@ Centang satu fase setelah test fase tersebut lulus.
 
 ## Fase A — Baseline
 
-- [ ] Buat branch khusus.
-- [ ] Catat status worktree.
-- [ ] Jalankan typecheck, lint, dan test.
-- [ ] Catat kegagalan yang sudah ada.
+- [x] Buat branch khusus.
+- [x] Catat status worktree.
+- [x] Jalankan typecheck, lint, dan test.
+- [x] Catat kegagalan yang sudah ada.
 
 ## Fase B — Tokens
 
-- [ ] Buat `colors.ts`.
-- [ ] Buat `spacing.ts`.
-- [ ] Buat `radius.ts`.
-- [ ] Buat `component-sizes.ts`.
-- [ ] Buat `typography.ts`.
-- [ ] Buat `shadows.ts`.
-- [ ] Update `theme/index.ts`.
-- [ ] Pertahankan alias lama.
-- [ ] Jalankan typecheck dan lint.
+- [x] Buat `colors.ts`.
+- [x] Buat `spacing.ts`.
+- [x] Buat `radius.ts`.
+- [x] Buat `component-sizes.ts`.
+- [x] Buat `typography.ts`.
+- [x] Buat `shadows.ts`.
+- [x] Update `theme/index.ts`.
+- [x] Pertahankan alias lama.
+- [x] Jalankan typecheck dan lint.
 
 ## Fase C — UI Components
 
-- [ ] Buat `AppButton`.
-- [ ] Buat `AppCard`.
-- [ ] Buat `StatusBadge`.
-- [ ] Buat `AppTextInput`.
-- [ ] Buat `SegmentedControl`.
-- [ ] Buat `AppHeader`.
-- [ ] Buat `SyncBanner`.
-- [ ] Buat barrel export.
-- [ ] Tambahkan unit test komponen kritis.
-- [ ] Jalankan typecheck, lint, dan test.
+- [x] Buat `AppButton`.
+- [x] Buat `AppCard`.
+- [x] Buat `StatusBadge`.
+- [x] Buat `AppTextInput`.
+- [x] Buat `SegmentedControl`.
+- [x] Buat `AppHeader`.
+- [x] Buat `SyncBanner`.
+- [x] Buat barrel export.
+- [x] Tambahkan unit test komponen kritis.
+- [x] Jalankan typecheck, lint, dan test.
 
 ## Fase D — Auth
 
-- [ ] Migrasi Splash.
-- [ ] Migrasi Login.
-- [ ] Migrasi OTP.
-- [ ] Uji password login.
-- [ ] Uji OTP.
-- [ ] Uji cold start token valid.
+- [x] Migrasi Splash.
+- [x] Migrasi Login.
+- [x] Migrasi OTP.
+- [x] Uji password login.
+- [x] Uji OTP.
+- [x] Uji cold start token valid.
 
 ## Fase E — Main UI
 
-- [ ] Migrasi Dashboard.
-- [ ] Migrasi Tasks.
-- [ ] Migrasi Scan tanpa mengubah scan guard.
-- [ ] Migrasi Collection tanpa mengubah payload.
-- [ ] Migrasi History tanpa melanggar immutable collections.
-- [ ] Migrasi Profile.
-- [ ] Migrasi tab bar.
+- [x] Migrasi Dashboard.
+- [x] Migrasi Tasks.
+- [x] Migrasi Scan tanpa mengubah scan guard.
+- [x] Migrasi Collection tanpa mengubah payload.
+- [x] Migrasi History tanpa melanggar immutable collections.
+- [x] Migrasi Profile.
+- [x] Migrasi tab bar.
 
 ## Fase F — Regression
 
-- [ ] Typecheck lulus.
-- [ ] Lint lulus.
-- [ ] Unit test lulus.
-- [ ] Build debug lulus.
-- [ ] Online submit lulus.
-- [ ] Offline queue lulus.
-- [ ] Auto-sync lulus.
-- [ ] QR error states lulus.
-- [ ] Resubmit lulus.
-- [ ] Logout lulus.
-- [ ] Simpan laporan testing bertanggal.
+- [x] Typecheck lulus.
+- [x] Lint lulus.
+- [x] Unit test lulus.
+- [x] Build debug lulus.
+- [x] Online submit lulus.
+- [x] Offline queue lulus.
+- [x] Auto-sync lulus.
+- [x] QR error states lulus.
+- [x] Resubmit lulus.
+- [x] Logout lulus.
+- [x] Simpan laporan testing bertanggal.
 
 ## Aturan Stop
 

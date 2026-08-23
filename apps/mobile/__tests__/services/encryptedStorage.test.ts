@@ -16,7 +16,7 @@ import {
   getEncryptionStatus,
   __resetForTest,
 } from '../../src/services/secureStorage';
-import { __resetCacheForTest } from '../../src/services/secureKey';
+import {__resetCacheForTest} from '../../src/services/secureKey';
 
 // Shortcut — MmkvModule.__resetMock() dll adalah test helpers
 // yang ditambahkan di __mocks__/react-native-mmkv.ts
@@ -36,7 +36,7 @@ describe('encryptedStorage', () => {
         username: 'mmkv',
         password: 'a-12byte-key',
       });
-      (MmkvModule as any).__setStorage({ existing_token: 'plain-value' });
+      (MmkvModule as any).__setStorage({existing_token: 'plain-value'});
 
       const status = await initEncryptedStorage();
 
@@ -114,7 +114,7 @@ describe('encryptedStorage', () => {
         username: 'mmkv',
         password: 'to-be-cleared',
       });
-      (MmkvModule as any).__setStorage({ access_token: 'user-data' });
+      (MmkvModule as any).__setStorage({access_token: 'user-data'});
 
       await initEncryptedStorage();
       expect(getEncryptionStatus()).not.toBeNull();
@@ -123,7 +123,7 @@ describe('encryptedStorage', () => {
 
       expect(getEncryptionStatus()).toBeNull();
       const calls = Keychain.__getCalls();
-      expect(calls.some((c) => c.method === 'resetGenericPassword')).toBe(true);
+      expect(calls.some(c => c.method === 'resetGenericPassword')).toBe(true);
     });
 
     it('setelah teardown, init ulang bisa dilakukan', async () => {

@@ -1,16 +1,17 @@
-import { create } from 'zustand';
-import { tasksService } from '../services/api';
-import { collectionService } from '../services/api';
-import { Task, AssignmentStatus } from '@lazisnu/shared-types';
+import {create} from 'zustand';
+import {tasksService} from '../services/api';
+import {collectionService} from '../services/api';
+import {Task, AssignmentStatus} from '@lazisnu/shared-types';
 import NetInfo from '@react-native-community/netinfo';
-import { tasksStatsCache } from '../services/offline/cache';
-import { offlineQueue } from '../services/offline/queue';
-import { taskCache } from '../services/offline/tasks';
+import {tasksStatsCache} from '../services/offline/cache';
+import {offlineQueue} from '../services/offline/queue';
+import {taskCache} from '../services/offline/tasks';
 
 let latestTasksRequestId = 0;
 let latestStatsRequestId = 0;
 
-const dedupeTasksById = (tasks: Task[]): Task[] => Array.from(new Map(tasks.map(task => [task.id, task])).values());
+const dedupeTasksById = (tasks: Task[]): Task[] =>
+  Array.from(new Map(tasks.map(task => [task.id, task])).values());
 
 export const reconcileTasks = (serverTasks: Task[], status: 'ACTIVE' | 'COMPLETED'): Task[] => {
   serverTasks = dedupeTasksById(serverTasks);
@@ -22,12 +23,11 @@ export const reconcileTasks = (serverTasks: Task[], status: 'ACTIVE' | 'COMPLETE
   ]);
 
   if (status === 'ACTIVE') {
-    return serverTasks.filter(task => task.status === AssignmentStatus.ACTIVE && !queuedIds.has(task.id));
+    return serverTasks.filter(
+      task => task.status === AssignmentStatus.ACTIVE && !queuedIds.has(task.id),
+    );
   } else {
-    const allCacheTasks = [
-      ...taskCache.getTasks('ACTIVE'),
-      ...taskCache.getTasks('COMPLETED'),
-    ];
+    const allCacheTasks = [...taskCache.getTasks('ACTIVE'), ...taskCache.getTasks('COMPLETED')];
     const allQueueItems = [...activeQueue, ...failedQueue];
 
     const queuedTasks: Task[] = [];
@@ -44,7 +44,10 @@ export const reconcileTasks = (serverTasks: Task[], status: 'ACTIVE' | 'COMPLETE
     }
 
     const serverCompleted = serverTasks.filter(
-      task => (task.status === AssignmentStatus.COMPLETED || task.status === AssignmentStatus.UNCOLLECTED) && !queuedTaskIds.has(task.id),
+      task =>
+        (task.status === AssignmentStatus.COMPLETED ||
+          task.status === AssignmentStatus.UNCOLLECTED) &&
+        !queuedTaskIds.has(task.id),
     );
 
     return dedupeTasksById([...queuedTasks, ...serverCompleted]);
@@ -92,10 +95,7 @@ function saveServerTasksPreservingLocal(
   status: 'ACTIVE' | 'COMPLETED',
   localSnapshot: Task[],
 ): void {
-  const localQueue = [
-    ...offlineQueue.getQueue(),
-    ...offlineQueue.getFailedPermanent(),
-  ];
+  const localQueue = [...offlineQueue.getQueue(), ...offlineQueue.getFailedPermanent()];
   const queuedAssignmentIds = new Set(localQueue.map(item => item.assignment_id));
 
   if (status === 'ACTIVE') {
@@ -110,10 +110,7 @@ function saveServerTasksPreservingLocal(
     .filter(task => queuedAssignmentIds.has(task.id))
     .map(task => ({...task, status: AssignmentStatus.COMPLETED}));
 
-  taskCache.saveTasks(
-    dedupeTasksById([...serverTasks, ...queuedLocalTasks]),
-    'COMPLETED',
-  );
+  taskCache.saveTasks(dedupeTasksById([...serverTasks, ...queuedLocalTasks]), 'COMPLETED');
 }
 interface TasksState {
   tasks: Task[];
@@ -127,7 +124,12 @@ interface TasksState {
   completedCount: number;
   totalCount: number;
   completedNominal: number;
-  setStats: (stats: { active: number; completed: number; total: number; completedNominal: number }) => void;
+  setStats: (stats: {
+    active: number;
+    completed: number;
+    total: number;
+    completedNominal: number;
+  }) => void;
   hydrateFromCache: () => void;
   fetchStats: () => Promise<void>;
 
@@ -137,9 +139,16 @@ interface TasksState {
   markTaskComplete: (taskId: string, nominal?: number) => void;
   adjustCompletedNominal: (delta: number) => void;
   skipAssignment: (taskId: string) => Promise<boolean>;
-  completePeriod: () => Promise<{ skipped: number; error?: string }>;
+  completePeriod: () => Promise<{skipped: number; error?: string}>;
+  resolveTaskByQRCode: (qrCode: string) => Promise<{
+    success: boolean;
+    task?: Task;
+    error?: {
+      code?: string;
+      message: string;
+    };
+  }>;
 }
-
 
 export const useTasksStore = create<TasksState>((set, get) => ({
   tasks: [],
@@ -154,7 +163,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
   totalCount: 0,
   completedNominal: 0,
 
-  setStats: (stats) => {
+  setStats: stats => {
     // Simpan ke MMKV + update RAM
     tasksStatsCache.set(stats);
     set({
@@ -179,7 +188,9 @@ export const useTasksStore = create<TasksState>((set, get) => ({
     const requestId = ++latestStatsRequestId;
     const isLatestRequest = () => requestId === latestStatsRequestId;
     const netInfo = await NetInfo.fetch();
-    if (!isLatestRequest()) {return;}
+    if (!isLatestRequest()) {
+      return;
+    }
 
     const isOnline = !!(netInfo.isConnected && netInfo.isInternetReachable);
     if (!isOnline) {
@@ -189,10 +200,12 @@ export const useTasksStore = create<TasksState>((set, get) => ({
 
     try {
       const [activeRes, completedRes] = await Promise.all([
-        tasksService.getTasks({ status: 'ACTIVE', page: 1, limit: 1 }),
-        tasksService.getTasks({ status: 'COMPLETED', page: 1, limit: 1 }),
+        tasksService.getTasks({status: 'ACTIVE', page: 1, limit: 1}),
+        tasksService.getTasks({status: 'COMPLETED', page: 1, limit: 1}),
       ]);
-      if (!isLatestRequest()) {return;}
+      if (!isLatestRequest()) {
+        return;
+      }
 
       if (activeRes.success && completedRes.success) {
         const activeTotal = activeRes.data?.pagination?.total || 0;
@@ -202,10 +215,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
 
         // Active queue dan quarantine sama-sama merepresentasikan tugas yang
         // sudah dijemput lokal tetapi belum mendapat ACK server.
-        const queue = [
-          ...offlineQueue.getQueue(),
-          ...offlineQueue.getFailedPermanent(),
-        ];
+        const queue = [...offlineQueue.getQueue(), ...offlineQueue.getFailedPermanent()];
 
         const uniqueMap = new Map<string, (typeof queue)[number]>();
         for (const item of queue) {
@@ -237,7 +247,9 @@ export const useTasksStore = create<TasksState>((set, get) => ({
     const requestId = ++latestTasksRequestId;
     const isLatestRequest = () => requestId === latestTasksRequestId;
     const netInfo = await NetInfo.fetch();
-    if (!isLatestRequest()) {return;}
+    if (!isLatestRequest()) {
+      return;
+    }
 
     const isOnline = !!(netInfo.isConnected && netInfo.isInternetReachable);
 
@@ -256,21 +268,21 @@ export const useTasksStore = create<TasksState>((set, get) => ({
 
     set({isLoading: true, error: null});
     const otherStatus = status === 'ACTIVE' ? 'COMPLETED' : 'ACTIVE';
-    const localSnapshot = [
-      ...taskCache.getTasks('ACTIVE'),
-      ...taskCache.getTasks('COMPLETED'),
-    ];
+    const localSnapshot = [...taskCache.getTasks('ACTIVE'), ...taskCache.getTasks('COMPLETED')];
 
     const [selectedResult, otherResult] = await Promise.allSettled([
       fetchAllTasksByStatus(status),
       fetchAllTasksByStatus(otherStatus),
     ]);
-    if (!isLatestRequest()) {return;}
+    if (!isLatestRequest()) {
+      return;
+    }
 
     if (selectedResult.status === 'rejected') {
-      const message = selectedResult.reason instanceof Error
-        ? selectedResult.reason.message
-        : 'Terjadi kesalahan jaringan';
+      const message =
+        selectedResult.reason instanceof Error
+          ? selectedResult.reason.message
+          : 'Terjadi kesalahan jaringan';
       set({error: message, isLoading: false});
       return;
     }
@@ -290,16 +302,21 @@ export const useTasksStore = create<TasksState>((set, get) => ({
     });
   },
   loadMore: async (status?: 'ACTIVE' | 'COMPLETED') => {
-    const { page, totalPages, tasks } = get();
-    if (page >= totalPages) { return; }
+    const {page, totalPages, tasks} = get();
+    if (page >= totalPages) {
+      return;
+    }
 
-    set({ isLoading: true });
+    set({isLoading: true});
     try {
-      const result = await tasksService.getTasks({ status, page: page + 1, limit: 20 });
+      const result = await tasksService.getTasks({status, page: page + 1, limit: 20});
 
       if (result.success && result.data) {
         const newTasks = result.data.tasks || [];
-        taskCache.saveTasks(dedupeTasksById([...taskCache.getTasks(status || 'ACTIVE'), ...newTasks]), status || 'ACTIVE');
+        taskCache.saveTasks(
+          dedupeTasksById([...taskCache.getTasks(status || 'ACTIVE'), ...newTasks]),
+          status || 'ACTIVE',
+        );
         const combined = dedupeTasksById([...tasks, ...newTasks]);
         const reconciled = reconcileTasks(combined, status || 'ACTIVE');
         set({
@@ -310,18 +327,20 @@ export const useTasksStore = create<TasksState>((set, get) => ({
         });
       }
     } catch {
-      set({ isLoading: false });
+      set({isLoading: false});
     }
   },
 
-  setCurrentTask: (task: Task | null) => set({ currentTask: task }),
+  setCurrentTask: (task: Task | null) => set({currentTask: task}),
 
   markTaskComplete: (taskId: string, nominal = 0) => {
     const {tasks, activeCount, completedCount, totalCount, completedNominal} = get();
     const moved = taskCache.markCompleted(taskId);
 
     set({tasks: tasks.filter(task => task.id !== taskId)});
-    if (!moved) { return; }
+    if (!moved) {
+      return;
+    }
 
     const stats = {
       active: Math.max(0, activeCount - 1),
@@ -338,7 +357,9 @@ export const useTasksStore = create<TasksState>((set, get) => ({
   },
 
   adjustCompletedNominal: (delta: number) => {
-    if (!Number.isFinite(delta) || delta === 0) { return; }
+    if (!Number.isFinite(delta) || delta === 0) {
+      return;
+    }
     const {activeCount, completedCount, totalCount, completedNominal} = get();
     const nextNominal = Math.max(0, completedNominal + delta);
     tasksStatsCache.set({
@@ -383,7 +404,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
       if (result.success && result.data) {
         const skipped = result.data.skipped_count;
         if (skipped > 0) {
-          const { completedCount, totalCount, completedNominal } = get();
+          const {completedCount, totalCount, completedNominal} = get();
           tasksStatsCache.set({
             active: 0,
             completed: completedCount + skipped,
@@ -397,11 +418,74 @@ export const useTasksStore = create<TasksState>((set, get) => ({
           get().fetchTasks('ACTIVE');
           get().fetchTasks('COMPLETED');
         }
-        return { skipped };
+        return {skipped};
       }
-      return { skipped: 0, error: result.error?.message || 'Gagal menyelesaikan periode' };
+      return {skipped: 0, error: result.error?.message || 'Gagal menyelesaikan periode'};
     } catch {
-      return { skipped: 0, error: 'Gagal menyelesaikan periode' };
+      return {skipped: 0, error: 'Gagal menyelesaikan periode'};
+    }
+  },
+
+  resolveTaskByQRCode: async (qrCode: string) => {
+    if (!qrCode || typeof qrCode !== 'string') {
+      return {
+        success: false,
+        error: {
+          code: 'QR_INVALID',
+          message: 'Format kode QR tidak valid.',
+        },
+      };
+    }
+
+    try {
+      const netInfo = await NetInfo.fetch();
+      const isOnline = !!(netInfo.isConnected && netInfo.isInternetReachable);
+
+      if (!isOnline) {
+        const cachedTask = taskCache.findByQRCode(qrCode);
+        if (cachedTask) {
+          return {
+            success: true,
+            task: cachedTask,
+          };
+        }
+        return {
+          success: false,
+          error: {
+            code: 'NOT_IN_CACHE',
+            message:
+              'Kode QR ini belum tersimpan di perangkat. Hubungkan internet sekali untuk memuat detail kaleng.',
+          },
+        };
+      }
+
+      const result = await tasksService.getTaskByQR(qrCode);
+      if (result.success && result.data) {
+        const task = result.data as Task;
+        const currentActive = taskCache.getTasks('ACTIVE');
+        taskCache.saveTasks([task, ...currentActive], 'ACTIVE');
+        return {
+          success: true,
+          task,
+        };
+      }
+
+      return {
+        success: false,
+        error: {
+          code: result.error?.code || 'QR_INVALID',
+          message: result.error?.message || 'Kode QR tidak valid.',
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Gagal memproses QR code';
+      return {
+        success: false,
+        error: {
+          code: 'NETWORK_ERROR',
+          message,
+        },
+      };
     }
   },
 }));

@@ -1,8 +1,25 @@
+import 'react-native-get-random-values';
 import {getOfflineStorage} from './mmkv';
+
+/**
+ * Menghasilkan ID unik transaksi offline menggunakan generator acak kriptografis.
+ * Memenuhi standar OWASP MASVS-CRYPTO.
+ */
+export function generateOfflineId(): string {
+  const bytes = new Uint8Array(8);
+  if (typeof crypto === 'undefined' || typeof crypto.getRandomValues !== 'function') {
+    // Idempotency key transaksi finansial TIDAK boleh diam-diam mundur ke RNG
+    // yang bisa diprediksi (standar Bab 2.2) — gagal keras lebih aman daripada salah.
+    throw new Error('crypto.getRandomValues tidak tersedia untuk generateOfflineId');
+  }
+  crypto.getRandomValues(bytes);
+  const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  return `local-${Date.now().toString(36)}-${hex}`;
+}
 
 const getOfficerSuffix = (): string => {
   try {
-    const { useAuthStore } = require('../../stores/useAuthStore');
+    const {useAuthStore} = require('../../stores/useAuthStore');
     const userId = useAuthStore.getState().user?.id;
     return userId ? `_${userId}` : '';
   } catch {
@@ -48,7 +65,9 @@ type LegacyQueuedCollection = QueuedCollection & {
 };
 
 function sanitizeQueue(items: LegacyQueuedCollection[]): QueuedCollection[] {
-  return items.map(({payment_method: _paymentMethod, transfer_receipt_url: _transferReceiptUrl, ...item}) => item);
+  return items.map(
+    ({payment_method: _paymentMethod, transfer_receipt_url: _transferReceiptUrl, ...item}) => item,
+  );
 }
 
 export const offlineQueue = {
@@ -61,17 +80,26 @@ export const offlineQueue = {
     const storage = getOfflineStorage();
     const key = getQueueKey();
     const data = storage.getString(key);
-    if (!data) { return []; }
+    if (!data) {
+      return [];
+    }
 
     const queue = sanitizeQueue(JSON.parse(data) as LegacyQueuedCollection[]);
     const sanitizedData = JSON.stringify(queue);
-    if (sanitizedData !== data) { storage.set(key, sanitizedData); }
+    if (sanitizedData !== data) {
+      storage.set(key, sanitizedData);
+    }
     return queue;
   },
 
   enqueue: (item: QueuedCollection): void => {
+    if (!item.offline_id) {
+      item.offline_id = generateOfflineId();
+    }
     const queue = offlineQueue.getQueue();
-    if (queue.some(existing => existing.offline_id === item.offline_id)) { return; }
+    if (queue.some(existing => existing.offline_id === item.offline_id)) {
+      return;
+    }
     queue.push(item);
     getOfflineStorage().set(getQueueKey(), JSON.stringify(queue));
     notifyQueueChanged();
@@ -81,7 +109,9 @@ export const offlineQueue = {
     let queue = offlineQueue.getQueue();
     const previousLength = queue.length;
     queue = queue.filter((item: QueuedCollection) => !offline_ids.includes(item.offline_id));
-    if (queue.length === previousLength) { return; }
+    if (queue.length === previousLength) {
+      return;
+    }
     getOfflineStorage().set(getQueueKey(), JSON.stringify(queue));
     notifyQueueChanged();
   },
@@ -95,11 +125,16 @@ export const offlineQueue = {
    * Mengembalikan true jika item ditemukan dan diperbarui.
    */
   updateNominal: (offline_id: string, newNominal: number): boolean => {
-    if (!Number.isSafeInteger(newNominal) || newNominal < 0) { return false; }
+    if (!Number.isSafeInteger(newNominal) || newNominal < 0) {
+      return false;
+    }
     const queue = offlineQueue.getQueue();
     const idx = queue.findIndex(item => item.offline_id === offline_id);
-    if (idx === -1) { return false; }
-    queue[idx].nominal = newNominal;
+    const item = queue[idx];
+    if (idx === -1 || !item) {
+      return false;
+    }
+    item.nominal = newNominal;
     getOfflineStorage().set(getQueueKey(), JSON.stringify(queue));
     notifyQueueChanged();
     return true;
@@ -108,14 +143,17 @@ export const offlineQueue = {
   getRetryableQueue: (): QueuedCollection[] => {
     const queue = offlineQueue.getQueue();
     const now = Date.now();
-    return queue.filter((item) => item.can_retry !== false && (!item.next_retry_at || Date.parse(item.next_retry_at) <= now));
+    return queue.filter(
+      item =>
+        item.can_retry !== false && (!item.next_retry_at || Date.parse(item.next_retry_at) <= now),
+    );
   },
 
   // P2: Increment retry_attempts pada item-item tertentu (dipanggil saat batchSubmit gagal).
   // Counter ini persisten di MMKV — bertahan antar panggilan autoSync.
   incrementRetryAttempts: (items: QueuedCollection[]): void => {
     const queue = offlineQueue.getQueue();
-    const idsToUpdate = new Set(items.map((i) => i.offline_id));
+    const idsToUpdate = new Set(items.map(i => i.offline_id));
     for (const item of queue) {
       if (idsToUpdate.has(item.offline_id)) {
         item.retry_attempts = (item.retry_attempts || 0) + 1;
@@ -131,11 +169,15 @@ export const offlineQueue = {
     const storage = getOfflineStorage();
     const key = getFailedQueueKey();
     const data = storage.getString(key);
-    if (!data) { return []; }
+    if (!data) {
+      return [];
+    }
 
     const queue = sanitizeQueue(JSON.parse(data) as LegacyQueuedCollection[]);
     const sanitizedData = JSON.stringify(queue);
-    if (sanitizedData !== data) { storage.set(key, sanitizedData); }
+    if (sanitizedData !== data) {
+      storage.set(key, sanitizedData);
+    }
     return queue;
   },
 
@@ -147,8 +189,8 @@ export const offlineQueue = {
     getOfflineStorage().set(getFailedQueueKey(), JSON.stringify(allFailed));
 
     const queue = offlineQueue.getQueue();
-    const failedIds = items.map((i) => i.offline_id);
-    const remaining = queue.filter((item) => !failedIds.includes(item.offline_id));
+    const failedIds = items.map(i => i.offline_id);
+    const remaining = queue.filter(item => !failedIds.includes(item.offline_id));
     getOfflineStorage().set(getQueueKey(), JSON.stringify(remaining));
     notifyQueueChanged();
   },
@@ -160,8 +202,10 @@ export const offlineQueue = {
   removeFromFailedPermanent: (offline_ids: string[]): void => {
     let failed = offlineQueue.getFailedPermanent();
     const previousLength = failed.length;
-    failed = failed.filter((item) => !offline_ids.includes(item.offline_id));
-    if (failed.length === previousLength) { return; }
+    failed = failed.filter(item => !offline_ids.includes(item.offline_id));
+    if (failed.length === previousLength) {
+      return;
+    }
     getOfflineStorage().set(getFailedQueueKey(), JSON.stringify(failed));
     notifyQueueChanged();
   },
@@ -193,11 +237,16 @@ export const offlineQueue = {
 
       for (const item of failed) {
         const isValid =
-          typeof item.offline_id === 'string' && item.offline_id.length > 0 &&
-          typeof item.assignment_id === 'string' && item.assignment_id.length > 0 &&
-          typeof item.can_id === 'string' && item.can_id.length > 0 &&
-          typeof item.nominal === 'number' && item.nominal >= 0 &&
-          typeof item.collected_at === 'string' && !isNaN(Date.parse(item.collected_at));
+          typeof item.offline_id === 'string' &&
+          item.offline_id.length > 0 &&
+          typeof item.assignment_id === 'string' &&
+          item.assignment_id.length > 0 &&
+          typeof item.can_id === 'string' &&
+          item.can_id.length > 0 &&
+          typeof item.nominal === 'number' &&
+          item.nominal >= 0 &&
+          typeof item.collected_at === 'string' &&
+          !isNaN(Date.parse(item.collected_at));
 
         if (isValid) {
           // 3. Reset metadata kegagalan kontrak
@@ -224,7 +273,9 @@ export const offlineQueue = {
         // 4. Pindahkan kembali ke active queue baru (dengan suffix)
         const currentQueueKey = getQueueKey();
         const activeData = storage.getString(currentQueueKey);
-        const activeQueue = activeData ? sanitizeQueue(JSON.parse(activeData) as LegacyQueuedCollection[]) : [];
+        const activeQueue = activeData
+          ? sanitizeQueue(JSON.parse(activeData) as LegacyQueuedCollection[])
+          : [];
         const mergedActive = [...activeQueue, ...validToRecover];
 
         // 5. Tulis active queue baru, baru bersihkan / update key lama
@@ -241,9 +292,15 @@ export const offlineQueue = {
       // 6. Set version key
       storage.set(getSchemaVersionKey(), CURRENT_SCHEMA_VERSION);
       notifyQueueChanged();
-      console.log(`[Migration] Recovered ${validToRecover.length} failed collections back to active queue.`);
+      if (__DEV__) {
+        console.log(
+          `[Migration] Recovered ${validToRecover.length} failed collections back to active queue.`,
+        );
+      }
     } catch (err) {
-      console.error('[Migration] Failed to run MMKV migration:', err);
+      if (__DEV__) {
+        console.error('[Migration] Failed to run MMKV migration:', err);
+      }
     }
   },
 };

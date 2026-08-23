@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import {create} from 'zustand';
 // Officer dari shared-types (SSOT) diimpor sebagai referensi tipe. Tipe lokal
 // OfficerWithStats adalah versi "display-ready" dengan relasi district/branch
 // yang sudah ter-resolve sebagai objek + stats computed. Hindari shadowing nama
@@ -32,7 +32,7 @@ interface OfficerState {
   fetchOfficer: () => Promise<void>;
 }
 
-export const useOfficerStore = create<OfficerState>((set) => ({
+export const useOfficerStore = create<OfficerState>(set => ({
   officer: null,
   isLoading: false,
   error: null,

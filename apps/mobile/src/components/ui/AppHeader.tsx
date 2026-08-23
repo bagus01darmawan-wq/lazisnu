@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import {View, Text, StyleSheet, TouchableOpacity} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import { Colors, ComponentSizes, Spacing, Typography } from '../../theme';
+import {Colors, ComponentSizes, Spacing, Typography} from '../../theme';
 
 type AppHeaderVariant = 'auth' | 'main' | 'stack';
 
@@ -13,12 +13,7 @@ type AppHeaderProps = {
   rightAction?: React.ReactNode;
 };
 
-export const AppHeader: React.FC<AppHeaderProps> = ({
-  variant,
-  title,
-  onBack,
-  rightAction,
-}) => {
+export const AppHeader: React.FC<AppHeaderProps> = ({variant, title, onBack, rightAction}) => {
   const insets = useSafeAreaInsets();
 
   if (variant === 'auth') {
@@ -59,8 +54,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         style={styles.backButton}
         accessibilityRole="button"
         accessibilityLabel="Kembali"
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      >
+        hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
         <Icon name="arrow-left" size={24} color={Colors.text.primary} />
       </TouchableOpacity>
       <Text style={styles.stackTitle} numberOfLines={1}>

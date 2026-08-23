@@ -117,10 +117,12 @@ jest.mock('../../src/stores', () => ({
 jest.mock('../../src/services/api', () => ({
   __esModule: true,
   tasksService: {
-    getTasks: jest.fn(() => Promise.resolve({
-      success: true,
-      data: {pagination: {total: 1}},
-    })),
+    getTasks: jest.fn(() =>
+      Promise.resolve({
+        success: true,
+        data: {pagination: {total: 1}},
+      }),
+    ),
   },
   default: {
     collection: {resubmitCollection: jest.fn()},
@@ -164,8 +166,12 @@ describe('authenticated screen render smoke tests', () => {
     expect(mockFetchCollections).toHaveBeenCalled();
   });
 
-  it('renders ProfileScreen using authenticated user data', () => {
-    expect(render(<ProfileScreen />).toJSON()).not.toBeNull();
+  it('renders ProfileScreen using authenticated user data', async () => {
+    let tree: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderer.create(<ProfileScreen />);
+    });
+    expect(tree!.toJSON()).not.toBeNull();
   });
 
   it('renders CollectionScreen with a scanned task', () => {
@@ -176,4 +182,3 @@ describe('authenticated screen render smoke tests', () => {
     ).not.toBeNull();
   });
 });
-

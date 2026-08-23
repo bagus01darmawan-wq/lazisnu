@@ -49,10 +49,7 @@ export function setAuthTag(key: string, value: string | number | boolean): void 
   }
 }
 
-export function captureAuthEvent(
-  code: string,
-  context?: Record<string, unknown>,
-): void {
+export function captureAuthEvent(code: string, context?: Record<string, unknown>): void {
   try {
     const reporter = getReporter();
     ignoreFailure(setAttribute(reporter, 'auth.event_code', code));

@@ -2,10 +2,7 @@
 // Urutan ini mencegah file terenkripsi dibuka tanpa key pada cold start.
 
 import {getAuthStorage, initializeAuthStorage} from './api';
-import {
-  getOfflineStorage,
-  initializeOfflineStorage,
-} from './offline/mmkv';
+import {getOfflineStorage, initializeOfflineStorage} from './offline/mmkv';
 import {
   clearEncryptionKey,
   generateEphemeralKey,

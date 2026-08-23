@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, {useEffect} from 'react';
 import {
   Alert,
   Image,
@@ -9,29 +9,24 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {useNavigation} from '@react-navigation/native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useAuthStore, useDashboardStore, useSyncStore } from '../stores';
-import { Colors, DashboardLayout, Layout, Radius, Shadows, Spacing, Typography } from '../theme';
+import {useAuthStore, useDashboardStore, useSyncStore} from '../stores';
+import {SyncBanner} from '../components/ui';
+import {Colors, DashboardLayout, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
+import {formatCurrency} from '../utils';
+import type {MainNavigationProp} from '../navigation/types';
 
 const logo = require('../assets/branding/logo-lazisnu-putih.png');
 
-const formatCurrency = (nominal: number) =>
-  new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    maximumFractionDigits: 0,
-  }).format(nominal);
-
 const DashboardScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<MainNavigationProp>();
   const insets = useSafeAreaInsets();
   const user = useAuthStore(state => state.user);
-  const { todayStats, pendingTasks, fetchDashboard, isLoading, error } =
-    useDashboardStore();
-  const { pendingCount, permanentFailedCount, checkStatus, triggerSync } = useSyncStore();
+  const {todayStats, pendingTasks, fetchDashboard, isLoading, error} = useDashboardStore();
+  const {pendingCount, permanentFailedCount, isSyncing, checkStatus, triggerSync} = useSyncStore();
   const totalSyncIssues = pendingCount + permanentFailedCount;
 
   useEffect(() => {
@@ -64,9 +59,9 @@ const DashboardScreen: React.FC = () => {
       'Data Belum Terkirim',
       'Penjemputan tetap aman tersimpan di perangkat. Aplikasi akan mencoba mengirim kembali secara otomatis.',
       [
-        { text: 'Nanti', style: 'cancel' },
-        { text: 'Lihat Detail', onPress: () => navigation.navigate('History') },
-        { text: 'Coba Kirim Lagi', onPress: () => triggerSync() },
+        {text: 'Nanti', style: 'cancel'},
+        {text: 'Lihat Detail', onPress: () => navigation.navigate('History')},
+        {text: 'Coba Kirim Lagi', onPress: () => triggerSync()},
       ],
     );
   };
@@ -86,7 +81,7 @@ const DashboardScreen: React.FC = () => {
         }>
         <LinearGradient
           colors={[Colors.brand.heroStart, Colors.brand.deepGreen, Colors.brand.heroEnd]}
-          style={[styles.hero, { paddingTop: insets.top + Spacing.md }]}>
+          style={[styles.hero, {paddingTop: insets.top + Spacing.md}]}>
           <View pointerEvents={'none'} style={styles.heroArcOuter} />
           <View pointerEvents={'none'} style={styles.heroArcInner} />
 
@@ -125,41 +120,27 @@ const DashboardScreen: React.FC = () => {
           <Text style={styles.greeting}>Assalamu’alaikum, {firstName}</Text>
           <Text style={styles.date}>{date}</Text>
 
-          <TouchableOpacity
-            accessibilityRole={totalSyncIssues ? 'button' : undefined}
-            accessibilityLabel={
-              totalSyncIssues ? `Periksa ${totalSyncIssues} data belum tersinkronisasi` : undefined
-            }
-            disabled={!totalSyncIssues}
-            activeOpacity={totalSyncIssues ? 0.8 : 1}
-            onPress={openSyncIssue}
-            style={styles.syncBanner}>
-            <Icon
-              name={
-                permanentFailedCount
-                  ? 'alert-circle-outline'
+          <SyncBanner
+            status={
+              isSyncing
+                ? 'syncing'
+                : permanentFailedCount
+                  ? 'failed'
                   : pendingCount
-                    ? 'cloud-sync-outline'
-                    : 'cloud-check-outline'
-              }
-              size={26}
-              color={Colors.brand.deepGreen}
-            />
-            <View style={styles.syncContent}>
-              <Text style={styles.syncText}>
-                {totalSyncIssues
-                  ? `${totalSyncIssues} data belum tersinkronisasi`
-                  : 'Semua data tersinkronisasi'}
-              </Text>
-              {!!totalSyncIssues && (
-                <Text style={styles.syncHelper}>
-                  {permanentFailedCount
-                    ? `${pendingCount} menunggu, ${permanentFailedCount} perlu ditinjau`
-                    : 'Akan dikirim saat koneksi tersedia'}
-                </Text>
-              )}
-            </View>
-          </TouchableOpacity>
+                    ? 'offline'
+                    : 'synced'
+            }
+            count={totalSyncIssues || undefined}
+            subtext={
+              totalSyncIssues
+                ? permanentFailedCount
+                  ? `${pendingCount} menunggu, ${permanentFailedCount} perlu ditinjau`
+                  : 'Akan dikirim saat koneksi tersedia'
+                : undefined
+            }
+            onPress={totalSyncIssues ? openSyncIssue : undefined}
+            style={styles.syncBanner}
+          />
         </LinearGradient>
 
         <View style={styles.body}>
@@ -178,11 +159,13 @@ const DashboardScreen: React.FC = () => {
             </View>
             <View style={styles.progressDivider} />
             <View style={styles.progressHeading}>
-              <Text style={styles.progressLabel}>{collected} dari {total} tugas selesai</Text>
+              <Text style={styles.progressLabel}>
+                {collected} dari {total} tugas selesai
+              </Text>
               <Text style={styles.progressPercent}>{Math.round(progress * 100)}%</Text>
             </View>
             <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
+              <View style={[styles.progressFill, {width: `${Math.round(progress * 100)}%`}]} />
             </View>
           </View>
 
@@ -193,7 +176,9 @@ const DashboardScreen: React.FC = () => {
               style={styles.errorBanner}
               onPress={refresh}>
               <Icon name={'alert-circle-outline'} size={20} color={Colors.status.error} />
-              <Text style={styles.errorText}>Ringkasan gagal diperbarui. Ketuk untuk mencoba lagi.</Text>
+              <Text style={styles.errorText}>
+                Ringkasan gagal diperbarui. Ketuk untuk mencoba lagi.
+              </Text>
             </TouchableOpacity>
           )}
 
@@ -222,15 +207,15 @@ const DashboardScreen: React.FC = () => {
                 onPress={() => navigation.navigate('Tasks')}
                 style={styles.taskCard}>
                 <View style={styles.taskIcon}>
-                  <Icon
-                    name={'package-variant-closed'}
-                    size={24}
-                    color={Colors.brand.deepGreen}
-                  />
+                  <Icon name={'package-variant-closed'} size={24} color={Colors.brand.deepGreen} />
                 </View>
                 <View style={styles.taskContent}>
-                  <Text style={styles.taskOwner} numberOfLines={1}>{task.owner_name}</Text>
-                  <Text style={styles.taskAddress} numberOfLines={1}>{task.address}</Text>
+                  <Text style={styles.taskOwner} numberOfLines={1}>
+                    {task.owner_name}
+                  </Text>
+                  <Text style={styles.taskAddress} numberOfLines={1}>
+                    {task.address}
+                  </Text>
                 </View>
                 <View style={styles.pendingBadge}>
                   <Text style={styles.pendingText}>BELUM</Text>
@@ -255,7 +240,7 @@ const DashboardScreen: React.FC = () => {
   );
 };
 
-const Stat = ({ value, label, wide = false }: { value: string; label: string; wide?: boolean }) => (
+const Stat = ({value, label, wide = false}: {value: string; label: string; wide?: boolean}) => (
   <View style={[styles.stat, wide && styles.statWide]}>
     <Text
       style={[styles.statValue, wide && styles.statValueWide]}
@@ -269,8 +254,8 @@ const Stat = ({ value, label, wide = false }: { value: string; label: string; wi
 );
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Colors.surface.page },
-  scrollContent: { paddingBottom: Spacing.xl },
+  screen: {flex: 1, backgroundColor: Colors.surface.page},
+  scrollContent: {paddingBottom: Spacing.xl},
   hero: {
     overflow: 'hidden',
     paddingHorizontal: Layout.screenPadding,
@@ -279,14 +264,31 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: DashboardLayout.heroCornerRadius,
   },
   heroArcOuter: {
-    position: 'absolute', width: 300, height: 300, borderRadius: 150,
-    borderWidth: 1, borderColor: Colors.overlay.sandSoft, top: -200, right: -132,
+    position: 'absolute',
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    borderWidth: 1,
+    borderColor: Colors.overlay.sandSoft,
+    top: -200,
+    right: -132,
   },
   heroArcInner: {
-    position: 'absolute', width: 240, height: 240, borderRadius: 120,
-    borderWidth: 1, borderColor: Colors.overlay.sandSubtle, top: -156, right: -102,
+    position: 'absolute',
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    borderWidth: 1,
+    borderColor: Colors.overlay.sandSubtle,
+    top: -156,
+    right: -102,
   },
-  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.xs },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.xs,
+  },
   logoContainer: {
     width: 140,
     height: 92,
@@ -299,96 +301,145 @@ const styles = StyleSheet.create({
     height: 70,
     tintColor: Colors.text.white,
   },
-  topActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  topActions: {flexDirection: 'row', alignItems: 'center', gap: Spacing.sm},
+  iconButton: {width: 44, height: 44, alignItems: 'center', justifyContent: 'center'},
   notificationDot: {
-    position: 'absolute', right: 5, top: 5, width: 9, height: 9,
-    borderRadius: Radius.pill, backgroundColor: Colors.status.error,
-    borderWidth: 2, borderColor: Colors.brand.deepGreen,
+    position: 'absolute',
+    right: 5,
+    top: 5,
+    width: 9,
+    height: 9,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.status.error,
+    borderWidth: 2,
+    borderColor: Colors.brand.deepGreen,
   },
   avatar: {
-    width: 48, height: 48, borderRadius: Radius.pill, backgroundColor: Colors.surface.avatar,
-    borderWidth: 2, borderColor: Colors.text.white, alignItems: 'center', justifyContent: 'center',
+    width: 48,
+    height: 48,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.surface.avatar,
+    borderWidth: 2,
+    borderColor: Colors.text.white,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  greeting: { ...Typography.heading1, color: Colors.text.white, fontSize: 23, lineHeight: 29 },
-  date: { ...Typography.body, color: Colors.text.white, opacity: 0.86, marginTop: Spacing.xs },
+  greeting: {...Typography.heading1, color: Colors.text.white, fontSize: 23, lineHeight: 29},
+  date: {...Typography.body, color: Colors.text.white, opacity: 0.86, marginTop: Spacing.xs},
   syncBanner: {
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
+    // Nilai visual (bg/radius/padding/row) disediakan oleh komponen SyncBanner
+    // sesuai statusnya — style di sini hanya untuk penempatan di hero.
     marginTop: Spacing.md,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.brand.mutedSand,
+  },
+  body: {paddingHorizontal: Layout.screenPadding, marginTop: -DashboardLayout.heroOverlap},
+  summaryCard: {
+    minHeight: DashboardLayout.summaryMinHeight,
+    backgroundColor: Colors.surface.card,
+    borderRadius: Radius.panel,
+    borderWidth: 1,
+    borderColor: Colors.border.accent,
+    padding: Layout.cardPadding,
+    ...Shadows.medium,
+  },
+  summaryTitle: {...Typography.heading2, color: Colors.brand.deepGreen, marginBottom: Spacing.md},
+  statsRow: {flexDirection: 'row', alignItems: 'center'},
+  stat: {flex: 0.8, alignItems: 'center'},
+  statWide: {flex: 1.6},
+  statValue: {color: Colors.brand.deepGreen, fontSize: 27, lineHeight: 33, fontWeight: '800'},
+  statValueWide: {fontSize: 19},
+  statLabel: {...Typography.bodySmall, color: Colors.text.secondary, marginTop: 2},
+  statDivider: {width: 1, height: 54, backgroundColor: Colors.border.summary},
+  progressDivider: {
+    height: 1,
+    backgroundColor: Colors.border.summary,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  progressHeading: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
+  progressLabel: {...Typography.bodySmall, color: Colors.brand.deepGreen, fontWeight: '600'},
+  progressPercent: {...Typography.caption, color: Colors.text.secondary},
+  progressTrack: {
+    height: 10,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.surface.progressTrack,
+    marginTop: Spacing.sm,
+    overflow: 'hidden',
+  },
+  progressFill: {height: '100%', borderRadius: Radius.pill, backgroundColor: Colors.brand.emerald},
+  errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
+    backgroundColor: Colors.surface.errorSoft,
+    padding: Spacing.sm,
+    borderRadius: Radius.md,
+    marginTop: Spacing.md,
   },
-  syncContent: { flex: 1 },
-  syncText: { ...Typography.body, color: Colors.brand.deepGreen, fontWeight: '700' },
-  syncHelper: { ...Typography.caption, color: Colors.brand.deepGreen, opacity: 0.75, marginTop: 2 },
-  body: { paddingHorizontal: Layout.screenPadding, marginTop: -DashboardLayout.heroOverlap },
-  summaryCard: {
-    minHeight: DashboardLayout.summaryMinHeight, backgroundColor: Colors.surface.card,
-    borderRadius: Radius.panel, borderWidth: 1, borderColor: Colors.border.accent,
-    padding: Layout.cardPadding, ...Shadows.medium,
-  },
-  summaryTitle: { ...Typography.heading2, color: Colors.brand.deepGreen, marginBottom: Spacing.md },
-  statsRow: { flexDirection: 'row', alignItems: 'center' },
-  stat: { flex: 0.8, alignItems: 'center' },
-  statWide: { flex: 1.6 },
-  statValue: { color: Colors.brand.deepGreen, fontSize: 27, lineHeight: 33, fontWeight: '800' },
-  statValueWide: { fontSize: 19 },
-  statLabel: { ...Typography.bodySmall, color: Colors.text.secondary, marginTop: 2 },
-  statDivider: { width: 1, height: 54, backgroundColor: Colors.border.summary },
-  progressDivider: { height: 1, backgroundColor: Colors.border.summary, marginTop: Spacing.md, marginBottom: Spacing.sm },
-  progressHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  progressLabel: { ...Typography.bodySmall, color: Colors.brand.deepGreen, fontWeight: '600' },
-  progressPercent: { ...Typography.caption, color: Colors.text.secondary },
-  progressTrack: {
-    height: 10, borderRadius: Radius.pill, backgroundColor: Colors.surface.progressTrack,
-    marginTop: Spacing.sm, overflow: 'hidden',
-  },
-  progressFill: { height: '100%', borderRadius: Radius.pill, backgroundColor: Colors.brand.emerald },
-  errorBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
-    backgroundColor: Colors.surface.errorSoft, padding: Spacing.sm, borderRadius: Radius.md, marginTop: Spacing.md,
-  },
-  errorText: { ...Typography.caption, color: Colors.status.error, flex: 1 },
+  errorText: {...Typography.caption, color: Colors.status.error, flex: 1},
   sectionHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginTop: Spacing.lg, marginBottom: Spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.sm,
   },
-  sectionTitle: { ...Typography.heading2, color: Colors.brand.deepGreen },
-  sectionSubtitle: { ...Typography.caption, color: Colors.text.secondary, marginTop: 2 },
-  seeAll: { minHeight: 48, flexDirection: 'row', alignItems: 'center' },
-  seeAllText: { ...Typography.bodySmall, color: Colors.brand.accentGold, fontWeight: '700' },
+  sectionTitle: {...Typography.heading2, color: Colors.brand.deepGreen},
+  sectionSubtitle: {...Typography.caption, color: Colors.text.secondary, marginTop: 2},
+  seeAll: {minHeight: 48, flexDirection: 'row', alignItems: 'center'},
+  seeAllText: {...Typography.bodySmall, color: Colors.brand.accentGold, fontWeight: '700'},
   taskCard: {
-    minHeight: 72, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border.warm,
-    backgroundColor: Colors.surface.card, marginBottom: Spacing.sm, paddingHorizontal: Spacing.sm,
-    flexDirection: 'row', alignItems: 'center', ...Shadows.soft,
+    minHeight: 72,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border.warm,
+    backgroundColor: Colors.surface.card,
+    marginBottom: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    ...Shadows.soft,
   },
   taskIcon: {
-    width: 42, height: 42, borderRadius: Radius.md, backgroundColor: Colors.surface.successSubtle,
-    alignItems: 'center', justifyContent: 'center', marginRight: Spacing.sm,
+    width: 42,
+    height: 42,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.surface.successSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.sm,
   },
-  taskContent: { flex: 1, minWidth: 0 },
-  taskOwner: { ...Typography.body, color: Colors.brand.deepGreen, fontWeight: '700' },
-  taskAddress: { ...Typography.bodySmall, color: Colors.text.secondary, marginTop: 2 },
+  taskContent: {flex: 1, minWidth: 0},
+  taskOwner: {...Typography.body, color: Colors.brand.deepGreen, fontWeight: '700'},
+  taskAddress: {...Typography.bodySmall, color: Colors.text.secondary, marginTop: 2},
   pendingBadge: {
-    borderRadius: Radius.md, backgroundColor: Colors.surface.warningSoft,
-    paddingHorizontal: Spacing.sm, paddingVertical: 6, marginRight: Spacing.xs,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.surface.warningSoft,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 6,
+    marginRight: Spacing.xs,
   },
-  pendingText: { color: Colors.brand.accentGold, fontSize: 11, fontWeight: '700' },
+  pendingText: {color: Colors.brand.accentGold, fontSize: 11, fontWeight: '700'},
   emptyCard: {
-    minHeight: 90, borderRadius: Radius.lg, backgroundColor: Colors.surface.card,
-    borderWidth: 1, borderColor: Colors.border.warm, flexDirection: 'row',
-    alignItems: 'center', padding: Spacing.md,
+    minHeight: 90,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.surface.card,
+    borderWidth: 1,
+    borderColor: Colors.border.warm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
   },
   emptyIcon: {
-    width: 44, height: 44, borderRadius: Radius.pill, backgroundColor: Colors.surface.successSubtle,
-    alignItems: 'center', justifyContent: 'center', marginRight: Spacing.sm,
+    width: 44,
+    height: 44,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.surface.successSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.sm,
   },
-  emptyTitle: { ...Typography.body, color: Colors.brand.deepGreen, fontWeight: '700' },
-  emptyText: { ...Typography.caption, color: Colors.text.secondary, marginTop: 2 },
+  emptyTitle: {...Typography.body, color: Colors.brand.deepGreen, fontWeight: '700'},
+  emptyText: {...Typography.caption, color: Colors.text.secondary, marginTop: 2},
 });
 
 export default DashboardScreen;

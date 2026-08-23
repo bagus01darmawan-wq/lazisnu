@@ -12,7 +12,7 @@
 // karena unit test tidak menguji entropi — yang diuji adalah behavior
 // (generate key, reuse, wipe, fallback path).
 global.crypto = {
-  getRandomValues: (array) => {
+  getRandomValues: array => {
     for (let i = 0; i < array.length; i++) {
       array[i] = Math.floor(Math.random() * 256);
     }
@@ -36,9 +36,11 @@ jest.mock('@react-native-firebase/crashlytics', () => {
 });
 
 jest.mock('@react-native-community/netinfo', () => ({
-  fetch: jest.fn(() => Promise.resolve({
-    isConnected: true,
-    isInternetReachable: true,
-  })),
+  fetch: jest.fn(() =>
+    Promise.resolve({
+      isConnected: true,
+      isInternetReachable: true,
+    }),
+  ),
   addEventListener: jest.fn(() => jest.fn()),
 }));

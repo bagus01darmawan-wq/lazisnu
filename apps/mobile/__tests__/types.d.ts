@@ -4,18 +4,17 @@
 // AUGMENT (tambah), bukan REPLACE. Kuncinya: import module dulu, baru
 // `declare module` — supaya TypeScript tahu kita menambah ke type yang sudah ada.
 
-
 import type * as _Keychain from 'react-native-keychain';
 import type * as _Mmkv from 'react-native-mmkv';
 
 declare module 'react-native-keychain' {
   export function __setMockValue(
-    value: { service: string; username: string; password: string } | null,
+    value: {service: string; username: string; password: string} | null,
   ): void;
   export function __setMockError(error: Error | null): void;
   export function __setBiometryType(type: string | null): void;
   export function __resetMock(): void;
-  export function __getCalls(): { method: string; args: unknown }[];
+  export function __getCalls(): {method: string; args: unknown}[];
 }
 
 declare module 'react-native-mmkv' {

@@ -1,7 +1,7 @@
 import NetInfo from '@react-native-community/netinfo';
-import { offlineQueue, QueuedCollection } from './queue';
-import { collectionService } from '../api';
-import { BatchCollectionRequestItem } from '@lazisnu/shared-types';
+import {offlineQueue, QueuedCollection} from './queue';
+import {collectionService} from '../api';
+import {BatchCollectionRequestItem, DeviceInfo} from '@lazisnu/shared-types';
 
 function toBatchPayload(item: QueuedCollection): BatchCollectionRequestItem {
   return {
@@ -12,14 +12,16 @@ function toBatchPayload(item: QueuedCollection): BatchCollectionRequestItem {
     collected_at: item.collected_at,
     latitude: item.latitude,
     longitude: item.longitude,
-    device_info: item.device_info as any,
+    device_info: item.device_info as DeviceInfo | undefined,
   };
 }
 
 // Console.log hanya aktif di dev — mencegah log detail transaksi
 // bocor ke logcat di production build.
 const devLog = (message: string) => {
-  if (__DEV__) { console.log(message); }
+  if (__DEV__) {
+    console.log(message);
+  }
 };
 
 // Module-level lock — accessible to all callers (network listener, submitCollection, triggerSync).
@@ -32,16 +34,34 @@ let syncInProgress = false;
 const MAX_RETRIES = 3;
 
 export const syncService = {
-  autoSync: async (): Promise<{ success: boolean; synced: number; failed: number; remaining: number; error?: any }> => {
+  autoSync: async (): Promise<{
+    success: boolean;
+    synced: number;
+    failed: number;
+    remaining: number;
+    error?: unknown;
+  }> => {
     // Guard: kalau sudah ada sync berjalan, tolak pemanggilan baru.
     // Data tetap ada di queue MMKV — akan tertangani di sync berikutnya.
     if (syncInProgress) {
-      return { success: false, synced: 0, failed: 0, remaining: offlineQueue.getRetryableQueue().length, error: 'SYNC_IN_PROGRESS' };
+      return {
+        success: false,
+        synced: 0,
+        failed: 0,
+        remaining: offlineQueue.getRetryableQueue().length,
+        error: 'SYNC_IN_PROGRESS',
+      };
     }
 
     const netInfo = await NetInfo.fetch();
     if (!netInfo.isConnected || !netInfo.isInternetReachable) {
-      return { success: false, synced: 0, failed: 0, remaining: offlineQueue.getRetryableQueue().length, error: 'NO_NETWORK' };
+      return {
+        success: false,
+        synced: 0,
+        failed: 0,
+        remaining: offlineQueue.getRetryableQueue().length,
+        error: 'NO_NETWORK',
+      };
     }
 
     syncInProgress = true;
@@ -59,15 +79,15 @@ export const syncService = {
 
         // P2: Sebelum kirim batch, pindahkan item yang retry_attempts-nya sudah habis.
         const queue = offlineQueue.getRetryableQueue();
-        const expiredItems = queue.filter((item) => (item.retry_attempts || 0) >= MAX_RETRIES);
+        const expiredItems = queue.filter(item => (item.retry_attempts || 0) >= MAX_RETRIES);
         if (expiredItems.length > 0) {
           offlineQueue.moveToFailedPermanent(
-            expiredItems.map((item) => ({
+            expiredItems.map(item => ({
               ...item,
               error_type: 'SERVER',
               can_retry: false,
               error_message: `Melebihi batas retry (${MAX_RETRIES}x)`,
-            }))
+            })),
           );
           totalFailed += expiredItems.length;
           devLog(`[Sync] ${expiredItems.length} item expired → failedPermanent.`);
@@ -77,7 +97,12 @@ export const syncService = {
         const remaining = offlineQueue.getRetryableQueue();
         if (remaining.length === 0) {
           const queuedCount = offlineQueue.getQueueCount();
-          return { success: queuedCount === 0, synced: totalSynced, failed: totalFailed, remaining: queuedCount };
+          return {
+            success: queuedCount === 0,
+            synced: totalSynced,
+            failed: totalFailed,
+            remaining: queuedCount,
+          };
         }
 
         try {
@@ -93,8 +118,10 @@ export const syncService = {
             const retryableFailures: QueuedCollection[] = [];
 
             for (const item of remaining) {
-              const result = results.find((r) => r.offline_id === item.offline_id);
-              if (!result) {continue;}
+              const result = results.find(r => r.offline_id === item.offline_id);
+              if (!result) {
+                continue;
+              }
 
               if (result.status === 'COMPLETED' || result.status === 'ALREADY_SYNCED') {
                 syncedIds.push(item.offline_id);
@@ -133,7 +160,12 @@ export const syncService = {
             const stillQueued = offlineQueue.getRetryableQueue();
             if (stillQueued.length === 0) {
               const queuedCount = offlineQueue.getQueueCount();
-              return { success: queuedCount === 0, synced: totalSynced, failed: totalFailed, remaining: queuedCount };
+              return {
+                success: queuedCount === 0,
+                synced: totalSynced,
+                failed: totalFailed,
+                remaining: queuedCount,
+              };
             }
 
             // Masih ada item di queue (kemungkinan 5xx dari batch ini) —
@@ -142,13 +174,17 @@ export const syncService = {
             // Batch gagal total (response.success = false)
             // P2: Increment retry_attempts pada SEMUA item di batch ini.
             offlineQueue.incrementRetryAttempts(remaining);
-            devLog(`[Sync] Batch gagal, retry_attempts di-increment untuk ${remaining.length} item.`);
+            devLog(
+              `[Sync] Batch gagal, retry_attempts di-increment untuk ${remaining.length} item.`,
+            );
           }
         } catch (error) {
           // Network error (5xx, timeout, dll)
           // P2: Increment retry_attempts pada semua item di batch.
           offlineQueue.incrementRetryAttempts(remaining);
-          devLog(`[Sync] Network error, retry_attempts di-increment untuk ${remaining.length} item.`);
+          devLog(
+            `[Sync] Network error, retry_attempts di-increment untuk ${remaining.length} item.`,
+          );
         }
       }
 
@@ -168,11 +204,11 @@ export const syncService = {
 
   startNetworkListener: () => {
     // Tidak perlu syncInProgress lokal — guard ada di autoSync().
-    return NetInfo.addEventListener(async (state) => {
+    return NetInfo.addEventListener(async state => {
       if (state.isConnected && state.isInternetReachable) {
         try {
           // Dynamic import useSyncStore to prevent circular dependency
-          const { useSyncStore } = require('../../stores/useSyncStore');
+          const {useSyncStore} = require('../../stores/useSyncStore');
           await useSyncStore.getState().triggerSync();
         } catch {
           await syncService.autoSync();

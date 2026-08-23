@@ -17,13 +17,18 @@ export const taskCache = {
   getTasks: (status: TaskFilter = 'ACTIVE'): Task[] => {
     const storage = getOfflineStorage();
     const key = getTasksKey(status);
-    const data = storage.getString(key) ||
+    const data =
+      storage.getString(key) ||
       (status === 'ACTIVE' ? storage.getString(LEGACY_TASKS_KEY) : undefined);
-    if (!data) {return [];}
+    if (!data) {
+      return [];
+    }
     try {
       const parsed = JSON.parse(data);
       const tasks = Array.isArray(parsed) ? dedupeTasks(parsed as Task[]) : [];
-      if (!storage.getString(key)) {storage.set(key, JSON.stringify(tasks));}
+      if (!storage.getString(key)) {
+        storage.set(key, JSON.stringify(tasks));
+      }
       return tasks;
     } catch {
       return [];
@@ -32,23 +37,25 @@ export const taskCache = {
 
   findByQRCode: (qrCode: string): Task | null => {
     const normalized = qrCode.trim().toLowerCase();
-    const allTasks = [
-      ...taskCache.getTasks('ACTIVE'),
-      ...taskCache.getTasks('COMPLETED'),
-    ];
+    const allTasks = [...taskCache.getTasks('ACTIVE'), ...taskCache.getTasks('COMPLETED')];
     return allTasks.find(task => task.qr_code.trim().toLowerCase() === normalized) || null;
   },
 
   markCompleted: (taskId: string): boolean => {
     const active = taskCache.getTasks('ACTIVE');
     const task = active.find(item => item.id === taskId);
-    if (!task) { return false; }
+    if (!task) {
+      return false;
+    }
 
-    taskCache.saveTasks(active.filter(item => item.id !== taskId), 'ACTIVE');
-    taskCache.saveTasks([
-      {...task, status: AssignmentStatus.COMPLETED},
-      ...taskCache.getTasks('COMPLETED'),
-    ], 'COMPLETED');
+    taskCache.saveTasks(
+      active.filter(item => item.id !== taskId),
+      'ACTIVE',
+    );
+    taskCache.saveTasks(
+      [{...task, status: AssignmentStatus.COMPLETED}, ...taskCache.getTasks('COMPLETED')],
+      'COMPLETED',
+    );
     return true;
   },
 

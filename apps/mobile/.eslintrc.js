@@ -1,6 +1,7 @@
 module.exports = {
   root: true,
   extends: '@react-native',
+  ignorePatterns: ['coverage/', 'node_modules/', 'android/', 'ios/'],
   rules: {
     'prettier/prettier': 0,
     '@typescript-eslint/no-unused-vars': [
@@ -10,8 +11,9 @@ module.exports = {
         varsIgnorePattern: '^_',
       },
     ],
-    'react-hooks/exhaustive-deps': 'warn',
-    'react-native/no-inline-styles': 0,
+    '@typescript-eslint/no-explicit-any': 'error',
+    'react-hooks/exhaustive-deps': 'error',
+    'react-native/no-inline-styles': 'error',
     'react/no-unstable-nested-components': 'warn',
     'no-unused-vars': 0,
     // Rule ini dihapus di @typescript-eslint v8+ (digantikan oleh @stylistic/func-call-spacing).
@@ -19,5 +21,12 @@ module.exports = {
     // yang masih mereferensikannya secara internal.
     '@typescript-eslint/func-call-spacing': 'off',
   },
+  overrides: [
+    {
+      files: ['__tests__/**/*', '__mocks__/**/*'],
+      rules: {
+        '@typescript-eslint/no-explicit-any': 'off',
+      },
+    },
+  ],
 };
-

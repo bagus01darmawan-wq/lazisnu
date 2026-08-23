@@ -1,10 +1,10 @@
-import { create } from 'zustand';
-import { offlineQueue } from '../services/offline/queue';
-import { syncService } from '../services/offline/sync';
-import { getErrorMessage } from '../utils/error';
-import { useDashboardStore } from './useDashboardStore';
-import { useTasksStore } from './useTasksStore';
-import { useCollectionsStore } from './useCollectionStore';
+import {create} from 'zustand';
+import {offlineQueue} from '../services/offline/queue';
+import {syncService} from '../services/offline/sync';
+import {getErrorMessage} from '../utils/error';
+import {useDashboardStore} from './useDashboardStore';
+import {useTasksStore} from './useTasksStore';
+import {useCollectionsStore} from './useCollectionStore';
 
 export function getTotalSyncIssueCount(): number {
   return offlineQueue.getQueueCount() + offlineQueue.getFailedPermanentCount();
@@ -20,7 +20,7 @@ interface SyncState {
   error: string | null;
 
   checkStatus: () => void;
-  triggerSync: () => Promise<{ success: number; failed: number }>;
+  triggerSync: () => Promise<{success: number; failed: number}>;
   setProgress: (progress: number) => void;
 }
 
@@ -38,14 +38,20 @@ export function refreshSyncCounts(): void {
     useSyncStore.setState({
       pendingCount: count,
       permanentFailedCount: permanentCount,
-      oldestPending: queue.length > 0 ? queue[0].collected_at : null,
+      oldestPending: queue[0]?.collected_at ?? null,
     });
   } catch (error) {
     console.error('Failed to refresh sync counts:', error);
   }
 }
 
-export const useSyncStore = create<SyncState>((set) => ({
+// Progres sinkronisasi bersifat dua tahap (batch terkirim → refresh store).
+// Angka ini BUKAN persentase nyata item yang tersinkron — hanya penanda tahap
+// untuk UI progress; jangan menambah angka tahap baru tanpa menamainya di sini.
+const PROGRESS_BATCH_SENT = 50;
+const PROGRESS_FINALIZING = 90;
+
+export const useSyncStore = create<SyncState>(set => ({
   pendingCount: 0,
   permanentFailedCount: 0,
   isSyncing: false,
@@ -59,27 +65,27 @@ export const useSyncStore = create<SyncState>((set) => ({
   },
 
   triggerSync: async () => {
-    set({ isSyncing: true, error: null, progress: 0 });
+    set({isSyncing: true, error: null, progress: 0});
     try {
       const result = await syncService.autoSync();
 
-      // SYNC_IN_PROGRESS: jangan anggap gagal � sync lain sedang berjalan.
+      // SYNC_IN_PROGRESS: jangan anggap gagal � sync lain sedang berjalan.
       // Update counts dari MMKV (yang mungkin sudah berubah oleh sync lain).
       if (result.error === 'SYNC_IN_PROGRESS') {
         set({
           isSyncing: false,
-          progress: 50,
+          progress: PROGRESS_BATCH_SENT,
           pendingCount: offlineQueue.getQueueCount(),
           permanentFailedCount: offlineQueue.getFailedPermanentCount(),
         });
-        return { success: 0, failed: 0 };
+        return {success: 0, failed: 0};
       }
 
       if (result.synced > 0) {
         // ACK sudah aman, tetapi status sync UI baru selesai setelah semua store
         // melihat snapshot server terbaru. allSettled mencegah satu layar gagal
         // membatalkan keberhasilan transaksi yang sudah committed.
-        set({progress: 90});
+        set({progress: PROGRESS_FINALIZING});
         await Promise.allSettled([
           useDashboardStore.getState().fetchDashboard(),
           useTasksStore.getState().fetchTasks('ACTIVE'),
@@ -96,7 +102,7 @@ export const useSyncStore = create<SyncState>((set) => ({
         permanentFailedCount: offlineQueue.getFailedPermanentCount(),
       });
 
-      return { success: result.synced, failed: result.failed };
+      return {success: result.synced, failed: result.failed};
     } catch (error: unknown) {
       // Tetap refresh counts dari MMKV meskipun sync gagal
       const currentPending = offlineQueue.getQueueCount();
@@ -108,10 +114,10 @@ export const useSyncStore = create<SyncState>((set) => ({
         pendingCount: currentPending,
         permanentFailedCount: currentFailed,
       });
-      return { success: 0, failed: 0 };
+      return {success: 0, failed: 0};
     }
   },
-  setProgress: (progress: number) => set({ progress }),
+  setProgress: (progress: number) => set({progress}),
 }));
 
 // Queue adalah source of truth. Setiap mutasi queue/quarantine langsung

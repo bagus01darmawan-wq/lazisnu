@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, {useEffect, useState} from 'react';
 import {Alert, ScrollView, StyleSheet, Switch, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -15,27 +15,46 @@ const roleLabels: Record<string, string> = {
 
 const ProfileScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const {user, logout, biometricEnabled, enableBiometric: enableBio, disableBiometric: disableBio} = useAuthStore();
+  const {
+    user,
+    logout,
+    biometricEnabled,
+    enableBiometric: enableBio,
+    disableBiometric: disableBio,
+  } = useAuthStore();
   const role = user?.role ? roleLabels[user.role] || user.role : 'Petugas';
   const [biometryType, setBiometryType] = useState<string | null>(null);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
     (async () => {
       const available = await isBiometricAvailable();
+      if (!isMounted) {
+        return;
+      }
       setBiometricAvailable(available);
       if (available) {
         const type = await getBiometryType();
+        if (!isMounted) {
+          return;
+        }
         setBiometryType(type);
       }
     })();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleToggleBiometric = async (value: boolean) => {
     if (value) {
       const success = await enableBio();
       if (!success) {
-        Alert.alert('Biometrik Tidak Tersedia', 'Perangkat ini tidak mendukung biometrik atau terjadi kesalahan.');
+        Alert.alert(
+          'Biometrik Tidak Tersedia',
+          'Perangkat ini tidak mendukung biometrik atau terjadi kesalahan.',
+        );
       }
     } else {
       await disableBio();
@@ -43,14 +62,10 @@ const ProfileScreen: React.FC = () => {
   };
 
   const handleLogout = () => {
-    Alert.alert(
-      'Konfirmasi Keluar',
-      'Apakah Anda yakin ingin keluar dari aplikasi?',
-      [
-        {text: 'Batal', style: 'cancel'},
-        {text: 'Keluar', style: 'destructive', onPress: logout},
-      ],
-    );
+    Alert.alert('Konfirmasi Keluar', 'Apakah Anda yakin ingin keluar dari aplikasi?', [
+      {text: 'Batal', style: 'cancel'},
+      {text: 'Keluar', style: 'destructive', onPress: logout},
+    ]);
   };
 
   return (
@@ -83,12 +98,7 @@ const ProfileScreen: React.FC = () => {
           label={'Nomor handphone'}
           value={user?.phone || 'Belum tersedia'}
         />
-        <InfoRow
-          icon={'badge-account-outline'}
-          label={'Peran akun'}
-          value={role}
-          last
-        />
+        <InfoRow icon={'badge-account-outline'} label={'Peran akun'} value={role} last />
       </AppCard>
 
       {biometricAvailable && (
@@ -97,15 +107,9 @@ const ProfileScreen: React.FC = () => {
           <AppCard variant={'elevated'} style={styles.infoCard}>
             <View style={styles.biometricRow}>
               <View style={styles.biometricLeft}>
-                <Icon
-                  name={'fingerprint'}
-                  size={22}
-                  color={Colors.brand.deepGreen}
-                />
+                <Icon name={'fingerprint'} size={22} color={Colors.brand.deepGreen} />
                 <View style={styles.biometricText}>
-                  <Text style={styles.biometricLabel}>
-                    {biometryType || 'Login Biometrik'}
-                  </Text>
+                  <Text style={styles.biometricLabel}>{biometryType || 'Login Biometrik'}</Text>
                   <Text style={styles.biometricStatus}>
                     {biometricEnabled ? 'Aktif' : 'Tidak Aktif'}
                   </Text>

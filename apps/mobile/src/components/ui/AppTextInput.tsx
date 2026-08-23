@@ -1,12 +1,5 @@
 import React, {useState} from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  TextInputProps,
-  View,
-} from 'react-native';
+import {Pressable, StyleSheet, Text, TextInput, TextInputProps, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {Colors, ComponentSizes, Radius, Spacing, Typography} from '../../theme';
 

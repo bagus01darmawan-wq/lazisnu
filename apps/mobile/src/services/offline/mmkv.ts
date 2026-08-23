@@ -3,14 +3,9 @@ import {MMKV} from 'react-native-mmkv';
 const OFFLINE_STORAGE_ID = '@lazisnu/offline-queue';
 let storage: MMKV | null = null;
 
-export function initializeOfflineStorage(
-  encryptionKey: string,
-  migrateUnencrypted = false,
-): MMKV {
+export function initializeOfflineStorage(encryptionKey: string, migrateUnencrypted = false): MMKV {
   const instance = new MMKV(
-    migrateUnencrypted
-      ? {id: OFFLINE_STORAGE_ID}
-      : {id: OFFLINE_STORAGE_ID, encryptionKey},
+    migrateUnencrypted ? {id: OFFLINE_STORAGE_ID} : {id: OFFLINE_STORAGE_ID, encryptionKey},
   );
 
   if (migrateUnencrypted) {

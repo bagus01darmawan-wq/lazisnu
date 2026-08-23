@@ -1,13 +1,7 @@
 import React from 'react';
-import {
-  TouchableOpacity,
-  Text,
-  ActivityIndicator,
-  StyleSheet,
-  View,
-} from 'react-native';
+import {TouchableOpacity, Text, ActivityIndicator, StyleSheet, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Colors, ComponentSizes, Radius, Typography, Spacing } from '../../theme';
+import {Colors, ComponentSizes, Radius, Typography, Spacing} from '../../theme';
 
 type AppButtonVariant = 'primary' | 'secondary' | 'outline' | 'danger';
 
@@ -67,7 +61,7 @@ export const AppButton: React.FC<AppButtonProps> = ({
     <TouchableOpacity
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel || label}
-      accessibilityState={{ disabled: disabled || loading }}
+      accessibilityState={{disabled: disabled || loading}}
       activeOpacity={0.8}
       disabled={disabled || loading}
       onPress={onPress}
@@ -76,30 +70,17 @@ export const AppButton: React.FC<AppButtonProps> = ({
         getContainerStyle(),
         fullWidth && styles.fullWidth,
         disabled && styles.disabledContainer,
-      ]}
-    >
+      ]}>
       {loading ? (
         <ActivityIndicator color={getIconColor()} />
       ) : (
         <View style={styles.content}>
-          {icon && (
-            <Icon
-              name={icon}
-              size={20}
-              color={getIconColor()}
-              style={styles.icon}
-            />
-          )}
+          {icon && <Icon name={icon} size={20} color={getIconColor()} style={styles.icon} />}
           <Text
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.8}
-            style={[
-              styles.text,
-              getTextStyle(),
-              disabled && styles.disabledText,
-            ]}
-          >
+            style={[styles.text, getTextStyle(), disabled && styles.disabledText]}>
             {label}
           </Text>
         </View>

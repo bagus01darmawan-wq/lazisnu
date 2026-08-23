@@ -6,6 +6,7 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "autoIncrement": true,
       "android": {
         "buildType": "apk"
       },
@@ -15,6 +16,7 @@
     },
     "preview": {
       "distribution": "internal",
+      "autoIncrement": true,
       "android": {
         "buildType": "apk"
       },
@@ -24,6 +26,7 @@
     },
     "internal-prod": {
       "distribution": "internal",
+      "autoIncrement": true,
       "android": {
         "buildType": "apk"
       },
@@ -32,15 +35,14 @@
       }
     },
     "production": {
+      "distribution": "internal",
+      "autoIncrement": true,
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "apk"
       },
       "env": {
         "API_URL": "https://api.lazisnu.site"
       }
     }
-  },
-  "submit": {
-    "production": {}
   }
 }

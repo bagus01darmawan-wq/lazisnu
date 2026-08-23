@@ -71,7 +71,7 @@ describe('secureKey', () => {
 
       expect(result.ok && result.source).toBe('cache');
       const calls = Keychain.__getCalls();
-      expect(calls.filter((c) => c.method === 'getGenericPassword')).toHaveLength(0);
+      expect(calls.filter(c => c.method === 'getGenericPassword')).toHaveLength(0);
     });
 
     it('return ok=false saat Keychain throw error', async () => {
@@ -91,10 +91,13 @@ describe('secureKey', () => {
       await getOrCreateEncryptionKey();
 
       const calls = Keychain.__getCalls();
-      const setCall = calls.find((c) => c.method === 'setGenericPassword');
+      const setCall = calls.find(c => c.method === 'setGenericPassword');
       expect(setCall).toBeDefined();
       if (setCall) {
-        const args = setCall.args as { username: string; options: { service: string; accessible: string; storage: string } };
+        const args = setCall.args as {
+          username: string;
+          options: {service: string; accessible: string; storage: string};
+        };
         expect(args.options.service).toBe(__TEST__.KEYCHAIN_SERVICE);
         expect(args.options.accessible).toBe(Keychain.ACCESSIBLE.AFTER_FIRST_UNLOCK);
         // storage dihapus sejak v10 (default AES-GCM; AES-CBC deprecated)
@@ -133,7 +136,7 @@ describe('secureKey', () => {
 
       expect(getCachedEncryptionKey()).toBeNull();
       const calls = Keychain.__getCalls();
-      expect(calls.some((c) => c.method === 'resetGenericPassword')).toBe(true);
+      expect(calls.some(c => c.method === 'resetGenericPassword')).toBe(true);
     });
 
     it('best-effort: tetap clear cache meski Keychain error', async () => {

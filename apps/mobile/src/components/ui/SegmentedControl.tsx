@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Colors, Radius, Spacing, Typography } from '../../theme';
+import {View, Text, TouchableOpacity, StyleSheet} from 'react-native';
+import {Colors, Radius, Spacing, Typography} from '../../theme';
 
 export type SegmentOption<T extends string> = {
   label: string;
@@ -20,7 +20,7 @@ export function SegmentedControl<T extends string>({
 }: SegmentedControlProps<T>) {
   return (
     <View style={styles.container}>
-      {options.map((option) => {
+      {options.map(option => {
         const isSelected = value === option.value;
         return (
           <TouchableOpacity
@@ -29,16 +29,8 @@ export function SegmentedControl<T extends string>({
             onPress={() => onChange(option.value)}
             activeOpacity={0.8}
             accessibilityRole="tab"
-            accessibilityState={{ selected: isSelected }}
-          >
-            <Text
-              style={[
-                styles.label,
-                isSelected && styles.labelSelected,
-              ]}
-            >
-              {option.label}
-            </Text>
+            accessibilityState={{selected: isSelected}}>
+            <Text style={[styles.label, isSelected && styles.labelSelected]}>{option.label}</Text>
           </TouchableOpacity>
         );
       })}
@@ -62,7 +54,7 @@ const styles = StyleSheet.create({
   segmentSelected: {
     backgroundColor: Colors.surface.card,
     shadowColor: Colors.overlay.shadow,
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: {width: 0, height: 1},
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,

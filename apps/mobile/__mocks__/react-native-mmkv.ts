@@ -18,7 +18,7 @@ let data: StorageShape = {};
 let currentKey: string | undefined; // encryption key state
 
 class MMKVMock {
-  constructor(config?: { encryptionKey?: string }) {
+  constructor(config?: {encryptionKey?: string}) {
     currentKey = config?.encryptionKey;
   }
 
@@ -60,7 +60,9 @@ class MMKVMock {
   recrypt(newKey: string | undefined): void {
     // Simulasi: re-encrypt adalah atomic, tidak throw jika newKey valid
     if (newKey !== undefined && newKey.length > 16) {
-      throw new Error('Failed to create MMKV instance! `encryptionKey` cannot be longer than 16 bytes!');
+      throw new Error(
+        'Failed to create MMKV instance! `encryptionKey` cannot be longer than 16 bytes!',
+      );
     }
     currentKey = newKey;
   }
@@ -68,10 +70,10 @@ class MMKVMock {
 
 // Test helpers — bukan API publik MMKV asli, hanya untuk mock
 export const __setStorage = (newData: StorageShape) => {
-  data = { ...newData };
+  data = {...newData};
 };
 
-export const __getStorage = () => ({ ...data });
+export const __getStorage = () => ({...data});
 
 export const __getCurrentKey = () => currentKey;
 
@@ -80,4 +82,4 @@ export const __resetMock = () => {
   currentKey = undefined;
 };
 
-export { MMKVMock as MMKV };
+export {MMKVMock as MMKV};

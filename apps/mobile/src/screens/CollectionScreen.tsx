@@ -12,20 +12,11 @@ import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useCollectionStore} from '../stores';
 import type {RootStackParamList} from '../navigation/types';
-import {
-  AppButton,
-  AppCard,
-  AppHeader,
-  AppTextInput,
-} from '../components/ui';
+import {AppButton, AppCard, AppHeader, AppTextInput} from '../components/ui';
 import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
+import {formatCurrency, formatInputCurrency} from '../utils';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Collection'>;
-
-const formatCurrency = (value: string) => {
-  const number = Number(value.replace(/\D/g, ''));
-  return number ? new Intl.NumberFormat('id-ID').format(number) : '';
-};
 
 const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
   const {task} = route.params;
@@ -47,12 +38,12 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
       return;
     }
     if (numericNominal === 0) {
-      return new Promise<void>((resolve) => {
+      return new Promise<void>(resolve => {
         Alert.alert(
           'Konfirmasi Kaleng Kosong',
           'Nominal yang dimasukkan adalah Rp0. Apakah kaleng benar-benar kosong?',
           [
-            { text: 'Tidak', style: 'cancel', onPress: () => resolve() },
+            {text: 'Tidak', style: 'cancel', onPress: () => resolve()},
             {
               text: 'Ya, Lanjutkan',
               onPress: () => {
@@ -68,20 +59,18 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
   };
 
   const doSubmit = async (numericNominal: number) => {
-
     reset();
     const result = await submitCollection({
       assignment_id: task.id,
       can_id: task.can_id,
       nominal: numericNominal,
       collected_at: new Date().toISOString(),
-      offline_id: `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
     });
 
     if (!result.success) {
       Alert.alert(
         'Gagal Menyimpan',
-        useCollectionStore.getState().error || 'Data penjemputan gagal disimpan.',
+        result.error || useCollectionStore.getState().error || 'Data penjemputan gagal disimpan.',
       );
       return;
     }
@@ -104,7 +93,11 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
   if (showSuccess) {
     return (
       <View style={styles.container}>
-        <AppHeader variant={'stack'} title={'Penjemputan Tersimpan'} onBack={() => navigation.navigate('Main', {screen: 'Dashboard'})} />
+        <AppHeader
+          variant={'stack'}
+          title={'Penjemputan Tersimpan'}
+          onBack={() => navigation.navigate('Main', {screen: 'Dashboard'})}
+        />
         <ScrollView
           contentContainerStyle={styles.successContainer}
           showsVerticalScrollIndicator={false}>
@@ -119,12 +112,7 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
           <AppCard variant={'elevated'} style={styles.summaryCard}>
             <SummaryRow label={'Kode QR'} value={task.qr_code} />
             <SummaryRow label={'Pemilik'} value={task.owner_name} />
-            <SummaryRow
-              label={'Nominal'}
-              value={`Rp ${formatCurrency(nominal)}`}
-              accent
-              last
-            />
+            <SummaryRow label={'Nominal'} value={formatCurrency(Number(nominal))} accent last />
           </AppCard>
 
           <View style={styles.whatsappInfo}>
@@ -158,11 +146,7 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <AppHeader
-        variant={'stack'}
-        title={'Input Penjemputan'}
-        onBack={() => navigation.goBack()}
-      />
+      <AppHeader variant={'stack'} title={'Input Penjemputan'} onBack={() => navigation.goBack()} />
 
       <ScrollView
         contentContainerStyle={styles.formContent}
@@ -176,7 +160,7 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
             <View style={styles.nominalInputContainer}>
               <AppTextInput
                 placeholder={'0'}
-                value={formatCurrency(nominal)}
+                value={formatInputCurrency(nominal)}
                 onChangeText={text => setNominal(text.replace(/\D/g, ''))}
                 keyboardType={'numeric'}
                 returnKeyType={'done'}
@@ -184,8 +168,10 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
               />
             </View>
           </View>
-          <Text style={styles.helperText}>Pastikan nominal sesuai dengan uang yang diterima. Nominal akan dicantumkan pada pesan konfirmasi donatur.</Text>
-
+          <Text style={styles.helperText}>
+            Pastikan nominal sesuai dengan uang yang diterima. Nominal akan dicantumkan pada pesan
+            konfirmasi donatur.
+          </Text>
         </AppCard>
 
         <Text style={styles.sectionTitle}>Detail Kaleng</Text>
@@ -224,7 +210,9 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
             <Icon name="map-marker" size={20} color={Colors.brand.emerald} />
             <View style={styles.detailContent}>
               <Text style={styles.detailLabel}>Alamat</Text>
-              <Text style={styles.detailValue}>{task.owner_address || 'Alamat belum tersedia'}</Text>
+              <Text style={styles.detailValue}>
+                {task.owner_address || 'Alamat belum tersedia'}
+              </Text>
             </View>
           </View>
 
@@ -236,11 +224,7 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
                 <View style={styles.detailContent}>
                   <Text style={styles.detailLabel}>Penjemputan Terakhir</Text>
                   <Text style={styles.detailValue}>
-                    {new Intl.NumberFormat('id-ID', {
-                      style: 'currency',
-                      currency: 'IDR',
-                      minimumFractionDigits: 0,
-                    }).format(task.last_collection.nominal)}
+                    {formatCurrency(task.last_collection.nominal)}
                   </Text>
                 </View>
               </View>

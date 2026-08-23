@@ -12,7 +12,7 @@
 // interaksi; glyph/font tidak relevan di unit test.
 
 import React from 'react';
-import { Text, type TextProps } from 'react-native';
+import {Text, type TextProps} from 'react-native';
 
 type IconProps = TextProps & {
   name?: string;
@@ -20,8 +20,8 @@ type IconProps = TextProps & {
   color?: string;
 };
 
-const MaterialCommunityIcons = ({ name, size = 12, color, style, ...props }: IconProps) => (
-  <Text {...props} style={[{ fontSize: size, color }, style]} testID={`icon-${name ?? ''}`}>
+const MaterialCommunityIcons = ({name, size = 12, color, style, ...props}: IconProps) => (
+  <Text {...props} style={[{fontSize: size, color}, style]} testID={`icon-${name ?? ''}`}>
     {name ?? ''}
   </Text>
 );

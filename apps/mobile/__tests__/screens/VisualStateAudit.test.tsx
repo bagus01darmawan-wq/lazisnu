@@ -87,7 +87,13 @@ const makeCollectionsStore = (overrides = {}) => ({
 jest.mock('../../src/stores', () => ({
   useAuthStore: (selector?: (s: any) => unknown) => {
     const state = {
-      user: {id: 'u1', full_name: 'Ahmad Bagus', phone: '082134536151', role: 'PETUGAS', is_active: true},
+      user: {
+        id: 'u1',
+        full_name: 'Ahmad Bagus',
+        phone: '082134536151',
+        role: 'PETUGAS',
+        is_active: true,
+      },
       logout: jest.fn(),
     };
     return selector ? selector(state) : state;
@@ -128,7 +134,7 @@ jest.mock('../../src/services/api', () => ({
 import CollectionScreen from '../../src/screens/CollectionScreen';
 import HistoryScreen from '../../src/screens/HistoryScreen';
 
-const makeNav = () => ({navigate: mockNavigate, goBack: mockGoBack} as any);
+const makeNav = () => ({navigate: mockNavigate, goBack: mockGoBack}) as any;
 
 const render = (element: React.ReactElement) => {
   let tree!: renderer.ReactTestRenderer;
@@ -144,11 +150,21 @@ const render = (element: React.ReactElement) => {
  */
 const findTextInTree = (tree: renderer.ReactTestRenderer, text: string): boolean => {
   const visit = (node: any): boolean => {
-    if (!node) {return false;}
-    if (typeof node === 'string') {return node.includes(text);}
-    if (typeof node === 'number') {return String(node).includes(text);}
-    if (Array.isArray(node)) {return node.some(visit);}
-    if (node.children) {return visit(node.children);}
+    if (!node) {
+      return false;
+    }
+    if (typeof node === 'string') {
+      return node.includes(text);
+    }
+    if (typeof node === 'number') {
+      return String(node).includes(text);
+    }
+    if (Array.isArray(node)) {
+      return node.some(visit);
+    }
+    if (node.children) {
+      return visit(node.children);
+    }
     return false;
   };
   return visit(tree.toJSON());
@@ -160,10 +176,7 @@ const findTextInTree = (tree: renderer.ReactTestRenderer, text: string): boolean
 describe('CollectionScreen — fallback alamat kartu donor', () => {
   it('menampilkan alamat asli jika tersedia', () => {
     const tree = render(
-      <CollectionScreen
-        navigation={makeNav()}
-        route={{params: {task: taskWithAddress}} as any}
-      />,
+      <CollectionScreen navigation={makeNav()} route={{params: {task: taskWithAddress}} as any} />,
     );
     expect(findTextInTree(tree, 'Jl. Merdeka No. 10, Pekalongan')).toBe(true);
   });
@@ -186,10 +199,7 @@ describe('CollectionScreen — tombol Simpan disabled saat nominal kosong', () =
   it('tombol Simpan memanggil Alert saat nominal kosong (state awal)', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     const tree = render(
-      <CollectionScreen
-        navigation={makeNav()}
-        route={{params: {task: taskWithAddress}} as any}
-      />,
+      <CollectionScreen navigation={makeNav()} route={{params: {task: taskWithAddress}} as any} />,
     );
     // Verifikasi: tombol "Simpan Penjemputan" ada di tree dan teks helper ada
     expect(findTextInTree(tree, 'Simpan Penjemputan')).toBe(true);
@@ -199,10 +209,7 @@ describe('CollectionScreen — tombol Simpan disabled saat nominal kosong', () =
 
   it('menampilkan helper teks batas maksimum', () => {
     const tree = render(
-      <CollectionScreen
-        navigation={makeNav()}
-        route={{params: {task: taskWithAddress}} as any}
-      />,
+      <CollectionScreen navigation={makeNav()} route={{params: {task: taskWithAddress}} as any} />,
     );
     expect(findTextInTree(tree, 'Pastikan nominal sesuai dengan uang yang diterima.')).toBe(true);
   });
@@ -218,10 +225,7 @@ describe('CollectionScreen — state sukses', () => {
     mockSubmitCollection.mockResolvedValueOnce({success: true, synced: true});
 
     const tree = render(
-      <CollectionScreen
-        navigation={makeNav()}
-        route={{params: {task: taskWithAddress}} as any}
-      />,
+      <CollectionScreen navigation={makeNav()} route={{params: {task: taskWithAddress}} as any} />,
     );
 
     // Verifikasi form input tampil dulu
@@ -233,17 +237,52 @@ describe('CollectionScreen — state sukses', () => {
     expect(findTextInTree(tree, 'Penjemputan Berhasil')).toBe(false);
   });
 
-  it('menampilkan teks "Scan QR Baru" dan "Kembali ke Beranda" pada state sukses', async () => {
-    // Buat komponen yang langsung memulai dengan showSuccess = true
-    // dengan memaksa submitCollection langsung berhasil dan mengklik tombol
+  it('menampilkan layar sukses lengkap setelah submit berhasil (interaksi nyata)', async () => {
     mockSubmitCollection.mockResolvedValueOnce({success: true, synced: true});
 
-    // Verifikasi bahwa teks sukses ada di kode sumber (unit test struktural)
-    // sehingga dijamin ada saat state sukses tercapai
-    const CollectionSource = require('../../src/screens/CollectionScreen').default.toString();
-    expect(CollectionSource).toContain('Penjemputan Berhasil');
-    expect(CollectionSource).toContain('Scan QR Baru');
-    expect(CollectionSource).toContain('Kembali ke Beranda');
+    const tree = render(
+      <CollectionScreen navigation={makeNav()} route={{params: {task: taskWithAddress}} as any} />,
+    );
+
+    // Isi nominal lewat handler input yang benar-benar dirender (bukan membaca source)
+    const nominalInput = tree.root.find(n => typeof n.props?.onChangeText === 'function');
+    act(() => {
+      nominalInput.props.onChangeText('50000');
+    });
+
+    // Kumpulkan teks subtree sebuah instance tombol untuk menemukan "Simpan Penjemputan"
+    const collectText = (node: any): string => {
+      let out = '';
+      const visit = (child: any): void => {
+        if (!child) {
+          return;
+        }
+        if (typeof child === 'string') {
+          out += child;
+        } else if (Array.isArray(child)) {
+          child.forEach(visit);
+        } else if (child.children) {
+          visit(child.children);
+        }
+      };
+      visit(node.children);
+      return out;
+    };
+    const submitButton = tree.root
+      .findAll(n => typeof n.props?.onPress === 'function')
+      .find(n => collectText(n).includes('Simpan Penjemputan'));
+    expect(submitButton).toBeDefined();
+
+    await act(async () => {
+      await submitButton!.props.onPress();
+    });
+
+    expect(mockSubmitCollection).toHaveBeenCalledWith(
+      expect.objectContaining({nominal: 50000, assignment_id: 'assignment-1'}),
+    );
+    expect(findTextInTree(tree, 'Penjemputan Berhasil')).toBe(true);
+    expect(findTextInTree(tree, 'Scan QR Baru')).toBe(true);
+    expect(findTextInTree(tree, 'Kembali ke Beranda')).toBe(true);
   });
 });
 
@@ -253,14 +292,11 @@ describe('CollectionScreen — state sukses', () => {
 describe('CollectionScreen — state submitting', () => {
   it('merender tanpa crash saat isSubmitting true', () => {
     const originalMock = jest.requireMock('../../src/stores');
-    const spy = jest.spyOn(originalMock, 'useCollectionStore').mockReturnValue(
-      makeCollectionStore({isSubmitting: true}),
-    );
+    const spy = jest
+      .spyOn(originalMock, 'useCollectionStore')
+      .mockReturnValue(makeCollectionStore({isSubmitting: true}));
     const tree = render(
-      <CollectionScreen
-        navigation={makeNav()}
-        route={{params: {task: taskWithAddress}} as any}
-      />,
+      <CollectionScreen navigation={makeNav()} route={{params: {task: taskWithAddress}} as any} />,
     );
     expect(tree.toJSON()).not.toBeNull();
     spy.mockRestore();
@@ -318,20 +354,23 @@ describe('HistoryScreen — modal Koreksi', () => {
     storesMock.useCollectionsStore = makeCollectionsStore;
   });
 
-  it('menampilkan fallback alamat History di kode sumber (Alamat tidak tersedia)', () => {
-    // HistoryItem adalah komponen terpisah; periksa source file secara langsung
-    // agar tidak bergantung pada transpiled .toString() yang mungkin tidak menyertakan
-    // komponen nested. Gunakan process.cwd() yang selalu tersedia di Node.js environment.
-    const fs = require('fs');
-    const path = require('path');
-    const sourcePath = path.join(
-      process.cwd(),
-      'src',
-      'screens',
-      'HistoryScreen.tsx',
-    );
-    const sourceContent = fs.readFileSync(sourcePath, 'utf8');
-    expect(sourceContent).toContain('Alamat tidak tersedia');
+  it('menampilkan fallback "Alamat tidak tersedia" saat koleksi tanpa alamat dirender', () => {
+    const collectionWithoutAddress = {
+      ...collectionWithAddress,
+      can: {
+        qr_code: 'LAZ-PNG-25-00009-533',
+        owner_name: 'Ayam Kremes',
+        owner_address: '',
+      },
+    };
+    const storesMock = jest.requireMock('../../src/stores');
+    storesMock.useCollectionsStore = () =>
+      makeCollectionsStore({collections: [collectionWithoutAddress], total: 1});
+    const tree = render(<HistoryScreen />);
+    expect(tree.toJSON()).not.toBeNull();
+    expect(findTextInTree(tree, 'Alamat tidak tersedia')).toBe(true);
+    // restore
+    storesMock.useCollectionsStore = makeCollectionsStore;
   });
 
   it('merender HistoryScreen dalam state error dan banner error tampil', () => {
@@ -347,10 +386,12 @@ describe('HistoryScreen — modal Koreksi', () => {
 
   it('memverifikasi validasi modal Koreksi ada di kode sumber (nominal, alasan, batal, simpan)', () => {
     const HistorySource = require('../../src/screens/HistoryScreen').default.toString();
+    const ModalSource =
+      require('../../src/screens/history/HistoryCorrectionModal').default.toString();
     expect(HistorySource).toContain('Nominal Tidak Valid');
     expect(HistorySource).toContain('Alasan Terlalu Singkat');
-    expect(HistorySource).toContain('Batal');
-    expect(HistorySource).toContain('Simpan Koreksi');
+    expect(ModalSource).toContain('Batal');
+    expect(ModalSource).toContain('Simpan Koreksi');
   });
 });
 
@@ -360,30 +401,21 @@ describe('HistoryScreen — modal Koreksi', () => {
 describe('CollectionScreen — elemen UI tambahan', () => {
   it('menampilkan notice keamanan', () => {
     const tree = render(
-      <CollectionScreen
-        navigation={makeNav()}
-        route={{params: {task: taskWithAddress}} as any}
-      />,
+      <CollectionScreen navigation={makeNav()} route={{params: {task: taskWithAddress}} as any} />,
     );
     expect(findTextInTree(tree, 'Pastikan nominal sesuai')).toBe(true);
   });
 
   it('menampilkan kode QR donatur', () => {
     const tree = render(
-      <CollectionScreen
-        navigation={makeNav()}
-        route={{params: {task: taskWithAddress}} as any}
-      />,
+      <CollectionScreen navigation={makeNav()} route={{params: {task: taskWithAddress}} as any} />,
     );
     expect(findTextInTree(tree, 'LAZ-PNG-25-00009-533')).toBe(true);
   });
 
   it('menampilkan nama donatur', () => {
     const tree = render(
-      <CollectionScreen
-        navigation={makeNav()}
-        route={{params: {task: taskWithAddress}} as any}
-      />,
+      <CollectionScreen navigation={makeNav()} route={{params: {task: taskWithAddress}} as any} />,
     );
     expect(findTextInTree(tree, 'Ayam Kremes')).toBe(true);
   });

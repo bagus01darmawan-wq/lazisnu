@@ -1,15 +1,35 @@
-import { create } from 'zustand';
-import { authService, setToken, setRefreshToken, getToken, clearToken, setSessionExpiredHandler, getAuthStorage, getRefreshToken } from '../services/api';
-import { isBiometricAvailable, enableBiometric, getTokenWithBiometric, updateBiometricToken, disableBiometric } from '../services/biometric';
-import { taskCache } from '../services/offline/tasks';
-import { clearAllCache } from '../services/offline/cache';
-import { useDashboardStore } from './useDashboardStore';
-import { useTasksStore } from './useTasksStore';
-import { useCollectionsStore } from './useCollectionStore';
-import { useSyncStore } from './useSyncStore';
-import { User } from '@lazisnu/shared-types';
-import { getErrorMessage } from '../utils/error';
-import { setAuthTag, captureAuthEvent, clearAuthenticatedUser, setAuthenticatedUser } from '../config/crashlytics';
+import {create} from 'zustand';
+import {
+  authService,
+  setToken,
+  setRefreshToken,
+  getToken,
+  clearToken,
+  setSessionExpiredHandler,
+  getAuthStorage,
+  getRefreshToken,
+} from '../services/api';
+import {
+  isBiometricAvailable,
+  enableBiometric,
+  getTokenWithBiometric,
+  updateBiometricToken,
+  disableBiometric,
+} from '../services/biometric';
+import {taskCache} from '../services/offline/tasks';
+import {clearAllCache} from '../services/offline/cache';
+import {useDashboardStore} from './useDashboardStore';
+import {useTasksStore} from './useTasksStore';
+import {useCollectionsStore} from './useCollectionStore';
+import {useSyncStore} from './useSyncStore';
+import {User} from '@lazisnu/shared-types';
+import {getErrorMessage} from '../utils/error';
+import {
+  setAuthTag,
+  captureAuthEvent,
+  clearAuthenticatedUser,
+  setAuthenticatedUser,
+} from '../config/crashlytics';
 
 interface AuthState {
   user: User | null;
@@ -83,7 +103,9 @@ function saveCachedUser(user: User): void {
 
 function getCachedUser(): User | null {
   const raw = getAuthStorage().getString(CACHED_USER_KEY);
-  if (!raw) {return null;}
+  if (!raw) {
+    return null;
+  }
   try {
     const parsed = JSON.parse(raw) as User;
     return parsed?.id ? parsed : null;
@@ -142,7 +164,7 @@ function resetAllClientState() {
   });
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>(set => ({
   user: null,
   token: null,
   isAuthenticated: false,
@@ -153,19 +175,19 @@ export const useAuthStore = create<AuthState>((set) => ({
   biometricEnabled: loadBiometricEnabled(),
 
   initializeAuth: async () => {
-    set({ isInitializing: true, error: null });
+    set({isInitializing: true, error: null});
     try {
       const token = await getToken();
       if (!token) {
         // Tidak ada token — biarkan AuthStack yang render
-        set({ isInitializing: false });
+        set({isInitializing: false});
         return;
       }
       // Token ada di MMKV. Validasi ke backend.
       const result = await authService.me();
       if (result.success && result.data) {
         // result.data bertipe MeResponse (snake_case) — akses langsung tanpa as any
-        const { id, full_name, email, phone, role, branch_id, district_id, is_active } = result.data;
+        const {id, full_name, email, phone, role, branch_id, district_id, is_active} = result.data;
 
         if (!is_active) {
           console.warn('[Auth] initializeAuth: account disabled');
@@ -195,7 +217,16 @@ export const useAuthStore = create<AuthState>((set) => ({
           isAuthenticated: true,
           isInitializing: false,
         });
-        saveCachedUser({ id, full_name, email: email || '', phone: phone || '', role: role as User['role'], branch_id, district_id, is_active });
+        saveCachedUser({
+          id,
+          full_name,
+          email: email || '',
+          phone: phone || '',
+          role: role as User['role'],
+          branch_id,
+          district_id,
+          is_active,
+        });
         setAuthenticatedUser(id);
       } else {
         // Token ditolak backend — bersihkan semuanya
@@ -216,30 +247,34 @@ export const useAuthStore = create<AuthState>((set) => ({
       const cachedToken = await getToken();
       if (cachedToken) {
         const cachedUser = getCachedUser();
-        set({ user: cachedUser, token: cachedToken, isAuthenticated: true, isInitializing: false });
-        if (cachedUser) {setAuthenticatedUser(cachedUser.id);}
+        set({user: cachedUser, token: cachedToken, isAuthenticated: true, isInitializing: false});
+        if (cachedUser) {
+          setAuthenticatedUser(cachedUser.id);
+        }
       } else {
-        set({ isInitializing: false });
+        set({isInitializing: false});
       }
     }
   },
 
   login: async (phone: string, password: string) => {
-    set({ isLoading: true, error: null });
+    set({isLoading: true, error: null});
     try {
       const result = await authService.login(phone, password);
 
       if (result.success && result.data) {
         // result.data bertipe AuthLoginResponse — akses langsung tanpa cast
-        const { access_token, refresh_token, user } = result.data;
+        const {access_token, refresh_token, user} = result.data;
 
         if (!access_token || !user) {
-          set({ error: 'Respons server tidak valid (token/user kosong)', isLoading: false });
+          set({error: 'Respons server tidak valid (token/user kosong)', isLoading: false});
           return false;
         }
 
         await setToken(access_token);
-        if (refresh_token) {setRefreshToken(refresh_token);}
+        if (refresh_token) {
+          setRefreshToken(refresh_token);
+        }
         set({
           // AuthLoginResponse.user: { id, full_name, role, email?, branch_id?, district_id? }
           // verifyOTP mengirim subset (tanpa email). Pastikan setiap field punya fallback.
@@ -247,7 +282,7 @@ export const useAuthStore = create<AuthState>((set) => ({
             id: user.id,
             full_name: user.full_name,
             email: user.email || '',
-            phone: phone,      // dari parameter function, bukan dari respons backend
+            phone: phone, // dari parameter function, bukan dari respons backend
             role: user.role as User['role'],
             branch_id: user.branch_id,
             district_id: user.district_id,
@@ -257,55 +292,66 @@ export const useAuthStore = create<AuthState>((set) => ({
           isAuthenticated: true,
           isLoading: false,
         });
-        saveCachedUser({ id: user.id, full_name: user.full_name, email: user.email || '', phone, role: user.role as User['role'], branch_id: user.branch_id, district_id: user.district_id, is_active: true });
+        saveCachedUser({
+          id: user.id,
+          full_name: user.full_name,
+          email: user.email || '',
+          phone,
+          role: user.role as User['role'],
+          branch_id: user.branch_id,
+          district_id: user.district_id,
+          is_active: true,
+        });
         setAuthenticatedUser(user.id);
         // Setelah login, ulangi migrasi agar legacy queue memakai key officerId.
         require('../services/offline/queue').offlineQueue.runMigration();
         return true;
       } else {
-        set({ error: result.error?.message || 'Login gagal', isLoading: false });
+        set({error: result.error?.message || 'Login gagal', isLoading: false});
         return false;
       }
     } catch (error: unknown) {
-      set({ error: getErrorMessage(error, 'Terjadi kesalahan'), isLoading: false });
+      set({error: getErrorMessage(error, 'Terjadi kesalahan'), isLoading: false});
       return false;
     }
   },
 
   requestOTP: async (phone: string) => {
-    set({ isLoading: true, error: null });
+    set({isLoading: true, error: null});
     try {
       const result = await authService.requestOTP(phone);
 
       if (result.success) {
-        set({ isLoading: false });
+        set({isLoading: false});
         return true;
       } else {
-        set({ error: result.error?.message || 'Gagal kirim OTP', isLoading: false });
+        set({error: result.error?.message || 'Gagal kirim OTP', isLoading: false});
         return false;
       }
     } catch (error: unknown) {
-      set({ error: getErrorMessage(error, 'Terjadi kesalahan'), isLoading: false });
+      set({error: getErrorMessage(error, 'Terjadi kesalahan'), isLoading: false});
       return false;
     }
   },
 
   verifyOTP: async (phone: string, otp: string) => {
-    set({ isLoading: true, error: null });
+    set({isLoading: true, error: null});
     try {
       const result = await authService.verifyOTP(phone, otp);
 
       if (result.success && result.data) {
         // result.data bertipe AuthLoginResponse — akses langsung tanpa cast
-        const { access_token, refresh_token, user } = result.data;
+        const {access_token, refresh_token, user} = result.data;
 
         if (!access_token || !user) {
-          set({ error: 'Respons server tidak valid (token/user kosong)', isLoading: false });
+          set({error: 'Respons server tidak valid (token/user kosong)', isLoading: false});
           return false;
         }
 
         await setToken(access_token);
-        if (refresh_token) {setRefreshToken(refresh_token);}
+        if (refresh_token) {
+          setRefreshToken(refresh_token);
+        }
         set({
           // AuthLoginResponse.user: { id, full_name, role, email?, branch_id?, district_id? }
           // verifyOTP mengirim subset (tanpa email). Pastikan setiap field punya fallback.
@@ -313,7 +359,7 @@ export const useAuthStore = create<AuthState>((set) => ({
             id: user.id,
             full_name: user.full_name,
             email: user.email || '',
-            phone: phone,      // dari parameter function, bukan dari respons backend
+            phone: phone, // dari parameter function, bukan dari respons backend
             role: user.role as User['role'],
             branch_id: user.branch_id,
             district_id: user.district_id,
@@ -323,17 +369,26 @@ export const useAuthStore = create<AuthState>((set) => ({
           isAuthenticated: true,
           isLoading: false,
         });
-        saveCachedUser({ id: user.id, full_name: user.full_name, email: user.email || '', phone, role: user.role as User['role'], branch_id: user.branch_id, district_id: user.district_id, is_active: true });
+        saveCachedUser({
+          id: user.id,
+          full_name: user.full_name,
+          email: user.email || '',
+          phone,
+          role: user.role as User['role'],
+          branch_id: user.branch_id,
+          district_id: user.district_id,
+          is_active: true,
+        });
         setAuthenticatedUser(user.id);
         // Setelah login, ulangi migrasi agar legacy queue memakai key officerId.
         require('../services/offline/queue').offlineQueue.runMigration();
         return true;
       } else {
-        set({ error: result.error?.message || 'OTP tidak valid', isLoading: false });
+        set({error: result.error?.message || 'OTP tidak valid', isLoading: false});
         return false;
       }
     } catch (error: unknown) {
-      set({ error: getErrorMessage(error, 'Terjadi kesalahan'), isLoading: false });
+      set({error: getErrorMessage(error, 'Terjadi kesalahan'), isLoading: false});
       return false;
     }
   },
@@ -347,24 +402,26 @@ export const useAuthStore = create<AuthState>((set) => ({
     const biometricActive = useAuthStore.getState().biometricEnabled;
     if (!biometricActive) {
       // 1. Beritahu backend (best-effort, jangan gagalkan logout bila offline)
-      await authService.logout().catch(() => { });
+      await authService.logout().catch(() => {});
     }
     // 2. Bersihkan token + seluruh state klien
     await clearToken();
     resetAllClientState();
     clearAuthenticatedUser();
-    set({ user: null, token: null, isAuthenticated: false, error: null });
+    set({user: null, token: null, isAuthenticated: false, error: null});
   },
 
-  forceLogout: (reason) => {
+  forceLogout: reason => {
     // Dipanggil saat SESSION_EXPIRED dari api.ts (refresh gagal).
     // Tidak panggil backend — token sudah tidak valid.
     // Crashlytics: telemetri untuk monitoring post-rollout
     setAuthTag('force_logout', 'true');
-    captureAuthEvent('force_logout', { reason: reason || 'unknown' });
+    captureAuthEvent('force_logout', {reason: reason || 'unknown'});
     clearAuthenticatedUser();
 
-    clearToken().catch(() => { /* ignore */ });
+    clearToken().catch(() => {
+      /* ignore */
+    });
     resetAllClientState();
     set({
       user: null,
@@ -378,25 +435,29 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   enableBiometric: async () => {
     const refreshToken = getRefreshToken();
-    if (!refreshToken) return false;
+    if (!refreshToken) {
+      return false;
+    }
 
     const available = await isBiometricAvailable();
-    if (!available) return false;
+    if (!available) {
+      return false;
+    }
 
     const result = await enableBiometric(refreshToken);
     if (result) {
       saveBiometricEnabled(true);
-      set({ biometricEnabled: true });
+      set({biometricEnabled: true});
     }
     return result;
   },
 
   loginWithBiometric: async () => {
-    set({ isLoading: true, error: null });
+    set({isLoading: true, error: null});
     try {
       const storedToken = await getTokenWithBiometric();
       if (!storedToken) {
-        set({ isLoading: false, error: 'Biometrik dibatalkan atau gagal' });
+        set({isLoading: false, error: 'Biometrik dibatalkan atau gagal'});
         return false;
       }
 
@@ -404,10 +465,10 @@ export const useAuthStore = create<AuthState>((set) => ({
       const result = await authService.refresh(storedToken);
 
       if (result.success && result.data) {
-        const { access_token, refresh_token } = result.data;
+        const {access_token, refresh_token} = result.data;
 
         if (!access_token) {
-          set({ error: 'Respons server tidak valid (token kosong)', isLoading: false });
+          set({error: 'Respons server tidak valid (token kosong)', isLoading: false});
           return false;
         }
 
@@ -421,35 +482,53 @@ export const useAuthStore = create<AuthState>((set) => ({
         // Ambil profil user untuk set state
         const meResult = await authService.me();
         if (meResult.success && meResult.data) {
-          const { id, full_name, email, phone, role, branch_id, district_id, is_active } = meResult.data;
+          const {id, full_name, email, phone, role, branch_id, district_id, is_active} =
+            meResult.data;
           if (!is_active) {
             await clearToken();
             await disableBiometric();
             saveBiometricEnabled(false);
             set({
-              user: null, token: null, isAuthenticated: false,
-              biometricEnabled: false, isLoading: false,
+              user: null,
+              token: null,
+              isAuthenticated: false,
+              biometricEnabled: false,
+              isLoading: false,
               error: 'Akun tidak aktif',
             });
             return false;
           }
           set({
             user: {
-              id, full_name,
-              email: email || '', phone: phone || '',
-              role: role as User['role'], branch_id, district_id, is_active,
+              id,
+              full_name,
+              email: email || '',
+              phone: phone || '',
+              role: role as User['role'],
+              branch_id,
+              district_id,
+              is_active,
             },
             token: access_token,
             isAuthenticated: true,
             isLoading: false,
           });
-          saveCachedUser({ id, full_name, email: email || '', phone: phone || '', role: role as User['role'], branch_id, district_id, is_active });
+          saveCachedUser({
+            id,
+            full_name,
+            email: email || '',
+            phone: phone || '',
+            role: role as User['role'],
+            branch_id,
+            district_id,
+            is_active,
+          });
           setAuthenticatedUser(id);
           return true;
         }
 
         // me() gagal tapi token valid — set minimal state dari refresh response
-        set({ token: access_token, isAuthenticated: true, isLoading: false });
+        set({token: access_token, isAuthenticated: true, isLoading: false});
         return true;
       }
 
@@ -465,10 +544,10 @@ export const useAuthStore = create<AuthState>((set) => ({
         return false;
       }
 
-      set({ error: result.error?.message || 'Login biometrik gagal', isLoading: false });
+      set({error: result.error?.message || 'Login biometrik gagal', isLoading: false});
       return false;
     } catch (error: unknown) {
-      set({ error: getErrorMessage(error, 'Terjadi kesalahan'), isLoading: false });
+      set({error: getErrorMessage(error, 'Terjadi kesalahan'), isLoading: false});
       return false;
     }
   },
@@ -476,14 +555,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   disableBiometric: async () => {
     await disableBiometric();
     saveBiometricEnabled(false);
-    set({ biometricEnabled: false });
+    set({biometricEnabled: false});
   },
 
-  setUser: (user: User) => set({ user }),
+  setUser: (user: User) => set({user}),
 
-  clearError: () => set({ error: null }),
+  clearError: () => set({error: null}),
 
-  setEncryptionWarning: (message) => set({ encryptionWarning: message }),
+  setEncryptionWarning: message => set({encryptionWarning: message}),
 }));
 
 // Daftarkan handler SESSION_EXPIRED ke api.ts agar saat refresh token

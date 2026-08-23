@@ -36,11 +36,14 @@ describe('biometric', () => {
 
       // Verifikasi token tersimpan
       const calls = Keychain.__getCalls();
-      const setCall = calls.find((c) => c.method === 'setGenericPassword');
+      const setCall = calls.find(c => c.method === 'setGenericPassword');
       expect(setCall).toBeDefined();
 
       if (setCall) {
-        const args = setCall.args as { username: string; options: { service: string; accessControl: string; accessible: string } };
+        const args = setCall.args as {
+          username: string;
+          options: {service: string; accessControl: string; accessible: string};
+        };
         expect(args.username).toBe('biometric');
         expect(args.options.service).toBe(BIOMETRIC_SERVICE);
         expect(args.options.accessControl).toBe(Keychain.ACCESS_CONTROL.BIOMETRY_ANY);
@@ -100,10 +103,10 @@ describe('biometric', () => {
 
       // Verifikasi resetGenericPassword dipanggil
       const calls = Keychain.__getCalls();
-      const resetCall = calls.find((c) => c.method === 'resetGenericPassword');
+      const resetCall = calls.find(c => c.method === 'resetGenericPassword');
       expect(resetCall).toBeDefined();
       if (resetCall) {
-        const args = resetCall.args as { service: string };
+        const args = resetCall.args as {service: string};
         expect(args.service).toBe(BIOMETRIC_SERVICE);
       }
     });
@@ -151,10 +154,10 @@ describe('biometric', () => {
       await getTokenWithBiometric();
 
       const calls = Keychain.__getCalls();
-      const getCall = calls.find((c) => c.method === 'getGenericPassword');
+      const getCall = calls.find(c => c.method === 'getGenericPassword');
       expect(getCall).toBeDefined();
       if (getCall) {
-        const args = getCall.args as { authenticationPrompt: { title: string; cancel: string } };
+        const args = getCall.args as {authenticationPrompt: {title: string; cancel: string}};
         expect(args.authenticationPrompt.title).toBe('Login Biometrik');
         expect(args.authenticationPrompt.cancel).toBe('Batal');
       }

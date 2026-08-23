@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, {useState} from 'react';
 import {
   Alert,
   Image,
@@ -12,17 +12,19 @@ import {
 } from 'react-native';
 
 const logo = require('../assets/branding/logo-lazisnu-putih.png');
-import { useNavigation } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {useNavigation} from '@react-navigation/native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useAuthStore } from '../stores';
-import { AppButton, AppCard, AppTextInput, SegmentedControl } from '../components/ui';
-import { Colors, Layout, Radius, Spacing, Typography } from '../theme';
+import {useAuthStore} from '../stores';
+import {AppButton, AppCard, AppTextInput, SegmentedControl} from '../components/ui';
+import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
+import type {AuthNavigationProp} from '../navigation/types';
 
 const LoginScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<AuthNavigationProp>();
   const insets = useSafeAreaInsets();
-  const { login, requestOTP, loginWithBiometric, isLoading, error, clearError, biometricEnabled } = useAuthStore();
+  const {login, requestOTP, loginWithBiometric, isLoading, error, clearError, biometricEnabled} =
+    useAuthStore();
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -61,7 +63,7 @@ const LoginScreen: React.FC = () => {
     clearError();
     const success = await requestOTP(phone.trim());
     if (success) {
-      navigation.navigate('OTP', { phone: phone.trim() });
+      navigation.navigate('OTP', {phone: phone.trim()});
       return;
     }
     const message = useAuthStore.getState().error;
@@ -89,7 +91,7 @@ const LoginScreen: React.FC = () => {
           keyboardShouldPersistTaps={'handled'}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}>
-          <View style={[styles.hero, { paddingTop: insets.top + Spacing.xl }]}>
+          <View style={[styles.hero, {paddingTop: insets.top + Spacing.xl}]}>
             <Image source={logo} style={styles.logo} resizeMode={'contain'} />
             <Text style={styles.taglineLine1}>Lembaga Amil Zakat</Text>
             <Text style={styles.taglineLine2}>Infak dan Sedekah Nahdlatul Ulama</Text>
@@ -99,8 +101,8 @@ const LoginScreen: React.FC = () => {
             <Text style={styles.cardTitle}>Masuk ke akun</Text>
             <SegmentedControl
               options={[
-                { label: 'Kata Sandi', value: 'password' },
-                { label: 'OTP WhatsApp', value: 'otp' },
+                {label: 'Kata Sandi', value: 'password'},
+                {label: 'OTP WhatsApp', value: 'otp'},
               ]}
               value={method}
               onChange={value => {
@@ -179,9 +181,9 @@ const LoginScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.surface.page },
-  keyboardView: { flex: 1 },
-  scrollContent: { flexGrow: 1, paddingBottom: Spacing.xl },
+  container: {flex: 1, backgroundColor: Colors.surface.page},
+  keyboardView: {flex: 1},
+  scrollContent: {flexGrow: 1, paddingBottom: Spacing.xl},
   hero: {
     backgroundColor: Colors.brand.deepGreen,
     alignItems: 'center',
@@ -250,7 +252,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: Spacing.md,
   },
-  formStart: { marginTop: Spacing.lg },
+  formStart: {marginTop: Spacing.lg},
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',

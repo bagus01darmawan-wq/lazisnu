@@ -1,6 +1,6 @@
 import React from 'react';
 import renderer from 'react-test-renderer';
-import { AppButton } from '../../../src/components/ui/AppButton';
+import {AppButton} from '../../../src/components/ui/AppButton';
 import {Text, TouchableOpacity} from 'react-native';
 
 describe('AppButton', () => {

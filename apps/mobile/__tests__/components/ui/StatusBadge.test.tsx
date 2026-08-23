@@ -1,7 +1,7 @@
 import React from 'react';
 import renderer from 'react-test-renderer';
-import { StatusBadge } from '../../../src/components/ui/StatusBadge';
-import { Text } from 'react-native';
+import {StatusBadge} from '../../../src/components/ui/StatusBadge';
+import {Text} from 'react-native';
 
 describe('StatusBadge', () => {
   it('renders label correctly', () => {

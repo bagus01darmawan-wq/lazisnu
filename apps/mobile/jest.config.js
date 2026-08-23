@@ -9,9 +9,25 @@ module.exports = {
   setupFiles: ['./jest.setup.js'],
   // Mock module manual ada di __mocks__/ — auto-load oleh Jest
   testMatch: [
-    '**/__tests__/**/*.test.ts',
-    '**/__tests__/**/*.test.tsx',
+    '<rootDir>/__tests__/**/*.test.[jt]s?(x)',
+    '<rootDir>/src/**/__tests__/**/*.[jt]s?(x)',
+    '<rootDir>/src/**/?(*.)+(spec|test).[jt]s?(x)',
   ],
+  collectCoverageFrom: [
+    'src/**/*.{ts,tsx}',
+    '!src/**/*.d.ts',
+    '!src/**/types.ts',
+    '!src/**/index.ts',
+  ],
+  coverageDirectory: 'coverage',
+  coverageThreshold: {
+    global: {
+      statements: 50,
+      branches: 35,
+      functions: 45,
+      lines: 50,
+    },
+  },
   transformIgnorePatterns: [
     'node_modules/(?!(jest-)?react-native|@react-native|react-native-vector-icons)/',
     '\\.pnpm/(?!(jest-)?react-native|@react-native|react-native-vector-icons)/',
@@ -20,12 +36,10 @@ module.exports = {
   // tersebut berisi Flow type syntax yang gagal di-transform oleh babel-jest
   // di environment pnpm (symlink path tidak match transformIgnorePatterns).
   moduleNameMapper: {
-    '^@react-native/js-polyfills/error-guard$':
-      '<rootDir>/__mocks__/error-guard-mock.js',
+    '^@react-native/js-polyfills/error-guard$': '<rootDir>/__mocks__/error-guard-mock.js',
     // react-native-get-random-values juga Flow syntax — di-mock sebagai no-op
     // karena crypto.getRandomValues sudah di-setup di jest.setup.js
-    '^react-native-get-random-values$':
-      '<rootDir>/__mocks__/react-native-get-random-values.ts',
+    '^react-native-get-random-values$': '<rootDir>/__mocks__/react-native-get-random-values.ts',
   },
   // Clear mocks otomatis sebelum tiap test
   clearMocks: true,

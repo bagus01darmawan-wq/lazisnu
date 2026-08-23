@@ -1,0 +1,9 @@
+node_modules/
+android/
+ios/
+.bundle/
+vendor/
+dist/
+build/
+coverage/
+*.lock

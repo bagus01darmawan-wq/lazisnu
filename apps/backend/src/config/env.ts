@@ -51,9 +51,6 @@ const envSchema = z.object({
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   R2_BUCKET_NAME: z.string().optional(),
 
-  // Google Play Integrity
-  PLAY_INTEGRITY_KEY: z.string().optional(),
-
   // Internal API Key (for scheduler/internal routes)
   INTERNAL_API_KEY: z.string().optional(),
 

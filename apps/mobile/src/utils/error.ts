@@ -7,9 +7,9 @@ export function getErrorMessage(error: unknown, fallback = 'Terjadi kesalahan'):
     typeof error === 'object' &&
     error !== null &&
     'message' in error &&
-    typeof (error as { message?: unknown }).message === 'string'
+    typeof (error as {message?: unknown}).message === 'string'
   ) {
-    return (error as { message: string }).message;
+    return (error as {message: string}).message;
   }
 
   return fallback;
