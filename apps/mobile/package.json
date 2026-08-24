@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit",
     "build:android": "react-native build-android --mode release",
     "build:debug": "react-native build-android --mode debug",
-    "postinstall": "patch-package",
+    "postinstall": "node scripts/patches/expo-updates-kapt-fix.js && patch-package",
     "eas-build-post-install": "pnpm --filter @lazisnu/shared-types build"
   },
   "dependencies": {
