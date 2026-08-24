@@ -6,24 +6,24 @@
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 export enum UserRole {
-  ADMIN_KECAMATAN = 'ADMIN_KECAMATAN',
-  ADMIN_RANTING   = 'ADMIN_RANTING',
-  PETUGAS         = 'PETUGAS',
+  ADMIN_KECAMATAN = "ADMIN_KECAMATAN",
+  ADMIN_RANTING = "ADMIN_RANTING",
+  PETUGAS = "PETUGAS",
 }
 
 export enum AssignmentStatus {
-  ACTIVE      = 'ACTIVE',
-  COMPLETED   = 'COMPLETED',
-  POSTPONED   = 'POSTPONED',
-  REASSIGNED  = 'REASSIGNED',
-  UNCOLLECTED = 'UNCOLLECTED',
+  ACTIVE = "ACTIVE",
+  COMPLETED = "COMPLETED",
+  POSTPONED = "POSTPONED",
+  REASSIGNED = "REASSIGNED",
+  UNCOLLECTED = "UNCOLLECTED",
 }
 
 export enum SyncStatus {
-  PENDING   = 'PENDING',
-  COMPLETED = 'COMPLETED',
-  FAILED    = 'FAILED',
-  CANCELLED = 'CANCELLED',
+  PENDING = "PENDING",
+  COMPLETED = "COMPLETED",
+  FAILED = "FAILED",
+  CANCELLED = "CANCELLED",
 }
 
 // ─── District ─────────────────────────────────────────────────────────────────
@@ -153,6 +153,9 @@ export interface Collection {
   latitude?: number;
   longitude?: number;
   offline_id?: string;
+  // Mobile-only flag: koreksi nominal sudah disimpan di antrean offline
+  // tetapi belum dibuang ke server (nominal di sini adalah nilai optimistis).
+  pending_correction?: boolean;
 }
 
 // ─── DeviceInfo ───────────────────────────────────────────────────────────────
@@ -252,7 +255,7 @@ export interface OfflineCollection {
   device_info?: DeviceInfo;
   submit_sequence?: number;
   is_latest?: boolean;
-  error_type?: 'VALIDATION' | 'SERVER';
+  error_type?: "VALIDATION" | "SERVER";
   can_retry?: boolean;
   error_message?: string;
   synced?: boolean;
@@ -418,10 +421,10 @@ export interface BatchCollectionRequestItem {
 export interface BatchItemResult {
   offline_id: string;
   server_id?: string;
-  status: 'COMPLETED' | 'ALREADY_SYNCED' | 'FAILED';
+  status: "COMPLETED" | "ALREADY_SYNCED" | "FAILED";
   error?: string;
   error_code?: string;
-  error_type?: 'VALIDATION' | 'SERVER';
+  error_type?: "VALIDATION" | "SERVER";
   can_retry?: boolean;
 }
 

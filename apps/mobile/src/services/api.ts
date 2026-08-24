@@ -16,6 +16,7 @@ import {
   BatchCollectionRequestItem,
 } from '@lazisnu/shared-types';
 import {captureAuthEvent} from '../config/crashlytics';
+import {updateBiometricToken} from './biometric';
 
 // Instance dibuat setelah encryption key tersedia. Membuka file terenkripsi
 // tanpa key lebih dulu dapat membuat MMKV menganggap file corrupt dan meresetnya.
@@ -235,6 +236,17 @@ async function refreshAccessToken(): Promise<RefreshResult> {
       // Jika refresh token baru diterima, simpan juga
       if (data.data.refresh_token) {
         setRefreshToken(data.data.refresh_token);
+        // Sinkronkan Keychain biometrik — server merotasi jti (single-use),
+        // tanpa penulisan ulang ini token di Keychain menjadi stale dan
+        // login sidik jari selalu ditolak dengan REFRESH_REVOKED.
+        try {
+          const {useAuthStore} = require('../stores/useAuthStore');
+          if (useAuthStore.getState().biometricEnabled) {
+            await updateBiometricToken(data.data.refresh_token);
+          }
+        } catch {
+          /* biometrik opsional — kegagalan Keychain tidak boleh gagalkan refresh */
+        }
       }
       return {token: newToken, networkError: false};
     }
@@ -430,13 +442,43 @@ export const authService = {
   refresh: async (
     refreshToken: string,
   ): Promise<ApiResponse<{access_token: string; refresh_token: string}>> => {
-    return apiRequest('/auth/refresh', {
-      method: 'POST',
-      body: JSON.stringify({
-        refresh_token: refreshToken,
-        device_id: getOrCreateDeviceId(),
-      }),
-    });
+    // Sengaja TIDAK lewat apiRequest: 401 dari endpoint /auth/refresh tidak
+    // boleh memicu interceptor auto-refresh (yang memakai token lokal yang
+    // berbeda) — pemanggil (login biometrik) butuh kode error asli server
+    // (REFRESH_REVOKED vs NETWORK_ERROR) untuk memutuskan disable biometrik.
+    try {
+      const response = await fetchWithTimeout(`${API_BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          refresh_token: refreshToken,
+          device_id: getOrCreateDeviceId(),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        return {
+          success: false,
+          error: {
+            code: data.error?.code || 'UNKNOWN_ERROR',
+            message: data.error?.message || 'Terjadi kesalahan',
+            details: data.error?.details,
+          },
+        };
+      }
+      return {success: true, data: data.data || data};
+    } catch (error: unknown) {
+      const isTimeout = isTimeoutError(error);
+      return {
+        success: false,
+        error: {
+          code: 'NETWORK_ERROR',
+          message: isTimeout
+            ? 'Koneksi timeout. Jaringan internet lambat atau tidak stabil.'
+            : 'Tidak ada koneksi internet. Periksa jaringan Anda.',
+        },
+      };
+    }
   },
 
   logout: async () => {

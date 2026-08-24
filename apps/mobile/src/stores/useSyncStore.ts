@@ -1,5 +1,6 @@
 import {create} from 'zustand';
 import {offlineQueue} from '../services/offline/queue';
+import {correctionQueue} from '../services/offline/corrections';
 import {syncService} from '../services/offline/sync';
 import {getErrorMessage} from '../utils/error';
 import {useDashboardStore} from './useDashboardStore';
@@ -7,12 +8,19 @@ import {useTasksStore} from './useTasksStore';
 import {useCollectionsStore} from './useCollectionStore';
 
 export function getTotalSyncIssueCount(): number {
-  return offlineQueue.getQueueCount() + offlineQueue.getFailedPermanentCount();
+  return (
+    offlineQueue.getQueueCount() +
+    offlineQueue.getFailedPermanentCount() +
+    correctionQueue.getQueueCount() +
+    correctionQueue.getFailedPermanentCount()
+  );
 }
 
 interface SyncState {
   pendingCount: number;
   permanentFailedCount: number;
+  pendingCorrectionsCount: number;
+  failedCorrectionsCount: number;
   isSyncing: boolean;
   progress: number;
   lastSyncAt: string | null;
@@ -39,6 +47,8 @@ export function refreshSyncCounts(): void {
       pendingCount: count,
       permanentFailedCount: permanentCount,
       oldestPending: queue[0]?.collected_at ?? null,
+      pendingCorrectionsCount: correctionQueue.getQueueCount(),
+      failedCorrectionsCount: correctionQueue.getFailedPermanentCount(),
     });
   } catch (error) {
     console.error('Failed to refresh sync counts:', error);
@@ -54,6 +64,8 @@ const PROGRESS_FINALIZING = 90;
 export const useSyncStore = create<SyncState>(set => ({
   pendingCount: 0,
   permanentFailedCount: 0,
+  pendingCorrectionsCount: 0,
+  failedCorrectionsCount: 0,
   isSyncing: false,
   progress: 0,
   lastSyncAt: null,
@@ -77,11 +89,13 @@ export const useSyncStore = create<SyncState>(set => ({
           progress: PROGRESS_BATCH_SENT,
           pendingCount: offlineQueue.getQueueCount(),
           permanentFailedCount: offlineQueue.getFailedPermanentCount(),
+          pendingCorrectionsCount: correctionQueue.getQueueCount(),
+          failedCorrectionsCount: correctionQueue.getFailedPermanentCount(),
         });
         return {success: 0, failed: 0};
       }
 
-      if (result.synced > 0) {
+      if (result.synced > 0 || result.corrections_synced) {
         // ACK sudah aman, tetapi status sync UI baru selesai setelah semua store
         // melihat snapshot server terbaru. allSettled mencegah satu layar gagal
         // membatalkan keberhasilan transaksi yang sudah committed.
@@ -100,6 +114,8 @@ export const useSyncStore = create<SyncState>(set => ({
         lastSyncAt: new Date().toISOString(),
         pendingCount: offlineQueue.getQueueCount(),
         permanentFailedCount: offlineQueue.getFailedPermanentCount(),
+        pendingCorrectionsCount: correctionQueue.getQueueCount(),
+        failedCorrectionsCount: correctionQueue.getFailedPermanentCount(),
       });
 
       return {success: result.synced, failed: result.failed};
@@ -113,13 +129,16 @@ export const useSyncStore = create<SyncState>(set => ({
         progress: 0,
         pendingCount: currentPending,
         permanentFailedCount: currentFailed,
+        pendingCorrectionsCount: correctionQueue.getQueueCount(),
+        failedCorrectionsCount: correctionQueue.getFailedPermanentCount(),
       });
       return {success: 0, failed: 0};
     }
   },
-  setProgress: (progress: number) => set({progress}),
+  setProgress: progress => set({progress}),
 }));
 
 // Queue adalah source of truth. Setiap mutasi queue/quarantine langsung
 // menyegarkan state badge, termasuk mutasi dari auto-sync dan layar Riwayat.
 offlineQueue.subscribe(refreshSyncCounts);
+correctionQueue.subscribe(refreshSyncCounts);

@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   Alert,
   Image,
@@ -8,6 +8,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 
@@ -23,12 +24,24 @@ import type {AuthNavigationProp} from '../navigation/types';
 const LoginScreen: React.FC = () => {
   const navigation = useNavigation<AuthNavigationProp>();
   const insets = useSafeAreaInsets();
-  const {login, requestOTP, loginWithBiometric, isLoading, error, clearError, biometricEnabled} =
-    useAuthStore();
+  const {
+    login,
+    requestOTP,
+    loginWithBiometric,
+    isLoading,
+    error,
+    clearError,
+    biometricEnabled,
+    sessionRecoveryAvailable,
+    dismissSessionRecovery,
+  } = useAuthStore();
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [method, setMethod] = useState<'password' | 'otp'>('password');
+  // Auto-prompt biometrik sekali saja saat panel pemulihan tampil —
+  // menghindari prompt berulang setiap re-render.
+  const autoBiometricAttempted = useRef(false);
 
   const validatePhone = () => {
     if (!phone.trim()) {
@@ -70,7 +83,7 @@ const LoginScreen: React.FC = () => {
     Alert.alert('OTP Tidak Terkirim', message || 'Coba kembali beberapa saat lagi.');
   };
 
-  const handleBiometricLogin = async () => {
+  const handleBiometricLogin = useCallback(async () => {
     clearError();
     const success = await loginWithBiometric();
     if (!success) {
@@ -79,7 +92,16 @@ const LoginScreen: React.FC = () => {
         Alert.alert('Login Biometrik Gagal', message);
       }
     }
-  };
+  }, [clearError, loginWithBiometric]);
+
+  const showRecoveryPanel = sessionRecoveryAvailable && biometricEnabled;
+
+  useEffect(() => {
+    if (showRecoveryPanel && !autoBiometricAttempted.current && !isLoading) {
+      autoBiometricAttempted.current = true;
+      handleBiometricLogin();
+    }
+  }, [showRecoveryPanel, isLoading, handleBiometricLogin]);
 
   return (
     <View style={styles.container}>
@@ -98,6 +120,37 @@ const LoginScreen: React.FC = () => {
           </View>
 
           <AppCard variant={'elevated'} style={styles.loginCard}>
+            {showRecoveryPanel && (
+              <View style={styles.recoveryPanel}>
+                <View style={styles.recoveryIcon}>
+                  <Icon name={'fingerprint'} size={26} color={Colors.brand.deepGreen} />
+                </View>
+                <View style={styles.recoveryContent}>
+                  <Text style={styles.recoveryTitle}>Sesi Anda berakhir</Text>
+                  <Text style={styles.recoveryText}>
+                    Lanjutkan tanpa mengetik kata sandi menggunakan sidik jari.
+                  </Text>
+                </View>
+                <AppButton
+                  label={'Gunakan Sidik Jari'}
+                  icon={'fingerprint'}
+                  variant={'outline'}
+                  onPress={handleBiometricLogin}
+                  loading={isLoading}
+                />
+                <TouchableOpacity
+                  accessibilityRole={'button'}
+                  accessibilityLabel={'Tutup panel pemulihan sesi'}
+                  onPress={() => {
+                    autoBiometricAttempted.current = true;
+                    dismissSessionRecovery();
+                  }}
+                  style={styles.recoveryDismiss}>
+                  <Text style={styles.recoveryDismissText}>Masuk dengan akun</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             <Text style={styles.cardTitle}>Masuk ke akun</Text>
             <SegmentedControl
               options={[
@@ -160,14 +213,23 @@ const LoginScreen: React.FC = () => {
             />
 
             {biometricEnabled && (
-              <AppButton
-                label={'Masuk dengan Sidik Jari'}
-                icon={'fingerprint'}
-                variant={'outline'}
-                onPress={handleBiometricLogin}
-                loading={isLoading}
-                fullWidth
-              />
+              <>
+                {/* Pemisah visual — sebelumnya tombol biometrik menempel
+                    langsung di tombol Masuk tanpa jarak. */}
+                <View style={styles.biometricDivider}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>atau</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+                <AppButton
+                  label={'Masuk dengan Sidik Jari'}
+                  icon={'fingerprint'}
+                  variant={'outline'}
+                  onPress={handleBiometricLogin}
+                  loading={isLoading}
+                  fullWidth
+                />
+              </>
             )}
           </AppCard>
 
@@ -253,6 +315,41 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   formStart: {marginTop: Spacing.lg},
+  recoveryPanel: {
+    backgroundColor: Colors.surface.successSubtle,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  recoveryIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.surface.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recoveryContent: {alignItems: 'center'},
+  recoveryTitle: {...Typography.body, color: Colors.brand.deepGreen, fontWeight: '700'},
+  recoveryText: {
+    ...Typography.caption,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+    marginTop: 2,
+    lineHeight: 17,
+  },
+  recoveryDismiss: {minHeight: 44, justifyContent: 'center', paddingHorizontal: Spacing.sm},
+  recoveryDismissText: {...Typography.label, color: Colors.text.secondary},
+  biometricDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginVertical: Spacing.md,
+  },
+  dividerLine: {flex: 1, height: 1, backgroundColor: Colors.border.summary},
+  dividerText: {...Typography.caption, color: Colors.text.muted},
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',

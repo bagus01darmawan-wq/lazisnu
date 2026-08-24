@@ -29,6 +29,8 @@ export const HistoryItem = memo(
             <StatusBadge status={'pending'} label={'Belum Terkirim'} />
           ) : item.sync_status === 'FAILED' ? (
             <StatusBadge status={'error'} label={'Gagal Terkirim'} />
+          ) : item.pending_correction ? (
+            <StatusBadge status={'pending'} label={'Koreksi Menunggu'} />
           ) : Number(item.submit_sequence || 1) > 1 ? (
             <StatusBadge status={'corrected'} label={'Terkoreksi'} />
           ) : (

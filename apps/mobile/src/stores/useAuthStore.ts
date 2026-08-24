@@ -45,6 +45,13 @@ interface AuthState {
   biometricEnabled: boolean;
 
   /**
+   * True saat user terlempar ke AuthStack karena SESSION_EXPIRED dan
+   * biometriknya aktif — halaman Login menampilkan panel pemulihan
+   * "Lanjutkan dengan Sidik Jari" alih-alih form kosong.
+   */
+  sessionRecoveryAvailable: boolean;
+
+  /**
    * Dipanggil sekali saat app boot. Jika ada token di MMKV,
    * validasi ke backend via /auth/me. Berhasil → set authenticated.
    * Gagal/expired → bersihkan state (lihat P1).
@@ -74,6 +81,7 @@ interface AuthState {
 
   setUser: (user: User) => void;
   clearError: () => void;
+  dismissSessionRecovery: () => void;
   setEncryptionWarning: (message: string | null) => void;
 }
 
@@ -156,6 +164,8 @@ function resetAllClientState() {
   useSyncStore.setState({
     pendingCount: 0,
     permanentFailedCount: 0,
+    pendingCorrectionsCount: 0,
+    failedCorrectionsCount: 0,
     isSyncing: false,
     progress: 0,
     lastSyncAt: null,
@@ -173,6 +183,7 @@ export const useAuthStore = create<AuthState>(set => ({
   error: null,
   encryptionWarning: null,
   biometricEnabled: loadBiometricEnabled(),
+  sessionRecoveryAvailable: false,
 
   initializeAuth: async () => {
     set({isInitializing: true, error: null});
@@ -229,7 +240,36 @@ export const useAuthStore = create<AuthState>(set => ({
         });
         setAuthenticatedUser(id);
       } else {
-        // Token ditolak backend — bersihkan semuanya
+        // Bedakan kegagalan jaringan dari penolakan server sungguhan.
+        // apiRequest TIDAK pernah throw saat offline — ia return
+        // {success:false, code:'NETWORK_ERROR'}. Menghapus sesi karena tidak
+        // ada sinyal membuat petugas lapangan terlempar ke halaman Login dan
+        // cache offline (dashboard/tugas/riwayat) ikut terhapus.
+        const errorCode = result.error?.code;
+        const isAuthRejection =
+          errorCode === 'UNAUTHORIZED' ||
+          errorCode === 'SESSION_EXPIRED' ||
+          errorCode === 'REFRESH_REVOKED' ||
+          errorCode === 'FORBIDDEN';
+        const cachedToken = await getToken();
+
+        if (!isAuthRejection && cachedToken) {
+          // Jaringan bermasalah / server error — pulihkan sesi dari cache.
+          console.warn('[Auth] initializeAuth: jaringan tidak tersedia, pulihkan sesi lokal');
+          const cachedUser = getCachedUser();
+          set({
+            user: cachedUser,
+            token: cachedToken,
+            isAuthenticated: true,
+            isInitializing: false,
+          });
+          if (cachedUser) {
+            setAuthenticatedUser(cachedUser.id);
+          }
+          return;
+        }
+
+        // Penolakan eksplisit backend atau token hilang — bersihkan semuanya
         await clearToken();
         resetAllClientState();
         set({
@@ -291,6 +331,7 @@ export const useAuthStore = create<AuthState>(set => ({
           token: access_token,
           isAuthenticated: true,
           isLoading: false,
+          sessionRecoveryAvailable: false,
         });
         saveCachedUser({
           id: user.id,
@@ -368,6 +409,7 @@ export const useAuthStore = create<AuthState>(set => ({
           token: access_token,
           isAuthenticated: true,
           isLoading: false,
+          sessionRecoveryAvailable: false,
         });
         saveCachedUser({
           id: user.id,
@@ -408,7 +450,13 @@ export const useAuthStore = create<AuthState>(set => ({
     await clearToken();
     resetAllClientState();
     clearAuthenticatedUser();
-    set({user: null, token: null, isAuthenticated: false, error: null});
+    set({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      error: null,
+      sessionRecoveryAvailable: false,
+    });
   },
 
   forceLogout: reason => {
@@ -428,6 +476,7 @@ export const useAuthStore = create<AuthState>(set => ({
       token: null,
       isAuthenticated: false,
       error: reason || 'Sesi telah berakhir. Silakan login kembali.',
+      sessionRecoveryAvailable: useAuthStore.getState().biometricEnabled,
     });
   },
 
@@ -512,6 +561,7 @@ export const useAuthStore = create<AuthState>(set => ({
             token: access_token,
             isAuthenticated: true,
             isLoading: false,
+            sessionRecoveryAvailable: false,
           });
           saveCachedUser({
             id,
@@ -528,18 +578,41 @@ export const useAuthStore = create<AuthState>(set => ({
         }
 
         // me() gagal tapi token valid — set minimal state dari refresh response
-        set({token: access_token, isAuthenticated: true, isLoading: false});
+        set({
+          token: access_token,
+          isAuthenticated: true,
+          isLoading: false,
+          sessionRecoveryAvailable: false,
+        });
         return true;
       }
 
-      // REFRESH_REVOKED — nonaktifkan biometrik
-      if (result.error?.code === 'REFRESH_REVOKED' || result.error?.code === 'UNAUTHORIZED') {
+      // Token mati/rusak secara definitif — nonaktifkan biometrik agar user
+      // tidak terus-menerus gagal dengan pesan sama (kode asli server kini
+      // sampai karena authService.refresh tidak lewat interceptor 401).
+      if (
+        result.error?.code === 'REFRESH_REVOKED' ||
+        result.error?.code === 'UNAUTHORIZED' ||
+        result.error?.code === 'INVALID_TOKEN' ||
+        result.error?.code === 'MISSING_TOKEN'
+      ) {
         await disableBiometric();
         saveBiometricEnabled(false);
         set({
           biometricEnabled: false,
           isLoading: false,
           error: 'Sesi biometrik telah berakhir. Silakan login dengan kata sandi.',
+        });
+        return false;
+      }
+
+      if (result.error?.code === 'NETWORK_ERROR') {
+        // Jaringan bermasalah BUKAN alasan mencabut biometrik — token di
+        // Keychain tetap sah, cukup diminta ulang saat online.
+        set({
+          isLoading: false,
+          error:
+            result.error.message || 'Tidak ada koneksi internet. Coba lagi saat jaringan tersedia.',
         });
         return false;
       }
@@ -561,6 +634,8 @@ export const useAuthStore = create<AuthState>(set => ({
   setUser: (user: User) => set({user}),
 
   clearError: () => set({error: null}),
+
+  dismissSessionRecovery: () => set({sessionRecoveryAvailable: false, error: null}),
 
   setEncryptionWarning: message => set({encryptionWarning: message}),
 }));

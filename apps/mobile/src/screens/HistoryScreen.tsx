@@ -12,10 +12,12 @@ import {
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import type {Collection} from '@lazisnu/shared-types';
+import {correctionQueue, QueuedCorrection} from '../services/offline/corrections';
 import {useCollectionsStore, useSyncStore, useTasksStore} from '../stores';
 import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
 import {
   HistoryCorrectionData,
+  HistoryCorrectionFailureModal,
   HistoryCorrectionModal,
   HistoryFailureModal,
   HistoryItem,
@@ -28,11 +30,23 @@ const HistoryScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const {collections, fetchCollections, loadMore, isLoading, error, page, totalPages, total} =
     useCollectionsStore();
-  const {checkStatus} = useSyncStore();
+  const {checkStatus, failedCorrectionsCount} = useSyncStore();
   const [correction, setCorrection] = useState<HistoryCorrectionData | null>(null);
   const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [failureItem, setFailureItem] = useState<Collection | null>(null);
+  const [showFailedCorrections, setShowFailedCorrections] = useState(false);
+  const [failedCorrectionItems, setFailedCorrectionItems] = useState<QueuedCorrection[]>([]);
+
+  const openFailedCorrections = useCallback(() => {
+    setFailedCorrectionItems(correctionQueue.getFailedPermanent());
+    setShowFailedCorrections(true);
+  }, []);
+
+  const dismissFailedCorrection = useCallback((correctionId: string) => {
+    correctionQueue.removeFromFailedPermanent([correctionId]);
+    setFailedCorrectionItems(correctionQueue.getFailedPermanent());
+  }, []);
 
   const openFailureDetail = useCallback((item: Collection) => {
     setFailureItem(item);
@@ -44,10 +58,15 @@ const HistoryScreen: React.FC = () => {
   }, [checkStatus, fetchCollections]);
 
   const openCorrection = useCallback((item: Collection) => {
+    // Item dengan koreksi offline tertunda menampilkan nominal optimistis;
+    // baseline audit harus nominal server asli, bukan hasil overlay.
+    const baselineNominal = item.pending_correction
+      ? (correctionQueue.getLatestByCollectionId(item.id)?.nominal_lama ?? item.nominal)
+      : item.nominal;
     setCorrection({
       id: item.sync_status === 'PENDING' ? item.offline_id || item.id : item.id,
       nominal: String(item.nominal),
-      originalNominal: item.nominal,
+      originalNominal: baselineNominal,
       isPending: item.sync_status === 'PENDING',
     });
     setReason('');
@@ -100,6 +119,7 @@ const HistoryScreen: React.FC = () => {
       const response = await useCollectionsStore.getState().resubmitCollection(correction.id, {
         nominal,
         alasan_resubmit: reason.trim(),
+        nominal_lama: correction.originalNominal,
       });
       if (!response.success) {
         Alert.alert('Koreksi Gagal', response.error || 'Data belum dapat dikoreksi.');
@@ -107,7 +127,14 @@ const HistoryScreen: React.FC = () => {
       }
       setCorrection(null);
       setReason('');
-      Alert.alert('Koreksi Tersimpan', 'Riwayat telah diperbarui.');
+      if (response.queued) {
+        Alert.alert(
+          'Koreksi Tersimpan',
+          'Perubahan dikirim otomatis saat koneksi internet tersedia.',
+        );
+      } else {
+        Alert.alert('Koreksi Tersimpan', 'Riwayat telah diperbarui.');
+      }
     } catch {
       Alert.alert('Koreksi Gagal', 'Terjadi kesalahan saat mengirim koreksi.');
     } finally {
@@ -216,6 +243,27 @@ const HistoryScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
       />
 
+      {failedCorrectionsCount > 0 && !showFailedCorrections && (
+        <TouchableOpacity
+          accessibilityRole={'button'}
+          accessibilityLabel={'Buka daftar koreksi yang ditolak server'}
+          onPress={openFailedCorrections}
+          style={styles.failedCorrectionBanner}>
+          <Icon name={'pencil-off'} size={18} color={Colors.status.error} />
+          <Text style={styles.failedCorrectionText}>
+            {failedCorrectionsCount} koreksi ditolak server — ketuk untuk detail
+          </Text>
+          <Icon name={'chevron-right'} size={20} color={Colors.status.error} />
+        </TouchableOpacity>
+      )}
+
+      <HistoryCorrectionFailureModal
+        visible={showFailedCorrections}
+        items={failedCorrectionItems}
+        onClose={() => setShowFailedCorrections(false)}
+        onDismiss={dismissFailedCorrection}
+      />
+
       <HistoryCorrectionModal
         correction={correction}
         reason={reason}
@@ -309,6 +357,27 @@ const styles = StyleSheet.create({
   },
   retryText: {...Typography.label, color: Colors.text.white},
   loadingFooter: {paddingVertical: Spacing.lg},
+  failedCorrectionBanner: {
+    position: 'absolute',
+    left: Spacing.md,
+    right: Spacing.md,
+    bottom: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    backgroundColor: Colors.surface.errorSoft,
+    borderColor: Colors.status.error,
+    borderWidth: 1,
+    borderRadius: Radius.lg,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+  },
+  failedCorrectionText: {
+    ...Typography.caption,
+    color: Colors.status.error,
+    flex: 1,
+    fontWeight: '600',
+  },
 });
 
 export default HistoryScreen;

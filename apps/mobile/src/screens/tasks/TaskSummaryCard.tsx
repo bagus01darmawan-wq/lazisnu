@@ -1,7 +1,7 @@
 import React from 'react';
 import {StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import {Colors, DashboardLayout, Layout, Radius, Shadows, Spacing, Typography} from '../../theme';
+import {Colors, Layout, Radius, Shadows, Spacing, Typography} from '../../theme';
 import {formatCurrency} from '../../utils';
 
 export interface TaskSummaryCardProps {
@@ -9,7 +9,8 @@ export interface TaskSummaryCardProps {
   completedCount: number;
   totalCount: number;
   completedNominal: number;
-  onCompletePeriod: () => void;
+  /** Bila tidak disediakan, tombol aksi Selesai Periode tidak dirender. */
+  onCompletePeriod?: () => void;
 }
 
 const Stat = ({value, label}: {value: string; label: string}) => (
@@ -31,44 +32,38 @@ export const TaskSummaryCard: React.FC<TaskSummaryCardProps> = ({
   const progress = totalCount ? completedCount / totalCount : 0;
 
   return (
-    <View style={styles.body}>
-      <View style={styles.summaryCard}>
-        <Text style={styles.summaryTitle}>Progres Tugas</Text>
-        <View style={styles.statsRow}>
-          <Stat value={`${activeCount}`} label={'Belum'} />
-          <View style={styles.statDivider} />
-          <Stat value={`${completedCount}`} label={'Selesai'} />
-          <View style={styles.statDivider} />
-          <Stat value={`${totalCount}`} label={'Semua'} />
-        </View>
-        <View style={styles.progressDivider} />
-        <View style={styles.progressHeading}>
-          <Text style={styles.progressLabel}>{formatCurrency(completedNominal)} terjemput</Text>
-          <Text style={styles.progressPercent}>{Math.round(progress * 100)}%</Text>
-        </View>
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, {width: `${Math.round(progress * 100)}%`}]} />
-        </View>
-        {activeCount > 0 && (
-          <TouchableOpacity
-            accessibilityRole={'button'}
-            accessibilityLabel={'Selesaikan periode berjalan'}
-            onPress={onCompletePeriod}
-            style={styles.completePeriodButton}>
-            <Icon name={'flag-checkered'} size={18} color={Colors.status.warning} />
-            <Text style={styles.completePeriodText}>Selesai Periode ({activeCount} belum)</Text>
-          </TouchableOpacity>
-        )}
+    <View style={styles.summaryCard}>
+      <Text style={styles.summaryTitle}>Progres Tugas</Text>
+      <View style={styles.statsRow}>
+        <Stat value={`${activeCount}`} label={'Belum'} />
+        <View style={styles.statDivider} />
+        <Stat value={`${completedCount}`} label={'Selesai'} />
+        <View style={styles.statDivider} />
+        <Stat value={`${totalCount}`} label={'Semua'} />
       </View>
+      <View style={styles.progressDivider} />
+      <View style={styles.progressHeading}>
+        <Text style={styles.progressLabel}>{formatCurrency(completedNominal)} terjemput</Text>
+        <Text style={styles.progressPercent}>{Math.round(progress * 100)}%</Text>
+      </View>
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, {width: `${Math.round(progress * 100)}%`}]} />
+      </View>
+      {onCompletePeriod && activeCount > 0 && (
+        <TouchableOpacity
+          accessibilityRole={'button'}
+          accessibilityLabel={'Selesaikan periode berjalan'}
+          onPress={onCompletePeriod}
+          style={styles.completePeriodButton}>
+          <Icon name={'flag-checkered'} size={18} color={Colors.status.warning} />
+          <Text style={styles.completePeriodText}>Selesai Periode ({activeCount} belum)</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  body: {
-    paddingHorizontal: Layout.screenPadding,
-    marginTop: -DashboardLayout.heroOverlap,
-  },
   summaryCard: {
     minHeight: 160,
     backgroundColor: Colors.surface.card,

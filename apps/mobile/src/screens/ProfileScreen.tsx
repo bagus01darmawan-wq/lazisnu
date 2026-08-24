@@ -1,8 +1,8 @@
-import React, {useEffect, useState} from 'react';
-import {Alert, ScrollView, StyleSheet, Switch, Text, View} from 'react-native';
+import React, {useCallback, useEffect, useState} from 'react';
+import {Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import {useAuthStore} from '../stores';
+import {useAuthStore, useTasksStore} from '../stores';
 import {getBiometryType, isBiometricAvailable} from '../services/biometric';
 import {AppButton, AppCard, StatusBadge} from '../components/ui';
 import {Colors, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
@@ -67,6 +67,35 @@ const ProfileScreen: React.FC = () => {
       {text: 'Keluar', style: 'destructive', onPress: logout},
     ]);
   };
+
+  const {activeCount, completePeriod} = useTasksStore();
+
+  const handleCompletePeriod = useCallback(() => {
+    if (!activeCount) {
+      return;
+    }
+    Alert.alert(
+      'Selesai Periode',
+      `Anda memiliki ${activeCount} kaleng yang belum dijemput. Tandai semua sebagai selesai dan lanjut ke periode berikutnya?`,
+      [
+        {text: 'Batal', style: 'cancel'},
+        {
+          text: 'Ya, Selesaikan',
+          onPress: async () => {
+            const result = await completePeriod();
+            if (result.error) {
+              Alert.alert('Gagal', result.error);
+            } else if (result.skipped > 0) {
+              Alert.alert(
+                'Berhasil',
+                `${result.skipped} kaleng ditandai tidak dijemput. Periode berjalan selesai.`,
+              );
+            }
+          },
+        },
+      ],
+    );
+  }, [activeCount, completePeriod]);
 
   return (
     <ScrollView
@@ -134,6 +163,29 @@ const ProfileScreen: React.FC = () => {
         <Text style={styles.securityText}>
           Akun ini digunakan untuk mencatat penjemputan. Jangan berikan akses kepada orang lain.
         </Text>
+      </View>
+
+      <View style={styles.completePeriodWrapper}>
+        <TouchableOpacity
+          accessibilityRole={'button'}
+          accessibilityLabel={
+            activeCount
+              ? `Selesaikan periode berjalan, ${activeCount} kaleng belum dijemput`
+              : 'Tidak ada kaleng yang belum dijemput'
+          }
+          disabled={!activeCount}
+          onPress={handleCompletePeriod}
+          style={[styles.completePeriodButton, !activeCount && styles.completePeriodDisabled]}>
+          <Icon
+            name={'flag-checkered'}
+            size={18}
+            color={activeCount ? Colors.status.warning : Colors.text.muted}
+          />
+          <Text
+            style={[styles.completePeriodText, !activeCount && styles.completePeriodTextDisabled]}>
+            {activeCount ? `Selesai Periode (${activeCount} belum)` : 'Selesai Periode'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.logoutWrapper}>
@@ -257,6 +309,31 @@ const styles = StyleSheet.create({
     marginLeft: Spacing.sm,
   },
   logoutWrapper: {marginHorizontal: Layout.screenPadding, marginTop: Spacing.lg},
+  completePeriodWrapper: {marginHorizontal: Layout.screenPadding, marginTop: Spacing.lg},
+  completePeriodButton: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.xs + 2,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.status.warning + '60',
+    backgroundColor: Colors.surface.warningSoft,
+  },
+  completePeriodDisabled: {
+    borderColor: Colors.border.warm,
+    backgroundColor: Colors.surface.card,
+    opacity: 0.6,
+  },
+  completePeriodText: {
+    ...Typography.label,
+    color: Colors.status.warning,
+  },
+  completePeriodTextDisabled: {
+    color: Colors.text.muted,
+  },
   versionRow: {
     flexDirection: 'row',
     alignItems: 'center',

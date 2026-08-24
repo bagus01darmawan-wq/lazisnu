@@ -281,7 +281,9 @@ describe('CollectionScreen — state sukses', () => {
       expect.objectContaining({nominal: 50000, assignment_id: 'assignment-1'}),
     );
     expect(findTextInTree(tree, 'Penjemputan Berhasil')).toBe(true);
-    expect(findTextInTree(tree, 'Scan QR Baru')).toBe(true);
+    // Tombol "Scan QR Baru" dihapus dari layar sukses — petugas melanjutkan
+    // penjemputan berikutnya lewat tab Scan di navigasi bawah.
+    expect(findTextInTree(tree, 'Scan QR Baru')).toBe(false);
     expect(findTextInTree(tree, 'Kembali ke Beranda')).toBe(true);
   });
 });

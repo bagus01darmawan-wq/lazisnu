@@ -84,12 +84,6 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
     }
   };
 
-  const handleNewCollection = () => {
-    setNominal('');
-    setShowSuccess(false);
-    navigation.navigate('Main', {screen: 'Scan'});
-  };
-
   if (showSuccess) {
     return (
       <View style={styles.container}>
@@ -123,13 +117,6 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
           </View>
 
           <View style={styles.successActions}>
-            <AppButton
-              label={'Scan QR Baru'}
-              icon={'qrcode-scan'}
-              variant={'outline'}
-              onPress={handleNewCollection}
-              fullWidth
-            />
             <AppButton
               label={'Kembali ke Beranda'}
               icon={'home-outline'}

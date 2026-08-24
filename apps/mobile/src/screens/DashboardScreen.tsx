@@ -13,11 +13,12 @@ import {useNavigation} from '@react-navigation/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import {useAuthStore, useDashboardStore, useSyncStore} from '../stores';
+import {useAuthStore, useDashboardStore, useSyncStore, useTasksStore} from '../stores';
 import {SyncBanner} from '../components/ui';
 import {Colors, DashboardLayout, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
 import {formatCurrency} from '../utils';
 import type {MainNavigationProp} from '../navigation/types';
+import {TaskSummaryCard} from './tasks';
 
 const logo = require('../assets/branding/logo-lazisnu-putih.png');
 
@@ -25,17 +26,30 @@ const DashboardScreen: React.FC = () => {
   const navigation = useNavigation<MainNavigationProp>();
   const insets = useSafeAreaInsets();
   const user = useAuthStore(state => state.user);
-  const {todayStats, pendingTasks, fetchDashboard, isLoading, error} = useDashboardStore();
-  const {pendingCount, permanentFailedCount, isSyncing, checkStatus, triggerSync} = useSyncStore();
-  const totalSyncIssues = pendingCount + permanentFailedCount;
+  const {todayStats, fetchDashboard, isLoading, error} = useDashboardStore();
+  const {activeCount, completedCount, totalCount, completedNominal, fetchStats} = useTasksStore();
+  const {
+    pendingCount,
+    permanentFailedCount,
+    pendingCorrectionsCount,
+    failedCorrectionsCount,
+    isSyncing,
+    checkStatus,
+    triggerSync,
+  } = useSyncStore();
+  const totalWaiting = pendingCount + pendingCorrectionsCount;
+  const totalReview = permanentFailedCount + failedCorrectionsCount;
+  const totalSyncIssues = totalWaiting + totalReview;
 
   useEffect(() => {
     fetchDashboard();
+    fetchStats();
     checkStatus();
-  }, [checkStatus, fetchDashboard]);
+  }, [checkStatus, fetchDashboard, fetchStats]);
 
   const refresh = () => {
     fetchDashboard();
+    fetchStats();
     checkStatus();
   };
 
@@ -52,12 +66,12 @@ const DashboardScreen: React.FC = () => {
   }).format(new Date());
 
   const openSyncIssue = () => {
-    if (!permanentFailedCount && !pendingCount) {
+    if (!totalSyncIssues) {
       return;
     }
     Alert.alert(
       'Data Belum Terkirim',
-      'Penjemputan tetap aman tersimpan di perangkat. Aplikasi akan mencoba mengirim kembali secara otomatis.',
+      'Penjemputan dan koreksi tetap aman tersimpan di perangkat. Aplikasi akan mencoba mengirim kembali secara otomatis.',
       [
         {text: 'Nanti', style: 'cancel'},
         {text: 'Lihat Detail', onPress: () => navigation.navigate('History')},
@@ -122,19 +136,13 @@ const DashboardScreen: React.FC = () => {
 
           <SyncBanner
             status={
-              isSyncing
-                ? 'syncing'
-                : permanentFailedCount
-                  ? 'failed'
-                  : pendingCount
-                    ? 'offline'
-                    : 'synced'
+              isSyncing ? 'syncing' : totalReview ? 'failed' : totalWaiting ? 'offline' : 'synced'
             }
             count={totalSyncIssues || undefined}
             subtext={
               totalSyncIssues
-                ? permanentFailedCount
-                  ? `${pendingCount} menunggu, ${permanentFailedCount} perlu ditinjau`
+                ? totalReview
+                  ? `${totalWaiting} menunggu, ${totalReview} perlu ditinjau`
                   : 'Akan dikirim saat koneksi tersedia'
                 : undefined
             }
@@ -182,58 +190,14 @@ const DashboardScreen: React.FC = () => {
             </TouchableOpacity>
           )}
 
-          <View style={styles.sectionHeader}>
-            <View>
-              <Text style={styles.sectionTitle}>Tugas Berikutnya</Text>
-              <Text style={styles.sectionSubtitle}>Penjemputan yang masih menunggu</Text>
-            </View>
-            <TouchableOpacity
-              accessibilityRole={'button'}
-              accessibilityLabel={'Lihat semua tugas'}
-              onPress={() => navigation.navigate('Tasks')}
-              style={styles.seeAll}>
-              <Text style={styles.seeAllText}>Lihat Semua</Text>
-              <Icon name={'chevron-right'} size={21} color={Colors.brand.accentGold} />
-            </TouchableOpacity>
+          <View style={styles.taskSummaryWrap}>
+            <TaskSummaryCard
+              activeCount={activeCount}
+              completedCount={completedCount}
+              totalCount={totalCount}
+              completedNominal={completedNominal}
+            />
           </View>
-
-          {pendingTasks.length ? (
-            pendingTasks.slice(0, 3).map(task => (
-              <TouchableOpacity
-                key={task.id}
-                accessibilityRole={'button'}
-                accessibilityLabel={`Buka tugas ${task.owner_name}`}
-                activeOpacity={0.8}
-                onPress={() => navigation.navigate('Tasks')}
-                style={styles.taskCard}>
-                <View style={styles.taskIcon}>
-                  <Icon name={'package-variant-closed'} size={24} color={Colors.brand.deepGreen} />
-                </View>
-                <View style={styles.taskContent}>
-                  <Text style={styles.taskOwner} numberOfLines={1}>
-                    {task.owner_name}
-                  </Text>
-                  <Text style={styles.taskAddress} numberOfLines={1}>
-                    {task.address}
-                  </Text>
-                </View>
-                <View style={styles.pendingBadge}>
-                  <Text style={styles.pendingText}>BELUM</Text>
-                </View>
-                <Icon name={'chevron-right'} size={24} color={Colors.brand.deepGreen} />
-              </TouchableOpacity>
-            ))
-          ) : (
-            <View style={styles.emptyCard}>
-              <View style={styles.emptyIcon}>
-                <Icon name={'check'} size={26} color={Colors.brand.emerald} />
-              </View>
-              <View>
-                <Text style={styles.emptyTitle}>Semua tugas selesai</Text>
-                <Text style={styles.emptyText}>Tidak ada penjemputan yang menunggu.</Text>
-              </View>
-            </View>
-          )}
         </View>
       </ScrollView>
     </View>
@@ -376,70 +340,9 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
   },
   errorText: {...Typography.caption, color: Colors.status.error, flex: 1},
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: Spacing.lg,
-    marginBottom: Spacing.sm,
+  taskSummaryWrap: {
+    marginTop: Spacing.md,
   },
-  sectionTitle: {...Typography.heading2, color: Colors.brand.deepGreen},
-  sectionSubtitle: {...Typography.caption, color: Colors.text.secondary, marginTop: 2},
-  seeAll: {minHeight: 48, flexDirection: 'row', alignItems: 'center'},
-  seeAllText: {...Typography.bodySmall, color: Colors.brand.accentGold, fontWeight: '700'},
-  taskCard: {
-    minHeight: 72,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border.warm,
-    backgroundColor: Colors.surface.card,
-    marginBottom: Spacing.sm,
-    paddingHorizontal: Spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    ...Shadows.soft,
-  },
-  taskIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surface.successSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: Spacing.sm,
-  },
-  taskContent: {flex: 1, minWidth: 0},
-  taskOwner: {...Typography.body, color: Colors.brand.deepGreen, fontWeight: '700'},
-  taskAddress: {...Typography.bodySmall, color: Colors.text.secondary, marginTop: 2},
-  pendingBadge: {
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surface.warningSoft,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 6,
-    marginRight: Spacing.xs,
-  },
-  pendingText: {color: Colors.brand.accentGold, fontSize: 11, fontWeight: '700'},
-  emptyCard: {
-    minHeight: 90,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.surface.card,
-    borderWidth: 1,
-    borderColor: Colors.border.warm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Spacing.md,
-  },
-  emptyIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: Radius.pill,
-    backgroundColor: Colors.surface.successSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: Spacing.sm,
-  },
-  emptyTitle: {...Typography.body, color: Colors.brand.deepGreen, fontWeight: '700'},
-  emptyText: {...Typography.caption, color: Colors.text.secondary, marginTop: 2},
 });
 
 export default DashboardScreen;

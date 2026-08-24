@@ -17,7 +17,7 @@ export function generateOfflineId(): string {
   return `local-${Date.now().toString(36)}-${hex}`;
 }
 
-const getOfficerSuffix = (): string => {
+export const getOfficerSuffix = (): string => {
   try {
     const {useAuthStore} = require('../../stores/useAuthStore');
     const userId = useAuthStore.getState().user?.id;

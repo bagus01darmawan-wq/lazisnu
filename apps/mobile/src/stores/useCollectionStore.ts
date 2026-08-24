@@ -1,6 +1,7 @@
 import {create} from 'zustand';
 import {collectionService} from '../services/api';
 import {offlineQueue, generateOfflineId, QueuedCollection} from '../services/offline/queue';
+import {correctionQueue} from '../services/offline/corrections';
 import {syncService} from '../services/offline/sync';
 import NetInfo from '@react-native-community/netinfo';
 import {getDeviceInfo} from '../utils/device';
@@ -184,8 +185,8 @@ interface CollectionsHistoryState {
   updatePendingNominal: (offlineId: string, newNominal: number) => boolean;
   resubmitCollection: (
     id: string,
-    payload: {nominal: number; alasan_resubmit: string},
-  ) => Promise<{success: boolean; error?: string}>;
+    payload: {nominal: number; alasan_resubmit: string; nominal_lama?: number},
+  ) => Promise<{success: boolean; queued?: boolean; error?: string}>;
   retryFailedCollection: (offlineId: string) => Promise<boolean>;
 }
 
@@ -288,6 +289,31 @@ export function mergeCollectionsWithQueues(
     const ids = Array.from(acknowledgedOfflineIds);
     offlineQueue.dequeue(ids);
     offlineQueue.removeFromFailedPermanent(ids);
+  }
+
+  // Overlay koreksi offline yang belum terkirim: record synced dari server/cache
+  // menampilkan nominal_baru secara optimistis sampai flush sukses (setelah itu
+  // server mengembalikan nilai yang sama pada fetch berikutnya — tidak ada lompatan).
+  // Hanya item 'server:' yang di-overlay; koreksi gagal permanen TIDAK, agar
+  // tampilan kembali ke kebenaran server saat koreksi ditolak (NOT_LATEST dsb.).
+  const pendingCorrections = correctionQueue.getQueue();
+  if (pendingCorrections.length > 0) {
+    const correctionsByCollectionId = new Map(
+      pendingCorrections.map(item => [item.collection_id, item]),
+    );
+    for (const [key, item] of mergedMap) {
+      if (!key.startsWith('server:')) {
+        continue;
+      }
+      const correction = correctionsByCollectionId.get(item.id);
+      if (correction) {
+        mergedMap.set(key, {
+          ...item,
+          nominal: correction.nominal_baru,
+          pending_correction: true,
+        });
+      }
+    }
   }
 
   const mergedList = Array.from(mergedMap.values());
@@ -452,7 +478,10 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
     return updated;
   },
 
-  resubmitCollection: async (id: string, payload: {nominal: number; alasan_resubmit: string}) => {
+  resubmitCollection: async (
+    id: string,
+    payload: {nominal: number; alasan_resubmit: string; nominal_lama?: number},
+  ) => {
     if (
       typeof payload.nominal !== 'number' ||
       isNaN(payload.nominal) ||
@@ -468,6 +497,37 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
       return {success: false, error: 'Jelaskan alasan koreksi minimal 5 karakter.'};
     }
 
+    // Offline (atau koneksi putus di tengah request): simpan niat koreksi di
+    // antrean MMKV — UI sudah menampilkan nominal optimistis via merge overlay,
+    // server menerima saat flush online. Collapse otomatis di correctionQueue
+    // menjaga satu koreksi terbaru per collection_id.
+    const queueOffline = (): {success: boolean; queued: boolean} => {
+      const existing = correctionQueue.getLatestByCollectionId(id);
+      const nominalLama = existing ? existing.nominal_lama : payload.nominal_lama;
+      if (typeof nominalLama !== 'number' || isNaN(nominalLama) || nominalLama < 0) {
+        return {success: false, queued: false};
+      }
+      const result = correctionQueue.enqueue({
+        collection_id: id,
+        nominal_lama: nominalLama,
+        nominal_baru: payload.nominal,
+        alasan_resubmit: payload.alasan_resubmit.trim(),
+      });
+      if (!result.queued) {
+        return {success: false, queued: false};
+      }
+      const cached = collectionsCache.get();
+      const merged = mergeCollectionsWithQueues(cached);
+      set({collections: merged, total: merged.length});
+      refreshSyncCounts();
+      return {success: true, queued: true};
+    };
+
+    const netInfo = await NetInfo.fetch();
+    if (!(netInfo.isConnected && netInfo.isInternetReachable)) {
+      return queueOffline();
+    }
+
     try {
       const response = await collectionService.resubmitCollection(id, {
         nominal: payload.nominal,
@@ -477,6 +537,9 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
       if (response.success) {
         await get().fetchCollections();
         return {success: true};
+      }
+      if (response.error?.code === 'NETWORK_ERROR') {
+        return queueOffline();
       }
       return {success: false, error: response.error?.message || 'Data belum dapat dikoreksi.'};
     } catch (error) {

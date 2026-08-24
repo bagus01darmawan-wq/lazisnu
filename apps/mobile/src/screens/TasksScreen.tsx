@@ -21,15 +21,23 @@ import {useTasksStore, useSyncStore} from '../stores';
 import {SegmentedControl} from '../components/ui';
 import {Colors, DashboardLayout, Layout, Radius, Spacing, Typography} from '../theme';
 import type {MainNavigationProp} from '../navigation/types';
-import {TaskItem, TaskSearchBar, TaskSummaryCard} from './tasks';
+import {TaskItem, TaskSearchBar} from './tasks';
 
 const logo = require('../assets/branding/logo-lazisnu-putih.png');
 
 const TasksScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<MainNavigationProp>();
-  const {pendingCount, permanentFailedCount, checkStatus, triggerSync} = useSyncStore();
-  const totalSyncIssues = pendingCount + permanentFailedCount;
+  const {
+    pendingCount,
+    permanentFailedCount,
+    pendingCorrectionsCount,
+    failedCorrectionsCount,
+    checkStatus,
+    triggerSync,
+  } = useSyncStore();
+  const totalSyncIssues =
+    pendingCount + permanentFailedCount + pendingCorrectionsCount + failedCorrectionsCount;
   const {
     tasks,
     fetchTasks,
@@ -38,13 +46,8 @@ const TasksScreen: React.FC = () => {
     error,
     page,
     totalPages,
-    activeCount,
-    completedCount,
-    totalCount,
-    completedNominal,
     fetchStats,
     skipAssignment,
-    completePeriod,
   } = useTasksStore();
   const [filter, setFilter] = useState<'ACTIVE' | 'COMPLETED'>('ACTIVE');
   const [searchQuery, setSearchQuery] = useState('');
@@ -81,33 +84,6 @@ const TasksScreen: React.FC = () => {
     },
     [skipAssignment],
   );
-
-  const handleCompletePeriod = useCallback(() => {
-    if (activeCount === 0) {
-      return;
-    }
-    Alert.alert(
-      'Selesai Periode',
-      `Anda memiliki ${activeCount} kaleng yang belum dijemput. Tandai semua sebagai selesai dan lanjut ke periode berikutnya?`,
-      [
-        {text: 'Batal', style: 'cancel'},
-        {
-          text: 'Ya, Selesaikan',
-          onPress: async () => {
-            const result = await completePeriod();
-            if (result.error) {
-              Alert.alert('Gagal', result.error);
-            } else if (result.skipped > 0) {
-              Alert.alert(
-                'Berhasil',
-                `${result.skipped} kaleng ditandai tidak dijemput. Periode berjalan selesai.`,
-              );
-            }
-          },
-        },
-      ],
-    );
-  }, [activeCount, completePeriod]);
 
   const filteredTasks = tasks.filter(task => {
     const query = searchQuery.toLowerCase().trim();
@@ -171,7 +147,7 @@ const TasksScreen: React.FC = () => {
               onPress={() => {
                 Alert.alert(
                   'Data Belum Terkirim',
-                  'Penjemputan tetap aman tersimpan di perangkat. Aplikasi akan mencoba mengirim kembali secara otomatis.',
+                  'Penjemputan dan koreksi tetap aman tersimpan di perangkat. Aplikasi akan mencoba mengirim kembali secara otomatis.',
                   [
                     {text: 'Nanti', style: 'cancel'},
                     {text: 'Lihat Detail', onPress: () => navigation.navigate('History')},
@@ -182,9 +158,9 @@ const TasksScreen: React.FC = () => {
               style={styles.iconButton}>
               <Icon
                 name={
-                  permanentFailedCount
+                  permanentFailedCount || failedCorrectionsCount
                     ? 'cloud-alert'
-                    : pendingCount
+                    : pendingCount || pendingCorrectionsCount
                       ? 'cloud-sync-outline'
                       : 'cloud-check-outline'
                 }
@@ -211,14 +187,6 @@ const TasksScreen: React.FC = () => {
           onClear={() => setSearchQuery('')}
         />
       </LinearGradient>
-
-      <TaskSummaryCard
-        activeCount={activeCount}
-        completedCount={completedCount}
-        totalCount={totalCount}
-        completedNominal={completedNominal}
-        onCompletePeriod={handleCompletePeriod}
-      />
 
       <View style={styles.filterContainer}>
         <SegmentedControl
@@ -373,7 +341,9 @@ const styles = StyleSheet.create({
   },
   filterContainer: {
     paddingHorizontal: Layout.screenPadding,
-    paddingTop: Spacing.md,
+    // Menutup ruang yang ditinggalkan kartu Progres Tugas — kontrol menempel
+    // di atas kurva hero seperti penempatan kartu sebelumnya.
+    marginTop: -DashboardLayout.heroOverlap,
     paddingBottom: Spacing.sm,
   },
   listContainer: {
