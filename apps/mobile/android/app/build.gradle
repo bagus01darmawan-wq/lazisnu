@@ -9,6 +9,11 @@ apply plugin: "com.facebook.react"
  * By default you don't need to apply any configuration, just uncomment the lines you need.
  */
 react {
+    /* WAJIB untuk expo-updates-gradle-plugin: tanpa nilai eksplisit,
+       properti ini "has no value" dan build gagal
+       (lihat expo/expo#24590). resolveAppEntry membaca entry point dari package.json. */
+    entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", projectRoot, "Android", "absolute"].execute(null, rootDir).text.trim())
+
     /* Folders */
     //   The root of your project, i.e. where "package.json" lives. Default is '..'
     // root = file("../")
