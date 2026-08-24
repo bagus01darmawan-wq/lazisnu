@@ -1,6 +1,14 @@
 {
   "name": "LazisnuCollectorApp",
   "displayName": "LazisnuCollectorApp",
+  "expo": {
+    "name": "LazisnuCollectorApp",
+    "version": "1.1.0",
+    "runtimeVersion": "1.1.0",
+    "updates": {
+      "url": "https://u.expo.dev/6b596ee2-44f9-492e-ba9a-a4082a7730ed"
+    }
+  },
   "extra": {
     "eas": {
       "projectId": "6b596ee2-44f9-492e-ba9a-a4082a7730ed"
