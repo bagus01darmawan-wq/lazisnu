@@ -4,6 +4,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useAuthStore, useTasksStore} from '../stores';
 import {getBiometryType, isBiometricAvailable} from '../services/biometric';
+import {APP_VERSION} from '../config/appConfig';
 import {AppButton, AppCard, StatusBadge} from '../components/ui';
 import {Colors, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
 
@@ -200,7 +201,7 @@ const ProfileScreen: React.FC = () => {
 
       <View style={styles.versionRow}>
         <Icon name={'information-outline'} size={17} color={Colors.text.muted} />
-        <Text style={styles.versionText}>Lazisnu Collector • Versi 1.0.0</Text>
+        <Text style={styles.versionText}>Lazisnu Collector • Versi {APP_VERSION}</Text>
       </View>
     </ScrollView>
   );

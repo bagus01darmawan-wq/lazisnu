@@ -71,6 +71,13 @@ def enableProguardInReleaseBuilds = true
  */
 def jscFlavor = 'org.webkit:android-jsc:+'
 
+// versionName dibaca dari SATU sumber kebenaran yang sama dengan label
+// "Versi" di layar Profil aplikasi (src/config/appConfig.json).
+// Naikkan versi hanya di file tersebut — build.gradle tidak disentuh lagi.
+// Catatan: versionCode dikelola EAS (appVersionSource: remote) dan
+// disuntikkan saat build, sehingga nilai statis di bawah hanya fallback.
+def appConfig = new groovy.json.JsonSlurper().parseText(file("../../src/config/appConfig.json").text)
+
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -82,7 +89,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
-        versionName "1.0.0"
+        versionName appConfig.version
     }
     signingConfigs {
         debug {

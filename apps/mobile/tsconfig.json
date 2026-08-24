@@ -5,6 +5,7 @@
     "noUncheckedIndexedAccess": true,
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true,
+    "resolveJsonModule": true,
     "baseUrl": ".",
     "skipLibCheck": true,
     "types": ["jest", "node"]
