@@ -59,11 +59,13 @@ react {
 def enableProguardInReleaseBuilds = true
 
 /**
- * Split APK per arsitektur CPU — hasilnya EAS menghasilkan APK terpisah
- * arm64-v8a (HP modern) dan armeabi-v7a (HP lama) + universal sebagai
- * cadangan, alih-alih satu APK universal berukuran besar.
+ * Split APK per arsitektur CPU SENGAJA NONAKTIF: dengan distribution
+ * "internal", EAS membungkus hasil split menjadi .tar.gz sehingga petugas
+ * tidak bisa memasang langsung satu file APK. Aktifkan kembali hanya saat
+ * aplikasi berpindah ke Google Play (AAB). Penghematan utama sudah didapat
+ * lewat reactNativeArchitectures tanpa x86/x86_64.
  */
-def enableSeparateBuildPerCPUArchitecture = true
+def enableSeparateBuildPerCPUArchitecture = false
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -78,11 +80,10 @@ def enableSeparateBuildPerCPUArchitecture = true
  */
 def jscFlavor = 'org.webkit:android-jsc:+'
 
-// versionName dibaca dari SATU sumber kebenaran yang sama dengan label
-// "Versi" di layar Profil aplikasi (src/config/appConfig.json).
-// Naikkan versi hanya di file tersebut — build.gradle tidak disentuh lagi.
-// Catatan: versionCode dikelola EAS (appVersionSource: remote) dan
-// disuntikkan saat build, sehingga nilai statis di bawah hanya fallback.
+// versionName WAJIB string literal — EAS (appVersionSource: remote) membaca
+// nilai ini via pola teks saat build; ekspresi Groovy akan tersimpan mentah.
+// Sinkron dengan src/config/appConfig.json dijaga oleh tes unit
+// __tests__/config/appVersionSync.test.ts.
 def appConfig = new groovy.json.JsonSlurper().parseText(file("../../src/config/appConfig.json").text)
 
 android {
@@ -96,7 +97,16 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
-        versionName appConfig.version
+        versionName "1.1.0"
+        // EAS Update: URL + runtime version + channel disuntikkan ke manifest.
+        // Runtime version mengikuti appConfig.json — naik versi di sana berarti
+        // membuka siklus OTA baru; perbaikan JS dalam versi sama dikirim via
+        // `eas update` tanpa instal ulang APK.
+        manifestPlaceholders += [
+            expoUpdatesUrl    : "https://u.expo.dev/6b596ee2-44f9-492e-ba9a-a4082a7730ed",
+            expoRuntimeVersion: appConfig.version,
+            expoReleaseChannel: "production"
+        ]
     }
     signingConfigs {
         debug {

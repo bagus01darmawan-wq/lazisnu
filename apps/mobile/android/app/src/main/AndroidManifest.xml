@@ -11,6 +11,10 @@
       android:roundIcon="@mipmap/ic_launcher_round"
       android:allowBackup="false"
       android:theme="@style/AppTheme">
+      <!-- EAS Update: nilai placeholder diisi build.gradle dari appConfig.json -->
+      <meta-data android:name="expo.modules.updates.EXPO_UPDATE_URL" android:value="${expoUpdatesUrl}" />
+      <meta-data android:name="expo.modules.updates.EXPO_RUNTIME_VERSION" android:value="${expoRuntimeVersion}" />
+      <meta-data android:name="expo.modules.updates.RELEASE_CHANNEL" android:value="${expoReleaseChannel}" />
       <activity
         android:name=".MainActivity"
         android:label="@string/app_name"
