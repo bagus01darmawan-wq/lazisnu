@@ -111,7 +111,7 @@ command -v sed >/dev/null 2>&1 || fail_probe "missing_command_sed"
 # ─── Tahap 1: Login ─────────────────────────────────────────────────────────
 LOGIN_HTTP="$(curl --silent --show-error --max-time 30 -o /tmp/authprobe-login.$$ -w '%{http_code}' \
   -H 'Content-Type: application/json' \
-  --data "{\"email\":\"$TEST_EMAIL\",\"password\":\"$TEST_PASSWORD\",\"device_id\":\"$PROBE_DEVICE_ID\"}" \
+  --data "{\"identifier\":\"$TEST_EMAIL\",\"password\":\"$TEST_PASSWORD\",\"device_id\":\"$PROBE_DEVICE_ID\"}" \
   "$BACKEND_URL/v1/auth/login" 2>>"$LOG_FILE")"
 LOGIN_BODY="$(cat /tmp/authprobe-login.$$ 2>/dev/null || true)"
 rm -f /tmp/authprobe-login.$$
