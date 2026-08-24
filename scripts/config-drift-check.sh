@@ -119,27 +119,46 @@ fi
 command -v docker >/dev/null 2>&1 || fail_drift "missing_command_docker"
 command -v curl >/dev/null 2>&1 || fail_drift "missing_command_curl"
 
-# ─── Periksa pasangan blue (produksi) ──────────────────────────────────────
-BLUE_BACKEND_ACCESS="$(container_env_value blue-backend JWT_ACCESS_SECRET)"
-BLUE_WEB_ACCESS="$(container_env_value blue-web JWT_ACCESS_SECRET)"
-BLUE_BACKEND_REFRESH="$(container_env_value blue-backend JWT_REFRESH_SECRET)"
-BLUE_WEB_REFRESH="$(container_env_value blue-web JWT_REFRESH_SECRET)"
+# ─── Periksa pasangan produksi (warna aktif dari upstream.conf) ────────────
+# Blue-green: deploy berpindah warna → cek warna yang ADA (aktif dan/atau idle).
+ACTIVE_COLOR="$(sed -n 's/^# Active: \([a-z]*\) .*/\1/p' /opt/lazisnu/nginx/upstream.conf 2>/dev/null | head -1)"
+[[ -n "$ACTIVE_COLOR" ]] || ACTIVE_COLOR="blue"
+log "ACTIVE_COLOR=$ACTIVE_COLOR"
 
-[[ -n "$BLUE_BACKEND_ACCESS" ]] || fail_drift "blue_backend_missing_jwt_access_secret"
-[[ -n "$BLUE_WEB_ACCESS" ]] || fail_drift "blue_web_missing_jwt_access_secret"
-[[ -n "$BLUE_BACKEND_REFRESH" ]] || fail_drift "blue_backend_missing_jwt_refresh_secret"
-[[ -n "$BLUE_WEB_REFRESH" ]] || fail_drift "blue_web_missing_jwt_refresh_secret"
-[[ "$BLUE_BACKEND_ACCESS" == "$BLUE_WEB_ACCESS" ]] || fail_drift "blue_pair_jwt_access_secret_mismatch"
-[[ "$BLUE_BACKEND_REFRESH" == "$BLUE_WEB_REFRESH" ]] || fail_drift "blue_pair_jwt_refresh_secret_mismatch"
+PROD_PAIRS=()
+for color in blue green; do
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "${color}-backend"; then
+    PROD_PAIRS+=("$color")
+  fi
+done
+[[ "${#PROD_PAIRS[@]}" -gt 0 ]] || fail_drift "no_production_backend_container"
 
-# Baseline file env produksi (jika ada) harus konsisten dengan container blue.
+for color in "${PROD_PAIRS[@]}"; do
+  PROD_BACKEND_ACCESS="$(container_env_value "${color}-backend" JWT_ACCESS_SECRET)"
+  PROD_WEB_ACCESS="$(container_env_value "${color}-web" JWT_ACCESS_SECRET)"
+  PROD_BACKEND_REFRESH="$(container_env_value "${color}-backend" JWT_REFRESH_SECRET)"
+  PROD_WEB_REFRESH="$(container_env_value "${color}-web" JWT_REFRESH_SECRET)"
+
+  [[ -n "$PROD_BACKEND_ACCESS" ]] || fail_drift "${color}_backend_missing_jwt_access_secret"
+  [[ -n "$PROD_WEB_ACCESS" ]] || fail_drift "${color}_web_missing_jwt_access_secret"
+  [[ -n "$PROD_BACKEND_REFRESH" ]] || fail_drift "${color}_backend_missing_jwt_refresh_secret"
+  [[ -n "$PROD_WEB_REFRESH" ]] || fail_drift "${color}_web_missing_jwt_refresh_secret"
+  [[ "$PROD_BACKEND_ACCESS" == "$PROD_WEB_ACCESS" ]] || fail_drift "${color}_pair_jwt_access_secret_mismatch"
+  [[ "$PROD_BACKEND_REFRESH" == "$PROD_WEB_REFRESH" ]] || fail_drift "${color}_pair_jwt_refresh_secret_mismatch"
+
+  if [[ "$color" == "$ACTIVE_COLOR" ]]; then
+    ACTIVE_ACCESS="$PROD_BACKEND_ACCESS"
+  fi
+done
+
+# Baseline file env produksi (jika ada) harus konsisten dengan warna aktif.
 if [[ -r "$BACKEND_ENV_FILE" ]]; then
   FILE_ACCESS="$(file_env_value "$BACKEND_ENV_FILE" JWT_ACCESS_SECRET)"
-  if [[ -n "$FILE_ACCESS" && "$FILE_ACCESS" != "$BLUE_BACKEND_ACCESS" ]]; then
-    fail_drift "blue_envfile_jwt_access_secret_mismatch"
+  if [[ -n "$FILE_ACCESS" && -n "${ACTIVE_ACCESS:-}" && "$FILE_ACCESS" != "$ACTIVE_ACCESS" ]]; then
+    fail_drift "${ACTIVE_COLOR}_envfile_jwt_access_secret_mismatch"
   fi
 fi
-log "BLUE_OK"
+log "PROD_OK"
 
 # ─── Periksa pasangan staging ──────────────────────────────────────────────
 STG_BACKEND_ACCESS="$(container_env_value lazisnu-backend-staging-1 JWT_ACCESS_SECRET)"
