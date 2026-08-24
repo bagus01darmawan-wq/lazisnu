@@ -1,18 +1,21 @@
 /**
- * Patch pihak ketiga (berjalan di postinstall, lokal maupun server EAS).
+ * Patch pihak ketiga (postinstall, lokal maupun EAS) — tiga perbaikan saling
+ * berjenjang untuk kapt stub pada modul expo-updates.
  *
- * Masalah: expo-updates mengunci Room 2.4.2. Versi ini memiliki bug resolusi
- * anotasi pada Kotlin 1.9 + JDK 17 — stub kapt salah menafsir anotasi sebagai
- * NonExistentClass, sehingga kaptReleaseKotlin gagal:
+ * Masalah: stub kapt `kaptReleaseKotlin` gagal dengan pesan
  *   "error: incompatible types: NonExistentClass cannot be converted to Annotation"
+ * karena anotasi Kotlin-based khas Expo pada `UpdatesModule.@ExpoMethod` tidak
+ * diterjemahkan resolusi oleh generator stub.
  *
- * Perbaikan: naikkan Room ke 2.6.1 (rilis yang memperbaiki resolusi anotasi
- * kapt pada Kotlin 1.9). Juga membersihkan sisa jalur perkabaran keliru
- * (`kapt project(':expo-modules-core')`) bila sebelumnya pernah tertempel —
- * kapt tidak bisa menerima project Android-library sebagai anno-processor
- * (varian debug/release ambigu, Gradle menolak di task kaptClasspath).
+ * Perbaikan:
+ * 1. kapt { correctErrorTypes = true } — instruksi resmi Kotlin agar stub
+ *    generator menerjemahkan tipe anotasi ke represesni kompilabel Java.
+ * 2. Room dinaikkan ke 2.6.1 — versi ini memperbaiki resolusi anotasi kapt
+ *    pada Kotlin 1.9 + JDK 17.
+ * 3. Jalur perkabaran keliru lama dibersihkan: kapt tidak bisa menerima
+ *    project correction-library (kapt project(':expo-modules-core')).
  *
- * Sifat: idempoten; fail-fast bila anchor Room hilang/berubah format.
+ * Seluruhnya idempoten, fail-fast bila anchor berubah format di rilis baru.
  */
 
 const fs = require('fs');
@@ -20,6 +23,7 @@ const path = require('path');
 
 const ROOM_ANCHOR_OLD = `def room_version = "2.4.2"`;
 const ROOM_ANCHOR_NEW = `def room_version = "2.6.1"`;
+const KAPT_FLAG = `correctErrorTypes = true`;
 const STALE_KAPT_LINE_TOKEN = "kapt project(':expo-modules-core')";
 
 const pkgJsonPath = require.resolve('expo-updates/package.json');
@@ -55,7 +59,25 @@ if (content.includes(ROOM_ANCHOR_NEW)) {
   console.log('[patch] expo-updates room fix: Room dinaikkan ke 2.6.1.');
 }
 
+// 3. Aktifkan koreksi tipe error kapt agar stub expo-annotation diubah menjadi
+// representasi kompilabel Java untuk anotasi Kotlin pada kelas lintas-modul.
+if (content.includes(KAPT_FLAG)) {
+  console.log('[patch] kapt correctErrorTypes: sudah aktif, lewati.');
+} else {
+  const anchor = "apply plugin: 'kotlin-kapt'";
+  const count = content.split(anchor).length - 1;
+  if (count !== 1) {
+    console.error(
+      `[patch] kapt correctErrorTypes: anchor "${anchor}" ditemukan ${count}x (harus 1).`,
+    );
+    process.exit(1);
+  }
+  content = content.replace(anchor, `${anchor}\n\nkapt {\n    ${KAPT_FLAG}\n}`);
+  changed = true;
+  console.log('[patch] kapt correctErrorTypes: diaktifkan.');
+}
+
 if (changed) {
   fs.writeFileSync(gradlePath, content);
-  console.log('[patch] expo-updates room fix tertulis ke', gradlePath);
+  console.log('[patch] kapt+room fix tertulis ke', gradlePath);
 }
