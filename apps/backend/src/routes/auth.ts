@@ -462,6 +462,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       const { refresh_token } = request.body as { refresh_token: string };
 
       if (!refresh_token) {
+        request.log.warn({ ip: request.ip, userAgent: request.headers['user-agent'] }, 'auth_refresh_failed:missing_token');
         return sendError(reply, 400, 'MISSING_TOKEN', 'Refresh token diperlukan');
       }
 
@@ -469,6 +470,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       const decoded = await request.server.jwt.verify<any>(refresh_token, { key: config.JWT_REFRESH_SECRET });
 
       if (decoded.tokenType !== 'refresh') {
+        request.log.warn({ userId: decoded.userId, tokenType: decoded.tokenType, ip: request.ip, userAgent: request.headers['user-agent'] }, 'auth_refresh_failed:invalid_token_type');
         return sendError(reply, 401, 'INVALID_TOKEN', 'Token yang diberikan bukan refresh token');
       }
 
@@ -477,6 +479,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       if (decoded.jti) {
         const isValid = await validateDeviceSession(decoded.userId, deviceId, decoded.jti);
         if (!isValid) {
+          request.log.warn({ userId: decoded.userId, deviceId, jti: decoded.jti, ip: request.ip, userAgent: request.headers['user-agent'] }, 'auth_refresh_failed:revoked');
           return sendError(reply, 401, 'REFRESH_REVOKED', 'Refresh token sudah tidak berlaku');
         }
         // Revoke jti lama (rotation) — hanya di Redis, DB session ditutup nanti
@@ -542,6 +545,8 @@ export async function authRoutes(fastify: FastifyInstance) {
         refresh_token: tokens.refreshToken,
       });
     } catch (error) {
+      const jwtCode = isJwtErrorLike(error) ? error.code : (error instanceof Error ? error.message : 'unknown');
+      request.log.warn({ jwtCode, ip: request.ip, userAgent: request.headers['user-agent'] }, 'auth_refresh_failed:invalid_token');
       return sendError(reply, 401, 'INVALID_TOKEN', 'Refresh token tidak valid');
     }
   });

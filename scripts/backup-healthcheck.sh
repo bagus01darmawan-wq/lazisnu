@@ -59,6 +59,28 @@ send_alert() {
   return 1
 }
 
+send_recovery() {
+  local previous_reason="$1"
+  local payload
+
+  if [[ -z "$ALERT_WEBHOOK_URL" ]]; then
+    log "RECOVERY_NOT_SENT reason=webhook_not_configured previous=$previous_reason"
+    return 0
+  fi
+
+  payload="$(printf '{\"content\":\"[Lazisnu] Backup OK: pulih otomatis — %s (backup sehat kembali)\"}' "$previous_reason")"
+  if curl --fail --silent --show-error --max-time 15 \
+    -H 'Content-Type: application/json' \
+    --data "$payload" \
+    "$ALERT_WEBHOOK_URL" >>"$LOG_FILE" 2>&1; then
+    log "RECOVERY_SENT previous=$previous_reason"
+    return 0
+  fi
+
+  log "RECOVERY_DELIVERY_FAILED previous=$previous_reason"
+  return 1
+}
+
 fail_health() {
   local reason="$1"
   local previous_reason=""
@@ -153,6 +175,16 @@ if (( AGE_SECONDS > MAX_AGE_SECONDS )); then
   fail_health "last_success_age_${AGE_SECONDS}s_over_${MAX_AGE_SECONDS}s"
 fi
 
-rm -f "$ALERT_STATE_FILE"
+# Jika sebelumnya ada alert yang terkirim, kirim notifikasi pemulihan ke
+# Discord. State dihapus hanya setelah notifikasi terkirim; jika gagal,
+# dicoba lagi pada pengecekan berikutnya agar status "sehat" tidak terlewat.
+if [[ -f "$ALERT_STATE_FILE" ]]; then
+  previous_reason="$(cat "$ALERT_STATE_FILE")"
+  if send_recovery "$previous_reason"; then
+    rm -f "$ALERT_STATE_FILE"
+  fi
+else
+  rm -f "$ALERT_STATE_FILE"
+fi
 log "SUCCESS key=$BACKUP_KEY size_bytes=$REMOTE_SIZE age_seconds=$AGE_SECONDS"
 exit 0

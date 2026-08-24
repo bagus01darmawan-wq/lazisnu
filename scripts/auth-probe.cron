@@ -1,0 +1,4 @@
+# Synthetic auth probe — canary login/refresh/prefetch untuk dashboard.lazisnu.site.
+# Tiap 30 menit; total runtime ~17 menit (menunggu 16 menit agar access token TTL 15m kedaluwarsa).
+# Env rahasia: /opt/lazisnu/secrets/env.auth-probe (root, chmod 600).
+*/30 * * * * root /usr/bin/flock -n /run/lock/lazisnu-auth-probe.lock /usr/bin/timeout --foreground 25m bash /opt/lazisnu/scripts/auth-probe.sh

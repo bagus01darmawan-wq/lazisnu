@@ -95,3 +95,22 @@ groups:
             Semua target backend (blue-backend:3001 + green-backend:3101) tidak
             bisa di-scrape selama lebih dari 1 menit.
             Cek: docker ps, docker logs blue-backend / green-backend
+
+      # ──────────────────────────────────────────
+      # Lonjakan refresh token ditolak (401) — indikasi sesi di-revoke,
+      # rotasi token ganda (multi-tab), atau secret tidak konsisten.
+      # Ambang: >6 kejadian per 5 menit (≈0.02 rps) selama 3 menit.
+      # Metric: http_requests_total (custom backend, label route+statusCode).
+      # ──────────────────────────────────────────
+      - alert: AuthRefreshFailureRate
+        expr: rate(http_requests_total{route="/v1/auth/refresh",statusCode="401"}[5m]) > 0.02
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Lonjakan refresh token ditolak ({{ $value | printf \"%.3f\" }} rps)"
+          description: >
+            Refresh token ditolak 401 di atas ambang normal. Penyebab umum:
+            sesi di-revoke (login perangkat lain), rotasi token ganda antar
+            tab, atau secret JWT tidak konsisten.
+            Cek log backend: docker logs blue-backend | grep auth_refresh_failed
