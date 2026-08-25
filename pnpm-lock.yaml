@@ -173,9 +173,15 @@ importers:
       react-native:
         specifier: 0.74.1
         version: 0.74.1(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@18.2.79)(react@18.2.0)
+      react-native-blob-util:
+        specifier: ^0.24.10
+        version: 0.24.10(react-native@0.74.1(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@18.2.79)(react@18.2.0))(react@18.2.0)
       react-native-camera-kit:
         specifier: ^13.0.0
         version: 13.0.0(react-native@0.74.1(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@18.2.79)(react@18.2.0))(react@18.2.0)
+      react-native-device-info:
+        specifier: ^15.0.2
+        version: 15.0.2(react-native@0.74.1(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@18.2.79)(react@18.2.0))
       react-native-gesture-handler:
         specifier: 2.16.1
         version: 2.16.1(react-native@0.74.1(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@18.2.79)(react@18.2.0))(react@18.2.0)
@@ -4485,6 +4491,9 @@ packages:
       bare-abort-controller:
         optional: true
 
+  base-64@1.0.0:
+    resolution: {integrity: sha512-kwDPIFCGx0NZHog36dj+tHiwP4QMzsZ3AgMViUBKI0+V5n4U0ufTCUMhnQ04diaRI8EX/QcPfql7zlhZ7j4zgg==}
+
   base64-arraybuffer@1.0.2:
     resolution: {integrity: sha512-I3yl4r9QB5ZRY3XuJVEPfc2XhZO6YweFPI+UovAzn+8/hb3oJ6lnysaFcjVpkCPfVWFUDvoZ8kmVDP7WyRtYtQ==}
     engines: {node: '>= 0.6.0'}
@@ -8172,10 +8181,21 @@ packages:
   react-is@19.2.6:
     resolution: {integrity: sha512-XjBR15BhXuylgWGuslhDKqlSayuqvqBX91BP8pauG8kd1zY8kotkNWbXksTCNRarse4kuGbe2kIY05ARtwNIvw==}
 
+  react-native-blob-util@0.24.10:
+    resolution: {integrity: sha512-4yazgoCstXgt2/CRURtowGP3furAzbWdfMQ4jyUPDo5xtLx7KE2F/xMz3oU3shLwfL4id0iEKsBywoxvJSHPzQ==}
+    peerDependencies:
+      react: '*'
+      react-native: '*'
+
   react-native-camera-kit@13.0.0:
     resolution: {integrity: sha512-fnkyivCG2xzS+14/doP8pCAYNafYaTyg5J0t+JJltJdgKSHf328OG44Rd+fnbbEOydZxgy/bcuLB24R0kCbynw==}
     peerDependencies:
       react: '*'
+      react-native: '*'
+
+  react-native-device-info@15.0.2:
+    resolution: {integrity: sha512-dd71eXG2l3Cwp66IvKNadMTB8fhU3PEjyVddI97sYan+D4bgIAUmgGDhbSOFvHcGavksb2U17kiQYaDiK2WK2g==}
+    peerDependencies:
       react-native: '*'
 
   react-native-gesture-handler@2.16.1:
@@ -13598,8 +13618,8 @@ snapshots:
       '@babel/plugin-transform-parameters': 7.27.7(@babel/core@7.29.0)
       '@babel/plugin-transform-private-methods': 7.28.6(@babel/core@7.29.0)
       '@babel/plugin-transform-private-property-in-object': 7.28.6(@babel/core@7.29.0)
-      '@babel/plugin-transform-react-display-name': 7.28.0(@babel/core@7.29.0)
-      '@babel/plugin-transform-react-jsx': 7.28.6(@babel/core@7.29.0)
+      '@babel/plugin-transform-react-display-name': 7.29.7(@babel/core@7.29.0)
+      '@babel/plugin-transform-react-jsx': 7.29.7(@babel/core@7.29.0)
       '@babel/plugin-transform-react-jsx-self': 7.27.1(@babel/core@7.29.0)
       '@babel/plugin-transform-react-jsx-source': 7.27.1(@babel/core@7.29.0)
       '@babel/plugin-transform-runtime': 7.29.0(@babel/core@7.29.0)
@@ -15349,6 +15369,8 @@ snapshots:
   balanced-match@4.0.4: {}
 
   bare-events@2.9.1: {}
+
+  base-64@1.0.0: {}
 
   base64-arraybuffer@1.0.2: {}
 
@@ -20011,10 +20033,21 @@ snapshots:
 
   react-is@19.2.6: {}
 
+  react-native-blob-util@0.24.10(react-native@0.74.1(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@18.2.79)(react@18.2.0))(react@18.2.0):
+    dependencies:
+      base-64: 1.0.0
+      glob: 13.0.6
+      react: 18.2.0
+      react-native: 0.74.1(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@18.2.79)(react@18.2.0)
+
   react-native-camera-kit@13.0.0(react-native@0.74.1(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@18.2.79)(react@18.2.0))(react@18.2.0):
     dependencies:
       lodash: 4.18.1
       react: 18.2.0
+      react-native: 0.74.1(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@18.2.79)(react@18.2.0)
+
+  react-native-device-info@15.0.2(react-native@0.74.1(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@18.2.79)(react@18.2.0)):
+    dependencies:
       react-native: 0.74.1(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@18.2.79)(react@18.2.0)
 
   react-native-gesture-handler@2.16.1(react-native@0.74.1(@babel/core@7.29.0)(@babel/preset-env@7.29.2(@babel/core@7.29.0))(@types/react@18.2.79)(react@18.2.0))(react@18.2.0):

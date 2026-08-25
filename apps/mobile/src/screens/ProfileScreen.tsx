@@ -2,7 +2,7 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import {useAuthStore, useTasksStore} from '../stores';
+import {useAuthStore, useTasksStore, useUpdateStore} from '../stores';
 import {getBiometryType, isBiometricAvailable} from '../services/biometric';
 import {APP_VERSION} from '../config/appConfig';
 import {AppButton, AppCard, StatusBadge} from '../components/ui';
@@ -68,6 +68,22 @@ const ProfileScreen: React.FC = () => {
       {text: 'Keluar', style: 'destructive', onPress: logout},
     ]);
   };
+
+  const checkManually = useUpdateStore(state => state.checkManually);
+
+  const handleCheckUpdates = useCallback(async () => {
+    try {
+      const result = await checkManually();
+      if (result === 'up-to-date') {
+        Alert.alert('Versi Terbaru', `Kamu sudah memakai versi terbaru (${APP_VERSION}).`);
+      }
+    } catch {
+      Alert.alert(
+        'Gagal Memeriksa',
+        'Tidak dapat menghubungi server. Periksa koneksi internet lalu coba lagi.',
+      );
+    }
+  }, [checkManually]);
 
   const {activeCount, completePeriod} = useTasksStore();
 
@@ -199,10 +215,11 @@ const ProfileScreen: React.FC = () => {
         />
       </View>
 
-      <View style={styles.versionRow}>
+      <TouchableOpacity style={styles.versionRow} onPress={handleCheckUpdates}>
         <Icon name={'information-outline'} size={17} color={Colors.text.muted} />
         <Text style={styles.versionText}>Lazisnu Collector • Versi {APP_VERSION}</Text>
-      </View>
+        <Text style={styles.checkUpdateText}>Periksa Pembaruan</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 };
@@ -343,6 +360,12 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xl,
   },
   versionText: {...Typography.caption, color: Colors.text.muted},
+  checkUpdateText: {
+    ...Typography.caption,
+    color: Colors.brand.emerald,
+    fontWeight: '700',
+    marginLeft: 'auto',
+  },
   biometricRow: {
     flexDirection: 'row',
     alignItems: 'center',

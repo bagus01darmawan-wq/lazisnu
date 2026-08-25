@@ -1,7 +1,7 @@
 import {NavigationContainer, RouteProp, ParamListBase} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
-import React from 'react';
+import React, {useEffect} from 'react';
 import {View, ActivityIndicator, Image, StyleSheet} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -17,8 +17,9 @@ import ProfileScreen from '../screens/ProfileScreen';
 
 // Types
 import {RootStackParamList, MainTabParamList} from './types';
-import {useAuthStore} from '../stores';
+import {useAuthStore, useUpdateStore} from '../stores';
 import {Colors, ComponentSizes, Spacing} from '../theme';
+import UpdateModal from '../components/UpdateModal';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -150,6 +151,14 @@ const AuthStack = () => {
 const AppNavigator = () => {
   const {isAuthenticated, isInitializing} = useAuthStore();
 
+  // Cek pembaruan sekali setiap kali aplikasi dibuka (setelah login).
+  // Senyap: modal hanya muncul bila memang ada versi lebih baru.
+  useEffect(() => {
+    if (isAuthenticated && !isInitializing) {
+      useUpdateStore.getState().checkOnLaunch();
+    }
+  }, [isAuthenticated, isInitializing]);
+
   // Selama initializeAuth() berjalan, tampilkan splash agar UI tidak
   // flash ke LoginScreen saat ternyata token masih valid.
   if (isInitializing) {
@@ -161,7 +170,11 @@ const AppNavigator = () => {
   }
 
   return (
-    <NavigationContainer>{isAuthenticated ? <MainStack /> : <AuthStack />}</NavigationContainer>
+    <NavigationContainer>
+      {isAuthenticated ? <MainStack /> : <AuthStack />}
+      {/* Modal pembaruan (Tingkat 1) — melayang di atas semua layar */}
+      <UpdateModal />
+    </NavigationContainer>
   );
 };
 

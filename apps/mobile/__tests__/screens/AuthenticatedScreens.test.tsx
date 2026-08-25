@@ -8,6 +8,7 @@ const mockCheckStatus = jest.fn();
 const mockFetchTasks = jest.fn();
 const mockFetchStats = jest.fn();
 const mockFetchCollections = jest.fn();
+const mockCheckUpdates = jest.fn();
 
 const mockTask = {
   id: 'assignment-1',
@@ -84,6 +85,9 @@ jest.mock('../../src/stores', () => ({
     completedCount: 4,
     totalCount: 10,
     setStats: jest.fn(),
+  }),
+  useUpdateStore: () => ({
+    checkManually: mockCheckUpdates,
   }),
   useCollectionsStore: () => ({
     collections: [
