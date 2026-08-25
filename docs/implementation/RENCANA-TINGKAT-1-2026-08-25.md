@@ -75,8 +75,13 @@ Keputusan user 2026-08-25:
 2. Build EAS → catat versionCode hasil.
 3. Unggah APK ke R2 dengan nama berversi.
 4. Perbarui `mobileRelease.json` (version, versionCode, apkUrl, changelog, minimumVersionCode).
-5. Commit + `git tag v*` → deploy prod otomatis (CI).
+5. Commit + `git tag v*` → **picu deploy prod via `gh workflow run ci.yml --ref v1.1.2`** (trigger tag tidak ada di `on:` ci.yml — deploy job hanya jalan bila ref = tag; dispatch dengan ref tag adalah jalurnya).
 6. Kabari WA grup (pelengkap modal, bukan pengganti).
+
+**Peringatan rilis (pelajaran 2026-08-25):**
+- **JANGAN PERNAH force-push tag rilis.** VM menyimpan tag lokal di `/opt/lazisnu`; bila tag digeser, `git fetch --tags` di skrip deploy menolak ("would clobber existing tag") dan deploy gagal SENYAP setelah checkout. Kalau terpaksa memindahkan tag: `ssh lazisnu 'git -C /opt/lazisnu tag -d <tag>'` dulu.
+- `appleboy/ssh-action` WAJIB `@v1.2.2` (v1 lama = Node 16, crash diam-diam di runner baru).
+- Deploy prod = `workflow_dispatch --ref <tag>`; push main hanya menyentuh staging.
 
 ## 5. Batas & Risiko
 
