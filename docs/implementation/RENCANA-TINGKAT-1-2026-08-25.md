@@ -1,7 +1,7 @@
 # Rencana Implementasi: Fitur Update-In-App Tingkat 1 (Modal Versi + Download APK)
 
 Tanggal: 2026-08-25
-Status: DALAM PENGERJAAN
+Status: SELESAI — tayang di prod 2026-08-25 (v1.1.1 / versionCode 19)
 Target: Petugas mendapat pemberitahuan versi baru **di dalam aplikasi** (modal), mengunduh APK **di dalam modal** (progress bar), dan memasangnya tanpa keluar ke browser.
 
 ---
