@@ -95,6 +95,14 @@ android {
         applicationId "com.lazisnucollectorapp"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
+        // Buang x86/x86_64 (emulator-only) dari APK universal. Catatan lapangan:
+        // reactNativeArchitectures di gradle.properties TIDAK memfilter lib
+        // native pihak ketiga (ML Kit, Firebase, dll) sehingga APK universal
+        // tetap 4 ABI ±78 MB. Filter eksplisit di sini menurunkannya ke
+        // ±45 MB (2 ABI arm — mencakup semua HP petugas).
+        ndk {
+            abiFilters "armeabi-v7a", "arm64-v8a"
+        }
         versionCode 1
         versionName "1.1.0"
     }
