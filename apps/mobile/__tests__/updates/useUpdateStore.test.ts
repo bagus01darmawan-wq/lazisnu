@@ -37,9 +37,10 @@ const initial = {
 };
 
 const mockFetchOk = (data: unknown) => {
-  global.fetch = jest
-    .fn()
-    .mockResolvedValue({ok: true, json: async () => ({success: true, data})}) as unknown as typeof fetch;
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({success: true, data}),
+  }) as unknown as typeof fetch;
 };
 
 describe('useUpdateStore — fitur update-in-app', () => {
@@ -79,7 +80,9 @@ describe('useUpdateStore — fitur update-in-app', () => {
   });
 
   it('checkOnLaunch: jaringan gagal → diam total (tanpa lempar)', async () => {
-    global.fetch = jest.fn().mockRejectedValue(new Error('Network down')) as unknown as typeof fetch;
+    global.fetch = jest
+      .fn()
+      .mockRejectedValue(new Error('Network down')) as unknown as typeof fetch;
 
     await expect(useUpdateStore.getState().checkOnLaunch()).resolves.toBeUndefined();
     expect(useUpdateStore.getState().modalVisible).toBe(false);

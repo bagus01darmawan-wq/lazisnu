@@ -29,7 +29,9 @@ describe('fetchMobileVersion', () => {
   it('memanggil endpoint /v1/mobile/version dan mengembalikan data', async () => {
     global.fetch = jest
       .fn()
-      .mockResolvedValue(jsonResponse({success: true, data: baseRelease})) as unknown as typeof fetch;
+      .mockResolvedValue(
+        jsonResponse({success: true, data: baseRelease}),
+      ) as unknown as typeof fetch;
 
     const result = await fetchMobileVersion();
     expect(result).toEqual(baseRelease);

@@ -42,5 +42,8 @@ export async function installApk(apkPath: string): Promise<void> {
   if (Platform.OS !== 'android') {
     return;
   }
-  await ReactNativeBlobUtil.android.actionViewIntent(apkPath, 'application/vnd.android.package-archive');
+  await ReactNativeBlobUtil.android.actionViewIntent(
+    apkPath,
+    'application/vnd.android.package-archive',
+  );
 }

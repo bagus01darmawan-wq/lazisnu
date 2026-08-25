@@ -56,9 +56,15 @@ const UpdateModal = () => {
           </View>
         )}
         <View style={styles.actionWrap}>
-          {downloadState === 'idle' && <AppButton label="Unduh Pembaruan" fullWidth onPress={startDownload} />}
-          {downloadState === 'error' && <AppButton label="Coba Lagi" fullWidth onPress={startDownload} />}
-          {downloadState === 'ready' && <AppButton label="Pasang Sekarang" fullWidth onPress={install} />}
+          {downloadState === 'idle' && (
+            <AppButton label="Unduh Pembaruan" fullWidth onPress={startDownload} />
+          )}
+          {downloadState === 'error' && (
+            <AppButton label="Coba Lagi" fullWidth onPress={startDownload} />
+          )}
+          {downloadState === 'ready' && (
+            <AppButton label="Pasang Sekarang" fullWidth onPress={install} />
+          )}
         </View>
       </View>
     );
@@ -70,8 +76,7 @@ const UpdateModal = () => {
       transparent
       animationType="fade"
       // Paksa-update: tombol back Android tidak boleh menutup modal.
-      onRequestClose={forceUpdate ? () => {} : dismiss}
-    >
+      onRequestClose={forceUpdate ? () => {} : dismiss}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <Text style={styles.title}>{forceUpdate ? 'Pembaruan Wajib' : 'Pembaruan Tersedia'}</Text>

@@ -55,9 +55,6 @@ export function shouldShowUpdate(
  * Paksa-update: versi terpasang di bawah ambang minimum yang ditetapkan
  * server (mis. perbaikan data kritis). Modal tampil TANPA tombol "Nanti".
  */
-export function isForcedUpdate(
-  installedVersionCode: number,
-  release: MobileVersionInfo,
-): boolean {
+export function isForcedUpdate(installedVersionCode: number, release: MobileVersionInfo): boolean {
   return release.minimum_version_code > 0 && installedVersionCode < release.minimum_version_code;
 }
