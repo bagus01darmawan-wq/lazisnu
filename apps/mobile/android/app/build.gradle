@@ -8,15 +8,7 @@ apply plugin: "com.facebook.react"
  * This is the configuration block to customize your React Native Android app.
  * By default you don't need to apply any configuration, just uncomment the lines you need.
  */
-// Root proyek JS (berisi package.json/index.js) — dipakai resolveAppEntry Expo.
-def projectRoot = rootDir.getParentFile()
-
 react {
-    /* WAJIB untuk expo-updates-gradle-plugin: tanpa nilai eksplisit,
-       properti ini "has no value" dan build gagal
-       (lihat expo/expo#24590). resolveAppEntry membaca entry point dari package.json. */
-    entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", projectRoot, "android", "absolute"].execute(null, rootDir).text.trim())
-
     /* Folders */
     //   The root of your project, i.e. where "package.json" lives. Default is '..'
     // root = file("../")
@@ -92,7 +84,6 @@ def jscFlavor = 'org.webkit:android-jsc:+'
 // nilai ini via pola teks saat build; ekspresi Groovy akan tersimpan mentah.
 // Sinkron dengan src/config/appConfig.json dijaga oleh tes unit
 // __tests__/config/appVersionSync.test.ts.
-def appConfig = new groovy.json.JsonSlurper().parseText(file("../../src/config/appConfig.json").text)
 
 android {
     ndkVersion rootProject.ext.ndkVersion
@@ -106,15 +97,6 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.1.0"
-        // EAS Update: URL + runtime version + channel disuntikkan ke manifest.
-        // Runtime version mengikuti appConfig.json — naik versi di sana berarti
-        // membuka siklus OTA baru; perbaikan JS dalam versi sama dikirim via
-        // `eas update` tanpa instal ulang APK.
-        manifestPlaceholders += [
-            expoUpdatesUrl    : "https://u.expo.dev/6b596ee2-44f9-492e-ba9a-a4082a7730ed",
-            expoRuntimeVersion: appConfig.version,
-            expoReleaseChannel: "production"
-        ]
     }
     signingConfigs {
         debug {

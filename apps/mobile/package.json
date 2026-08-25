@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit",
     "build:android": "react-native build-android --mode release",
     "build:debug": "react-native build-android --mode debug",
-    "postinstall": "node scripts/patches/expo-updates-kapt-fix.js && patch-package",
+    "postinstall": "patch-package",
     "eas-build-post-install": "pnpm --filter @lazisnu/shared-types build"
   },
   "dependencies": {
@@ -28,8 +28,6 @@
     "@react-navigation/bottom-tabs": "^6.5.20",
     "@react-navigation/native": "^6.1.17",
     "@react-navigation/native-stack": "^6.9.26",
-    "expo": "~51.0.39",
-    "expo-updates": "~0.18.19",
     "react": "18.2.0",
     "react-native": "0.74.1",
     "react-native-camera-kit": "^13.0.0",

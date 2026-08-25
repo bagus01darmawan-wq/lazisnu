@@ -1,8 +1,4 @@
 rootProject.name = 'LazisnuMobileApp'
-// Autolinking modul Expo (dibutuhkan expo-updates) — harus sebelum
-// applyNativeModulesSettingsGradle agar modul expo ikut ter-link.
-apply from: new File(["node", "--print", "require.resolve('expo/scripts/autolinking.gradle')"].execute(null, rootDir).text.trim())
-useExpoModules()
 apply from: file("../../../node_modules/.pnpm/@react-native-community+cli-platform-android@13.6.6/node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesSettingsGradle(settings)
 include ':app'
 includeBuild('../node_modules/@react-native/gradle-plugin')

@@ -31,14 +31,3 @@ allprojects {
         }
     }
 }
-
-// Modul Expo tidak menyetel jvmTarget sendiri, sehingga Kotlin jatuh ke bawaan
-// (JVM 11) sementara javac mengikuti JDK build (17) → validasi AGP menolak.
-// Seragamkan target Kotlin seluruh modul ke JVM 17 (Kotlin 1.9.22 mendukung penuh).
-subprojects {
-    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-        kotlinOptions {
-            jvmTarget = JavaVersion.VERSION_17.toString()
-        }
-    }
-}
