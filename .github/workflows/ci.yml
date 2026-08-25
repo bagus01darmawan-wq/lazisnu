@@ -255,6 +255,11 @@ jobs:
   deploy:
     needs: [lint-and-typecheck, build-image]
     if: startsWith(github.ref, 'refs/tags/v')
+    # Seriakan deploy prod: dua rilis berurutan tidak boleh menabrak (2026-08-25:
+    # push beruntun membuat deploy staging bertabrakan di docker compose).
+    concurrency:
+      group: lazisnu-deploy-prod
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment: Production
 
@@ -301,6 +306,11 @@ jobs:
     if: >
       github.ref == 'refs/heads/main' &&
       (needs.changes.outputs.backend == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.infra == 'true')
+    # Seriakan deploy staging (2026-08-25: push beruntun → 5 deploy bersamaan
+    # → konflik container docker compose; hanya 1 yang menang).
+    concurrency:
+      group: lazisnu-deploy-staging
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment: staging
 
