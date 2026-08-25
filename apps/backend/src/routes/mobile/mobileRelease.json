@@ -1,0 +1,7 @@
+{
+  "version": "1.1.1",
+  "versionCode": 18,
+  "apkUrl": "https://apk.lazisnu.site/lazisnu-1.1.1.apk",
+  "changelog": "- Label versi kini tampil di layar Profil\n- Pemberitahuan versi baru langsung di aplikasi\n- Unduh pembaruan di dalam aplikasi (tanpa browser)",
+  "minimumVersionCode": 0
+}

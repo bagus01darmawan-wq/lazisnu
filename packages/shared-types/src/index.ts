@@ -434,3 +434,15 @@ export interface BatchSyncResponse {
   failed: number;
   results: BatchItemResult[];
 }
+
+// GET /v1/mobile/version — kontrak fitur update-in-app (Tingkat 1).
+// Endpoint publik: info versi + tautan APK memang informasi publik,
+// dan memungkinkan pengecekan sebelum login. Sumber data backend:
+// routes/mobile/mobileRelease.json (di-commit tiap rilis).
+export interface MobileVersionInfo {
+  version: string;
+  version_code: number;
+  apk_url: string;
+  changelog: string;
+  minimum_version_code: number;
+}

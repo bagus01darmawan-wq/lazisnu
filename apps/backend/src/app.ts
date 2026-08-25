@@ -7,6 +7,7 @@ import swaggerUi from '@fastify/swagger-ui';
 import { config, corsOrigins, isProduction } from './config/env';
 import { authRoutes } from './routes/auth';
 import { mobileRoutes } from './routes/mobile';
+import { versionRoutes } from './routes/mobile/version';
 import adminRoutes from './routes/admin';
 import { bendaharaRoutes } from './routes/bendahara';
 import { schedulerRoutes } from './routes/scheduler';
@@ -215,6 +216,8 @@ export async function buildApp() {
   await server.register(healthRoutes);
   await server.register(metricsRoutes);
   await server.register(authRoutes, { prefix: '/v1/auth' });
+  // Publik (tanpa auth): info rilis untuk fitur update-in-app Tingkat 1
+  await server.register(versionRoutes, { prefix: '/v1/mobile' });
   await server.register(mobileRoutes, { prefix: '/v1/mobile' });
   await server.register(adminRoutes, { prefix: '/v1/admin' });
   await server.register(bendaharaRoutes, { prefix: '/v1/bendahara' });
