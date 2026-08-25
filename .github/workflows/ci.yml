@@ -263,7 +263,7 @@ jobs:
       uses: actions/checkout@v5
 
     - name: Deploy to VM via SSH (blue-green)
-      uses: appleboy/ssh-action@v1
+      uses: appleboy/ssh-action@v1.2.2
       with:
         host: ${{ secrets.VM_HOST }}
         username: ${{ secrets.VM_USER }}
@@ -309,7 +309,7 @@ jobs:
       uses: actions/checkout@v5
 
     - name: Deploy Staging to VM via SSH
-      uses: appleboy/ssh-action@v1
+      uses: appleboy/ssh-action@v1.2.2
       with:
         host: ${{ secrets.VM_HOST }}
         username: ${{ secrets.VM_USER }}
