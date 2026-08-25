@@ -1,7 +1,7 @@
 # Rencana Implementasi: Tunda Integrasi EAS Update (expo-updates)
 
 Tanggal: 2026-08-25
-Status: SIAP DIEKSEKUSI
+Status: SELESAI — dieksekusi 2026-08-25 (lihat §6)
 Target: Mengembalikan pipeline build yang hijau dengan pekerjaan expo-updates dilepas bersih, tanpa kehilangan perbaikan sah lainnya dari sesi yang sama.
 
 ---
@@ -176,3 +176,29 @@ Lalu di perangkat: install menimpa, buka → Profil menampilkan "Versi 1.1.0" �
 1. Tandai selesai: ceritakan apa yang dicoba & dipelajari (untuk dokumentasi sesi).
 2. Lanjutkan pekerjaan Fitur Tingkat 1 (**modal update-in-app** berbasis endpoint versi + link APK) pada sesi berikutnya — terpisah total dari legacy alur ini.
 3. Catat di dokumentasi standar bahwa integrasi expo-updates hanya bisa dipertimbangkan kembali jika: upgrade RN/Expo SDK ke versi yang menjunjung Room 2.6+ dan Kotlin 1.9+ resmi (SDK ≥ 52).
+
+---
+
+## 6. Catatan Eksekusi (2026-08-25)
+
+Dokumen ini dieksekusi penuh 2026-08-25. Hasil & penyimpangan:
+
+| Langkah | Hasil |
+|---|---|
+| Pembongkaran | `f22ec8d` — package.json bersih, `scripts/patches` hilang, 6 file restore dari anchor, build.gradle edit in-place (komentar tar.gz/appVersionSource dipertahankan), tes sinkron diramping → 162 tes hijau |
+| Build rilis pertama | v1.1.0 FINISHED (vc 16) — tetapi **78,5 MB**, meleset dari target |
+| Perbaikan ukuran | `3da9aa3` — `ndk.abiFilters` eksplisit → APK **40,5 MB** (vc 17, FINISHED, hanya arm64-v8a + armeabi-v7a) |
+| Fix label versi | `d040ca3` — bug terpisah dari eksperimen expo (lihat §6.2 poin 3) |
+| Smoke test user | ✅ semua aman kecuali label versi (kini sudah di-fix di kode; ikut rilis berikutnya) |
+
+### 6.1 Penyimpangan vs rencana
+
+1. `android/app/build.gradle` diedit **in-place** (bukan checkout anchor) — hasil identik, tapi komentar penjelas bernilai tetap hidup dan tidak melewati state anchor yang terbukti bermasalah (versionName ekspresi + split true).
+2. Lockfile ada di **root monorepo** (`pnpm-lock.yaml`), bukan `apps/mobile/` — `pnpm install` dari root.
+3. Shell Git Bash (bukan PowerShell): `rm` alih-alih `Remove-Item`, lanjutan baris `\` alih-alih backtick.
+
+### 6.2 Pelajaran baru (melengkapi §4)
+
+1. **`reactNativeArchitectures` TIDAK memfilter library native pihak ketiga** (ML Kit, Firebase, dll) — APK universal tetap 4 ABI ±78 MB. Filter nyata: `ndk.abiFilters` eksplisit di `defaultConfig`. (Angka "40–45 MB" di retrospektif ternyata ukuran APK split per-ABI build #5, bukan universal.)
+2. **Git 2.54.0.windows.1 tidak bisa clone URL `file:///C:/...`** — eas-cli gagal membuat arsip upload (exit 128). Fix: `git config url.C:/path.insteadOf file:///C:/path` (per-repo, sudah terpasang).
+3. **Metro memprioritaskan `.json` DI ATAS `.ts` untuk import tanpa ekstensi; Jest kebalikannya.** Dua file `appConfig.ts` + `appConfig.json` ber-nama sama → bundle release membaca `APP_VERSION` dari objek JSON (tidak punya properti itu) → label versi kosong, padahal semua tes Jest hijau. Fix: hapus `appConfig.json` (gradle tidak lagi membacanya), `APP_VERSION` jadi konstanta di `appConfig.ts`. Terbukti dengan inspeksi bundle Metro sebelum/sesudah fix.

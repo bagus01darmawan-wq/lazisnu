@@ -90,7 +90,7 @@ Biaya per siklus ±30–45 menit antre EAS — dan setelah perbaikan jaringan-lo
 ## 5. Status Akhir & Langkah Berikutnya
 
 - [x] Semua pekerjaan sah terkirim dan ter-commit (sampai `1558d7b`)
-- [ ] **Rencana pembongkaran bersih expo-updates** dirinci lengkap di `docs/implementation/TUNDA-EXPO-UPDATES-2026-08-25.md` — siap dieksekusi
-- [ ] Build rilis stabil berikutnya (v1.1.0, tanpa expo) sebagai konfirmasi kembali-hijau
+- [x] **Rencana pembongkaran bersih expo-updates** — dieksekusi 2026-08-25, lihat `docs/implementation/TUNDA-EXPO-UPDATES-2026-08-25.md` §6
+- [x] Build rilis stabil (v1.1.0, tanpa expo) terkonfirmasi hijau 2026-08-25 — vc 17, 40,5 MB (detail: TUNDA-EXPO-UPDATES §6)
 - [ ] Sesi berikutnya: fitur update-in-app Tingkat 1 (endpoint versi + modal + link APK)
 - [ ] Integrasi expo-updates hanya layak dibuka kembali setelah upgrade ke Expo SDK ≥ 52 (Room & Kotlin resmi lebih baru)
