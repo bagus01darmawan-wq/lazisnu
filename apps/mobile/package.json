@@ -7,6 +7,8 @@
     "android": "react-native run-android",
     "ios": "react-native run-ios",
     "start": "react-native start",
+    "verify:icon": "node scripts/verify-icon.mjs",
+    "preview:icon": "node scripts/icon-preview.mjs",
     "generate:icon": "node scripts/generate-app-icon.mjs",
     "test": "jest",
     "test:coverage": "jest --coverage",
