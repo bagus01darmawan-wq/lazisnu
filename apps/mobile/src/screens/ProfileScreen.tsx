@@ -7,6 +7,7 @@ import {getBiometryType, isBiometricAvailable} from '../services/biometric';
 import {APP_VERSION} from '../config/appConfig';
 import {AppButton, AppCard, StatusBadge} from '../components/ui';
 import {Colors, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
+import {getErrorMessage} from '../utils/error';
 
 const roleLabels: Record<string, string> = {
   PETUGAS: 'Petugas Penjemputan',
@@ -78,11 +79,8 @@ const ProfileScreen: React.FC = () => {
       if (result === 'up-to-date') {
         Alert.alert('Versi Terbaru', `Kamu sudah memakai versi terbaru (${APP_VERSION}).`);
       }
-    } catch {
-      Alert.alert(
-        'Gagal Memeriksa',
-        'Tidak dapat menghubungi server. Periksa koneksi internet lalu coba lagi.',
-      );
+    } catch (error) {
+      Alert.alert('Gagal Memeriksa', getErrorMessage(error, 'Tidak dapat memeriksa pembaruan'));
     }
   }, [checkManually]);
 

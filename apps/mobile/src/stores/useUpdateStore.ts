@@ -8,6 +8,7 @@ import {
 } from '../services/updates/versionCheck';
 import {downloadApk, installApk} from '../services/updates/apkDownload';
 import {getUpdateStorage, DISMISSED_VERSION_CODE_KEY} from '../services/updates/storage';
+import {getErrorMessage} from '../utils/error';
 
 export type DownloadState = 'idle' | 'downloading' | 'ready' | 'error';
 
@@ -106,10 +107,10 @@ export const useUpdateStore = create<UpdateState>((set, get) => {
           }
         });
         set({downloadState: 'ready', apkPath: path, downloadProgress: 100});
-      } catch {
+      } catch (error) {
         set({
           downloadState: 'error',
-          downloadError: 'Unduhan gagal. Periksa sinyal lalu coba lagi.',
+          downloadError: getErrorMessage(error, 'Gagal mengunduh pembaruan'),
         });
       }
     },

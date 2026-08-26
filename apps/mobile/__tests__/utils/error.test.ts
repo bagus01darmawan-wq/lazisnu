@@ -1,26 +1,51 @@
 import {getErrorMessage} from '../../src/utils/error';
 
-describe('getErrorMessage (utils/error.ts)', () => {
-  it('mengembalikan message dari instance Error', () => {
-    expect(getErrorMessage(new Error('Gagal memuat'))).toBe('Gagal memuat');
+describe('getErrorMessage — pesan error jujur (tanpa fitnah penyebab)', () => {
+  it('memetakan unduhan terputus (regresi blob-util) ke penjelasan jujur', () => {
+    expect(getErrorMessage(new Error('Download interrupted.'))).toBe(
+      'Unduhan terputus sebelum selesai — file tidak utuh.',
+    );
   });
 
-  it('mengembalikan message dari objek non-Error yang memiliki field message string', () => {
-    expect(getErrorMessage({message: 'respons server'})).toBe('respons server');
+  it('memetakan kegagalan jaringan fetch ke fakta yang terbukti', () => {
+    expect(getErrorMessage(new TypeError('Network request failed'))).toBe(
+      'Koneksi jaringan bermasalah.',
+    );
+    expect(getErrorMessage(new TypeError('Failed to fetch'))).toBe('Koneksi jaringan bermasalah.');
   });
 
-  it('mengembalikan fallback bawaan untuk nilai tanpa message', () => {
-    expect(getErrorMessage('string biasa')).toBe('Terjadi kesalahan');
-    expect(getErrorMessage(42)).toBe('Terjadi kesalahan');
-    expect(getErrorMessage(null)).toBe('Terjadi kesalahan');
+  it('memetakan status HTTP ke pesan yang jujur', () => {
+    expect(getErrorMessage(new Error('HTTP 500'))).toBe('Server menjawab dengan status HTTP 500.');
+  });
+
+  it('memetakan timeout/abort ke fakta yang terbukti', () => {
+    expect(getErrorMessage(new Error('Aborted'))).toBe('Waktu tunggu habis — server tidak merespons.');
+    expect(getErrorMessage(new Error('timeout of 5000ms exceeded'))).toBe(
+      'Waktu tunggu habis — server tidak merespons.',
+    );
+  });
+
+  it('pesan tidak dikenal → diteruskan apa adanya (jujur, bukan fitnah)', () => {
+    expect(getErrorMessage(new Error('disk full'))).toBe('disk full');
+  });
+
+  it('objek non-Error dengan message → dipakai', () => {
+    expect(getErrorMessage({message: 'Bentuk respons tidak sesuai'})).toBe(
+      'Bentuk respons tidak sesuai',
+    );
+  });
+
+  it('tanpa informasi sama sekali → fallback netral (tidak menuduh)', () => {
+    expect(getErrorMessage('jaringan putus')).toBe('Terjadi kesalahan');
     expect(getErrorMessage(undefined)).toBe('Terjadi kesalahan');
+    expect(getErrorMessage(null)).toBe('Terjadi kesalahan');
+    expect(getErrorMessage(new Error('   '))).toBe('Terjadi kesalahan');
+    expect(getErrorMessage(null, 'Gagal mengunduh pembaruan')).toBe('Gagal mengunduh pembaruan');
   });
 
-  it('menghormati fallback kustom dari caller', () => {
-    expect(getErrorMessage(undefined, 'Fallback kustom')).toBe('Fallback kustom');
-  });
-
-  it('mengabaikan field message yang bukan string', () => {
-    expect(getErrorMessage({message: 123})).toBe('Terjadi kesalahan');
+  it('pesan panjang dipotong agar tidak membanjiri UI', () => {
+    const msg = getErrorMessage(new Error('x'.repeat(200)));
+    expect(msg.length).toBeLessThanOrEqual(141);
+    expect(msg.endsWith('…')).toBe(true);
   });
 });

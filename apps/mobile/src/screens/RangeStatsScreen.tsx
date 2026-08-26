@@ -8,6 +8,7 @@ import {tasksService} from '../services/api';
 import {AppHeader, RangeCalendar} from '../components/ui';
 import {Colors, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
 import {formatCurrency} from '../utils';
+import {getErrorMessage} from '../utils/error';
 
 const toISODate = (d: Date): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -92,8 +93,8 @@ const RangeStatsScreen: React.FC = () => {
       } else {
         setError(result.error?.message || 'Gagal memuat statistik');
       }
-    } catch {
-      setError('Tidak dapat terhubung ke server. Periksa koneksi internet.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Gagal memuat statistik'));
     } finally {
       setIsLoading(false);
     }

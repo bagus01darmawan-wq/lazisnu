@@ -145,7 +145,21 @@ describe('useUpdateStore — fitur update-in-app', () => {
     expect(s.apkPath).toContain('lazisnu-1.1.1.apk');
   });
 
-  it('startDownload: unduhan gagal → state error dengan pesan', async () => {
+  it('startDownload: unduhan gagal (penyebab dikenal) → pesan jujur terpetakan', async () => {
+    (DeviceInfo.getBuildNumber as jest.Mock).mockReturnValue('17');
+    mockFetchOk(baseRelease);
+    await useUpdateStore.getState().checkOnLaunch();
+
+    blobMock.fs.exists.mockRejectedValueOnce(new Error('Download interrupted.'));
+
+    await useUpdateStore.getState().startDownload();
+
+    const s = useUpdateStore.getState();
+    expect(s.downloadState).toBe('error');
+    expect(s.downloadError).toBe('Unduhan terputus sebelum selesai — file tidak utuh.');
+  });
+
+  it('startDownload: error tidak dikenal ditampilkan apa adanya (jujur, tanpa fitnah)', async () => {
     (DeviceInfo.getBuildNumber as jest.Mock).mockReturnValue('17');
     mockFetchOk(baseRelease);
     await useUpdateStore.getState().checkOnLaunch();
@@ -156,7 +170,7 @@ describe('useUpdateStore — fitur update-in-app', () => {
 
     const s = useUpdateStore.getState();
     expect(s.downloadState).toBe('error');
-    expect(s.downloadError).toContain('Unduhan gagal');
+    expect(s.downloadError).toBe('disk full');
   });
 
   it('install: membuka pemasangan sistem Android untuk APK yang diunduh', async () => {
