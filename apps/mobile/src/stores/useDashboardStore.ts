@@ -3,6 +3,7 @@ import {dashboardService} from '../services/api';
 import {
   TodayStats,
   WeekStats,
+  MonthStats,
   DashboardTaskItem,
   RecentCollectionSummary,
   Task,
@@ -42,11 +43,21 @@ const isThisWeek = (dateStr: string): boolean => {
   return time >= startOfWeek.getTime() && time <= endOfWeek.getTime();
 };
 
+const isCurrentMonth = (dateStr: string): boolean => {
+  const d = new Date(dateStr);
+  const now = new Date();
+  return (
+    d.getMonth() === now.getMonth() &&
+    d.getFullYear() === now.getFullYear()
+  );
+};
+
 function mergeDashboardData(
   today_stats: TodayStats,
   week_stats: WeekStats,
   pending_tasks: DashboardTaskItem[],
   recent_collections: RecentCollectionSummary[],
+  month_stats?: MonthStats | null,
 ) {
   const activeQueue = offlineQueue.getQueue();
   const failedQueue = offlineQueue.getFailedPermanent();
@@ -61,6 +72,18 @@ function mergeDashboardData(
   let collectedWeek = week_stats.collected;
   let nominalWeek = week_stats.total_nominal;
 
+  // 3. Merge month stats — penjemputan lokal bulan berjalan belum tercatat
+  //    server; tugasnya dianggap selesai lokal (server masih ACTIVE).
+  let collectedMonth = month_stats?.collected ?? 0;
+  let nominalMonth = month_stats?.total_nominal ?? 0;
+  let taskCompletedMonth = month_stats?.task_completed ?? 0;
+  const taskTotalMonth = month_stats?.task_total ?? 0;
+
+  const tasks = taskCache.getTasks();
+  const now = new Date();
+  const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const periodAdjustedIds = new Set<string>();
+
   for (const item of allLocal) {
     if (isToday(item.collected_at)) {
       collectedToday += 1;
@@ -71,6 +94,23 @@ function mergeDashboardData(
       collectedWeek += 1;
       nominalWeek += item.nominal;
     }
+    if (month_stats && isCurrentMonth(item.collected_at)) {
+      collectedMonth += 1;
+      nominalMonth += item.nominal;
+
+      // Satu assignment hanya digeser sekali walau muncul di queue + failed.
+      if (!periodAdjustedIds.has(item.assignment_id)) {
+        periodAdjustedIds.add(item.assignment_id);
+        const task = tasks.find((t: Task) => t.id === item.assignment_id);
+        // Periode tugas tidak diketahui → pakai periode penjemputan sebagai
+        // aproksimasi; penjemputan bulan ini hampir selalu tugas periode ini.
+        const inCurrentPeriod =
+          task?.period === currentPeriod || (!task?.period && isCurrentMonth(item.collected_at));
+        if (inCurrentPeriod) {
+          taskCompletedMonth += 1;
+        }
+      }
+    }
   }
 
   // 3. Filter pending tasks
@@ -79,7 +119,6 @@ function mergeDashboardData(
 
   // 4. Merge recent collections
   const localRecent: RecentCollectionSummary[] = [];
-  const tasks = taskCache.getTasks();
 
   for (const item of allLocal) {
     const task = tasks.find((t: Task) => t.id === item.assignment_id);
@@ -117,6 +156,14 @@ function mergeDashboardData(
       collected: collectedWeek,
       total_nominal: nominalWeek,
     },
+    monthStats: month_stats
+      ? {
+          collected: collectedMonth,
+          total_nominal: nominalMonth,
+          task_total: taskTotalMonth,
+          task_completed: taskCompletedMonth,
+        }
+      : null,
     pendingTasks: filteredTasks,
     recentCollections: mergedRecent.slice(0, 10),
   };
@@ -125,6 +172,7 @@ function mergeDashboardData(
 interface DashboardState {
   todayStats: TodayStats | null;
   weekStats: WeekStats | null;
+  monthStats: MonthStats | null;
   pendingTasks: DashboardTaskItem[];
   recentCollections: RecentCollectionSummary[];
   isLoading: boolean;
@@ -140,6 +188,7 @@ interface DashboardState {
 export const useDashboardStore = create<DashboardState>((set, get) => ({
   todayStats: null,
   weekStats: null,
+  monthStats: null,
   pendingTasks: [],
   recentCollections: [],
   isLoading: false,
@@ -162,10 +211,17 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         remaining: 0,
       };
       const cachedWeek = dashboardCache.getWeekStats() || {collected: 0, total_nominal: 0};
+      const cachedMonth = dashboardCache.getMonthStats();
       const cachedTasks = dashboardCache.getPendingTasks();
       const cachedRecent = dashboardCache.getRecentCollections();
 
-      const merged = mergeDashboardData(cachedToday, cachedWeek, cachedTasks, cachedRecent);
+      const merged = mergeDashboardData(
+        cachedToday,
+        cachedWeek,
+        cachedTasks,
+        cachedRecent,
+        cachedMonth,
+      );
       if (!isLatestRequest()) {
         return;
       }
@@ -184,10 +240,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       }
 
       if (result.success && result.data) {
-        const {today_stats, week_stats, pending_tasks, recent_collections} = result.data;
+        const {today_stats, week_stats, pending_tasks, recent_collections, month_stats} =
+          result.data;
 
         dashboardCache.setTodayStats(today_stats);
         dashboardCache.setWeekStats(week_stats);
+        if (month_stats) {
+          dashboardCache.setMonthStats(month_stats);
+        }
         dashboardCache.setPendingTasks(pending_tasks || []);
         dashboardCache.setRecentCollections(recent_collections || []);
 
@@ -196,6 +256,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           week_stats,
           pending_tasks || [],
           recent_collections || [],
+          month_stats ?? dashboardCache.getMonthStats(),
         );
 
         set({
@@ -228,10 +289,17 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       remaining: 0,
     };
     const cachedWeek = dashboardCache.getWeekStats() || {collected: 0, total_nominal: 0};
+    const cachedMonth = dashboardCache.getMonthStats();
     const cachedTasks = dashboardCache.getPendingTasks();
     const cachedRecent = dashboardCache.getRecentCollections();
 
-    const merged = mergeDashboardData(cachedToday, cachedWeek, cachedTasks, cachedRecent);
+    const merged = mergeDashboardData(
+      cachedToday,
+      cachedWeek,
+      cachedTasks,
+      cachedRecent,
+      cachedMonth,
+    );
     set(merged);
   },
 

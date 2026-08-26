@@ -14,6 +14,7 @@ import ScanScreen from '../screens/ScanScreen';
 import CollectionScreen from '../screens/CollectionScreen';
 import HistoryScreen from '../screens/HistoryScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import RangeStatsScreen from '../screens/RangeStatsScreen';
 
 // Types
 import {RootStackParamList, MainTabParamList} from './types';
@@ -130,6 +131,11 @@ const MainStack = () => {
     <Stack.Navigator screenOptions={{headerShown: false}}>
       <Stack.Screen name="Main" component={MainTabs} />
       <Stack.Screen name="Collection" component={CollectionScreen} />
+      <Stack.Screen
+        name="RangeStats"
+        component={RangeStatsScreen}
+        options={{title: 'Statistik Rentang'}}
+      />
     </Stack.Navigator>
   );
 };

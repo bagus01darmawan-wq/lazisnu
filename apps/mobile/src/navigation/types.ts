@@ -8,6 +8,7 @@ export type RootStackParamList = {
   OTP: {phone: string};
   Main: NavigatorScreenParams<MainTabParamList> | undefined;
   Collection: {task: Task};
+  RangeStats: undefined;
 };
 
 export type MainTabParamList = {

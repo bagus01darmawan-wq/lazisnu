@@ -19,6 +19,7 @@ import {Colors, DashboardLayout, Layout, Radius, Shadows, Spacing, Typography} f
 import {formatCurrency} from '../utils';
 import type {MainNavigationProp} from '../navigation/types';
 import {TaskSummaryCard} from './tasks';
+import {MonthProgressCard} from './dashboard';
 
 const logo = require('../assets/branding/logo-lazisnu-putih.png');
 
@@ -26,7 +27,7 @@ const DashboardScreen: React.FC = () => {
   const navigation = useNavigation<MainNavigationProp>();
   const insets = useSafeAreaInsets();
   const user = useAuthStore(state => state.user);
-  const {todayStats, fetchDashboard, isLoading, error} = useDashboardStore();
+  const {todayStats, monthStats, fetchDashboard, isLoading, error} = useDashboardStore();
   const {activeCount, completedCount, totalCount, completedNominal, fetchStats} = useTasksStore();
   const {
     pendingCount,
@@ -190,12 +191,21 @@ const DashboardScreen: React.FC = () => {
             </TouchableOpacity>
           )}
 
+          <MonthProgressCard
+            collected={monthStats?.collected || 0}
+            nominal={monthStats?.total_nominal || 0}
+            taskTotal={monthStats?.task_total || 0}
+            taskCompleted={monthStats?.task_completed || 0}
+            onPress={() => navigation.navigate('RangeStats')}
+          />
+
           <View style={styles.taskSummaryWrap}>
             <TaskSummaryCard
               activeCount={activeCount}
               completedCount={completedCount}
               totalCount={totalCount}
               completedNominal={completedNominal}
+              subtitle={'Rekap akumulasi sepanjang masa'}
             />
           </View>
         </View>

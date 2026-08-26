@@ -1,12 +1,13 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { eq, and, desc, asc, gte, sql } from 'drizzle-orm';
+import { eq, and, desc, asc, gte, lte, or, sql } from 'drizzle-orm';
 import { isValidQRCode } from '../../utils/qr';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { getLatestCollectionCondition } from '../../services/collectionSubmission';
 import { skipAssignmentSchema } from './schemas';
 import { AppError, isAppError } from '../../utils/AppError';
+import { parseStatsRange, computeMonthsCovered } from '../../utils/statsRange';
 
 export async function tasksRoutes(fastify: FastifyInstance) {
   // GET /mobile/dashboard
@@ -25,8 +26,11 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const weekStart = new Date(today);
       weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const periodYear = now.getFullYear();
+      const periodMonth = now.getMonth() + 1;
 
-      const [todayStats, weekStats, pendingAssignments, latestRecent, remainingCount] = await Promise.all([
+      const [todayStats, weekStats, monthStats, pendingAssignments, latestRecent, remainingCount] = await Promise.all([
         db.select({
           collected: sql<number>`count(*)::int`,
           total_nominal: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
@@ -47,6 +51,38 @@ export async function tasksRoutes(fastify: FastifyInstance) {
             eq(schema.collections.syncStatus, 'COMPLETED'),
             latestCollectionCondition
           )).then(r => r[0]),
+        // Statistik bulan berjalan: penjemputan + progres tugas periode berjalan
+        Promise.all([
+          db.select({
+            collected: sql<number>`count(*)::int`,
+            total_nominal: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
+          }).from(schema.collections)
+            .where(and(
+              eq(schema.collections.officerId, officerId),
+              gte(schema.collections.collectedAt, monthStart),
+              eq(schema.collections.syncStatus, 'COMPLETED'),
+              latestCollectionCondition
+            )).then(r => r[0]),
+          db.select({
+            status: schema.assignments.status,
+            count: sql<number>`count(*)::int`,
+          }).from(schema.assignments)
+            .where(and(
+              eq(schema.assignments.officerId, officerId),
+              eq(schema.assignments.periodYear, periodYear),
+              eq(schema.assignments.periodMonth, periodMonth)
+            ))
+            .groupBy(schema.assignments.status),
+        ]).then(([colRes, taskRows]) => {
+          const completed = taskRows.find((r) => r.status === 'COMPLETED')?.count ?? 0;
+          const active = taskRows.find((r) => r.status === 'ACTIVE')?.count ?? 0;
+          return {
+            collected: colRes.collected,
+            total_nominal: colRes.total_nominal,
+            task_total: completed + active,
+            task_completed: completed,
+          };
+        }),
         db.query.assignments.findMany({
           where: and(eq(schema.assignments.officerId, officerId), eq(schema.assignments.status, 'ACTIVE')),
           with: {
@@ -83,6 +119,12 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         week_stats: {
           collected: weekStats.collected,
           total_nominal: Number(weekStats.total_nominal),
+        },
+        month_stats: {
+          collected: monthStats.collected,
+          total_nominal: Number(monthStats.total_nominal),
+          task_total: monthStats.task_total,
+          task_completed: monthStats.task_completed,
         },
         pending_tasks: pendingAssignments.map((a) => ({
           id: a.id,
@@ -193,6 +235,75 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           total,
           total_pages: Math.ceil(total / limit),
         },
+      });
+    } catch (error) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  // GET /mobile/tasks/stats-range?start=YYYY-MM-DD&end=YYYY-MM-DD
+  // Akumulasi penjemputan dalam rentang tanggal + progres tugas dari semua
+  // periode (bulan) yang tersentuh rentang.
+  fastify.get('/tasks/stats-range', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = request.currentUser!;
+      const officerId = user.officerId;
+
+      if (!officerId) {
+        return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
+      }
+
+      const query = request.query as { start?: string; end?: string };
+      const parsed = parseStatsRange(query.start, query.end);
+      if (!parsed.ok) {
+        return sendError(reply, 400, 'BAD_REQUEST', parsed.error!);
+      }
+      const startDate = parsed.startDate!;
+      const endDate = parsed.endDate!;
+
+      // Daftar periode (YYYY-MM) yang tersentuh rentang — dipakai untuk filter
+      // tugas dan dilaporkan kembali sebagai months_covered.
+      const monthsCovered = computeMonthsCovered(startDate, endDate);
+      const periodConditions = monthsCovered.map((period) => {
+        const [y, m] = period.split('-').map(Number);
+        return and(eq(schema.assignments.periodYear, y), eq(schema.assignments.periodMonth, m));
+      });
+
+      const latestCollectionCondition = getLatestCollectionCondition();
+
+      const [colRes, taskRows] = await Promise.all([
+        db.select({
+          collected: sql<number>`count(*)::int`,
+          total_nominal: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
+        }).from(schema.collections)
+          .where(and(
+            eq(schema.collections.officerId, officerId),
+            gte(schema.collections.collectedAt, startDate),
+            lte(schema.collections.collectedAt, endDate),
+            eq(schema.collections.syncStatus, 'COMPLETED'),
+            latestCollectionCondition
+          )).then(r => r[0]),
+        db.select({
+          status: schema.assignments.status,
+          count: sql<number>`count(*)::int`,
+        }).from(schema.assignments)
+          .where(and(
+            eq(schema.assignments.officerId, officerId),
+            or(...periodConditions)
+          ))
+          .groupBy(schema.assignments.status),
+      ]);
+
+      const completedCount = taskRows.find((r) => r.status === 'COMPLETED')?.count ?? 0;
+      const activeCount = taskRows.find((r) => r.status === 'ACTIVE')?.count ?? 0;
+
+      return sendSuccess(reply, {
+        collected: colRes.collected,
+        total_nominal: Number(colRes.total_nominal),
+        task_active: activeCount,
+        task_completed: completedCount,
+        task_total: activeCount + completedCount,
+        months_covered: monthsCovered,
       });
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);

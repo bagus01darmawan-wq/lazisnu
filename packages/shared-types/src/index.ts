@@ -222,6 +222,15 @@ export interface WeekStats {
   total_nominal: number;
 }
 
+export interface MonthStats {
+  collected: number;
+  total_nominal: number;
+  /** Total tugas pada periode berjalan. */
+  task_total: number;
+  /** Tugas selesai pada periode berjalan. */
+  task_completed: number;
+}
+
 // ─── API Response Types ──────────────────────────────────────────────────────
 export interface ApiResponse<T> {
   success: boolean;
@@ -317,8 +326,22 @@ export interface MeResponse {
 export interface DashboardResponse {
   today_stats: TodayStats;
   week_stats: WeekStats;
+  /** Opsional untuk kompatibilitas aplikasi lama yang masih berjalan. */
+  month_stats?: MonthStats;
   pending_tasks: DashboardTaskItem[];
   recent_collections: RecentCollectionSummary[];
+}
+
+// Response GET /mobile/tasks/stats-range — akumulasi dalam rentang tanggal.
+// Progres tugas dihitung dari seluruh periode (bulan) yang tersentuh rentang.
+export interface RangeStatsResponse {
+  collected: number;
+  total_nominal: number;
+  task_active: number;
+  task_completed: number;
+  task_total: number;
+  /** Periode yang tersentuh rentang, format "YYYY-MM". */
+  months_covered: string[];
 }
 
 export interface DashboardTaskItem {

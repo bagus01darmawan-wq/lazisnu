@@ -9,6 +9,8 @@ export interface TaskSummaryCardProps {
   completedCount: number;
   totalCount: number;
   completedNominal: number;
+  /** Teks kecil di bawah judul, mis. penjelasan cakupan rekap. */
+  subtitle?: string;
   /** Bila tidak disediakan, tombol aksi Selesai Periode tidak dirender. */
   onCompletePeriod?: () => void;
 }
@@ -27,6 +29,7 @@ export const TaskSummaryCard: React.FC<TaskSummaryCardProps> = ({
   completedCount,
   totalCount,
   completedNominal,
+  subtitle,
   onCompletePeriod,
 }) => {
   const progress = totalCount ? completedCount / totalCount : 0;
@@ -34,6 +37,7 @@ export const TaskSummaryCard: React.FC<TaskSummaryCardProps> = ({
   return (
     <View style={styles.summaryCard}>
       <Text style={styles.summaryTitle}>Progres Tugas</Text>
+      {!!subtitle && <Text style={styles.summarySubtitle}>{subtitle}</Text>}
       <View style={styles.statsRow}>
         <Stat value={`${activeCount}`} label={'Belum'} />
         <View style={styles.statDivider} />
@@ -76,6 +80,12 @@ const styles = StyleSheet.create({
   summaryTitle: {
     ...Typography.heading2,
     color: Colors.brand.deepGreen,
+    marginBottom: Spacing.md,
+  },
+  summarySubtitle: {
+    ...Typography.caption,
+    color: Colors.text.secondary,
+    marginTop: -Spacing.sm + 2,
     marginBottom: Spacing.md,
   },
   statsRow: {

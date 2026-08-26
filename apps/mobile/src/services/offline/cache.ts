@@ -11,6 +11,7 @@ import {getOfflineStorage} from './mmkv';
 import {
   TodayStats,
   WeekStats,
+  MonthStats,
   DashboardTaskItem,
   RecentCollectionSummary,
   Collection,
@@ -19,10 +20,11 @@ import {
 // --- Key Prefix --------------------------------------------------------------
 const KEY_DASHBOARD_TODAY_STATS = 'cache:dashboard:todayStats';
 const KEY_DASHBOARD_WEEK_STATS = 'cache:dashboard:weekStats';
+const KEY_DASHBOARD_MONTH_STATS = 'cache:dashboard:monthStats';
 const KEY_DASHBOARD_PENDING_TASKS = 'cache:dashboard:pendingTasks';
 const KEY_DASHBOARD_RECENT = 'cache:dashboard:recentCollections';
 const KEY_DASHBOARD_SCHEMA_VERSION = 'cache:dashboard:schemaVersion';
-const DASHBOARD_SCHEMA_VERSION = 2;
+const DASHBOARD_SCHEMA_VERSION = 3;
 const KEY_TASKS_ACTIVE_COUNT = 'cache:tasks:activeCount';
 const KEY_TASKS_COMPLETED_COUNT = 'cache:tasks:completedCount';
 const KEY_TASKS_COMPLETED_NOMINAL = 'cache:tasks:completedNominal';
@@ -69,6 +71,7 @@ function ensureDashboardSchema(): void {
     // Invalidate hanya cache turunan dashboard; queue transaksi tetap utuh.
     storage.delete(KEY_DASHBOARD_TODAY_STATS);
     storage.delete(KEY_DASHBOARD_WEEK_STATS);
+    storage.delete(KEY_DASHBOARD_MONTH_STATS);
     storage.delete(KEY_DASHBOARD_PENDING_TASKS);
     storage.delete(KEY_DASHBOARD_RECENT);
     storage.set(KEY_DASHBOARD_SCHEMA_VERSION, DASHBOARD_SCHEMA_VERSION);
@@ -99,6 +102,16 @@ export const dashboardCache = {
     safeSet(KEY_DASHBOARD_WEEK_STATS, stats);
   },
 
+  getMonthStats: (): MonthStats | null => {
+    ensureDashboardSchema();
+    return safeGet<MonthStats>(KEY_DASHBOARD_MONTH_STATS);
+  },
+
+  setMonthStats: (stats: MonthStats): void => {
+    ensureDashboardSchema();
+    safeSet(KEY_DASHBOARD_MONTH_STATS, stats);
+  },
+
   getPendingTasks: (): DashboardTaskItem[] => {
     ensureDashboardSchema();
     return safeGet<DashboardTaskItem[]>(KEY_DASHBOARD_PENDING_TASKS) ?? [];
@@ -122,6 +135,7 @@ export const dashboardCache = {
   clear: (): void => {
     safeDelete(KEY_DASHBOARD_TODAY_STATS);
     safeDelete(KEY_DASHBOARD_WEEK_STATS);
+    safeDelete(KEY_DASHBOARD_MONTH_STATS);
     safeDelete(KEY_DASHBOARD_PENDING_TASKS);
     safeDelete(KEY_DASHBOARD_RECENT);
     safeDelete(KEY_DASHBOARD_SCHEMA_VERSION);
