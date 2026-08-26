@@ -316,8 +316,9 @@ digabung ke v1.1.3 yang isinya Opsi A murni (retro #6).
 - [ ] 1. Buat `AbiModule.kt` + `AbiPackage.kt` + Daftar `MainApplication.kt` (Gate G1)
 - [ ] 2. `deviceAbi.ts` + `resolveApkUrl.ts` + tes co-located (Gate G2) → commit (kode saja, CI hijau)
 - [ ] 3. shared-types (`apk_urls?` opsional) + backend schema `.optional()` + **tes integrasi 2 skenario** (Gate G3) → commit — json v1.1.2 TIDAK disentuh di langkah ini (F1)
-- [ ] 4. `build.gradle` parametrisasi + **HAPUS blok `splits` & offset `abiVersionCode` (M1)** → build debug lokal hijau
-- [ ] 5. eas.json: tambah profil `production-arm64`/`production-armv7` → 1× build percobaan tiap profil (Gate G4, ±30 menit; bukti gate positif+negatif; **catat ukuran aktual**). Bukti wajib disimpan: metadata `eas build:list --json` tiap build + versi eas-cli yang dipakai (S1/S2) — pola perbandingan antar-build inilah yang membongkar tar.gz di saga lama
+- [x] 4. `build.gradle` parametrisasi (`-PabiFilter`, default 2 ABI arm = status quo) + **HAPUS blok `splits` & offset `abiVersionCode` (M1)** → ✅ 2026-08-26 tervalidasi CI: job Build Android Debug APK hijau (commit `219b077`)
+- [x] 5.a eas.json: profil `production-arm64`/`production-armv7` TERPASANG (commit `219b077`)
+- [ ] 5.b **Gate G4 — 1× build percobaan tiap profil** (±30 menit masing-masing; bukti wajib disimpan: artefak `.apk` tunggal, gate positif+negatif `lib/`, ukuran aktual → kalibrasi §1, metadata `eas build:list --json` + versi eas-cli (S1/S2))
 - [ ] 5.b **JANGAN memulai pekerjaan infra lain selama window Opsi A** — khususnya expo-updates yang ditunda (`TUNDA-EXPO-UPDATES-2026-08-25.md`) tetap tertunda sampai v1.1.3 tuntas (S3)
 - [ ] 6a. `release-bump.mjs`: sinkronisasi otomatis `apkUrls` ikut versi (bagian 5.H) + dry-run diverifikasi (F2)
 - [ ] 6b. release.yml → matrix 3 artefak + gate `.apk`/ABI positif+negatif/ukuran terkalibrasi + timeout 120 mnt; trigger-deploy fail-closed
