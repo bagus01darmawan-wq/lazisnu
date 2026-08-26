@@ -1,9 +1,15 @@
-name: "Release APK (Opsi B: EAS, R2, deploy)"
+name: "Release APK (CI-build — tanpa kuota EAS)"
 
 # Rilis APK satu-tombol. Dipicu oleh tag v* — dibuat oleh scripts/release-bump.mjs --publish.
-# Alur: [1] build EAS (profile production) → [2] unduh APK → [3] unggah ke R2
-#       (apk.lazisnu.site) → [4] dispatch ci.yml pada ref tag (build image + deploy prod blue-green).
+# Alur: [1] build APK bertanda tangan produksi via Gradle di runner GitHub
+#       → [2] gerbang mutu (.apk tunggal, isi lib/, ukuran)
+#       → [3] unggah ke R2 (apk.lazisnu.site) → [4] verifikasi URL publik
+#       → [5] dispatch ci.yml pada ref tag (build image + deploy prod blue-green).
 # Fail-closed: kalau unggah R2 gagal, tidak ada dispatch → produksi tetap di versi lama.
+#
+# 2026-08-26: mesin build pindah dari EAS ke GitHub Actions runner
+# (RENCANA-SPLIT-ABI §G4-equivalent terbukti; kuota EAS Free terbatas).
+# Keystore produksi dibaca dari Actions Secrets (sumber: Bitwarden PO).
 
 on:
   push:
@@ -11,11 +17,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Versi (harus sama dengan versionName di build.gradle)'
+        description: 'Versi (override untuk dry-run; kosongkan = baca build.gradle)'
         required: false
-      version_code:
-        description: 'VersionCode (harus sama dengan build.gradle)'
+      dry_run:
+        description: 'true = build+gate saja (tanpa R2 & tanpa dispatch deploy)'
         required: false
+        default: 'false'
 
 permissions:
   contents: read
@@ -24,7 +31,7 @@ permissions:
 jobs:
   build-upload-release:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
     concurrency:
       group: lazisnu-release-apk
       cancel-in-progress: false
@@ -34,48 +41,122 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Baca versionName dari build.gradle (satu-sumber)
+      - name: Baca versionName/versionCode dari build.gradle (satu-sumber)
         id: ver
         run: |
           VERSION=$(grep -m1 'versionName "' apps/mobile/android/app/build.gradle | sed -E 's/.*versionName "([^"]+)".*/\1/')
+          CODE=$(grep -m1 'versionCode ' apps/mobile/android/app/build.gradle | sed -E 's/.*versionCode ([0-9]+).*/\1/')
+          if [ -n "${{ github.event.inputs.version }}" ]; then VERSION="${{ github.event.inputs.version }}"; fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "building v$VERSION"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "building v$VERSION (vc $CODE)"
 
-      - name: Build APK via EAS (production, internal distribution)
-        env:
-          EXPO_TOKEN: ${{ secrets.EAS_ACCESS_TOKEN }}
-        run: |
-          cd apps/mobile
-          npx --yes eas-cli@latest build \
-            --platform android \
-            --profile production \
-            --non-interactive \
-            --wait \
-            --json > eas-build.json
-          node -e "
-            const fs=require('fs');const b=JSON.parse(fs.readFileSync('eas-build.json','utf8'));
-            const arr=Array.isArray(b)?b:[b];const x=arr[0];
-            console.log('build id:', x.id); console.log('status:', x.status);
-            if(!x.artifacts || !x.artifacts.buildUrl){console.error('NO ARTIFACT');process.exit(1);}
-            fs.writeFileSync('build-url.txt', x.artifacts.buildUrl);
-          "
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
 
-      - name: Unduh APK dari EAS
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+
+      - name: Setup Java JDK (Java 17)
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Shared Types
+        run: pnpm build:shared
+
+      - name: Pulihkan keystore produksi dari Secrets
         env:
-          EXPO_TOKEN: ${{ secrets.EAS_ACCESS_TOKEN }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          cd apps/mobile
-          curl -fL -H "Authorization: Bearer $EXPO_TOKEN" \
-            -o "lazisnu-${{ steps.ver.outputs.version }}.apk" "$(cat build-url.txt)"
-          ls -la "lazisnu-${{ steps.ver.outputs.version }}.apk"
+          echo "$KEYSTORE_BASE64" | base64 -d > apps/mobile/android/app/lazisnu-production.keystore
+          ls -la apps/mobile/android/app/lazisnu-production.keystore
+
+      - name: Sidik jari sertifikat (bukti rantai kepercayaan)
+        working-directory: apps/mobile/android/app
+        run: |
+          keytool -list -v -keystore lazisnu-production.keystore \
+            -storepass "${{ secrets.KEYSTORE_STORE_PASSWORD }}" \
+            -alias "${{ secrets.KEYSTORE_KEY_ALIAS }}" 2>/dev/null \
+            | grep -E 'SHA1:|SHA256:|Valid' | tee /tmp/cert-fp.txt
+
+      - name: Build APK universal bertanda tangan produksi
+        working-directory: apps/mobile/android
+        run: |
+          ./gradlew assembleRelease --no-daemon \
+            -PMYAPP_UPLOAD_STORE_FILE=lazisnu-production.keystore \
+            -PMYAPP_UPLOAD_STORE_PASSWORD=${{ secrets.KEYSTORE_STORE_PASSWORD }} \
+            -PMYAPP_UPLOAD_KEY_ALIAS=${{ secrets.KEYSTORE_KEY_ALIAS }} \
+            -PMYAPP_UPLOAD_KEY_PASSWORD=${{ secrets.KEYSTORE_KEY_PASSWORD }}
+
+      - name: Gate rilis — tepat satu .apk, nol arsip
+        working-directory: apps/mobile/android/app/build/outputs/apk/release
+        run: |
+          set -eo pipefail
+          APK_COUNT=$(find . -maxdepth 1 -name '*.apk' | wc -l)
+          ARCHIVE_COUNT=$(find . -maxdepth 1 \( -name '*.tar.gz' -o -name '*.zip' \) | wc -l)
+          echo "apk=$APK_COUNT archive=$ARCHIVE_COUNT"
+          if [ "$APK_COUNT" -ne 1 ] || [ "$ARCHIVE_COUNT" -ne 0 ]; then
+            echo "::error::GATE GAGAL — harus tepat 1 .apk dan nol arsip"; exit 1
+          fi
+
+      - name: Gate rilis — universal: kedua ABI arm ada, x86 nol
+        working-directory: apps/mobile/android/app/build/outputs/apk/release
+        run: |
+          set -eo pipefail
+          APK=$(ls *.apk)
+          LIBS=$(unzip -l "$APK" | grep -o 'lib/[^/]*/' | sort -u)
+          echo "$LIBS"
+          echo "$LIBS" | grep -q 'lib/arm64-v8a/'    || { echo "::error::arm64 hilang"; exit 1; }
+          echo "$LIBS" | grep -q 'lib/armeabi-v7a/' || { echo "::error::armv7 hilang"; exit 1; }
+          if echo "$LIBS" | grep -qE 'lib/(x86|x86_64)/'; then
+            echo "::error::x86 bocor"; exit 1
+          fi
+
+      - name: Gate rilis — ukuran wajar (34–46 MB)
+        working-directory: apps/mobile/android/app/build/outputs/apk/release
+        run: |
+          set -eo pipefail
+          APK=$(ls *.apk)
+          SIZE_MB=$(du -m "$APK" | cut -f1)
+          echo "ukuran: ${SIZE_MB} MB"
+          if [ "$SIZE_MB" -lt 34 ] || [ "$SIZE_MB" -gt 46 ]; then
+            echo "::error::ukuran di luar jangkauan wajar universal"; exit 1
+          fi
+
+      - name: Siapkan nama artefak rilis
+        working-directory: apps/mobile/android/app/build/outputs/apk/release
+        run: cp *.apk "lazisnu-${{ steps.ver.outputs.version }}.apk"
+
+      - name: Upload artefak bukti build
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk-${{ steps.ver.outputs.version }}
+          path: apps/mobile/android/app/build/outputs/apk/release/lazisnu-*.apk
+          retention-days: 30
+
+      - name: Dry-run berhenti di sini
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true'
+        run: echo "DRY RUN — build+gate lolos. R2 & deploy dilewati."
 
       - name: Unggah ke R2 (apk.lazisnu.site)
+        if: github.event_name == 'push' || github.event.inputs.dry_run != 'true'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_EC2_METADATA_DISABLED: 'true'
         run: |
-          cd apps/mobile
+          cd apps/mobile/android/app/build/outputs/apk/release
           aws s3 cp "lazisnu-${{ steps.ver.outputs.version }}.apk" \
             "s3://lazisnu-apk/lazisnu-${{ steps.ver.outputs.version }}.apk" \
             --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com" \
@@ -83,6 +164,7 @@ jobs:
             --cache-control 'public, max-age=31536000, immutable'
 
       - name: Verifikasi URL publik
+        if: github.event_name == 'push' || github.event.inputs.dry_run != 'true'
         run: |
           URL="https://apk.lazisnu.site/lazisnu-${{ steps.ver.outputs.version }}.apk"
           CODE=$(curl -s -o /dev/null -w '%{http_code} %{size_download}' "$URL")
@@ -90,6 +172,7 @@ jobs:
           case "$CODE" in 200*) ;; *) echo "PUBLIC URL NOT HEALTHY"; exit 1;; esac
 
       - name: Dispatch ci.yml (build image + deploy prod blue-green) pada ref tag
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -100,4 +183,3 @@ jobs:
         run: |
           echo "Rilis APK v${{ steps.ver.outputs.version }} selesai di R2."
           echo "URL: https://apk.lazisnu.site/lazisnu-${{ steps.ver.outputs.version }}.apk"
-          echo "(deploy backend berjalan terpisah via ci.yml; cek Actions, CI)"
