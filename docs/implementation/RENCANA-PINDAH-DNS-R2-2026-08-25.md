@@ -48,7 +48,7 @@ Total 4 record (www ikut apex) — migrasi berisiko rendah.
 
 ### Fase 4 — Cutover (menyusul, satu paket dengan rilis v1.1.2)
 1. `node scripts/release-bump.mjs 1.1.2 --version-code 20 --changelog "..." --publish` → tag → release.yml otomatis (build EAS → R2 → deploy).
-2. **Selepas rilis**: pasang PAT read-only di VM (prasyarat `git fetch` saat repo privat) → privatisasi repo.
+2. ~~Pasang PAT read-only di VM~~ → ✅ **2026-08-26: diganti deploy key SSH read-only** (lebih baik: tidak pernah expired). Key ed25519 `lazisnu-vm-deploy-readonly` dibuat di VM (`~/.ssh/ed25519_lazisnu_deploy`), terdaftar di GitHub (id key `161329085`, read-only), remote `/opt/lazisnu` pindah ke SSH + fetch & push-deny terverifikasi. **Prasyarat privatisasi sudah lengkap** → tinggal flip repo ke Private.
 3. Opsional setelah stabil: rilis berikutnya = satu perintah yang sama.
 
 ## 4. Risiko & Jaring Pengaman
