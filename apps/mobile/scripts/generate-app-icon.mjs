@@ -57,10 +57,7 @@ async function main() {
     // ── Legacy persegi + bulat ──
     const size = Math.round(LEGACY_DP * scale);
     const markW = Math.round(size * MARK_SCALE);
-    const mark = await sharp(svgBuf)
-      .resize({width: markW, kernel: 'lanczos3'})
-      .png()
-      .toBuffer();
+    const mark = await sharp(svgBuf).resize({width: markW, kernel: 'lanczos3'}).png().toBuffer();
     const markMeta = await sharp(mark).metadata();
 
     const squareBase = await sharp({
@@ -98,7 +95,12 @@ async function main() {
     const fgDir = resolve(RES, `drawable-${dpi}`);
     mkdirSync(fgDir, {recursive: true});
     await sharp({
-      create: {width: fgSize, height: fgSize, channels: 4, background: {r: 0, g: 0, b: 0, alpha: 0}},
+      create: {
+        width: fgSize,
+        height: fgSize,
+        channels: 4,
+        background: {r: 0, g: 0, b: 0, alpha: 0},
+      },
     })
       .composite([
         {
@@ -137,7 +139,9 @@ async function main() {
 `,
   );
 
-  console.log(`✓ XML adaptive + colors.xml (mark master ${meta.width}px, rasio ${(meta.width / meta.height).toFixed(2)}:1)`);
+  console.log(
+    `✓ XML adaptive + colors.xml (mark master ${meta.width}px, rasio ${(meta.width / meta.height).toFixed(2)}:1)`,
+  );
 }
 
 main().catch(e => {
