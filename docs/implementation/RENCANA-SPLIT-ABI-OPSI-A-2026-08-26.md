@@ -319,6 +319,7 @@ digabung ke v1.1.3 yang isinya Opsi A murni (retro #6).
 - [x] 4. `build.gradle` parametrisasi (`-PabiFilter`, default 2 ABI arm = status quo) + **HAPUS blok `splits` & offset `abiVersionCode` (M1)** → ✅ 2026-08-26 tervalidasi CI: job Build Android Debug APK hijau (commit `219b077`)
 - [x] 5.a eas.json: profil `production-arm64`/`production-armv7` TERPASANG (commit `219b077`)
 - [ ] 5.b **Gate G4 — 1× build percobaan tiap profil** (±30 menit masing-masing; bukti wajib disimpan: artefak `.apk` tunggal, gate positif+negatif `lib/`, ukuran aktual → kalibrasi §1, metadata `eas build:list --json` + versi eas-cli (S1/S2))
+  - ⛔ **2026-08-26: TERTAHAN KUOTA** — kuota build Android paket EAS Free Agustus habis; reset **Sel, 01 Sep 2026**. Upaya submit pertama tercatat (upload arsip 38,9 MB sukses, ditolak di tahap alokasi). Opsi: tunggu reset, atau upgrade Starter (keputusan PO). Konfigurasi (profil + abiFilter) sudah terpasang & tervalidasi CI — G4 tinggal eksekusi ulang perintah yang sama
 - [ ] 5.b **JANGAN memulai pekerjaan infra lain selama window Opsi A** — khususnya expo-updates yang ditunda (`TUNDA-EXPO-UPDATES-2026-08-25.md`) tetap tertunda sampai v1.1.3 tuntas (S3)
 - [ ] 6a. `release-bump.mjs`: sinkronisasi otomatis `apkUrls` ikut versi (bagian 5.H) + dry-run diverifikasi (F2)
 - [ ] 6b. release.yml → matrix 3 artefak + gate `.apk`/ABI positif+negatif/ukuran terkalibrasi + timeout 120 mnt; trigger-deploy fail-closed

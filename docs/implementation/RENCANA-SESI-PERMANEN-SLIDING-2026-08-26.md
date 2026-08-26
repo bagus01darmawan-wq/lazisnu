@@ -153,9 +153,14 @@ Rate limit 30/5mnt dipertahankan (cukup; klien sudah anti-storm).
 
 ### 4.E Konfigurasi ops (terpisah dari kode)
 
-- `redis/redis.conf`: `maxmemory 50mb` → `256mb` (cek RAM VM dulu: `free -m`);
-  pertimbangkan `noeviction` + monitoring, karena denylist yang terevikt =
-  pencabutan yang dilupakan. Dokumentasikan di SOP-HOUSEKEEPING.
+- ✅ **2026-08-26 SELESAI**: `maxmemory` 50mb → **100mb** (keputusan PO; VM RAM
+  3,7 GB total / 2,1 GB available — aman). Diterapkan runtime via
+  `CONFIG SET` di prod + staging, DAN di file repo `redis/redis.conf`
+  (persisten lintas recreate container).
+- Catatan: `volatile-lru` dipertahankan; denylist yang terevikt = pencabutan
+  yang dilupakan — dengan headroom ×2 dan pertumbuhan data yang lambat
+  (terpakai ±2,5 MB), risiko ini rendah. Evaluasi ulang bila used_memory
+  mendekati 60% maxmemory.
 
 ### 4.F Tes
 
@@ -209,7 +214,7 @@ Rate limit 30/5mnt dipertahankan (cukup; klien sudah anti-storm).
 - [ ] 3. Sesuaikan `/auth/logout`, `DELETE /sessions`, revoke-sesi → tulis denylist TTL sisa-umur (§4.C)
 - [ ] 4. Tes: tokenService + integrasi kasus 1–6 (G1) → commit + push main (deploy otomatis)
 - [ ] 5. Verifikasi staging G2 + G3 + G4
-- [ ] 6. Ops: naikkan maxmemory Redis prod (setelah cek RAM VM) (§4.E)
+- [x] 6. Ops: maxmemory Redis prod+staging → 100mb (runtime + repo file) — ✅ 2026-08-26 (§4.E)
 - [ ] 7. Monitor prod 7 hari (G5) — dashboard log `auth_refresh_failed:*` + Crashlytics
 - [ ] 8. Mobile §4.D masuk bundel v1.1.2 (bersama fitur statistik rentang)
 - [ ] 9. G6 uji lapangan → tandai rencana SELESAI + catat di decisions-log
