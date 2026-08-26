@@ -1,6 +1,6 @@
 # Rencana Implementasi — Polish UI v1.1.2 (Tugas / Scan / Profil)
 
-**Tanggal:** 2026-08-26 · **Status:** RENCANA — menunggu persetujuan PO · **Disusun oleh:** ox-alpha
+**Tanggal:** 2026-08-26 · **Status:** ✅ SELESAI DIEKSEKUSI (commit `87e82f3`, CI hijau) · **Disusun oleh:** ox-alpha
 
 > Empat area sentuhan akhir sebelum rilis v1.1.2. Semua **mobile-only**,
 > tanpa perubahan backend. Keputusan sudah dikonfirmasi PO pada 2026-08-26.
