@@ -1,8 +1,9 @@
 # Rencana Implementasi — Split APK per Arsitektur (Opsi A: per-ABI + auto-pick)
 
-**Tanggal:** 2026-08-26 · **Status:** RENCANA (belum dieksekusi) · **Disusun oleh:** Hermes (untuk Bagus Darmwan)
+**Tanggal:** 2026-08-26 · **Status:** RENCANA — desain matang (R1+R2), keystone empiris = Gate G4 · **Disusun oleh:** Hermes (untuk Bagus Darmwan)
 **Revisi R1 (2026-08-26):** hasil review ulang ox-alpha — perbaikan F1–F4 + rekomendasi minor (lihat bagian 11).
 **Revisi R2 (2026-08-26):** bedah sesi gagal split asli (`ses_fce66068…`) — pelajaran S1–S5 + kronologi bukti §3.A + log bagian 12.
+**Sinkronisasi (2026-08-26):** §6 diperbarui — isi v1.1.2 kini pasti (statistik rentang + penguatan auth); backend sliding session live di staging, interaksi nol dengan pipeline rilis.
 
 > Opsi A = rilis menghasilkan **3 artefak** (arm64-v8a, armeabi-v7a, universal),
 > aplikasi **mendeteksi CPU sendiri** dan mengunduh file yang tepat — petugas tetap
@@ -272,10 +273,16 @@ Dengan ini, keberadaan `apkUrls` di json = saklar Opsi A: rilis v1.1.2 (tanpa ke
 
 | Rilis | Isi | Jalur distribusi |
 |---|---|---|
-| **v1.1.2** | Editan user (kode aplikasi) | Jalur lama + R2 universal (pipeline Opsi B yang SUDAH teruji hari ini) |
+| **v1.1.2** | Konten aplikasi (sudah ter-commit 2026-08-26, menunggu rilis): fitur **statistik rentang tanggal** (kartu Bulan Ini + kalender rentang + endpoint `stats-range`) dan **penguatan mobile auth** (sesi permanen sliding: mutex refresh bersama, aturan kode-error→aksi, pesan UX spesifik) | Jalur lama + R2 universal (pipeline Opsi B teruji) |
 | **v1.1.3** | Opsi A (split + auto-pick) | release.yml versi matrix — perubahan infrastruktur MURNI, tidak dicampur fitur |
 
-Kalau editan user belum siap saat v1.1.2: rilis v1.1.2 diundur, v1.1.3 = Opsi A + editan sekaligus HANYA bila user setuju risiko (tidak direkomendasikan).
+Catatan sinkronisasi 2026-08-26: backend sliding session SUDAH live di staging
+(akan ikut production saat tag v1.1.2 — deploy prod berbasis tag). Ini TIDAK
+menyentuh pipeline rilis APK; `release.yml` tak berubah. Interaksi Opsi A:
+nol — tetap aman dieksekusi di v1.1.3 sesuai jadwal ini.
+
+Kalau editan tambahan muncul setelah v1.1.2 rilis: masukkan ke v1.1.4, JANGAN
+digabung ke v1.1.3 yang isinya Opsi A murni (retro #6).
 
 ---
 
