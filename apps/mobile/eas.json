@@ -44,6 +44,28 @@
       "env": {
         "API_URL": "https://api.lazisnu.site"
       }
+    },
+    "production-arm64": {
+      "distribution": "internal",
+      "autoIncrement": false,
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease -PabiFilter=arm64-v8a -PreactNativeArchitectures=arm64-v8a"
+      },
+      "env": {
+        "API_URL": "https://api.lazisnu.site"
+      }
+    },
+    "production-armv7": {
+      "distribution": "internal",
+      "autoIncrement": false,
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease -PabiFilter=armeabi-v7a -PreactNativeArchitectures=armeabi-v7a"
+      },
+      "env": {
+        "API_URL": "https://api.lazisnu.site"
+      }
     }
   }
 }

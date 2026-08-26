@@ -59,13 +59,18 @@ react {
 def enableProguardInReleaseBuilds = true
 
 /**
- * Split APK per arsitektur CPU SENGAJA NONAKTIF: dengan distribution
- * "internal", EAS membungkus hasil split menjadi .tar.gz sehingga petugas
- * tidak bisa memasang langsung satu file APK. Aktifkan kembali hanya saat
- * aplikasi berpindah ke Google Play (AAB). Penghematan utama sudah didapat
- * lewat reactNativeArchitectures tanpa x86/x86_64.
+ * ABI filter — parametrisasi untuk Opsi A split per-ABI
+ * (RENCANA-SPLIT-ABI-OPSI-A-2026-08-26 §5.E).
+ *
+ * Default: 2 ABI arm (build lokal/universal — status quo, tidak berubah).
+ * Build per-ABI: kirim -PabiFilter=arm64-v8a ATAU -PabiFilter=armeabi-v7a
+ * lewat profil eas.json `production-arm64` / `production-armv7`.
+ *
+ * Catatan lapangan: reactNativeArchitectures di gradle.properties TIDAK
+ * memfilter lib native pihak ketiga (ML Kit, Firebase, dll) — filter final
+ * tetap ditentukan di blok ndk.abiFilters di bawah.
  */
-def enableSeparateBuildPerCPUArchitecture = false
+def abiFilter = project.findProperty('abiFilter') ?: 'armeabi-v7a,arm64-v8a'
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -80,8 +85,10 @@ def enableSeparateBuildPerCPUArchitecture = false
  */
 def jscFlavor = 'org.webkit:android-jsc:+'
 
-// versionName WAJIB string literal — EAS (appVersionSource: remote) membaca
-// nilai ini via pola teks saat build; ekspresi Groovy akan tersimpan mentah.
+// versionName WAJIB string literal — pelajaran saga 2026-08-24: EAS membaca/
+// menyuntikkan nilai ini sebagai teks pola; ekspresi Groovy tersimpan mentah
+// (pernah tampil "appConfig.version" di HP petugas). Berlaku untuk mode
+// appVersionSource local maupun remote.
 // Sinkron dengan src/config/appConfig.json dijaga oleh tes unit
 // __tests__/config/appVersionSync.test.ts.
 
@@ -95,13 +102,10 @@ android {
         applicationId "com.lazisnucollectorapp"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        // Buang x86/x86_64 (emulator-only) dari APK universal. Catatan lapangan:
-        // reactNativeArchitectures di gradle.properties TIDAK memfilter lib
-        // native pihak ketiga (ML Kit, Firebase, dll) sehingga APK universal
-        // tetap 4 ABI ±78 MB. Filter eksplisit di sini menurunkannya ke
-        // ±45 MB (2 ABI arm — mencakup semua HP petugas).
+        // Filter eksplisit — gerbang akhir packaging lib native (RN + pihak
+        // ketiga). Nilai dari properti abiFilter di atas.
         ndk {
-            abiFilters "armeabi-v7a", "arm64-v8a"
+            abiFilters abiFilter.split(',')
         }
         versionCode 1
         versionName "1.1.1"
@@ -133,25 +137,13 @@ android {
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }
-    splits {
-        abi {
-            reset()
-            enable enableSeparateBuildPerCPUArchitecture
-            include "armeabi-v7a", "arm64-v8a"
-            universalApk true
-        }
-    }
-    // Split APK butuh versionCode unik per arsitektur agar bisa saling
-    // meng-update tanpa konflik. Offset kecil ditambahkan di belakang
-    // versionCode yang disuntikkan EAS (appVersionSource: remote).
-    applicationVariants.all { variant ->
-        variant.outputs.each { output ->
-            def abiVersionCode = ["armeabi-v7a": 1, "arm64-v8a": 2].get(output.getFilter(com.android.build.OutputFile.ABI))
-            if (abiVersionCode != null) {
-                output.versionCodeOverride = variant.versionCode * 10 + abiVersionCode
-            }
-        }
-    }
+    // CATATAN M1 (RENCANA-SPLIT-ABI §5.E): blok `splits { abi { ... } }` dan
+    // offset versionCode per-ABI era saga 2026-08-24 SENGAJA DIHAPUS — bukan
+    // sekadar dinonaktifkan. Dengan distribution "internal", EAS membungkus
+    // hasil splits menjadi .tar.gz (petugas tak bisa 1-klik), dan offset
+    // vc×10+N mengubah versionCode diam-diam bila splits tersentuh aktif.
+    // Split kini lewat jalur berbeda: build EAS TERPISAH per ABI via
+    // -PabiFilter (lihat abiFilter di atas) — satu build = satu APK.
 }
 
 dependencies {
