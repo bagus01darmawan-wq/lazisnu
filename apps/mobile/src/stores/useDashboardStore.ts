@@ -46,10 +46,7 @@ const isThisWeek = (dateStr: string): boolean => {
 const isCurrentMonth = (dateStr: string): boolean => {
   const d = new Date(dateStr);
   const now = new Date();
-  return (
-    d.getMonth() === now.getMonth() &&
-    d.getFullYear() === now.getFullYear()
-  );
+  return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
 };
 
 function mergeDashboardData(

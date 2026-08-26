@@ -20,10 +20,10 @@ export type SessionAction = 'logout' | 'keep';
  * Semua kode lain (INVALID_TOKEN, NETWORK_ERROR, UNKNOWN_ERROR, ...) = keep.
  */
 export function resolveSessionAction(errorCode?: string | null): SessionAction {
-  if (!errorCode) {return 'keep';}
-  return (SESSION_DENIAL_CODES as readonly string[]).includes(errorCode)
-    ? 'logout'
-    : 'keep';
+  if (!errorCode) {
+    return 'keep';
+  }
+  return (SESSION_DENIAL_CODES as readonly string[]).includes(errorCode) ? 'logout' : 'keep';
 }
 
 /** Pesan UX spesifik per kode — pengganti "Sesi telah berakhir" generik. */

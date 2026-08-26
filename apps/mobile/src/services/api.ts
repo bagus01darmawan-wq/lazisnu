@@ -140,9 +140,7 @@ let refreshSubscribers: RefreshSubscriber[] = [];
 // OFFICER_DISABLED) untuk pesan UX spesifik.
 let sessionExpiredHandler: ((reason?: string) => void) | null = null;
 
-export function setSessionExpiredHandler(
-  handler: ((reason?: string) => void) | null,
-) {
+export function setSessionExpiredHandler(handler: ((reason?: string) => void) | null) {
   sessionExpiredHandler = handler;
 }
 
@@ -563,10 +561,7 @@ export const tasksService = {
     return apiRequest<Task>(`/mobile/scan/${encodeURIComponent(qrCode)}`);
   },
 
-  getRangeStats: async (
-    start: string,
-    end: string,
-  ): Promise<ApiResponse<RangeStatsResponse>> => {
+  getRangeStats: async (start: string, end: string): Promise<ApiResponse<RangeStatsResponse>> => {
     const query = new URLSearchParams({start, end}).toString();
     return apiRequest<RangeStatsResponse>(`/mobile/tasks/stats-range?${query}`);
   },

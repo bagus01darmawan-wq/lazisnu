@@ -1,16 +1,12 @@
-import {
-  resolveSessionAction,
-  sessionExpiredMessage,
-} from './authSessionPolicy';
+import {resolveSessionAction, sessionExpiredMessage} from './authSessionPolicy';
 
 describe('authSessionPolicy — kode error → aksi sesi', () => {
-  it.each([
-    'REFRESH_REVOKED',
-    'ACCOUNT_DISABLED',
-    'OFFICER_DISABLED',
-  ])('kode penolakan bisnis %s → logout', code => {
-    expect(resolveSessionAction(code)).toBe('logout');
-  });
+  it.each(['REFRESH_REVOKED', 'ACCOUNT_DISABLED', 'OFFICER_DISABLED'])(
+    'kode penolakan bisnis %s → logout',
+    code => {
+      expect(resolveSessionAction(code)).toBe('logout');
+    },
+  );
 
   it.each([
     'INVALID_TOKEN', // token invalid sesaat — tidak boleh menghapus sesi lokal

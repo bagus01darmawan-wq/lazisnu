@@ -126,7 +126,9 @@ const RangeStatsScreen: React.FC = () => {
     <View style={styles.screen}>
       <AppHeader variant={'stack'} title={'Statistik Rentang'} onBack={() => navigation.goBack()} />
       <SafeAreaView edges={['bottom']} style={styles.safe}>
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled">
           {/* Pintasan preset */}
           <View style={styles.presetRow}>
             {PRESETS.map(preset => (
@@ -186,9 +188,21 @@ const RangeStatsScreen: React.FC = () => {
             {rangeComplete && !isLoading && !error && stats && (
               <>
                 <View style={styles.statGrid}>
-                  <StatBlock icon={'package-variant-closed'} value={`${stats.collected}`} label={'Penjemputan'} />
-                  <StatBlock icon={'cash-multiple'} value={formatCurrency(stats.total_nominal)} label={'Total Infak'} />
-                  <StatBlock icon={'progress-check'} value={`${stats.task_active}`} label={'Tugas Belum'} />
+                  <StatBlock
+                    icon={'package-variant-closed'}
+                    value={`${stats.collected}`}
+                    label={'Penjemputan'}
+                  />
+                  <StatBlock
+                    icon={'cash-multiple'}
+                    value={formatCurrency(stats.total_nominal)}
+                    label={'Total Infak'}
+                  />
+                  <StatBlock
+                    icon={'progress-check'}
+                    value={`${stats.task_active}`}
+                    label={'Tugas Belum'}
+                  />
                   <StatBlock
                     icon={'check-circle-outline'}
                     value={`${stats.task_completed}/${stats.task_total}`}

@@ -18,10 +18,7 @@ import {
 } from '../services/biometric';
 import {taskCache} from '../services/offline/tasks';
 import {clearAllCache} from '../services/offline/cache';
-import {
-  resolveSessionAction,
-  sessionExpiredMessage,
-} from '../services/authSessionPolicy';
+import {resolveSessionAction, sessionExpiredMessage} from '../services/authSessionPolicy';
 import {useDashboardStore} from './useDashboardStore';
 import {useTasksStore} from './useTasksStore';
 import {useCollectionsStore} from './useCollectionStore';
@@ -254,8 +251,7 @@ export const useAuthStore = create<AuthState>(set => ({
         // membuang sesi lokal; UNAUTHORIZED polos (= access token expired
         // dan refresh sempat gagal teknis) TIDAK lagi menghapus login.
         const isAuthRejection =
-          errorCode === 'SESSION_EXPIRED' ||
-          resolveSessionAction(errorCode) === 'logout';
+          errorCode === 'SESSION_EXPIRED' || resolveSessionAction(errorCode) === 'logout';
         const cachedToken = await getToken();
 
         if (!isAuthRejection && cachedToken) {
