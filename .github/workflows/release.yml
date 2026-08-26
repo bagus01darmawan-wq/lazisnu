@@ -110,7 +110,7 @@ jobs:
             echo "::error::GATE GAGAL — harus tepat 1 .apk dan nol arsip"; exit 1
           fi
 
-      - name: Gate rilis — universal: kedua ABI arm ada, x86 nol
+      - name: Gate rilis universal — kedua ABI arm ada, x86 nol
         working-directory: apps/mobile/android/app/build/outputs/apk/release
         run: |
           set -eo pipefail
