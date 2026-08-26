@@ -36,7 +36,7 @@ export const TaskSummaryCard: React.FC<TaskSummaryCardProps> = ({
 
   return (
     <View style={styles.summaryCard}>
-      <Text style={styles.summaryTitle}>Progres Tugas</Text>
+      <Text style={styles.summaryTitle}>Akumulasi</Text>
       {!!subtitle && <Text style={styles.summarySubtitle}>{subtitle}</Text>}
       <View style={styles.statsRow}>
         <Stat value={`${activeCount}`} label={'Belum'} />

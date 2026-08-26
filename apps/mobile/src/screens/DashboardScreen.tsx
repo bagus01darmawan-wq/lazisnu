@@ -14,7 +14,6 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useAuthStore, useDashboardStore, useSyncStore, useTasksStore} from '../stores';
-import {SyncBanner} from '../components/ui';
 import {Colors, DashboardLayout, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
 import {formatCurrency} from '../utils';
 import type {MainNavigationProp} from '../navigation/types';
@@ -34,7 +33,6 @@ const DashboardScreen: React.FC = () => {
     permanentFailedCount,
     pendingCorrectionsCount,
     failedCorrectionsCount,
-    isSyncing,
     checkStatus,
     triggerSync,
   } = useSyncStore();
@@ -105,23 +103,32 @@ const DashboardScreen: React.FC = () => {
               <Image source={logo} style={styles.logo} resizeMode={'contain'} />
             </View>
             <View style={styles.topActions}>
-              {permanentFailedCount ? (
-                <TouchableOpacity
-                  accessibilityRole={'button'}
-                  accessibilityLabel={'Buka data yang gagal dikirim'}
-                  onPress={openSyncIssue}
-                  style={styles.iconButton}>
-                  <Icon name={'bell-alert-outline'} size={28} color={Colors.text.white} />
-                  <View style={styles.notificationDot} />
-                </TouchableOpacity>
-              ) : (
-                <View
-                  accessible={false}
-                  importantForAccessibility={'no-hide-descendants'}
-                  style={styles.iconButton}>
-                  <Icon name={'bell-outline'} size={28} color={Colors.text.white} />
-                </View>
-              )}
+              <TouchableOpacity
+                accessibilityRole={totalSyncIssues ? 'button' : undefined}
+                accessibilityLabel={
+                  totalSyncIssues ? `${totalSyncIssues} data belum tersinkronisasi` : undefined
+                }
+                disabled={!totalSyncIssues}
+                activeOpacity={totalSyncIssues ? 0.8 : 1}
+                onPress={openSyncIssue}
+                style={styles.iconButton}>
+                <Icon
+                  name={
+                    permanentFailedCount || failedCorrectionsCount
+                      ? 'cloud-alert'
+                      : pendingCount || pendingCorrectionsCount
+                        ? 'cloud-sync-outline'
+                        : 'cloud-check-outline'
+                  }
+                  size={28}
+                  color={Colors.text.white}
+                />
+                {!!totalSyncIssues && (
+                  <View style={styles.syncCountBadge}>
+                    <Text style={styles.syncCountText}>{totalSyncIssues}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
               <TouchableOpacity
                 accessibilityRole={'button'}
                 accessibilityLabel={'Buka profil'}
@@ -134,27 +141,11 @@ const DashboardScreen: React.FC = () => {
 
           <Text style={styles.greeting}>Assalamu’alaikum, {firstName}</Text>
           <Text style={styles.date}>{date}</Text>
-
-          <SyncBanner
-            status={
-              isSyncing ? 'syncing' : totalReview ? 'failed' : totalWaiting ? 'offline' : 'synced'
-            }
-            count={totalSyncIssues || undefined}
-            subtext={
-              totalSyncIssues
-                ? totalReview
-                  ? `${totalWaiting} menunggu, ${totalReview} perlu ditinjau`
-                  : 'Akan dikirim saat koneksi tersedia'
-                : undefined
-            }
-            onPress={totalSyncIssues ? openSyncIssue : undefined}
-            style={styles.syncBanner}
-          />
         </LinearGradient>
 
         <View style={styles.body}>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>Ringkasan Hari Ini</Text>
+            <Text style={styles.summaryTitle}>Hari Ini</Text>
             <View style={styles.statsRow}>
               <Stat value={`${collected}`} label={'Dijemput'} />
               <View style={styles.statDivider} />
@@ -205,7 +196,7 @@ const DashboardScreen: React.FC = () => {
               completedCount={completedCount}
               totalCount={totalCount}
               completedNominal={completedNominal}
-              subtitle={'Rekap akumulasi sepanjang masa'}
+              subtitle={'Rekap sepanjang masa'}
             />
           </View>
         </View>
@@ -233,7 +224,7 @@ const styles = StyleSheet.create({
   hero: {
     overflow: 'hidden',
     paddingHorizontal: Layout.screenPadding,
-    paddingBottom: DashboardLayout.heroBottomPadding,
+    paddingBottom: Spacing.md,
     borderBottomLeftRadius: DashboardLayout.heroCornerRadius,
     borderBottomRightRadius: DashboardLayout.heroCornerRadius,
   },
@@ -277,16 +268,23 @@ const styles = StyleSheet.create({
   },
   topActions: {flexDirection: 'row', alignItems: 'center', gap: Spacing.sm},
   iconButton: {width: 44, height: 44, alignItems: 'center', justifyContent: 'center'},
-  notificationDot: {
+  syncCountBadge: {
     position: 'absolute',
-    right: 5,
-    top: 5,
-    width: 9,
-    height: 9,
-    borderRadius: Radius.pill,
+    right: -5,
+    top: -5,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: Colors.status.error,
-    borderWidth: 2,
-    borderColor: Colors.brand.deepGreen,
+  },
+  syncCountText: {
+    ...Typography.caption,
+    color: Colors.text.white,
+    fontWeight: '700',
+    fontSize: 11,
   },
   avatar: {
     width: 48,
@@ -300,12 +298,7 @@ const styles = StyleSheet.create({
   },
   greeting: {...Typography.heading1, color: Colors.text.white, fontSize: 23, lineHeight: 29},
   date: {...Typography.body, color: Colors.text.white, opacity: 0.86, marginTop: Spacing.xs},
-  syncBanner: {
-    // Nilai visual (bg/radius/padding/row) disediakan oleh komponen SyncBanner
-    // sesuai statusnya — style di sini hanya untuk penempatan di hero.
-    marginTop: Spacing.md,
-  },
-  body: {paddingHorizontal: Layout.screenPadding, marginTop: -DashboardLayout.heroOverlap},
+  body: {paddingHorizontal: Layout.screenPadding},
   summaryCard: {
     minHeight: DashboardLayout.summaryMinHeight,
     backgroundColor: Colors.surface.card,
