@@ -14,9 +14,11 @@ import {
   HistoryResponse,
   BatchSyncResponse,
   BatchCollectionRequestItem,
+  RangeStatsResponse,
 } from '@lazisnu/shared-types';
 import {captureAuthEvent} from '../config/crashlytics';
 import {updateBiometricToken} from './biometric';
+import {resolveSessionAction} from './authSessionPolicy';
 
 // Instance dibuat setelah encryption key tersedia. Membuka file terenkripsi
 // tanpa key lebih dulu dapat membuat MMKV menganggap file corrupt dan meresetnya.
@@ -134,18 +136,22 @@ let refreshSubscribers: RefreshSubscriber[] = [];
 // Handler SESSION_EXPIRED — dipasang oleh useAuthStore agar api.ts
 // tidak perlu import store (mencegah circular dependency).
 // Setelah dipanggil, state klien di-reset dan UI kembali ke AuthStack.
-let sessionExpiredHandler: (() => void) | null = null;
+// Argumen reason = kode penolakan bisnis (REFRESH_REVOKED / ACCOUNT_DISABLED /
+// OFFICER_DISABLED) untuk pesan UX spesifik.
+let sessionExpiredHandler: ((reason?: string) => void) | null = null;
 
-export function setSessionExpiredHandler(handler: (() => void) | null) {
+export function setSessionExpiredHandler(
+  handler: ((reason?: string) => void) | null,
+) {
   sessionExpiredHandler = handler;
 }
 
-function notifySessionExpired() {
+function notifySessionExpired(reason?: string) {
   // Telemetri post-rollout: lacak frekuensi SESSION_EXPIRED per user/device
-  captureAuthEvent('session_expired', {source: 'refresh_failed'});
+  captureAuthEvent('session_expired', {source: 'refresh_failed', reason});
   if (sessionExpiredHandler) {
     try {
-      sessionExpiredHandler();
+      sessionExpiredHandler(reason);
     } catch (e) {
       /* swallow */
     }
@@ -214,7 +220,19 @@ function isTimeoutError(error: unknown): boolean {
   );
 }
 
-type RefreshResult = {token: string | null; networkError: boolean};
+type RefreshResult = {token: string | null; networkError: boolean; denialCode?: string};
+
+/**
+ * Mutex lintas-jalur: interceptor 401 dan login biometrik sama-sama memutar
+ * refresh token single-use. Tanpa antrean ini dua jalur bisa balapan memakai
+ * token yang sama hampir bersamaan.
+ */
+let refreshQueueTail: Promise<unknown> = Promise.resolve();
+function enqueueRefresh<T>(fn: () => Promise<T>): Promise<T> {
+  const run = refreshQueueTail.then(fn, fn);
+  refreshQueueTail = run.catch(() => {});
+  return run;
+}
 
 async function refreshAccessToken(): Promise<RefreshResult> {
   const refreshToken = getRefreshToken();
@@ -250,13 +268,17 @@ async function refreshAccessToken(): Promise<RefreshResult> {
       }
       return {token: newToken, networkError: false};
     }
-    // Refresh gagal: hanya bersihkan token jika server secara eksplisit
-    // menolak kredensial (401/403). Untuk 5xx/network/timeout, biarkan token
-    // agar retry berikutnya masih bisa mencoba (lihat review P3).
-    if (response.status === 401 || response.status === 403) {
+
+    // Sesi Permanen Sliding: HANYA penolakan bisnis eksplisit yang boleh
+    // membersihkan sesi lokal. INVALID_TOKEN / 5xx / bentuk tak dikenal =
+    // treat sebagai masalah sementara — token dipertahankan agar petugas
+    // tidak ter-logout saat sinyal buruk.
+    const errorCode = data?.error?.code as string | undefined;
+    if (resolveSessionAction(errorCode) === 'logout') {
       await clearToken();
+      return {token: null, networkError: false, denialCode: errorCode};
     }
-    return {token: null, networkError: response.status >= 500};
+    return {token: null, networkError: true};
   } catch {
     // Network error / timeout / JSON parse error — JANGAN clearToken di sini.
     // Token masih bisa valid; user bisa retry saat online.
@@ -342,7 +364,8 @@ const apiRequest = async <T>(
       }
 
       isRefreshing = true;
-      const refreshResult = await refreshAccessToken();
+      // Mutex bersama dengan jalur biometrik — cegah dua rotasi paralel
+      const refreshResult = await enqueueRefresh(() => refreshAccessToken());
       isRefreshing = false;
 
       if (refreshResult.token) {
@@ -350,6 +373,8 @@ const apiRequest = async <T>(
         // Retry original request dengan token baru
         return apiRequest<T>(endpoint, options, true);
       } else if (refreshResult.networkError) {
+        // Masalah teknis (jaringan/server/token invalid sesaat) — sesi lokal
+        // DIPERTAHANKAN; petugas tidak ter-logout, cukup gagal-soft.
         onRefreshFailed();
         return {
           success: false,
@@ -359,11 +384,10 @@ const apiRequest = async <T>(
           },
         };
       } else {
-        // Refresh gagal — flush semua subscriber yang menunggu agar
-        // tidak menggantung, lalu broadcast SESSION_EXPIRED agar UI
-        // kembali ke AuthStack lewat useAuthStore.forceLogout.
+        // Penolakan bisnis eksplisit (revoked/disabled) — flush subscriber lalu
+        // broadcast SESSION_EXPIRED agar UI kembali ke AuthStack.
         onRefreshFailed();
-        notifySessionExpired();
+        notifySessionExpired(refreshResult.denialCode);
         return {
           success: false,
           error: {code: 'SESSION_EXPIRED', message: 'Sesi telah berakhir. Silakan login kembali.'},
@@ -447,14 +471,17 @@ export const authService = {
     // berbeda) — pemanggil (login biometrik) butuh kode error asli server
     // (REFRESH_REVOKED vs NETWORK_ERROR) untuk memutuskan disable biometrik.
     try {
-      const response = await fetchWithTimeout(`${API_BASE_URL}/auth/refresh`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          refresh_token: refreshToken,
-          device_id: getOrCreateDeviceId(),
+      // Mutex bersama dengan interceptor — rotasi tidak boleh balapan
+      const response = await enqueueRefresh(() =>
+        fetchWithTimeout(`${API_BASE_URL}/auth/refresh`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            refresh_token: refreshToken,
+            device_id: getOrCreateDeviceId(),
+          }),
         }),
-      });
+      );
       const data = await response.json();
       if (!response.ok) {
         return {
@@ -534,6 +561,14 @@ export const tasksService = {
 
   getTaskByQR: async (qrCode: string): Promise<ApiResponse<Task>> => {
     return apiRequest<Task>(`/mobile/scan/${encodeURIComponent(qrCode)}`);
+  },
+
+  getRangeStats: async (
+    start: string,
+    end: string,
+  ): Promise<ApiResponse<RangeStatsResponse>> => {
+    const query = new URLSearchParams({start, end}).toString();
+    return apiRequest<RangeStatsResponse>(`/mobile/tasks/stats-range?${query}`);
   },
 };
 

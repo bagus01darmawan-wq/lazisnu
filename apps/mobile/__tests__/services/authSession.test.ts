@@ -91,7 +91,29 @@ describe('Sesi & Biometrik (initializeAuth / refresh / biometrik)', () => {
       setRefreshToken('refresh_tok_revoked');
       seedCachedUser();
 
-      // 403 tidak memicu interceptor auto-refresh (bukan 401)
+      // 403 tidak memicu interceptor auto-refresh (bukan 401).
+      // Kode penolakan BISNIS eksplisit = satu-satunya pemicu pembersihan.
+      global.fetch = jest.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        json: async () => ({
+          success: false,
+          error: {code: 'ACCOUNT_DISABLED', message: 'Akun tidak aktif'},
+        }),
+      });
+
+      await useAuthStore.getState().initializeAuth();
+
+      const state = useAuthStore.getState();
+      expect(state.isAuthenticated).toBe(false);
+      expect(state.token).toBeNull();
+    });
+
+    it('FORBIDDEN generik TIDAK membersihkan sesi (sliding policy)', async () => {
+      setToken('access_tok_keep');
+      setRefreshToken('refresh_tok_keep');
+      seedCachedUser();
+
       global.fetch = jest.fn().mockResolvedValueOnce({
         ok: false,
         status: 403,
@@ -101,8 +123,8 @@ describe('Sesi & Biometrik (initializeAuth / refresh / biometrik)', () => {
       await useAuthStore.getState().initializeAuth();
 
       const state = useAuthStore.getState();
-      expect(state.isAuthenticated).toBe(false);
-      expect(state.token).toBeNull();
+      expect(state.isAuthenticated).toBe(true);
+      expect(state.token).toBe('access_tok_keep');
     });
   });
 

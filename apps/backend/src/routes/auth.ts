@@ -8,7 +8,7 @@ import { users, officers, userSessions } from '../database/schema';
 import { eq, or, and, isNull } from 'drizzle-orm';
 import { generateTokens } from '../middleware/auth';
 import { otpService } from '../services/otp';
-import { storeDeviceSession, validateDeviceSession, revokeDeviceSession, revokeAllUserSessions } from '../services/tokenService';
+import { storeDeviceSession, isDeviceRevoked, revokeDeviceSession, revokeAllUserSessions, clearDeviceRevocation } from '../services/tokenService';
 import { createSession, getUserSessions } from '../services/sessionService';
 import { ApiResponse, User } from '@lazisnu/shared-types';
 import { isJwtErrorLike } from '../utils/error-guards';
@@ -185,6 +185,9 @@ export async function authRoutes(fastify: FastifyInstance) {
       const tokens = generateTokens(payload, fastify, undefined, deviceId);
 
       await storeDeviceSession(user.id, tokens.did, tokens.refreshJti, 365 * 24 * 60 * 60);
+      // Login kredensial berhasil pada device ini = bukti pemegang akun hadir —
+      // hapus blokir lama agar refresh berikutnya tidak tertolak denylist usang
+      await clearDeviceRevocation(user.id, tokens.did);
 
       await createSession({
         userId: user.id,
@@ -408,6 +411,8 @@ export async function authRoutes(fastify: FastifyInstance) {
 
       // Simpan sesi per-device ke Redis
       await storeDeviceSession(officer.user.id, tokens.did, tokens.refreshJti, 365 * 24 * 60 * 60);
+      // Login OTP berhasil = bukti pemegang akun hadir — hapus blokir lama device ini
+      await clearDeviceRevocation(officer.user.id, tokens.did);
 
       // Simpan session ke DB
       await createSession({
@@ -452,41 +457,53 @@ export async function authRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // POST /auth/refresh
+  // POST /auth/refresh — Sesi Permanen Sliding (RENCANA-SESI-PERMANEN-SLIDING)
+  // Prinsip: kegagalan infrastruktur TIDAK BOLEH me-logout petugas.
+  //  - Redis = daftar blokir eksplisit saja (fail-open).
+  //  - Rotasi lunak: token lama tidak dicabut; kedaluwarsa alami. Respons yang
+  //    hilang karena sinyal tidak lagi mematikan sesi (F1).
+  //  - did stabil per perangkat — memperbaiki bug deterministik F0 (sebelumnya
+  //    setiap rotasi menghasilkan did acak baru sehingga refresh ke-2 selalu
+  //    REFRESH_REVOKED).
   fastify.post('/refresh', {
     config: {
       rateLimit: { max: 30, timeWindow: '5 minutes' }
     },
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { refresh_token } = request.body as { refresh_token: string };
+      const { refresh_token } = request.body as { refresh_token?: string };
 
       if (!refresh_token) {
         request.log.warn({ ip: request.ip, userAgent: request.headers['user-agent'] }, 'auth_refresh_failed:missing_token');
         return sendError(reply, 400, 'MISSING_TOKEN', 'Refresh token diperlukan');
       }
 
-      // 1. Verify refresh token dengan secret khusus
-      const decoded = await request.server.jwt.verify<any>(refresh_token, { key: config.JWT_REFRESH_SECRET });
+      // 1. Verifikasi tanda tangan + masa berlaku — satu-satunya sumber 401 INVALID_TOKEN
+      let decoded: any;
+      try {
+        decoded = await request.server.jwt.verify<any>(refresh_token, { key: config.JWT_REFRESH_SECRET });
+      } catch (jwtError) {
+        const jwtCode = isJwtErrorLike(jwtError) ? jwtError.code : 'verify_failed';
+        request.log.warn({ jwtCode, ip: request.ip, userAgent: request.headers['user-agent'] }, 'auth_refresh_failed:invalid_token');
+        return sendError(reply, 401, 'INVALID_TOKEN', 'Refresh token tidak valid');
+      }
 
       if (decoded.tokenType !== 'refresh') {
         request.log.warn({ userId: decoded.userId, tokenType: decoded.tokenType, ip: request.ip, userAgent: request.headers['user-agent'] }, 'auth_refresh_failed:invalid_token_type');
         return sendError(reply, 401, 'INVALID_TOKEN', 'Token yang diberikan bukan refresh token');
       }
 
-      // 2. Validasi sesi per-device (Bab 20 Fase 1)
-      const deviceId = decoded.did || decoded.jti;
-      if (decoded.jti) {
-        const isValid = await validateDeviceSession(decoded.userId, deviceId, decoded.jti);
-        if (!isValid) {
-          request.log.warn({ userId: decoded.userId, deviceId, jti: decoded.jti, ip: request.ip, userAgent: request.headers['user-agent'] }, 'auth_refresh_failed:revoked');
-          return sendError(reply, 401, 'REFRESH_REVOKED', 'Refresh token sudah tidak berlaku');
-        }
-        // Revoke jti lama (rotation) — hanya di Redis, DB session ditutup nanti
-        await revokeDeviceSession(decoded.userId, deviceId);
+      // Fallback jti hanya untuk token legacy pra-F0 yang tidak membawa did
+      const deviceId: string = decoded.did || decoded.jti;
+
+      // 2. Denylist eksplisit (fail-open — Redis bermasalah tidak menolak sesi)
+      const revoked = await isDeviceRevoked(decoded.userId, deviceId);
+      if (revoked) {
+        request.log.warn({ userId: decoded.userId, deviceId, ip: request.ip, userAgent: request.headers['user-agent'] }, 'auth_refresh_failed:revoked');
+        return sendError(reply, 401, 'REFRESH_REVOKED', 'Refresh token sudah dicabut');
       }
 
-      // 3. Check user active status
+      // 3-4. Status akun selalu dari database (nonaktif = terblokir cepat)
       const userRes = await db.select().from(users).where(eq(users.id, decoded.userId)).limit(1);
       const user = userRes[0];
 
@@ -517,37 +534,48 @@ export async function authRoutes(fastify: FastifyInstance) {
         officerId: freshOfficerId,
       };
 
-      // 4. Generate new tokens dengan jti baru
-      const tokens = generateTokens(newPayload, request.server);
+      // 5. Rotasi lunak — did DITERUSKAN (F0); jti lama dibiarkan hidup sampai exp-nya
+      const tokens = generateTokens(newPayload, request.server, undefined, deviceId);
 
-      // 5. Simpan sesi baru ke Redis + DB
+      // 6. Catatan jti terakhir (informatif — UI daftar perangkat), fail-open
       await storeDeviceSession(user.id, deviceId, tokens.refreshJti, 365 * 24 * 60 * 60);
 
-      // Tutup session DB lama (tandai revokedAt)
-      if (decoded.jti) {
-        await db.update(userSessions)
-          .set({ revokedAt: new Date() } as any)
-          .where(eq(userSessions.jti, decoded.jti))
-          .catch(() => {}); // best-effort
-      }
+      // 7. userSessions: SATU baris terbuka per device (update, bukan insert baru)
+      try {
+        const openRows = await db.select().from(userSessions).where(and(
+          eq(userSessions.userId, user.id),
+          eq(userSessions.deviceId, deviceId),
+          isNull(userSessions.revokedAt),
+        )).limit(1);
 
-      await createSession({
-        userId: user.id,
-        jti: tokens.refreshJti,
-        deviceId,
-        deviceLabel: undefined,
-        userAgent: request.headers['user-agent'] || undefined,
-        ipAddress: request.ip,
-      });
+        if (openRows[0]) {
+          await db.update(userSessions)
+            .set({ jti: tokens.refreshJti, lastUsedAt: new Date() } as any)
+            .where(eq(userSessions.id, openRows[0].id));
+        } else {
+          await createSession({
+            userId: user.id,
+            jti: tokens.refreshJti,
+            deviceId,
+            userAgent: request.headers['user-agent'] || undefined,
+            ipAddress: request.ip,
+          });
+        }
+      } catch (sessionErr) {
+        // Best-effort — kegagalan pencatatan sesi tidak boleh menggagalkan refresh
+        request.log.warn({ err: sessionErr }, 'refresh_session_upsert_failed');
+      }
 
       return sendSuccess(reply, {
         access_token: tokens.accessToken,
         refresh_token: tokens.refreshToken,
       });
     } catch (error) {
-      const jwtCode = isJwtErrorLike(error) ? error.code : (error instanceof Error ? error.message : 'unknown');
-      request.log.warn({ jwtCode, ip: request.ip, userAgent: request.headers['user-agent'] }, 'auth_refresh_failed:invalid_token');
-      return sendError(reply, 401, 'INVALID_TOKEN', 'Refresh token tidak valid');
+      // F2: semua jalur 401 legitimen sudah return di atas — apapun yang lolos
+      // ke sini adalah gangguan infrastruktur → 503 agar klien TIDAK membersihkan
+      // token lokal dan mencoba lagi nanti.
+      request.log.error({ err: error, ip: request.ip }, 'auth_refresh_failed:service_unavailable');
+      return sendError(reply, 503, 'SERVICE_UNAVAILABLE', 'Layanan autentikasi sedang tidak tersedia');
     }
   });
 
@@ -573,7 +601,13 @@ export async function authRoutes(fastify: FastifyInstance) {
           deviceId = decoded.did || decoded.jti || null;
 
           if (userId && deviceId) {
-            await revokeDeviceSession(userId, deviceId);
+            // Denylist TTL = sisa umur token yang dicabut (self-cleaning);
+            // token yang sudah exp tidak perlu ditandai
+            const nowSec = Math.floor(Date.now() / 1000);
+            const remainTtl = typeof decoded.exp === 'number' ? decoded.exp - nowSec : 365 * 24 * 60 * 60;
+            if (remainTtl > 0) {
+              await revokeDeviceSession(userId, deviceId, remainTtl);
+            }
           }
 
           // Tutup session DB

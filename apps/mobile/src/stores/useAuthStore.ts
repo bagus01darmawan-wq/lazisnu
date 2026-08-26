@@ -18,6 +18,10 @@ import {
 } from '../services/biometric';
 import {taskCache} from '../services/offline/tasks';
 import {clearAllCache} from '../services/offline/cache';
+import {
+  resolveSessionAction,
+  sessionExpiredMessage,
+} from '../services/authSessionPolicy';
 import {useDashboardStore} from './useDashboardStore';
 import {useTasksStore} from './useTasksStore';
 import {useCollectionsStore} from './useCollectionStore';
@@ -246,11 +250,12 @@ export const useAuthStore = create<AuthState>(set => ({
         // ada sinyal membuat petugas lapangan terlempar ke halaman Login dan
         // cache offline (dashboard/tugas/riwayat) ikut terhapus.
         const errorCode = result.error?.code;
+        // Sesi Permanen Sliding: hanya penolakan bisnis eksplisit yang
+        // membuang sesi lokal; UNAUTHORIZED polos (= access token expired
+        // dan refresh sempat gagal teknis) TIDAK lagi menghapus login.
         const isAuthRejection =
-          errorCode === 'UNAUTHORIZED' ||
           errorCode === 'SESSION_EXPIRED' ||
-          errorCode === 'REFRESH_REVOKED' ||
-          errorCode === 'FORBIDDEN';
+          resolveSessionAction(errorCode) === 'logout';
         const cachedToken = await getToken();
 
         if (!isAuthRejection && cachedToken) {
@@ -460,8 +465,8 @@ export const useAuthStore = create<AuthState>(set => ({
   },
 
   forceLogout: reason => {
-    // Dipanggil saat SESSION_EXPIRED dari api.ts (refresh gagal).
-    // Tidak panggil backend — token sudah tidak valid.
+    // Dipanggil saat SESSION_EXPIRED dari api.ts — HANYA untuk penolakan
+    // bisnis eksplisit (revoked/disabled). Tidak panggil backend — token sudah tidak valid.
     // Crashlytics: telemetri untuk monitoring post-rollout
     setAuthTag('force_logout', 'true');
     captureAuthEvent('force_logout', {reason: reason || 'unknown'});
@@ -475,7 +480,7 @@ export const useAuthStore = create<AuthState>(set => ({
       user: null,
       token: null,
       isAuthenticated: false,
-      error: reason || 'Sesi telah berakhir. Silakan login kembali.',
+      error: sessionExpiredMessage(reason),
       sessionRecoveryAvailable: useAuthStore.getState().biometricEnabled,
     });
   },
@@ -641,8 +646,10 @@ export const useAuthStore = create<AuthState>(set => ({
 }));
 
 // Daftarkan handler SESSION_EXPIRED ke api.ts agar saat refresh token
-// gagal, store otomatis paksa logout dan UI kembali ke AuthStack.
+// ditolak dengan penolakan bisnis eksplisit (revoked/disabled), store
+// otomatis paksa logout dan UI kembali ke AuthStack.
+// Masalah teknis (jaringan/server) TIDAK pernah sampai sini — sesi dipertahankan.
 // Side-effect ini aman: hanya jalan sekali saat module di-load.
-setSessionExpiredHandler(() => {
-  useAuthStore.getState().forceLogout();
+setSessionExpiredHandler(reason => {
+  useAuthStore.getState().forceLogout(reason);
 });

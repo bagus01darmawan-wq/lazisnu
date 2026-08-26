@@ -476,15 +476,16 @@ describe('Session Management (04-F1)', () => {
     const token2 = refreshRes.body.data.refresh_token;
     sessionToken = token2;
 
-    // Token lama (token1) tidak bisa dipakai refresh lagi (sudah dirotasi)
+    // Token lama (token1) TETAP SAH — Sesi Permanen Sliding: rotasi tidak
+    // mencabut jti lama; respons hilang karena sinyal tidak mematikan sesi.
+    // (Perilaku lama: 401 REFRESH_REVOKED — sumber logout misterius di lapangan.)
     (db.select as jest.Mock).mockImplementation(() => ({ from: mockFrom2 }));
     const refreshOld = await request(app.server)
       .post('/v1/auth/refresh')
       .send({ refresh_token: token1 });
-    
-    // Token lama sudah direvoke (rotasi) → 401 REFRESH_REVOKED
-    expect(refreshOld.status).toBe(401);
-    expect(refreshOld.body.error.code).toBe('REFRESH_REVOKED');
+
+    expect(refreshOld.status).toBe(200);
+    expect(refreshOld.body.data.refresh_token).toBeDefined();
 
     // ── 3. Logout → refresh gagal ──
     (db.select as jest.Mock).mockImplementation(() => ({ from: mockFrom2 }));

@@ -1,25 +1,35 @@
 /**
- * Token Service — per-device session keys (Bab 20 Fase 1).
+ * Token Service — Sesi Permanen Sliding (RENCANA-SESI-PERMANEN-SLIDING-2026-08-26).
+ *
+ * Model baru: Redis BUKAN gerbang wajib, melainkan daftar blokir eksplisit.
  *
  * Struktur Redis:
- *   refresh:{userId}:{deviceId}  → jti aktif (1 key per user per perangkat)
- *   refresh:devices:{userId}     → Redis SET berisi deviceId aktif
+ *   refresh:{userId}:{deviceId}   → jti TERAKHIR (informatif — UI perangkat aktif)
+ *   revoked:{userId}:{deviceId}   → penanda blokir eksplisit (TTL = sisa umur token
+ *                                   saat dicabut; self-cleaning)
+ *   refresh:devices:{userId}      → Redis SET berisi deviceId yang pernah login
  *
- * Perilaku:
- *   - Login ulang device sama → overwrite key (jti lama tidak berlaku lagi)
- *   - Revoke 1 device → DEL key + SREM dari registry
- *   - Revoke all → SMEMBERS registry → DEL semua key
+ * Perilaku kunci:
+ *   - Refresh TIDAK lagi mencabut jti lama (rotasi lunak / sliding).
+ *     Respons hilang karena sinyal tidak lagi mematikan sesi.
+ *   - Semua operasi Redis fail-open dengan log: kegagalan Redis TIDAK BOLEH
+ *     membuat petugas ter-logout. Kegagalan hanya menunda pencabutan eksplisit.
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { getRedis, redisConnection } from '../config/redis';
-import { config, isProduction } from '../config/env';
-import { AppError } from '../utils/AppError';
+import { getRedis } from '../config/redis';
+import { isProduction } from '../config/env';
 
 const REFRESH_PREFIX = 'refresh:';
+const REVOKED_PREFIX = 'revoked:';
 const DEVICES_PREFIX = 'refresh:devices:';
 
 const DEFAULT_TTL = 365 * 24 * 60 * 60; // 365 hari dalam detik
+
+function warnRedis(operation: string, error: unknown): void {
+  // Fail-open: kegagalan Redis dicatat, tidak pernah dilempar ke caller auth.
+  console.warn(`[tokenService] redis error pada ${operation}:`, error);
+}
 
 /**
  * Buat jti (JWT ID) baru untuk refresh token.
@@ -29,8 +39,7 @@ export function generateJti(): string {
 }
 
 /**
- * Simpan sesi per device ke Redis.
- * Overwrite natural jika login ulang device sama.
+ * Catat jti terakhir per device (informatif — dipakai UI daftar perangkat).
  */
 export async function storeDeviceSession(
   userId: string,
@@ -39,127 +48,117 @@ export async function storeDeviceSession(
   ttlSeconds: number = DEFAULT_TTL
 ): Promise<void> {
   const redis = getRedis();
-  if (!redis) return;
-
-  const key = `${REFRESH_PREFIX}${userId}:${deviceId}`;
-  const registryKey = `${DEVICES_PREFIX}${userId}`;
-
-  await redis.set(key, jti, 'EX', ttlSeconds);
-  await redis.sadd(registryKey, deviceId);
-  await redis.expire(registryKey, ttlSeconds);
+  if (!redis) {
+    if (isProduction) warnRedis('storeDeviceSession', 'redis unavailable');
+    return;
+  }
+  try {
+    const key = `${REFRESH_PREFIX}${userId}:${deviceId}`;
+    const registryKey = `${DEVICES_PREFIX}${userId}`;
+    await redis.set(key, jti, 'EX', ttlSeconds);
+    await redis.sadd(registryKey, deviceId);
+    await redis.expire(registryKey, ttlSeconds);
+  } catch (error) {
+    warnRedis('storeDeviceSession', error);
+  }
 }
 
 /**
- * Validasi sesi per device.
- * Returns true jika jti cocok.
- * Fail-closed di production jika Redis tidak tersedia (D-08).
+ * Cek apakah device EXPLISIT dicabut (oleh user sendiri atau admin).
+ * Fail-open: Redis down / key hilang → false (sesi tetap diizinkan).
  */
-export async function validateDeviceSession(
+export async function isDeviceRevoked(
   userId: string,
-  deviceId: string,
-  jti: string
+  deviceId: string
 ): Promise<boolean> {
   const redis = getRedis();
-
-  if (!redis) {
-    if (isProduction) {
-      throw new AppError(
-        'SERVICE_UNAVAILABLE',
-        'Layanan autentikasi tidak tersedia',
-        503,
-        false
-      );
-    }
-    return true; // development: fallback izinkan
+  if (!redis) return false;
+  try {
+    const flag = await redis.get(`${REVOKED_PREFIX}${userId}:${deviceId}`);
+    return flag !== null;
+  } catch (error) {
+    warnRedis('isDeviceRevoked', error);
+    return false;
   }
-
-  const storedJti = await redis.get(`${REFRESH_PREFIX}${userId}:${deviceId}`);
-  return storedJti === jti;
 }
 
 /**
- * Revoke 1 sesi device.
+ * Cabut sesi device secara eksplisit:
+ * tulis denylist (TTL = sisa umur token saat dicabut) + bersihkan catatan aktif.
  */
 export async function revokeDeviceSession(
+  userId: string,
+  deviceId: string,
+  denylistTtlSeconds: number = DEFAULT_TTL
+): Promise<void> {
+  const redis = getRedis();
+  if (!redis) {
+    if (isProduction) warnRedis('revokeDeviceSession', 'redis unavailable');
+    return;
+  }
+  try {
+    const ttl = Math.max(1, Math.floor(denylistTtlSeconds));
+    await redis.set(`${REVOKED_PREFIX}${userId}:${deviceId}`, '1', 'EX', ttl);
+    await redis.del(`${REFRESH_PREFIX}${userId}:${deviceId}`);
+    await redis.srem(`${DEVICES_PREFIX}${userId}`, deviceId);
+  } catch (error) {
+    warnRedis('revokeDeviceSession', error);
+  }
+}
+
+/**
+ * Hapus penanda blokir — dipanggil saat login ulang BERHASIL dengan kredensial
+ * (OTP/password) pada device yang sama: bukti fisik pemegang akun hadir,
+ * sehingga blokir lama tidak boleh menggantung selamanya.
+ */
+export async function clearDeviceRevocation(
   userId: string,
   deviceId: string
 ): Promise<void> {
   const redis = getRedis();
   if (!redis) return;
-
-  const key = `${REFRESH_PREFIX}${userId}:${deviceId}`;
-  const registryKey = `${DEVICES_PREFIX}${userId}`;
-
-  await redis.del(key);
-  await redis.srem(registryKey, deviceId);
+  try {
+    await redis.del(`${REVOKED_PREFIX}${userId}:${deviceId}`);
+  } catch (error) {
+    warnRedis('clearDeviceRevocation', error);
+  }
 }
 
 /**
- * Revoke semua sesi user.
- * Jika exceptDeviceId diberikan, sesi device itu dipertahankan.
+ * Cabut semua sesi user kecuali deviceId yang dikecualikan.
+ * Setiap device yang dicabut mendapat denylist TTL = denylistTtlSeconds.
+ * Returns daftar deviceId yang efektif dicabut (yang berhasil ditandai).
  */
 export async function revokeAllUserSessions(
   userId: string,
-  exceptDeviceId?: string
+  exceptDeviceId?: string,
+  denylistTtlSeconds: number = DEFAULT_TTL
 ): Promise<string[]> {
   const redis = getRedis();
   if (!redis) return [];
 
   const registryKey = `${DEVICES_PREFIX}${userId}`;
-  const deviceIds = await redis.smembers(registryKey);
-  const revoked: string[] = [];
+  let deviceIds: string[] = [];
+  try {
+    deviceIds = await redis.smembers(registryKey);
+  } catch (error) {
+    warnRedis('revokeAllUserSessions:smembers', error);
+    return [];
+  }
 
+  const revoked: string[] = [];
   for (const did of deviceIds) {
     if (did === exceptDeviceId) continue;
-
-    const key = `${REFRESH_PREFIX}${userId}:${did}`;
-    await redis.del(key);
-    await redis.srem(registryKey, did);
-    revoked.push(did);
+    try {
+      const ttl = Math.max(1, Math.floor(denylistTtlSeconds));
+      await redis.set(`${REVOKED_PREFIX}${userId}:${did}`, '1', 'EX', ttl);
+      await redis.del(`${REFRESH_PREFIX}${userId}:${did}`);
+      await redis.srem(registryKey, did);
+      revoked.push(did);
+    } catch (error) {
+      warnRedis('revokeAllUserSessions:device', error);
+    }
   }
 
   return revoked;
-}
-
-// ─── Fungsi lama (deprecated — dipertahankan untuk backward compat) ───
-
-/**
- * @deprecated Gunakan storeDeviceSession()
- */
-export async function storeRefreshJti(jti: string, userId: string, ttlSeconds: number): Promise<void> {
-  const deviceId = jti; // fallback: jti sebagai deviceId
-  await storeDeviceSession(userId, deviceId, jti, ttlSeconds);
-}
-
-/**
- * @deprecated Gunakan validateDeviceSession()
- */
-export async function validateRefreshJti(jti: string): Promise<string | null> {
-  const redis = getRedis();
-  if (!redis) return isProduction ? null : 'redis-unavailable';
-
-  // Pencarian linear — only for backward compat
-  const keys = await redis.keys(`${REFRESH_PREFIX}*:${jti}`);
-  if (keys.length === 0) return null;
-  return jti;
-}
-
-/**
- * @deprecated Gunakan revokeDeviceSession()
- */
-export async function revokeRefreshJti(jti: string): Promise<void> {
-  const redis = getRedis();
-  if (!redis) return;
-
-  const keys = await redis.keys(`${REFRESH_PREFIX}*:${jti}`);
-  for (const key of keys) {
-    await redis.del(key);
-  }
-}
-
-/**
- * @deprecated Gunakan revokeAllUserSessions()
- */
-export async function revokeAllUserRefreshJti(userId: string): Promise<void> {
-  await revokeAllUserSessions(userId);
 }

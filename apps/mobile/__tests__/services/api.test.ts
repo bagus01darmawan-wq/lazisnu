@@ -256,7 +256,7 @@ describe('API Service (api.ts)', () => {
       expect(await getToken()).toBe('shared_new_token');
     });
 
-    it('triggers sessionExpiredHandler when refresh token is rejected with 401', async () => {
+    it('triggers sessionExpiredHandler when refresh is denied by business rule (REFRESH_REVOKED)', async () => {
       await setToken('expired_token');
       setRefreshToken('revoked_refresh_token');
 
@@ -264,7 +264,7 @@ describe('API Service (api.ts)', () => {
       setSessionExpiredHandler(sessionExpiredMock);
 
       // Request -> 401
-      // Refresh -> 401 (Refresh failed!)
+      // Refresh -> 401 dengan kode penolakan BISNIS eksplisit
       global.fetch = jest
         .fn()
         .mockResolvedValueOnce({
@@ -275,13 +275,53 @@ describe('API Service (api.ts)', () => {
         .mockResolvedValueOnce({
           ok: false,
           status: 401,
-          json: async () => ({success: false, error: 'INVALID_REFRESH_TOKEN'}),
+          json: async () => ({
+            success: false,
+            error: {code: 'REFRESH_REVOKED', message: 'dicabut'},
+          }),
         });
 
       const response = await collectionService.getHistory();
       expect(response.success).toBe(false);
       expect(response.error?.code).toBe('SESSION_EXPIRED');
+      expect(sessionExpiredMock).toHaveBeenCalledWith('REFRESH_REVOKED');
       expect(sessionExpiredMock).toHaveBeenCalledTimes(1);
+
+      setSessionExpiredHandler(null);
+    });
+
+    it('KEEPS the local session when refresh fails with technical INVALID_TOKEN (sliding policy)', async () => {
+      await setToken('expired_token');
+      setRefreshToken('still_hopeful_refresh_token');
+
+      const sessionExpiredMock = jest.fn();
+      setSessionExpiredHandler(sessionExpiredMock);
+
+      // Request -> 401; Refresh -> 401 INVALID_TOKEN (bukan penolakan bisnis)
+      global.fetch = jest
+        .fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          json: async () => ({success: false, error: 'TOKEN_EXPIRED'}),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          json: async () => ({
+            success: false,
+            error: {code: 'INVALID_TOKEN', message: 'tidak valid'},
+          }),
+        });
+
+      const response = await collectionService.getHistory();
+      expect(response.success).toBe(false);
+      expect(response.error?.code).toBe('NETWORK_ERROR');
+
+      // Sesi lokal DIPERTAHANKAN — petugas tidak ter-logout
+      expect(sessionExpiredMock).not.toHaveBeenCalled();
+      expect(await getToken()).toBe('expired_token');
+      expect(await getRefreshToken()).toBe('still_hopeful_refresh_token');
 
       setSessionExpiredHandler(null);
     });

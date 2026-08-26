@@ -222,18 +222,32 @@ describe('Auth Store (useAuthStore.ts)', () => {
       expect(getRefreshToken()).toBeNull();
     });
 
-    it('performs forceLogout on session expiration', () => {
+    it('performs forceLogout on session expiration with business-denial reason', () => {
       useAuthStore.setState({
         isAuthenticated: true,
         user: {id: 'usr_1', full_name: 'User'} as any,
       });
 
-      useAuthStore.getState().forceLogout('Sesi telah berakhir');
+      useAuthStore.getState().forceLogout('REFRESH_REVOKED');
 
       const state = useAuthStore.getState();
       expect(state.isAuthenticated).toBe(false);
       expect(state.user).toBeNull();
-      expect(state.error).toBe('Sesi telah berakhir');
+      // Pesan UX spesifik sesuai kode penolakan
+      expect(state.error).toMatch(/dicabut/i);
+    });
+
+    it('forceLogout dengan kode tak dikenal memakai pesan fallback generik', () => {
+      useAuthStore.setState({
+        isAuthenticated: true,
+        user: {id: 'usr_2', full_name: 'User Dua'} as any,
+      });
+
+      useAuthStore.getState().forceLogout('APA_SAJA');
+
+      const state = useAuthStore.getState();
+      expect(state.isAuthenticated).toBe(false);
+      expect(state.error).toBe('Sesi telah berakhir. Silakan login kembali.');
     });
   });
 
