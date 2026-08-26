@@ -16,7 +16,7 @@
 | Item | Keputusan |
 |---|---|
 | Artefak per rilis | 3 APK: `lazisnu-<ver>-arm64.apk`, `lazisnu-<ver>-armv7.apk`, `lazisnu-<ver>.apk` (universal) |
-| Ukuran unduhan petugas | **Target ±33–36 MB (arm64)** — dari 40,5 MB. ⚠️ Angka final WAJIB diverifikasi di Gate G4 sebelum diklaim di mana pun: universal saat ini sudah 2 ABI (x86 dibuang, build.gradle:104), jadi split hanya membuang ±setengah direktori `lib/` — estimasi awal "±30 MB / 25%" terbukti terlalu optimistis (F3) |
+| Ukuran unduhan petugas | **TERKALIBRASI (trial CI 2026-08-26): arm64 = 28 MB** (29.293.431 B, −31% dari 40,5 MB) · armv7 = 22 MB (22.776.396 B, −46%) · universal tetap ±40,5 MB. Gate isi lib/ positif+negatif & tepat-1-artefak lolos kedua build (run `32937731538`) — angka final EAS dikonfirmasi ulang saat G4 resmi pasca-1 Sep |
 | Pemilihan file | **Otomatis oleh aplikasi** (modul native kecil, ~40 baris Kotlin) — tanpa input petugas |
 | Cara membangun | **3 build EAS per rilis** (arm64 + armv7 + universal; masing-masing 1 ABI / 2 ABI utk universal) — BUKAN gradle `splits` (sumber saga `.tar.gz`) |
 | versionCode | Satu angka untuk keduanya (mis. 21) — aman: 2 APK beda ABI tidak pernah terpasang di perangkat yang sama |
@@ -245,7 +245,7 @@ jobs:
         univ. : KEDUA direktori ADA
       ("tepat 1 direktori" saja TIDAK cukup — build armv7 yang salah bangun
        jadi arm64 tetap lolos pola itu)
-    - ukuran: arm* ±28–38 MB (kalibrasi ulang setelah G4) → di luar jangkauan = gagal (fail-fast)
+    - ukuran: arm64 ±25–31 MB · armv7 ±20–25 MB (terkalibrasi trial 2026-08-26: 28/22 MB) → di luar jangkauan = gagal (fail-fast)
     - unggah R2: lazisnu-<ver>-arm64.apk / -armv7.apk / lazisnu-<ver>.apk
     - verifikasi publik: curl 200 + size_download > 20 MB ×3
   trigger-deploy:              # needs: semua matrix selesai hijau
@@ -319,7 +319,8 @@ digabung ke v1.1.3 yang isinya Opsi A murni (retro #6).
 - [x] 4. `build.gradle` parametrisasi (`-PabiFilter`, default 2 ABI arm = status quo) + **HAPUS blok `splits` & offset `abiVersionCode` (M1)** → ✅ 2026-08-26 tervalidasi CI: job Build Android Debug APK hijau (commit `219b077`)
 - [x] 5.a eas.json: profil `production-arm64`/`production-armv7` TERPASANG (commit `219b077`)
 - [ ] 5.b **Gate G4 — 1× build percobaan tiap profil** (±30 menit masing-masing; bukti wajib disimpan: artefak `.apk` tunggal, gate positif+negatif `lib/`, ukuran aktual → kalibrasi §1, metadata `eas build:list --json` + versi eas-cli (S1/S2))
-  - ⛔ **2026-08-26: TERTAHAN KUOTA** — kuota build Android paket EAS Free Agustus habis; reset **Sel, 01 Sep 2026**. Upaya submit pertama tercatat (upload arsip 38,9 MB sukses, ditolak di tahap alokasi). Opsi: tunggu reset, atau upgrade Starter (keputusan PO). Konfigurasi (profil + abiFilter) sudah terpasang & tervalidasi CI — G4 tinggal eksekusi ulang perintah yang sama
+  - ✅ **2026-08-26: G4-EQUIVALENT lolos via trial CI** (Opsi B, run `32937731538`, workflow sementara `g4-trial-build.yml`) — arm64: apk=1 archive=0, gate ABI lolos, **28 MB**; armv7: apk=1 archive=0, gate ABI lolos, **22 MB**. Menutup pertanyaan sisi Gradle (satu filter = satu APK) + kalibrasi ukuran.
+  - ⛔ Sisa EAS-resmi: kuota Free Agustus habis; reset Sel 01 Sep. Konfirmasi ulang via EAS (jalur + versi eas-cli + metadata JSON) — gerbang `.apk` di release.yml tetap fail-closed sebagai jaring pengaman
 - [ ] 5.b **JANGAN memulai pekerjaan infra lain selama window Opsi A** — khususnya expo-updates yang ditunda (`TUNDA-EXPO-UPDATES-2026-08-25.md`) tetap tertunda sampai v1.1.3 tuntas (S3)
 - [ ] 6a. `release-bump.mjs`: sinkronisasi otomatis `apkUrls` ikut versi (bagian 5.H) + dry-run diverifikasi (F2)
 - [ ] 6b. release.yml → matrix 3 artefak + gate `.apk`/ABI positif+negatif/ukuran terkalibrasi + timeout 120 mnt; trigger-deploy fail-closed
