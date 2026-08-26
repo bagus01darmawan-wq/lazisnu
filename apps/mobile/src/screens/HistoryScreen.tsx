@@ -297,7 +297,12 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: Radius.panel,
     borderBottomRightRadius: Radius.panel,
   },
-  headerTitle: {...Typography.heading1, color: Colors.text.white},
+  headerTitle: {
+    ...Typography.heading1,
+    color: Colors.text.white,
+    fontSize: 23,
+    lineHeight: 29,
+  },
   headerSubtitle: {...Typography.bodySmall, color: Colors.text.white, opacity: 0.78, marginTop: 3},
   headerSummary: {
     flexDirection: 'row',

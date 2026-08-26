@@ -11,10 +11,9 @@ export interface TaskItemProps {
   item: Task;
   index: number;
   onCopy: (text: string) => void;
-  onSkip: (taskId: string) => void;
 }
 
-export const TaskItem = memo(({item, index, onCopy, onSkip}: TaskItemProps) => {
+export const TaskItem = memo(({item, index, onCopy}: TaskItemProps) => {
   const active = item.status === 'ACTIVE';
 
   return (
@@ -68,17 +67,6 @@ export const TaskItem = memo(({item, index, onCopy, onSkip}: TaskItemProps) => {
             </View>
             <Icon name={'history'} size={22} color={Colors.brand.mutedTeal} />
           </View>
-        )}
-
-        {active && (
-          <TouchableOpacity
-            accessibilityRole={'button'}
-            accessibilityLabel={'Tandai tidak dijemput'}
-            onPress={() => onSkip(item.id)}
-            style={styles.skipButton}>
-            <Icon name={'cancel'} size={16} color={Colors.status.warning} />
-            <Text style={styles.skipText}>Tidak Dijemput</Text>
-          </TouchableOpacity>
         )}
 
         {!active && item.status === 'UNCOLLECTED' && (
@@ -176,23 +164,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.brand.deepGreen,
     marginTop: 2,
-  },
-  skipButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: Spacing.sm,
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.sm,
-    borderRadius: Radius.sm,
-    borderWidth: 1,
-    borderColor: Colors.status.warning + '50',
-    alignSelf: 'flex-start',
-  },
-  skipText: {
-    ...Typography.caption,
-    color: Colors.status.warning,
-    fontWeight: '600',
   },
   uncollectedBadge: {
     flexDirection: 'row',

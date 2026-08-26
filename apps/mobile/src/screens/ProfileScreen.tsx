@@ -26,6 +26,7 @@ const ProfileScreen: React.FC = () => {
   const role = user?.role ? roleLabels[user.role] || user.role : 'Petugas';
   const [biometryType, setBiometryType] = useState<string | null>(null);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [advancedVisible, setAdvancedVisible] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -182,38 +183,60 @@ const ProfileScreen: React.FC = () => {
         </Text>
       </View>
 
-      <View style={styles.completePeriodWrapper}>
-        <TouchableOpacity
-          accessibilityRole={'button'}
-          accessibilityLabel={
-            activeCount
-              ? `Selesaikan periode berjalan, ${activeCount} kaleng belum dijemput`
-              : 'Tidak ada kaleng yang belum dijemput'
-          }
-          disabled={!activeCount}
-          onPress={handleCompletePeriod}
-          style={[styles.completePeriodButton, !activeCount && styles.completePeriodDisabled]}>
-          <Icon
-            name={'flag-checkered'}
-            size={18}
-            color={activeCount ? Colors.status.warning : Colors.text.muted}
-          />
-          <Text
-            style={[styles.completePeriodText, !activeCount && styles.completePeriodTextDisabled]}>
-            {activeCount ? `Selesai Periode (${activeCount} belum)` : 'Selesai Periode'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.logoutWrapper}>
-        <AppButton
-          label={'Keluar dari Akun'}
-          icon={'logout'}
-          variant={'outline'}
-          onPress={handleLogout}
-          fullWidth
+      {/* Gerbang aman: aksi sensitif tersembunyi di balik "Opsi Lanjutan" agar
+          tidak tertekan tidak sengaja (keputusan PO, RENCANA-UI-POLISH §2.E). */}
+      <TouchableOpacity
+        accessibilityRole={'button'}
+        accessibilityLabel={advancedVisible ? 'Tutup opsi lanjutan' : 'Buka opsi lanjutan'}
+        onPress={() => setAdvancedVisible(v => !v)}
+        style={styles.advancedToggle}>
+        <Icon
+          name={advancedVisible ? 'chevron-up' : 'chevron-down'}
+          size={20}
+          color={Colors.text.muted}
         />
-      </View>
+        <Text style={styles.advancedText}>Opsi Lanjutan</Text>
+      </TouchableOpacity>
+
+      {advancedVisible && (
+        <>
+          <View style={styles.completePeriodWrapper}>
+            <TouchableOpacity
+              accessibilityRole={'button'}
+              accessibilityLabel={
+                activeCount
+                  ? `Selesaikan periode berjalan, ${activeCount} kaleng belum dijemput`
+                  : 'Tidak ada kaleng yang belum dijemput'
+              }
+              disabled={!activeCount}
+              onPress={handleCompletePeriod}
+              style={[styles.completePeriodButton, !activeCount && styles.completePeriodDisabled]}>
+              <Icon
+                name={'flag-checkered'}
+                size={18}
+                color={activeCount ? Colors.status.warning : Colors.text.muted}
+              />
+              <Text
+                style={[
+                  styles.completePeriodText,
+                  !activeCount && styles.completePeriodTextDisabled,
+                ]}>
+                {activeCount ? `Selesai Periode (${activeCount} belum)` : 'Selesai Periode'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.logoutWrapper}>
+            <AppButton
+              label={'Keluar dari Akun'}
+              icon={'logout'}
+              variant={'outline'}
+              onPress={handleLogout}
+              fullWidth
+            />
+          </View>
+        </>
+      )}
 
       <TouchableOpacity style={styles.versionRow} onPress={handleCheckUpdates}>
         <Icon name={'information-outline'} size={17} color={Colors.text.muted} />
@@ -259,8 +282,10 @@ const styles = StyleSheet.create({
     ...Shadows.soft,
   },
   headerLabel: {
-    ...Typography.heading2,
+    ...Typography.heading1,
     color: Colors.text.white,
+    fontSize: 23,
+    lineHeight: 29,
     alignSelf: 'flex-start',
     marginBottom: Spacing.lg,
   },
@@ -327,7 +352,16 @@ const styles = StyleSheet.create({
     marginLeft: Spacing.sm,
   },
   logoutWrapper: {marginHorizontal: Layout.screenPadding, marginTop: Spacing.lg},
-  completePeriodWrapper: {marginHorizontal: Layout.screenPadding, marginTop: Spacing.lg},
+  advancedToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginHorizontal: Layout.screenPadding,
+    marginTop: Spacing.lg,
+    paddingVertical: Spacing.sm,
+  },
+  advancedText: {...Typography.body, color: Colors.text.muted},
+  completePeriodWrapper: {marginHorizontal: Layout.screenPadding, marginTop: Spacing.sm},
   completePeriodButton: {
     minHeight: 48,
     flexDirection: 'row',

@@ -8,11 +8,12 @@ import {formatCurrency} from '../../utils';
 
 export interface ScanResultCardProps {
   task: Task;
-  onReset: () => void;
+  /** Tandai kaleng tidak dijemput untuk periode berjalan. */
+  onSkip: (task: Task) => void;
   onContinue: (task: Task) => void;
 }
 
-export const ScanResultCard: React.FC<ScanResultCardProps> = ({task, onReset, onContinue}) => {
+export const ScanResultCard: React.FC<ScanResultCardProps> = ({task, onSkip, onContinue}) => {
   return (
     <View style={styles.resultContainer}>
       <View style={styles.successIcon}>
@@ -78,7 +79,13 @@ export const ScanResultCard: React.FC<ScanResultCardProps> = ({task, onReset, on
 
       <View style={styles.actionButtons}>
         <View style={styles.actionHalf}>
-          <AppButton label="Scan Ulang" variant="outline" onPress={onReset} fullWidth />
+          <AppButton
+            label="Tidak Dijemput"
+            variant="outline"
+            icon="cancel"
+            onPress={() => onSkip(task)}
+            fullWidth
+          />
         </View>
         <View style={styles.actionHalf}>
           <AppButton

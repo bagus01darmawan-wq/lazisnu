@@ -4,7 +4,6 @@ import {
   Alert,
   Clipboard,
   FlatList,
-  Image,
   RefreshControl,
   StyleSheet,
   Text,
@@ -23,8 +22,6 @@ import {Colors, DashboardLayout, Layout, Radius, Spacing, Typography} from '../t
 import type {MainNavigationProp} from '../navigation/types';
 import {TaskItem, TaskSearchBar} from './tasks';
 
-const logo = require('../assets/branding/logo-lazisnu-putih.png');
-
 const TasksScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<MainNavigationProp>();
@@ -38,17 +35,8 @@ const TasksScreen: React.FC = () => {
   } = useSyncStore();
   const totalSyncIssues =
     pendingCount + permanentFailedCount + pendingCorrectionsCount + failedCorrectionsCount;
-  const {
-    tasks,
-    fetchTasks,
-    loadMore,
-    isLoading,
-    error,
-    page,
-    totalPages,
-    fetchStats,
-    skipAssignment,
-  } = useTasksStore();
+  const {tasks, fetchTasks, loadMore, isLoading, error, page, totalPages, fetchStats} =
+    useTasksStore();
   const [filter, setFilter] = useState<'ACTIVE' | 'COMPLETED'>('ACTIVE');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -62,28 +50,6 @@ const TasksScreen: React.FC = () => {
     Clipboard.setString(text);
     ToastAndroid.show('Kode QR disalin', ToastAndroid.SHORT);
   }, []);
-
-  const handleSkip = useCallback(
-    (taskId: string) => {
-      Alert.alert(
-        'Tandai Tidak Dijemput',
-        'Tandai kaleng ini sebagai tidak dijemput untuk periode berjalan?',
-        [
-          {text: 'Batal', style: 'cancel'},
-          {
-            text: 'Ya, Tandai',
-            onPress: async () => {
-              const ok = await skipAssignment(taskId);
-              if (!ok) {
-                Alert.alert('Gagal', 'Gagal menandai kaleng. Pastikan koneksi internet tersedia.');
-              }
-            },
-          },
-        ],
-      );
-    },
-    [skipAssignment],
-  );
 
   const filteredTasks = tasks.filter(task => {
     const query = searchQuery.toLowerCase().trim();
@@ -99,9 +65,9 @@ const TasksScreen: React.FC = () => {
 
   const renderTaskItem = useCallback(
     ({item, index}: {item: Task; index: number}) => (
-      <TaskItem item={item} index={index} onCopy={copyToClipboard} onSkip={handleSkip} />
+      <TaskItem item={item} index={index} onCopy={copyToClipboard} />
     ),
-    [copyToClipboard, handleSkip],
+    [copyToClipboard],
   );
 
   const renderEmpty = () => (
@@ -133,9 +99,6 @@ const TasksScreen: React.FC = () => {
         <View pointerEvents={'none'} style={styles.heroArcInner} />
 
         <View style={styles.topRow}>
-          <View style={styles.logoContainer}>
-            <Image source={logo} style={styles.logo} resizeMode={'contain'} />
-          </View>
           <View style={styles.topActions}>
             <TouchableOpacity
               accessibilityRole={totalSyncIssues ? 'button' : undefined}
@@ -294,18 +257,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: Spacing.xs,
-  },
-  logoContainer: {
-    width: 140,
-    height: 92,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 22,
-  },
-  logo: {
-    width: 131,
-    height: 70,
-    tintColor: Colors.text.white,
   },
   topActions: {flexDirection: 'row', alignItems: 'center', gap: Spacing.sm},
   iconButton: {width: 44, height: 44, alignItems: 'center', justifyContent: 'center'},

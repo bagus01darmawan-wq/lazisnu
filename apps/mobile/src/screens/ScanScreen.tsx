@@ -94,6 +94,40 @@ const ScanScreen: React.FC = () => {
     return () => backHandler.remove();
   }, [isScanning, isManualInput]);
 
+  // Aktifkan jalur tab Scan saat berada di Detail Kaleng: menekan tab Scan
+  // mengembalikan kamera (sebelumnya tombol tidak merespons sama sekali).
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('tabPress', e => {
+      if (!isScanning || scannedData) {
+        e.preventDefault();
+        handleReset();
+      }
+    });
+    return unsubscribe;
+  });
+
+  const handleSkip = (task: Task) => {
+    Alert.alert(
+      'Tandai Tidak Dijemput',
+      `Tandai kaleng ${task.qr_code} sebagai tidak dijemput untuk periode berjalan?`,
+      [
+        {text: 'Batal', style: 'cancel'},
+        {
+          text: 'Ya, Tandai',
+          onPress: async () => {
+            const ok = await useTasksStore.getState().skipAssignment(task.id);
+            if (ok) {
+              handleReset();
+              navigation.navigate('Tasks');
+            } else {
+              Alert.alert('Gagal', 'Gagal menandai kaleng. Pastikan koneksi internet tersedia.');
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const processQRCode = async (qrCode: string, source: QRInputSource) => {
     if (processingRef.current || imagePickerRef.current || !isScanning) {
       return;
@@ -245,7 +279,7 @@ const ScanScreen: React.FC = () => {
       {scannedData && (
         <ScanResultCard
           task={scannedData}
-          onReset={handleReset}
+          onSkip={handleSkip}
           onContinue={task => navigation.navigate('Collection', {task})}
         />
       )}
