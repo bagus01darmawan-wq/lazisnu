@@ -1,13 +1,13 @@
 {
   "cli": {
     "version": ">= 5.0.0",
-    "appVersionSource": "remote"
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "autoIncrement": true,
+      "autoIncrement": false,
       "android": {
         "buildType": "apk"
       },
@@ -17,7 +17,7 @@
     },
     "preview": {
       "distribution": "internal",
-      "autoIncrement": true,
+      "autoIncrement": false,
       "android": {
         "buildType": "apk"
       },
@@ -27,7 +27,7 @@
     },
     "internal-prod": {
       "distribution": "internal",
-      "autoIncrement": true,
+      "autoIncrement": false,
       "android": {
         "buildType": "apk"
       },
@@ -37,7 +37,7 @@
     },
     "production": {
       "distribution": "internal",
-      "autoIncrement": true,
+      "autoIncrement": false,
       "android": {
         "buildType": "apk"
       },

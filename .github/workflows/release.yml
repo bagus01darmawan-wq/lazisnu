@@ -1,0 +1,103 @@
+name: "Release APK (Opsi B: EAS, R2, deploy)"
+
+# Rilis APK satu-tombol. Dipicu oleh tag v* — dibuat oleh scripts/release-bump.mjs --publish.
+# Alur: [1] build EAS (profile production) → [2] unduh APK → [3] unggah ke R2
+#       (apk.lazisnu.site) → [4] dispatch ci.yml pada ref tag (build image + deploy prod blue-green).
+# Fail-closed: kalau unggah R2 gagal, tidak ada dispatch → produksi tetap di versi lama.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versi (harus sama dengan versionName di build.gradle)'
+        required: false
+      version_code:
+        description: 'VersionCode (harus sama dengan build.gradle)'
+        required: false
+
+permissions:
+  contents: read
+  actions: write   # untuk gh workflow run (dispatch ci.yml)
+
+jobs:
+  build-upload-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    concurrency:
+      group: lazisnu-release-apk
+      cancel-in-progress: false
+    steps:
+      - name: Checkout pada ref tag
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Baca versionName dari build.gradle (satu-sumber)
+        id: ver
+        run: |
+          VERSION=$(grep -m1 'versionName "' apps/mobile/android/app/build.gradle | sed -E 's/.*versionName "([^"]+)".*/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "building v$VERSION"
+
+      - name: Build APK via EAS (production, internal distribution)
+        env:
+          EXPO_TOKEN: ${{ secrets.EAS_ACCESS_TOKEN }}
+        run: |
+          cd apps/mobile
+          npx --yes eas-cli@latest build \
+            --platform android \
+            --profile production \
+            --non-interactive \
+            --wait \
+            --json > eas-build.json
+          node -e "
+            const fs=require('fs');const b=JSON.parse(fs.readFileSync('eas-build.json','utf8'));
+            const arr=Array.isArray(b)?b:[b];const x=arr[0];
+            console.log('build id:', x.id); console.log('status:', x.status);
+            if(!x.artifacts || !x.artifacts.buildUrl){console.error('NO ARTIFACT');process.exit(1);}
+            fs.writeFileSync('build-url.txt', x.artifacts.buildUrl);
+          "
+
+      - name: Unduh APK dari EAS
+        env:
+          EXPO_TOKEN: ${{ secrets.EAS_ACCESS_TOKEN }}
+        run: |
+          cd apps/mobile
+          curl -fL -H "Authorization: Bearer $EXPO_TOKEN" \
+            -o "lazisnu-${{ steps.ver.outputs.version }}.apk" "$(cat build-url.txt)"
+          ls -la "lazisnu-${{ steps.ver.outputs.version }}.apk"
+
+      - name: Unggah ke R2 (apk.lazisnu.site)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_EC2_METADATA_DISABLED: 'true'
+        run: |
+          cd apps/mobile
+          aws s3 cp "lazisnu-${{ steps.ver.outputs.version }}.apk" \
+            "s3://lazisnu-apk/lazisnu-${{ steps.ver.outputs.version }}.apk" \
+            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com" \
+            --content-type application/vnd.android.package-archive \
+            --cache-control 'public, max-age=31536000, immutable'
+
+      - name: Verifikasi URL publik
+        run: |
+          URL="https://apk.lazisnu.site/lazisnu-${{ steps.ver.outputs.version }}.apk"
+          CODE=$(curl -s -o /dev/null -w '%{http_code} %{size_download}' "$URL")
+          echo "URL: $URL -> $CODE"
+          case "$CODE" in 200*) ;; *) echo "PUBLIC URL NOT HEALTHY"; exit 1;; esac
+
+      - name: Dispatch ci.yml (build image + deploy prod blue-green) pada ref tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run ci.yml --ref "${{ github.ref_name }}" --repo "${{ github.repository }}"
+          echo "ci.yml dispatched pada ref ${{ github.ref_name }} — deploy prod menyusul."
+
+      - name: Ringkasan
+        run: |
+          echo "Rilis APK v${{ steps.ver.outputs.version }} selesai di R2."
+          echo "URL: https://apk.lazisnu.site/lazisnu-${{ steps.ver.outputs.version }}.apk"
+          echo "(deploy backend berjalan terpisah via ci.yml; cek Actions, CI)"

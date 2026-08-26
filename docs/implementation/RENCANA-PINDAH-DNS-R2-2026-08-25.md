@@ -39,17 +39,17 @@ Total 4 record (www ikut apex) — migrasi berisiko rendah.
 3. Tunggu propagasi (umumnya <1 jam; maks 24 jam). Status "Active" di Cloudflare = selesai.
 4. **Rollback bila ada masalah:** kembalikan NS ke `hyperion.dns-parking.com` + `atlas.dns-parking.com` (5 menit, propagasi balik).
 
-### Fase 3 — R2 custom domain (30 menit, setelah zona aktif)
-1. Pastikan bucket `lazisnu-apk` ada (lokasi Asia Pacific/Singapore).
-2. Bucket → **Settings** → **Custom Domains** → connect `apk.lazisnu.site` → Cloudflare otomatis membuat CNAME + verifikasi (karena zona sudah di Cloudflare).
-3. Unggah `lazisnu-1.1.1.apk` (API token R2 yang kamu buat → saya unggah; atau drag-drop dashboard).
-4. Uji: `curl https://apk.lazisnu.site/lazisnu-1.1.1.apk` → 200.
+### Fase 3 — R2 custom domain (SELESAI, zona aktif — Opsi A tidak dipakai)
+1. Bucket `lazisnu-apk` (Asia Pacific/Singapore) + custom domain `apk.lazisnu.site` — aktif.
+2. **Keputusan 2026-08-26: Opsi A (unggah manual dari komputer) DIBUANG** — murni Opsi B (CI-driven):
+   - `.github/workflows/release.yml` — tag `v*` → build EAS (profile production) → unduh APK → unggah R2 → dispatch ci.yml (deploy prod).
+   - `scripts/release-bump.mjs` — satu perintah bump versi (build.gradle + appConfig.ts + mobileRelease.json) → commit → push → tag (tanpa force-push).
+   - `eas.json`: `appVersionSource` → **local** + `autoIncrement: false` — versionCode kini deterministik dari build.gradle (counter remote EAS terbukti tak sinkron: EAS vc19 vs build.gradle vc1; kelas bug "vc terbakar" dihapus).
 
 ### Fase 4 — Cutover (menyusul, satu paket dengan rilis v1.1.2)
-1. `mobileRelease.json`: `apkUrl` → `https://apk.lazisnu.site/lazisnu-1.1.2.apk`.
-2. Build EAS v1.1.2 (isi: editan user + fix kecil + apk baru) → unggah R2.
-3. Commit + tag → deploy prod (dispatch `--ref`).
-4. Opsional setelah stabil: **privatisasi repo** + pasang token deploy read-only di VM (tanpa itu, `git fetch` di VM akan gagal saat repo privat).
+1. `node scripts/release-bump.mjs 1.1.2 --version-code 20 --changelog "..." --publish` → tag → release.yml otomatis (build EAS → R2 → deploy).
+2. **Selepas rilis**: pasang PAT read-only di VM (prasyarat `git fetch` saat repo privat) → privatisasi repo.
+3. Opsional setelah stabil: rilis berikutnya = satu perintah yang sama.
 
 ## 4. Risiko & Jaring Pengaman
 
