@@ -1,7 +1,7 @@
 {
-  "version": "1.1.1",
-  "versionCode": 19,
-  "apkUrl": "https://github.com/bagus01darmawan-wq/lazisnu/releases/download/v1.1.1/lazisnu-1.1.1.apk",
-  "changelog": "- Label versi kini tampil di layar Profil\n- Pemberitahuan versi baru langsung di aplikasi\n- Unduh pembaruan di dalam aplikasi (tanpa browser)",
+  "version": "1.1.2",
+  "versionCode": 20,
+  "apkUrl": "https://apk.lazisnu.site/lazisnu-1.1.2.apk",
+  "changelog": "- Fitur baru: statistik penjemputan bulan ini & rentang tanggal bebas di Beranda\n- Sesi login tidak lagi berakhir sendiri saat bertugas di lapangan\n- Halaman Daftar Tugas tampilan baru - kartu lebih ringkas\n- Tombol 'Tidak Dijemput' kini ada di halaman Detail Kaleng hasil scan\n- Selesai Periode & Keluar Akun pindah ke menu 'Opsi Lanjutan'\n- Ikon aplikasi baru",
   "minimumVersionCode": 0
 }
