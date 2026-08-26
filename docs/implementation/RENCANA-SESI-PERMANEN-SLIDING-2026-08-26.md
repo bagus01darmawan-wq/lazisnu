@@ -1,6 +1,6 @@
 # Rencana Implementasi — Sesi Permanen Sliding (anti logout misterius)
 
-**Tanggal:** 2026-08-26 · **Status:** RENCANA (belum dieksekusi) · **Disusun oleh:** ox-alpha (untuk Bagus Darmawan)
+**Tanggal:** 2026-08-26 · **Status:** ✅ SEBAGIAN BESAR SELESAI — live production 2026-08-26 via v1.1.2; tersisa G5 monitoring & G6 lapangan · **Disusun oleh:** ox-alpha (untuk Bagus Darmawan)
 
 > Tujuan: aplikasi **tidak pernah logout sendiri** — seperti aplikasi media sosial.
 > Petugas lapangan dengan sinyal apapun kondisinya tidak boleh terlempar ke halaman
@@ -216,8 +216,8 @@ Rate limit 30/5mnt dipertahankan (cukup; klien sudah anti-storm).
 - [ ] 5. Verifikasi staging G2 + G3 + G4
 - [x] 6. Ops: maxmemory Redis prod+staging → 100mb (runtime + repo file) — ✅ 2026-08-26 (§4.E)
 - [ ] 7. Monitor prod 7 hari (G5) — dashboard log `auth_refresh_failed:*` + Crashlytics
-- [ ] 8. Mobile §4.D masuk bundel v1.1.2 (bersama fitur statistik rentang)
-- [ ] 9. G6 uji lapangan → tandai rencana SELESAI + catat di decisions-log
+- [x] 8. ✅ Mobile §4.D ter-rilis bersama v1.1.2 → production (2026-08-26)
+- [ ] 9. G6 uji lapangan 2 petugas (setelah mereka update ke v1.1.2) → tandai rencana SELESAI + catat di decisions-log
 
 ## 9. Yang TIDAK berubah
 

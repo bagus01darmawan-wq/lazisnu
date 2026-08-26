@@ -273,13 +273,14 @@ Dengan ini, keberadaan `apkUrls` di json = saklar Opsi A: rilis v1.1.2 (tanpa ke
 
 | Rilis | Isi | Jalur distribusi |
 |---|---|---|
-| **v1.1.2** | Konten aplikasi (sudah ter-commit 2026-08-26, menunggu rilis): fitur **statistik rentang tanggal** (kartu Bulan Ini + kalender rentang + endpoint `stats-range`) dan **penguatan mobile auth** (sesi permanen sliding: mutex refresh bersama, aturan kode-error→aksi, pesan UX spesifik) | Jalur lama + R2 universal (pipeline Opsi B teruji) |
+| **v1.1.2** | ✅ **SUDAH RILIS (2026-08-26)**: statistik rentang tanggal + sliding session + polish UI + adaptive icon — APK 41 MB di `apk.lazisnu.site`, deploy prod blue-green sukses | ✅ Terkirim via **Gradle-CI runner** (kuota EAS terbatas; alur R2 + deploy identik) |
 | **v1.1.3** | Opsi A (split + auto-pick) | release.yml versi matrix — perubahan infrastruktur MURNI, tidak dicampur fitur |
 
-Catatan sinkronisasi 2026-08-26: backend sliding session SUDAH live di staging
-(akan ikut production saat tag v1.1.2 — deploy prod berbasis tag). Ini TIDAK
-menyentuh pipeline rilis APK; `release.yml` tak berubah. Interaksi Opsi A:
-nol — tetap aman dieksekusi di v1.1.3 sesuai jadwal ini.
+Catatan sinkronisasi 2026-08-26 (pasca-rilis v1.1.2): backend sliding session
+LIVE production sejak rilis ini; mesin build rilis juga sudah pindah ke
+Gradle-CI (release.yml dirombak, terbukti 2×: dry-run + rilis nyata).
+Interaksi Opsi A: nol — pipeline matrix ke depan tinggal disusun di jalur CI,
+konfirmasi resmi EAS pasca-1 Sep tinggal opsional.
 
 Kalau editan tambahan muncul setelah v1.1.2 rilis: masukkan ke v1.1.4, JANGAN
 digabung ke v1.1.3 yang isinya Opsi A murni (retro #6).

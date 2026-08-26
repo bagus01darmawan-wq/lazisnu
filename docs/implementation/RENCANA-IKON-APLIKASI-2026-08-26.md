@@ -1,6 +1,6 @@
 # Rencana Implementasi — Ikon Aplikasi LAZISNU (Adaptive Icon)
 
-**Tanggal:** 2026-08-26 · **Status:** RENCANA (disetujui visual, belum dieksekusi) · **Oleh:** Hermes (untuk Bagus Darmwan)
+**Tanggal:** 2026-08-26 · **Status:** ✅ SELESAI — ter-rilis bersama v1.1.2 (commit `490b9b0`, APK 41 MB, CI hijau 2×) · **Oleh:** Hermes (untuk Bagus Darmwan)
 
 > Keputusan user: **Varian B final** — background putih, mark hijau tua `#02542C`,
 > **art diperbesar ke 90% lebar kanvas** (mengisi sisi kosong), preview rounded 20%.
@@ -65,7 +65,7 @@ sebelum/sesudah perbesaran di sesi 2026-08-26).
 - [ ] 5. **Gate G2** — anilisis APK: `unzip -l` APK debug memuat semua mipmap/drawable baru (`ic_launcher_foreground.png`, `anydpi-v26`)
 - [ ] 6. Commit + push → CI penuh hijau (lint/typecheck/test/lint prettier mobile)
 - [ ] 7. Uji perangkat nyata (opsional, setelah rilis): 1 HP arm64 modern → ikon terlihat putih + mark hijau, tidak terpotong; 1 HP lama (armv7, Android 7 ke bawah) → ikon legacy bulat
-- [ ] 8. Rilis ikut **v1.1.2** (editan user + ikon — jalur universal teruji; ikon bukan perubahan infrastruktur, aman digabung)
+- [x] 8. ✅ Rilis ikut v1.1.2 (2026-08-26) — catatan: mesin build kini Gradle-CI runner (bukan EAS); tetap universal, alur R2/deploy identik
 
 ## 6. Risiko & Mitigasi
 
