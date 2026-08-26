@@ -7,6 +7,7 @@
     "android": "react-native run-android",
     "ios": "react-native run-ios",
     "start": "react-native start",
+    "generate:icon": "node scripts/generate-app-icon.mjs",
     "test": "jest",
     "test:coverage": "jest --coverage",
     "test:watch": "jest --watch",
@@ -73,6 +74,7 @@
     "patch-package": "^8.0.1",
     "prettier": "^3.2.5",
     "react-test-renderer": "18.2.0",
+    "sharp": "^0.35.4",
     "typescript": "^5.4.5"
   },
   "engines": {
