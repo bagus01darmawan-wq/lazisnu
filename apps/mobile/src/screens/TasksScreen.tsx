@@ -17,7 +17,6 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
 import type {Task} from '@lazisnu/shared-types';
 import {useTasksStore, useSyncStore} from '../stores';
-import {SegmentedControl} from '../components/ui';
 import {Colors, DashboardLayout, Layout, Radius, Spacing, Typography} from '../theme';
 import type {MainNavigationProp} from '../navigation/types';
 import {TaskItem, TaskSearchBar} from './tasks';
@@ -37,14 +36,13 @@ const TasksScreen: React.FC = () => {
     pendingCount + permanentFailedCount + pendingCorrectionsCount + failedCorrectionsCount;
   const {tasks, fetchTasks, loadMore, isLoading, error, page, totalPages, fetchStats} =
     useTasksStore();
-  const [filter, setFilter] = useState<'ACTIVE' | 'COMPLETED'>('ACTIVE');
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    fetchTasks(filter);
+    fetchTasks();
     fetchStats();
     checkStatus();
-  }, [checkStatus, filter, fetchTasks, fetchStats]);
+  }, [checkStatus, fetchTasks, fetchStats]);
 
   const copyToClipboard = useCallback((text: string) => {
     Clipboard.setString(text);
@@ -79,18 +77,14 @@ const TasksScreen: React.FC = () => {
     <View style={styles.emptyContainer}>
       <View style={styles.emptyIcon}>
         <Icon
-          name={filter === 'ACTIVE' ? 'clipboard-check-outline' : 'clipboard-text-outline'}
+          name={'clipboard-check-outline'}
           size={44}
           color={Colors.brand.deepGreen}
         />
       </View>
-      <Text style={styles.emptyTitle}>
-        {filter === 'ACTIVE' ? 'Semua tugas selesai' : 'Belum ada tugas'}
-      </Text>
+      <Text style={styles.emptyTitle}>Semua tugas selesai</Text>
       <Text style={styles.emptyText}>
-        {filter === 'ACTIVE'
-          ? 'Tidak ada penjemputan yang masih menunggu.'
-          : 'Daftar tugas pada kategori ini masih kosong.'}
+        Tidak ada penjemputan yang masih menunggu.
       </Text>
     </View>
   );
@@ -103,48 +97,46 @@ const TasksScreen: React.FC = () => {
         <View pointerEvents={'none'} style={styles.heroArcOuter} />
         <View pointerEvents={'none'} style={styles.heroArcInner} />
 
-        <View style={styles.topRow}>
-          <View style={styles.topActions}>
-            <TouchableOpacity
-              accessibilityRole={totalSyncIssues ? 'button' : undefined}
-              accessibilityLabel={
-                totalSyncIssues ? `${totalSyncIssues} data belum tersinkronisasi` : undefined
+        <View style={styles.titleRow}>
+          <Text style={styles.headerTitle}>Daftar Tugas</Text>
+          <TouchableOpacity
+            accessibilityRole={totalSyncIssues ? 'button' : undefined}
+            accessibilityLabel={
+              totalSyncIssues ? `${totalSyncIssues} data belum tersinkronisasi` : undefined
+            }
+            disabled={!totalSyncIssues}
+            activeOpacity={totalSyncIssues ? 0.8 : 1}
+            onPress={() => {
+              Alert.alert(
+                'Data Belum Terkirim',
+                'Penjemputan dan koreksi tetap aman tersimpan di perangkat. Aplikasi akan mencoba mengirim kembali secara otomatis.',
+                [
+                  {text: 'Nanti', style: 'cancel'},
+                  {text: 'Lihat Detail', onPress: () => navigation.navigate('History')},
+                  {text: 'Coba Kirim Lagi', onPress: () => triggerSync()},
+                ],
+              );
+            }}
+            style={styles.iconButton}>
+            <Icon
+              name={
+                permanentFailedCount || failedCorrectionsCount
+                  ? 'cloud-alert'
+                  : pendingCount || pendingCorrectionsCount
+                    ? 'cloud-sync-outline'
+                    : 'cloud-check-outline'
               }
-              disabled={!totalSyncIssues}
-              activeOpacity={totalSyncIssues ? 0.8 : 1}
-              onPress={() => {
-                Alert.alert(
-                  'Data Belum Terkirim',
-                  'Penjemputan dan koreksi tetap aman tersimpan di perangkat. Aplikasi akan mencoba mengirim kembali secara otomatis.',
-                  [
-                    {text: 'Nanti', style: 'cancel'},
-                    {text: 'Lihat Detail', onPress: () => navigation.navigate('History')},
-                    {text: 'Coba Kirim Lagi', onPress: () => triggerSync()},
-                  ],
-                );
-              }}
-              style={styles.iconButton}>
-              <Icon
-                name={
-                  permanentFailedCount || failedCorrectionsCount
-                    ? 'cloud-alert'
-                    : pendingCount || pendingCorrectionsCount
-                      ? 'cloud-sync-outline'
-                      : 'cloud-check-outline'
-                }
-                size={28}
-                color={Colors.text.white}
-              />
-              {!!totalSyncIssues && (
-                <View style={styles.syncCountBadge}>
-                  <Text style={styles.syncCountText}>{totalSyncIssues}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
+              size={28}
+              color={Colors.text.white}
+            />
+            {!!totalSyncIssues && (
+              <View style={styles.syncCountBadge}>
+                <Text style={styles.syncCountText}>{totalSyncIssues}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
 
-        <Text style={styles.headerTitle}>Daftar Tugas</Text>
         <Text style={styles.headerSubtitle}>
           {isLoading && page === 1 ? 'Memuat penugasan...' : `${tasks.length} tugas ditampilkan`}
         </Text>
@@ -156,22 +148,11 @@ const TasksScreen: React.FC = () => {
         />
       </LinearGradient>
 
-      <View style={styles.filterContainer}>
-        <SegmentedControl
-          options={[
-            {label: 'Belum', value: 'ACTIVE'},
-            {label: 'Selesai', value: 'COMPLETED'},
-          ]}
-          value={filter}
-          onChange={value => setFilter(value as typeof filter)}
-        />
-      </View>
-
       {!!error && !isLoading && (
         <TouchableOpacity
           accessibilityRole={'button'}
           accessibilityLabel={'Coba lagi memuat tugas'}
-          onPress={() => fetchTasks(filter)}
+          onPress={() => fetchTasks()}
           style={styles.errorBanner}>
           <Icon name={'alert-circle-outline'} size={20} color={Colors.status.error} />
           <Text style={styles.errorText}>{error}</Text>
@@ -198,7 +179,7 @@ const TasksScreen: React.FC = () => {
           <RefreshControl
             refreshing={isLoading && page === 1}
             onRefresh={() => {
-              fetchTasks(filter);
+              fetchTasks();
               fetchStats();
               checkStatus();
             }}
@@ -208,7 +189,7 @@ const TasksScreen: React.FC = () => {
         }
         onEndReached={() => {
           if (!isLoading && page < totalPages) {
-            loadMore(filter);
+            loadMore();
           }
         }}
         onEndReachedThreshold={0.5}
@@ -233,7 +214,7 @@ const styles = StyleSheet.create({
   header: {
     overflow: 'hidden',
     paddingHorizontal: Layout.screenPadding,
-    paddingBottom: DashboardLayout.heroBottomPadding,
+    paddingBottom: Spacing.md,
     borderBottomLeftRadius: DashboardLayout.heroCornerRadius,
     borderBottomRightRadius: DashboardLayout.heroCornerRadius,
   },
@@ -257,14 +238,17 @@ const styles = StyleSheet.create({
     top: -156,
     right: -102,
   },
-  topRow: {
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: Spacing.xs,
   },
-  topActions: {flexDirection: 'row', alignItems: 'center', gap: Spacing.sm},
-  iconButton: {width: 44, height: 44, alignItems: 'center', justifyContent: 'center'},
+  iconButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   syncCountBadge: {
     position: 'absolute',
     right: -5,
@@ -295,16 +279,9 @@ const styles = StyleSheet.create({
     opacity: 0.86,
     marginTop: Spacing.xs,
   },
-  filterContainer: {
-    paddingHorizontal: Layout.screenPadding,
-    // Menutup ruang yang ditinggalkan kartu Progres Tugas — kontrol menempel
-    // di atas kurva hero seperti penempatan kartu sebelumnya.
-    marginTop: -DashboardLayout.heroOverlap,
-    paddingBottom: Spacing.sm,
-  },
   listContainer: {
     paddingHorizontal: Layout.screenPadding,
-    paddingTop: Spacing.xs,
+    paddingTop: Spacing.md,
     paddingBottom: Spacing.xl,
     flexGrow: 1,
   },

@@ -161,7 +161,7 @@ describe('authenticated screen render smoke tests', () => {
   it('renders TasksScreen with an active task', () => {
     const tree = render(<TasksScreen />);
     expect(tree.toJSON()).not.toBeNull();
-    expect(mockFetchTasks).toHaveBeenCalledWith('ACTIVE');
+    expect(mockFetchTasks).toHaveBeenCalled();
   });
 
   it('renders HistoryScreen with a completed collection', () => {
