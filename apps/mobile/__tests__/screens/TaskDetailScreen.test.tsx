@@ -74,7 +74,7 @@ describe('TaskDetailScreen — detail penjemputan dari kartu tugas', () => {
     jest.clearAllMocks();
     skipSpy = jest
       .spyOn(useTasksStore.getState(), 'skipAssignment')
-      .mockResolvedValue(true as never);
+      .mockResolvedValue({success: true} as never);
     fetchSpy = jest
       .spyOn(useTasksStore.getState(), 'fetchTasks')
       .mockResolvedValue(undefined as never);
@@ -160,5 +160,37 @@ describe('TaskDetailScreen — detail penjemputan dari kartu tugas', () => {
     expect(skipSpy).toHaveBeenCalledWith('task-1');
     expect(fetchSpy).toHaveBeenCalledWith('ACTIVE');
     expect(mockGoBack).toHaveBeenCalled();
+  });
+
+  it('skip gagal → menampilkan alasan asli (bukan tuduhan koneksi internet)', async () => {
+    skipSpy.mockResolvedValueOnce({
+      success: false,
+      code: 'ALREADY_SUBMITTED',
+      error: 'Kaleng ini sudah disetor pada periode berjalan.',
+    } as never);
+
+    const tree = await renderScreen();
+    const labelNode = tree.root
+      .findAllByType(require('react-native').Text)
+      .find(n => collectText(n.props.children) === 'Tidak Dijemput');
+    const pressable = findPressable(labelNode);
+
+    await act(async () => {
+      pressable?.props?.onPress?.();
+    });
+
+    const buttons = alertSpy.mock.calls[0][2] as Array<{text: string; onPress?: () => void}>;
+    const confirm = buttons.find(b => b.text === 'Ya, Tandai');
+    expect(confirm).toBeDefined();
+
+    await act(async () => {
+      await confirm?.onPress?.();
+    });
+
+    expect(alertSpy).toHaveBeenLastCalledWith(
+      'Gagal Menandai',
+      'Kaleng ini sudah disetor pada periode berjalan.',
+    );
+    expect(mockGoBack).not.toHaveBeenCalled();
   });
 });

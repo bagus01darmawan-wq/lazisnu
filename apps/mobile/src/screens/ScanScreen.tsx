@@ -115,12 +115,13 @@ const ScanScreen: React.FC = () => {
         {
           text: 'Ya, Tandai',
           onPress: async () => {
-            const ok = await useTasksStore.getState().skipAssignment(task.id);
-            if (ok) {
+            const result = await useTasksStore.getState().skipAssignment(task.id);
+            if (result.success) {
               handleReset();
               navigation.navigate('Tasks');
             } else {
-              Alert.alert('Gagal', 'Gagal menandai kaleng. Pastikan koneksi internet tersedia.');
+              // Pesan jujur: alasan asli (server / jaringan) — bukan tuduhan sinyal.
+              Alert.alert('Gagal Menandai', result.error || 'Gagal menandai kaleng. Coba lagi.');
             }
           },
         },

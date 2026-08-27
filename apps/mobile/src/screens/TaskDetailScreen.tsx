@@ -29,8 +29,8 @@ const TaskDetailScreen: React.FC = () => {
         {
           text: 'Ya, Tandai',
           onPress: async () => {
-            const ok = await useTasksStore.getState().skipAssignment(task.id);
-            if (ok) {
+            const result = await useTasksStore.getState().skipAssignment(task.id);
+            if (result.success) {
               // Segarkan daftar di belakang lalu kembali.
               useTasksStore
                 .getState()
@@ -38,7 +38,8 @@ const TaskDetailScreen: React.FC = () => {
                 .catch(() => {});
               navigation.goBack();
             } else {
-              Alert.alert('Gagal', 'Gagal menandai kaleng. Pastikan koneksi internet tersedia.');
+              // Pesan jujur: alasan asli (server / jaringan) — bukan tuduhan sinyal.
+              Alert.alert('Gagal Menandai', result.error || 'Gagal menandai kaleng. Coba lagi.');
             }
           },
         },

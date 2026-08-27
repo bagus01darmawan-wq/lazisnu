@@ -6,6 +6,7 @@ import NetInfo from '@react-native-community/netinfo';
 import {tasksStatsCache} from '../services/offline/cache';
 import {offlineQueue} from '../services/offline/queue';
 import {taskCache} from '../services/offline/tasks';
+import {getErrorMessage} from '../utils/error';
 
 let latestTasksRequestId = 0;
 let latestStatsRequestId = 0;
@@ -138,7 +139,11 @@ interface TasksState {
   setCurrentTask: (task: Task | null) => void;
   markTaskComplete: (taskId: string, nominal?: number) => void;
   adjustCompletedNominal: (delta: number) => void;
-  skipAssignment: (taskId: string) => Promise<boolean>;
+  skipAssignment: (taskId: string) => Promise<{
+    success: boolean;
+    code?: string;
+    error?: string;
+  }>;
   completePeriod: () => Promise<{skipped: number; error?: string}>;
   resolveTaskByQRCode: (qrCode: string) => Promise<{
     success: boolean;
@@ -390,11 +395,21 @@ export const useTasksStore = create<TasksState>((set, get) => ({
           activeCount: Math.max(0, activeCount - 1),
           completedCount: completedCount + 1,
         });
-        return true;
+        return {success: true};
       }
-      return false;
-    } catch {
-      return false;
+      // G3: teruskan alasan asli dari server (mis. kaleng sudah dijemput /
+      // ditolak bisnis) — UI bukan menuduh "koneksi internet" lagi.
+      return {
+        success: false,
+        code: result.error?.code,
+        error: result.error?.message || 'Gagal menandai kaleng',
+      };
+    } catch (error) {
+      // G1: pesan jujur dari akar kesalahan (timeout, putus, dsb.)
+      return {
+        success: false,
+        error: getErrorMessage(error, 'Gagal menandai kaleng'),
+      };
     }
   },
 
