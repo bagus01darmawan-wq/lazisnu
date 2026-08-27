@@ -17,7 +17,7 @@ import {
   RangeStatsResponse,
 } from '@lazisnu/shared-types';
 import {captureAuthEvent} from '../config/crashlytics';
-import {updateBiometricToken} from './biometric';
+import {saveRefreshTokenSilent} from './biometric';
 import {resolveSessionAction} from './authSessionPolicy';
 
 // Instance dibuat setelah encryption key tersedia. Membuka file terenkripsi
@@ -252,13 +252,14 @@ async function refreshAccessToken(): Promise<RefreshResult> {
       // Jika refresh token baru diterima, simpan juga
       if (data.data.refresh_token) {
         setRefreshToken(data.data.refresh_token);
-        // Sinkronkan Keychain biometrik — server merotasi jti (single-use),
-        // tanpa penulisan ulang ini token di Keychain menjadi stale dan
-        // login sidik jari selalu ditolak dengan REFRESH_REVOKED.
+        // Perbarui GUDANG token silent (tanpa prompt!). Menulis ke service
+        // ber-accessControl biometrik memunculkan prompt sidik jari di waktu
+        // arbitrer (keychain v10 memakai BiometricPrompt di jalur encrypt) —
+        // penyebab bug "modal biometrik muncul di halaman statistik".
         try {
           const {useAuthStore} = require('../stores/useAuthStore');
           if (useAuthStore.getState().biometricEnabled) {
-            await updateBiometricToken(data.data.refresh_token);
+            await saveRefreshTokenSilent(data.data.refresh_token);
           }
         } catch {
           /* biometrik opsional — kegagalan Keychain tidak boleh gagalkan refresh */

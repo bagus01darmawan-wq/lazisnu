@@ -1,25 +1,30 @@
 // apps/mobile/__mocks__/react-native-keychain.ts
 //
-// Controllable mock untuk react-native-keychain. Test bisa program
-// return value atau throw error untuk simulate Keychain unavailable.
+// Controllable mock untuk react-native-keychain — penyimpanan PER-SERVICE
+// (meniru runtime asli: setiap service punya entry sendiri; service A
+// biometrik dan service B silent tidak saling menimpa).
 //
 // Cara kontrol test:
 //   const Keychain = require('react-native-keychain');
-//   Keychain.__setMockValue({ password: 'my-encryption-key' });
+//   Keychain.__setMockValue({service: '...', username: 'u', password: 'p'});
 //   Keychain.__setMockError(new Error('keychain corrupt'));
 //   Keychain.__resetMock();
 
+interface Entry {
+  service: string;
+  username: string;
+  password: string;
+}
+
 interface MockState {
-  value: {service: string; username: string; password: string} | null;
+  values: Record<string, Entry>;
   shouldThrow: Error | null;
-  // Track call history
   calls: {method: string; args: unknown}[];
-  // Biometric support control
   biometryType: string | null;
 }
 
 let state: MockState = {
-  value: null,
+  values: {},
   shouldThrow: null,
   calls: [],
   biometryType: 'Fingerprint',
@@ -66,7 +71,8 @@ export async function getGenericPassword(options?: {
   if (state.shouldThrow) {
     throw state.shouldThrow;
   }
-  return state.value;
+  const service = options?.service || 'default';
+  return state.values[service] ?? null;
 }
 
 export async function setGenericPassword(
@@ -85,7 +91,7 @@ export async function setGenericPassword(
     throw state.shouldThrow;
   }
   const service = options?.service || 'mock';
-  state.value = {service, username, password};
+  state.values[service] = {service, username, password};
   return {service};
 }
 
@@ -94,11 +100,13 @@ export async function resetGenericPassword(options?: {service?: string}): Promis
   if (state.shouldThrow) {
     throw state.shouldThrow;
   }
-  if (!options?.service || state.value?.service === options.service) {
-    state.value = null;
+  if (!options?.service) {
+    state.values = {};
     return true;
   }
-  return false;
+  const existed = options.service in state.values;
+  delete state.values[options.service];
+  return existed;
 }
 
 export async function getSupportedBiometryType(): Promise<string | null> {
@@ -107,8 +115,12 @@ export async function getSupportedBiometryType(): Promise<string | null> {
 }
 
 // Test helpers
-export const __setMockValue = (value: MockState['value']) => {
-  state.value = value;
+export const __setMockValue = (value: Entry | null) => {
+  if (value === null) {
+    state.values = {};
+    return;
+  }
+  state.values[value.service] = value;
 };
 
 export const __setMockError = (error: Error | null) => {
@@ -120,7 +132,10 @@ export const __setBiometryType = (type: string | null) => {
 };
 
 export const __resetMock = () => {
-  state = {value: null, shouldThrow: null, calls: [], biometryType: 'Fingerprint'};
+  state = {values: {}, shouldThrow: null, calls: [], biometryType: 'Fingerprint'};
 };
 
 export const __getCalls = () => [...state.calls];
+
+/** Inspeksi per-service (meniru Keychain asli: satu entry per service). */
+export const __getValues = () => ({...state.values});

@@ -1,11 +1,10 @@
 // apps/mobile/__tests__/services/biometric.test.ts
 //
-// Unit test untuk biometric.ts (Sub-bab 05, D-09).
-// Verifikasi 4 skenario wajib:
-// - Enable → token tersimpan di Keychain
-// - Login biometric sukses → rotasi refresh token tersimpan kembali
-// - REFRESH_REVOKED → fallback disable; entry Keychain terhapus
-// - Toggle off → entry Keychain terhapus
+// Unit test untuk biometric.ts (Sub-bab 05, D-09) — revisi 2026-08-26.
+// Arsitektur GERBANG + GUDANG:
+// - A (BIOMETRY_ANY) = gerbang: dibaca saat tombol login (prompt);
+//   ditulis HANYA saat enable/disable. Isinya TIDAK dipakai sebagai token.
+// - B (silent) = gudang token terbaru, ditulis diam-diam di setiap rotasi.
 
 import * as Keychain from 'react-native-keychain';
 import {
@@ -13,46 +12,50 @@ import {
   getBiometryType,
   enableBiometric,
   getTokenWithBiometric,
-  updateBiometricToken,
+  saveRefreshTokenSilent,
+  getRefreshTokenSilent,
   disableBiometric,
 } from '../../src/services/biometric';
 
 const BIOMETRIC_SERVICE = 'com.lazisnu.biometric.refresh-token';
+const SILENT_SERVICE = 'com.lazisnu.biometric.refresh-token.silent';
 const REFRESH_TOKEN = 'test-refresh-token-abc123';
 const NEW_REFRESH_TOKEN = 'new-refresh-token-xyz789';
+
+const setCallFor = (service: string) =>
+  Keychain.__getCalls().find(
+    c => c.method === 'setGenericPassword' && (c.args as {options?: {service?: string}}).options?.service === service,
+  );
 
 describe('biometric', () => {
   beforeEach(() => {
     Keychain.__resetMock();
   });
 
-  // ── Skenario 1: Enable → token tersimpan di Keychain ────────────────────
+  // ── Enable: gerbang A (BIOMETRY_ANY) + seed gudang B ────────────────────
 
   describe('enableBiometric', () => {
-    it('menyimpan refresh token di Keychain dengan access control biometrik', async () => {
+    it('menyimpan di gerbang A dengan accessControl biometrik, lalu seed gudang B tanpa accessControl', async () => {
       const result = await enableBiometric(REFRESH_TOKEN);
 
       expect(result).toBe(true);
 
-      // Verifikasi token tersimpan
-      const calls = Keychain.__getCalls();
-      const setCall = calls.find(c => c.method === 'setGenericPassword');
-      expect(setCall).toBeDefined();
+      const aSet = setCallFor(BIOMETRIC_SERVICE);
+      expect(aSet).toBeDefined();
+      const aArgs = aSet?.args as {username: string; options: {service: string; accessControl: string; accessible: string}};
+      expect(aArgs.username).toBe('biometric');
+      expect(aArgs.options.accessControl).toBe(Keychain.ACCESS_CONTROL.BIOMETRY_ANY);
+      expect(aArgs.options.accessible).toBe(Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY);
 
-      if (setCall) {
-        const args = setCall.args as {
-          username: string;
-          options: {service: string; accessControl: string; accessible: string};
-        };
-        expect(args.username).toBe('biometric');
-        expect(args.options.service).toBe(BIOMETRIC_SERVICE);
-        expect(args.options.accessControl).toBe(Keychain.ACCESS_CONTROL.BIOMETRY_ANY);
-        expect(args.options.accessible).toBe(Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY);
-      }
+      const bSet = setCallFor(SILENT_SERVICE);
+      expect(bSet).toBeDefined();
+      const bArgs = bSet?.args as {options: {accessControl?: string; authenticationPrompt?: unknown}};
+      expect(bArgs.options.accessControl).toBeUndefined();
+      expect(bArgs.options.authenticationPrompt).toBeUndefined();
 
-      // Verifikasi bisa dibaca kembali
-      const stored = await getTokenWithBiometric();
-      expect(stored).toBe(REFRESH_TOKEN);
+      // Kedua gerbang terbaca
+      expect(await getTokenWithBiometric()).toBe(REFRESH_TOKEN);
+      expect(await getRefreshTokenSilent()).toBe(REFRESH_TOKEN);
     });
 
     it('return false jika simpan ke Keychain gagal', async () => {
@@ -63,78 +66,79 @@ describe('biometric', () => {
     });
   });
 
-  // ── Skenario 2: Login biometric sukses → rotasi refresh token ────────────
+  // ── Rotasi: tulis GUDANG B diam-diam, gerbang A tak tersentuh ────────────
 
-  describe('updateBiometricToken (rotasi)', () => {
-    it('token baru menimpa token lama di Keychain', async () => {
-      // Enable dulu
+  describe('saveRefreshTokenSilent (rotasi)', () => {
+    it('token baru masuk gudang B; gerbang A TIDAK berubah (oracle)', async () => {
       await enableBiometric(REFRESH_TOKEN);
 
-      // Rotasi: simpan token baru
-      const updateResult = await updateBiometricToken(NEW_REFRESH_TOKEN);
+      const updateResult = await saveRefreshTokenSilent(NEW_REFRESH_TOKEN);
       expect(updateResult).toBe(true);
 
-      // Verifikasi token lama sudah tertimpa
-      const stored = await getTokenWithBiometric();
-      expect(stored).toBe(NEW_REFRESH_TOKEN);
-      expect(stored).not.toBe(REFRESH_TOKEN);
+      expect(await getRefreshTokenSilent()).toBe(NEW_REFRESH_TOKEN);
+      expect(await getTokenWithBiometric()).toBe(REFRESH_TOKEN); // A tak tersentuh
+    });
+
+    it('penulisan TIDAK memakai accessControl biometrik (tidak memicu prompt)', async () => {
+      await saveRefreshTokenSilent(NEW_REFRESH_TOKEN);
+
+      const bSet = setCallFor(SILENT_SERVICE);
+      expect(bSet).toBeDefined();
+      const args = bSet?.args as {options: {accessControl?: string; authenticationPrompt?: unknown}};
+      expect(args.options.accessControl).toBeUndefined();
+      expect(args.options.authenticationPrompt).toBeUndefined();
     });
   });
 
-  // ── Skenario 3: Toggle off → entry Keychain terhapus ─────────────────────
+  describe('getRefreshTokenSilent', () => {
+    it('null bila gudang kosong', async () => {
+      expect(await getRefreshTokenSilent()).toBeNull();
+    });
+
+    it('null bila Keychain error', async () => {
+      Keychain.__setMockError(new Error('Keychain unavailable'));
+      expect(await getRefreshTokenSilent()).toBeNull();
+    });
+  });
+
+  // ── Toggle off: hapus gerbang A DAN gudang B ─────────────────────────────
 
   describe('disableBiometric', () => {
-    it('menghapus refresh token dari Keychain', async () => {
-      // Enable dulu
+    it('menghapus refresh token dari gerbang A dan gudang B', async () => {
       await enableBiometric(REFRESH_TOKEN);
 
-      // Verifikasi token ada
-      const beforeDisable = await getTokenWithBiometric();
-      expect(beforeDisable).toBe(REFRESH_TOKEN);
+      expect(await disableBiometric()).toBe(true);
 
-      // Toggle off
-      const disableResult = await disableBiometric();
-      expect(disableResult).toBe(true);
+      expect(await getTokenWithBiometric()).toBeNull();
+      expect(await getRefreshTokenSilent()).toBeNull();
 
-      // Verifikasi Keychain kosong
-      Keychain.__setMockValue(null); // Simulasi Keychain benar-benar terhapus
-      const afterDisable = await getTokenWithBiometric();
-      expect(afterDisable).toBeNull();
-
-      // Verifikasi resetGenericPassword dipanggil
-      const calls = Keychain.__getCalls();
-      const resetCall = calls.find(c => c.method === 'resetGenericPassword');
-      expect(resetCall).toBeDefined();
-      if (resetCall) {
-        const args = resetCall.args as {service: string};
-        expect(args.service).toBe(BIOMETRIC_SERVICE);
-      }
+      const resets = Keychain.__getCalls().filter(c => c.method === 'resetGenericPassword');
+      expect(resets).toHaveLength(2);
+      const services = resets.map(
+        c => (c.args as {service?: string}).service,
+      );
+      expect(services).toContain(BIOMETRIC_SERVICE);
+      expect(services).toContain(SILENT_SERVICE);
     });
 
     it('best-effort: tidak throw meski Keychain error', async () => {
       Keychain.__setMockError(new Error('Keychain unavailable'));
-
-      // Tidak boleh throw
       const result = await disableBiometric();
       expect(result).toBe(false);
     });
   });
 
-  // ── Skenario 4: REFRESH_REVOKED → tidak bisa login biometrik ─────────────
+  // ── Gerbang: baca dengan prompt ──────────────────────────────────────────
 
   describe('getTokenWithBiometric', () => {
-    it('mengembalikan null jika Keychain kosong (simulasi setelah revoke)', async () => {
-      // Tanpa enable terlebih dahulu — simulasi setelah disableBiometric
+    it('mengembalikan null jika gerbang kosong', async () => {
       Keychain.__setMockValue(null);
-
       const token = await getTokenWithBiometric();
       expect(token).toBeNull();
     });
 
     it('mengembalikan null jika user membatalkan biometrik', async () => {
-      // Simulasi Keychain throw (user cancel / error)
       Keychain.__setMockError(new Error('User canceled'));
-
       const token = await getTokenWithBiometric();
       expect(token).toBeNull();
     });
@@ -142,9 +146,7 @@ describe('biometric', () => {
     it('menggunakan authentication prompt yang benar', async () => {
       await enableBiometric(REFRESH_TOKEN);
 
-      // Reset call history untuk melihat hanya call terbaru
       Keychain.__resetMock();
-      // Re-set mock value
       Keychain.__setMockValue({
         service: BIOMETRIC_SERVICE,
         username: 'biometric',
@@ -156,15 +158,13 @@ describe('biometric', () => {
       const calls = Keychain.__getCalls();
       const getCall = calls.find(c => c.method === 'getGenericPassword');
       expect(getCall).toBeDefined();
-      if (getCall) {
-        const args = getCall.args as {authenticationPrompt: {title: string; cancel: string}};
-        expect(args.authenticationPrompt.title).toBe('Login Biometrik');
-        expect(args.authenticationPrompt.cancel).toBe('Batal');
-      }
+      const args = getCall?.args as {authenticationPrompt: {title: string; cancel: string}};
+      expect(args.authenticationPrompt.title).toBe('Login Biometrik');
+      expect(args.authenticationPrompt.cancel).toBe('Batal');
     });
   });
 
-  // ── Biometric availability ──────────────────────────────────────────────
+  // ── Ketersediaan biometrik ──────────────────────────────────────────────
 
   describe('isBiometricAvailable', () => {
     it('return true jika perangkat mendukung biometrik', async () => {
@@ -174,7 +174,6 @@ describe('biometric', () => {
 
     it('return false jika perangkat tidak mendukung biometrik', async () => {
       Keychain.__setBiometryType(null);
-
       const result = await isBiometricAvailable();
       expect(result).toBe(false);
     });
@@ -183,14 +182,12 @@ describe('biometric', () => {
   describe('getBiometryType', () => {
     it('return nama yang sudah dinormalisasi', async () => {
       Keychain.__setBiometryType(Keychain.BIOMETRY_TYPE.FINGERPRINT.toString());
-
       const type = await getBiometryType();
       expect(type).toBe('Sidik Jari');
     });
 
     it('return null jika tidak tersedia', async () => {
       Keychain.__setBiometryType(null);
-
       const type = await getBiometryType();
       expect(type).toBeNull();
     });

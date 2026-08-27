@@ -13,7 +13,8 @@ import {
   isBiometricAvailable,
   enableBiometric,
   getTokenWithBiometric,
-  updateBiometricToken,
+  getRefreshTokenSilent,
+  saveRefreshTokenSilent,
   disableBiometric,
 } from '../services/biometric';
 import {taskCache} from '../services/offline/tasks';
@@ -511,8 +512,14 @@ export const useAuthStore = create<AuthState>(set => ({
         return false;
       }
 
-      // Panggil refresh dengan token dari Keystore
-      const result = await authService.refresh(storedToken);
+      // Token dari gerbang (A) bisa STALE (server merotasi jti single-use).
+      // Ambil token terbaru dari gudang silent (B); fallback ke isi A untuk
+      // instalasi lama yang belum pernah menulis B (tetap valid sampai rotasi
+      // pertama terjadi).
+      const refreshToken = (await getRefreshTokenSilent()) ?? storedToken;
+
+      // Panggil refresh dengan token terbaru
+      const result = await authService.refresh(refreshToken);
 
       if (result.success && result.data) {
         const {access_token, refresh_token} = result.data;
@@ -525,8 +532,8 @@ export const useAuthStore = create<AuthState>(set => ({
         await setToken(access_token);
         if (refresh_token) {
           setRefreshToken(refresh_token);
-          // Simpan refresh token baru kembali ke Keystore (rotasi)
-          await updateBiometricToken(refresh_token);
+          // Simpan refresh token baru ke GUDANG silent (rotasi, tanpa prompt)
+          await saveRefreshTokenSilent(refresh_token);
         }
 
         // Ambil profil user untuk set state

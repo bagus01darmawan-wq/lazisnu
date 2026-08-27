@@ -5,16 +5,33 @@
  * - Sidik jari hanya membuka akses ke refresh token di Android Keystore / iOS Keychain
  * - Server tetap otoritas penuh — revoke di server = jalur biometrik ikut mati
  * - Password tidak pernah disimpan
- * - Saat rotasi refresh, token baru disimpan kembali ke Keychain
  * - Saat REFRESH_REVOKED, biometrik dinonaktifkan otomatis
+ *
+ * Arsitektur GERBANG + GUDANG (revisi 2026-08-26 — perbaikan prompt nakal):
+ * - Service A (BIOMETRY_ANY) = GERBANG: dibaca HANYA saat tombol login biometrik
+ *   ditekan (prompt muncul di sana). Ditulis HANYA saat enable/disable di Profil.
+ *   Isinya TIDAK dipakai sebagai token (bisa stale — jti dirotasi server).
+ * - Service B (tanpa accessControl, AFTER_FIRST_UNLOCK, device-bound) = GUDANG:
+ *   selalu berisi refresh token terbaru — ditulis diam-diam setiap rotasi.
+ *   Tidak pernah memunculkan prompt.
+ * - loginWithBiometric: prompt lewat A (bukti autentikasi) → token fresh dari B
+ *   → refresh → rotasi → tulis ulang B diam-diam.
+ *
+ * Alasan teknis: react-native-keychain v10 di Android memakai BiometricPrompt
+ * juga pada jalur ENCRYPT (KeychainModule.kt → encryptToResult → interactive
+ * handler) — menulis ke service ber-accessControl BIOMETRY_ANY memunculkan
+ * prompt di waktu arbitrer (mis. saat background refresh setelah access token
+ * kedaluwarsa 15 menit).
  *
  * Ref: Bab 20.3, D-09 (opsional toggle On/Off)
  */
 
 import * as Keychain from 'react-native-keychain';
 
-const BIOMETRIC_SERVICE = 'com.lazisnu.biometric.refresh-token';
+const BIOMETRIC_SERVICE = 'com.lazisnu.biometric.refresh-token'; // A — gerbang
 const BIOMETRIC_USERNAME = 'biometric';
+const SILENT_SERVICE = 'com.lazisnu.biometric.refresh-token.silent'; // B — gudang
+const SILENT_USERNAME = 'biometric-silent';
 
 export async function isBiometricAvailable(): Promise<boolean> {
   try {
@@ -56,7 +73,9 @@ export async function getBiometryType(): Promise<string | null> {
 
 /**
  * Aktifkan login biometrik: simpan refresh token di Keystore/Keychain
- * yang hanya bisa dibuka dengan sidik jari / face ID.
+ * yang hanya bisa dibuka dengan sidik jari / face ID (service A — gerbang),
+ * lalu seed gudang silent (B) dengan token saat ini.
+ * Dipanggil HANYA saat toggle di Profil (prompt di sini = eksplisit).
  */
 export async function enableBiometric(refreshToken: string): Promise<boolean> {
   try {
@@ -70,6 +89,10 @@ export async function enableBiometric(refreshToken: string): Promise<boolean> {
         cancel: 'Batal',
       },
     });
+    if (result !== false) {
+      // Best-effort: gudang B mulai berisi token terbaru yang dimiliki app.
+      await saveRefreshTokenSilent(refreshToken);
+    }
     return result !== false;
   } catch (error) {
     // Diagnosa: error native (mis. E_CRYPTO_FAILED, KeyStoreException) —
@@ -80,10 +103,12 @@ export async function enableBiometric(refreshToken: string): Promise<boolean> {
 }
 
 /**
- * Buka refresh token dengan biometrik.
+ * Buka GERBANG (service A) dengan biometrik.
  * Memunculkan prompt sidik jari / face ID sistem.
  *
- * @returns refresh token atau null jika gagal / user membatalkan
+ * @returns token dari A, atau null jika gagal / user membatalkan.
+ *          CATATAN: token ini bisa STALE (server merotasi jti single-use) —
+ *          gunakan getRefreshTokenSilent() untuk isi token yang masih valid.
  */
 export async function getTokenWithBiometric(): Promise<string | null> {
   try {
@@ -107,20 +132,45 @@ export async function getTokenWithBiometric(): Promise<string | null> {
 }
 
 /**
- * Simpan refresh token baru setelah rotasi (refresh berhasil via biometrik).
- * Token lama sudah tidak valid — token baru harus ditulis ulang ke Keystore.
+ * Simpan refresh token terbaru ke GUDANG silent (service B) — TANPA prompt.
+ * Dipanggil setiap rotasi refresh (background, diam-diam).
  */
-export async function updateBiometricToken(refreshToken: string): Promise<boolean> {
-  // Sama dengan enableBiometric — overwrite entry yang sudah ada
-  return enableBiometric(refreshToken);
+export async function saveRefreshTokenSilent(refreshToken: string): Promise<boolean> {
+  try {
+    const result = await Keychain.setGenericPassword(SILENT_USERNAME, refreshToken, {
+      accessible: Keychain.ACCESSIBLE.AFTER_FIRST_UNLOCK,
+      service: SILENT_SERVICE,
+    });
+    return result !== false;
+  } catch (error) {
+    console.warn('[biometric] saveRefreshTokenSilent gagal:', error);
+    return false;
+  }
 }
 
 /**
- * Nonaktifkan login biometrik: hapus refresh token dari Keystore.
+ * Baca refresh token terbaru dari GUDANG silent (service B) — tanpa prompt.
+ * null bila belum pernah ditulis (mis. instalasi lama) → caller fallback.
+ */
+export async function getRefreshTokenSilent(): Promise<string | null> {
+  try {
+    const credentials = await Keychain.getGenericPassword({service: SILENT_SERVICE});
+    if (!credentials || typeof credentials === 'boolean') {
+      return null;
+    }
+    return credentials.password;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Nonaktifkan login biometrik: hapus GERBANG (A) + GUDANG (B) dari Keystore.
  */
 export async function disableBiometric(): Promise<boolean> {
   try {
     await Keychain.resetGenericPassword({service: BIOMETRIC_SERVICE});
+    await Keychain.resetGenericPassword({service: SILENT_SERVICE});
     return true;
   } catch {
     return false;
