@@ -3,7 +3,7 @@ import {TouchableOpacity, Text, ActivityIndicator, StyleSheet, View} from 'react
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {Colors, ComponentSizes, Radius, Typography, Spacing} from '../../theme';
 
-type AppButtonVariant = 'primary' | 'secondary' | 'outline' | 'danger';
+type AppButtonVariant = 'primary' | 'secondary' | 'outline' | 'danger' | 'dangerOutline';
 
 type AppButtonProps = {
   label: string;
@@ -36,6 +36,8 @@ export const AppButton: React.FC<AppButtonProps> = ({
         return styles.outlineContainer;
       case 'danger':
         return styles.dangerContainer;
+      case 'dangerOutline':
+        return styles.dangerOutlineContainer;
     }
   };
 
@@ -47,12 +49,17 @@ export const AppButton: React.FC<AppButtonProps> = ({
         return styles.solidText;
       case 'outline':
         return styles.outlineText;
+      case 'dangerOutline':
+        return styles.dangerOutlineText;
     }
   };
 
   const getIconColor = () => {
     if (disabled) {
       return Colors.text.muted;
+    }
+    if (variant === 'dangerOutline') {
+      return Colors.status.error;
     }
     return variant === 'outline' ? Colors.brand.deepGreen : Colors.text.white;
   };
@@ -133,6 +140,14 @@ const styles = StyleSheet.create({
   },
   outlineText: {
     color: Colors.brand.deepGreen,
+  },
+  dangerOutlineContainer: {
+    backgroundColor: Colors.surface.errorSoft,
+    borderWidth: 2,
+    borderColor: Colors.status.error,
+  },
+  dangerOutlineText: {
+    color: Colors.status.error,
   },
   disabledContainer: {
     backgroundColor: Colors.border.default,

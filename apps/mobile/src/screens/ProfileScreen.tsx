@@ -181,11 +181,11 @@ const ProfileScreen: React.FC = () => {
         </Text>
       </View>
 
-      {/* Gerbang aman: aksi sensitif tersembunyi di balik "Opsi Lanjutan" agar
+      {/* Gerbang aman: aksi sensitif tersembunyi di balik "Danger Area" agar
           tidak tertekan tidak sengaja (keputusan PO, RENCANA-UI-POLISH §2.E). */}
       <TouchableOpacity
         accessibilityRole={'button'}
-        accessibilityLabel={advancedVisible ? 'Tutup opsi lanjutan' : 'Buka opsi lanjutan'}
+        accessibilityLabel={advancedVisible ? 'Tutup bagian Danger Area' : 'Buka bagian Danger Area'}
         onPress={() => setAdvancedVisible(v => !v)}
         style={styles.advancedToggle}>
         <Icon
@@ -193,7 +193,7 @@ const ProfileScreen: React.FC = () => {
           size={20}
           color={Colors.text.muted}
         />
-        <Text style={styles.advancedText}>Opsi Lanjutan</Text>
+        <Text style={styles.advancedText}>Danger Area</Text>
       </TouchableOpacity>
 
       {advancedVisible && (
@@ -212,7 +212,7 @@ const ProfileScreen: React.FC = () => {
               <Icon
                 name={'flag-checkered'}
                 size={18}
-                color={activeCount ? Colors.status.warning : Colors.text.muted}
+                color={activeCount ? Colors.status.error : Colors.text.muted}
               />
               <Text
                 style={[
@@ -228,7 +228,7 @@ const ProfileScreen: React.FC = () => {
             <AppButton
               label={'Keluar dari Akun'}
               icon={'logout'}
-              variant={'outline'}
+              variant={'dangerOutline'}
               onPress={handleLogout}
               fullWidth
             />
@@ -369,8 +369,8 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xs + 2,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.status.warning + '60',
-    backgroundColor: Colors.surface.warningSoft,
+    borderColor: Colors.status.error + '60',
+    backgroundColor: Colors.surface.errorSoft,
   },
   completePeriodDisabled: {
     borderColor: Colors.border.warm,
@@ -379,7 +379,7 @@ const styles = StyleSheet.create({
   },
   completePeriodText: {
     ...Typography.label,
-    color: Colors.status.warning,
+    color: Colors.status.error,
   },
   completePeriodTextDisabled: {
     color: Colors.text.muted,
