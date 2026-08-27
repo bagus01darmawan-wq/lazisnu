@@ -1,4 +1,4 @@
-import React, {useEffect} from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   Alert,
   Image,
@@ -16,6 +16,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useAuthStore, useDashboardStore, useSyncStore, useTasksStore} from '../stores';
 import {Colors, DashboardLayout, Layout, Radius, Spacing, Typography} from '../theme';
 import {formatCurrency} from '../utils';
+import {SyncIssuesSheet} from '../components/SyncIssuesSheet';
 import type {MainNavigationProp} from '../navigation/types';
 
 const logo = require('../assets/branding/logo-lazisnu-putih.png');
@@ -37,6 +38,7 @@ const DashboardScreen: React.FC = () => {
   const totalWaiting = pendingCount + pendingCorrectionsCount;
   const totalReview = permanentFailedCount + failedCorrectionsCount;
   const totalSyncIssues = totalWaiting + totalReview;
+  const [issuesVisible, setIssuesVisible] = useState(false);
 
   useEffect(() => {
     fetchDashboard();
@@ -71,7 +73,7 @@ const DashboardScreen: React.FC = () => {
       'Penjemputan dan koreksi tetap aman tersimpan di perangkat. Aplikasi akan mencoba mengirim kembali secara otomatis.',
       [
         {text: 'Nanti', style: 'cancel'},
-        {text: 'Lihat Detail', onPress: () => navigation.navigate('History')},
+        {text: 'Lihat Detail', onPress: () => setIssuesVisible(true)},
         {text: 'Coba Kirim Lagi', onPress: () => triggerSync()},
       ],
     );
@@ -237,6 +239,7 @@ const DashboardScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      <SyncIssuesSheet visible={issuesVisible} onClose={() => setIssuesVisible(false)} />
     </View>
   );
 };

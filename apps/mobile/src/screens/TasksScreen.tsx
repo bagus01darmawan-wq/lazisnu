@@ -20,6 +20,7 @@ import {useTasksStore, useSyncStore} from '../stores';
 import {Colors, DashboardLayout, Layout, Radius, Spacing, Typography} from '../theme';
 import type {MainNavigationProp} from '../navigation/types';
 import {TaskItem, TaskSearchBar} from './tasks';
+import {SyncIssuesSheet} from '../components/SyncIssuesSheet';
 
 const TasksScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -37,6 +38,7 @@ const TasksScreen: React.FC = () => {
   const {tasks, fetchTasks, loadMore, isLoading, error, page, totalPages, fetchStats} =
     useTasksStore();
   const [searchQuery, setSearchQuery] = useState('');
+  const [issuesVisible, setIssuesVisible] = useState(false);
 
   useEffect(() => {
     fetchTasks();
@@ -112,7 +114,7 @@ const TasksScreen: React.FC = () => {
                 'Penjemputan dan koreksi tetap aman tersimpan di perangkat. Aplikasi akan mencoba mengirim kembali secara otomatis.',
                 [
                   {text: 'Nanti', style: 'cancel'},
-                  {text: 'Lihat Detail', onPress: () => navigation.navigate('History')},
+                  {text: 'Lihat Detail', onPress: () => setIssuesVisible(true)},
                   {text: 'Coba Kirim Lagi', onPress: () => triggerSync()},
                 ],
               );
@@ -202,6 +204,7 @@ const TasksScreen: React.FC = () => {
         maxToRenderPerBatch={10}
         windowSize={5}
       />
+      <SyncIssuesSheet visible={issuesVisible} onClose={() => setIssuesVisible(false)} />
     </View>
   );
 };
