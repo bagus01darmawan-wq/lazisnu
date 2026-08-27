@@ -80,9 +80,7 @@ export const KalengInfoCard: React.FC<KalengInfoCardProps> = ({task, showPeriod 
             <Icon name="history" size={20} color={Colors.status.warning} />
             <View style={styles.detailContent}>
               <Text style={styles.detailLabel}>Penjemputan Terakhir</Text>
-              <Text style={styles.detailValue}>
-                {formatCurrency(task.last_collection.nominal)}
-              </Text>
+              <Text style={styles.detailValue}>{formatCurrency(task.last_collection.nominal)}</Text>
             </View>
           </View>
         </>

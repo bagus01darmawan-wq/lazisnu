@@ -57,7 +57,5 @@ export function getErrorMessage(error: unknown, fallback = 'Terjadi kesalahan'):
     }
   }
 
-  return trimmed.length > MAX_MESSAGE_LENGTH
-    ? `${trimmed.slice(0, MAX_MESSAGE_LENGTH)}…`
-    : trimmed;
+  return trimmed.length > MAX_MESSAGE_LENGTH ? `${trimmed.slice(0, MAX_MESSAGE_LENGTH)}…` : trimmed;
 }

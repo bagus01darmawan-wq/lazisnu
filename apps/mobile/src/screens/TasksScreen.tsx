@@ -78,16 +78,10 @@ const TasksScreen: React.FC = () => {
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
       <View style={styles.emptyIcon}>
-        <Icon
-          name={'clipboard-check-outline'}
-          size={44}
-          color={Colors.brand.deepGreen}
-        />
+        <Icon name={'clipboard-check-outline'} size={44} color={Colors.brand.deepGreen} />
       </View>
       <Text style={styles.emptyTitle}>Semua tugas selesai</Text>
-      <Text style={styles.emptyText}>
-        Tidak ada penjemputan yang masih menunggu.
-      </Text>
+      <Text style={styles.emptyText}>Tidak ada penjemputan yang masih menunggu.</Text>
     </View>
   );
 

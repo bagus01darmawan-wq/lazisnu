@@ -24,7 +24,9 @@ const NEW_REFRESH_TOKEN = 'new-refresh-token-xyz789';
 
 const setCallFor = (service: string) =>
   Keychain.__getCalls().find(
-    c => c.method === 'setGenericPassword' && (c.args as {options?: {service?: string}}).options?.service === service,
+    c =>
+      c.method === 'setGenericPassword' &&
+      (c.args as {options?: {service?: string}}).options?.service === service,
   );
 
 describe('biometric', () => {
@@ -42,14 +44,19 @@ describe('biometric', () => {
 
       const aSet = setCallFor(BIOMETRIC_SERVICE);
       expect(aSet).toBeDefined();
-      const aArgs = aSet?.args as {username: string; options: {service: string; accessControl: string; accessible: string}};
+      const aArgs = aSet?.args as {
+        username: string;
+        options: {service: string; accessControl: string; accessible: string};
+      };
       expect(aArgs.username).toBe('biometric');
       expect(aArgs.options.accessControl).toBe(Keychain.ACCESS_CONTROL.BIOMETRY_ANY);
       expect(aArgs.options.accessible).toBe(Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY);
 
       const bSet = setCallFor(SILENT_SERVICE);
       expect(bSet).toBeDefined();
-      const bArgs = bSet?.args as {options: {accessControl?: string; authenticationPrompt?: unknown}};
+      const bArgs = bSet?.args as {
+        options: {accessControl?: string; authenticationPrompt?: unknown};
+      };
       expect(bArgs.options.accessControl).toBeUndefined();
       expect(bArgs.options.authenticationPrompt).toBeUndefined();
 
@@ -84,7 +91,9 @@ describe('biometric', () => {
 
       const bSet = setCallFor(SILENT_SERVICE);
       expect(bSet).toBeDefined();
-      const args = bSet?.args as {options: {accessControl?: string; authenticationPrompt?: unknown}};
+      const args = bSet?.args as {
+        options: {accessControl?: string; authenticationPrompt?: unknown};
+      };
       expect(args.options.accessControl).toBeUndefined();
       expect(args.options.authenticationPrompt).toBeUndefined();
     });
@@ -114,9 +123,7 @@ describe('biometric', () => {
 
       const resets = Keychain.__getCalls().filter(c => c.method === 'resetGenericPassword');
       expect(resets).toHaveLength(2);
-      const services = resets.map(
-        c => (c.args as {service?: string}).service,
-      );
+      const services = resets.map(c => (c.args as {service?: string}).service);
       expect(services).toContain(BIOMETRIC_SERVICE);
       expect(services).toContain(SILENT_SERVICE);
     });

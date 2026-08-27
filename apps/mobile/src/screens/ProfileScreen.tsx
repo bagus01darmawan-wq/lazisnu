@@ -185,7 +185,9 @@ const ProfileScreen: React.FC = () => {
           tidak tertekan tidak sengaja (keputusan PO, RENCANA-UI-POLISH §2.E). */}
       <TouchableOpacity
         accessibilityRole={'button'}
-        accessibilityLabel={advancedVisible ? 'Tutup bagian Danger Area' : 'Buka bagian Danger Area'}
+        accessibilityLabel={
+          advancedVisible ? 'Tutup bagian Danger Area' : 'Buka bagian Danger Area'
+        }
         onPress={() => setAdvancedVisible(v => !v)}
         style={styles.advancedToggle}>
         <Icon

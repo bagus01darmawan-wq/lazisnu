@@ -137,13 +137,22 @@ export const SyncIssuesSheet: React.FC<SyncIssuesSheetProps> = ({visible, onClos
             {item.meta}
           </Text>
         </View>
-        <View style={[styles.badge, item.tone === 'failed' ? styles.badgeFailed : styles.badgePending]}>
-          <Text style={[styles.badgeText, item.tone === 'failed' ? styles.badgeTextFailed : styles.badgeTextPending]}>
+        <View
+          style={[styles.badge, item.tone === 'failed' ? styles.badgeFailed : styles.badgePending]}>
+          <Text
+            style={[
+              styles.badgeText,
+              item.tone === 'failed' ? styles.badgeTextFailed : styles.badgeTextPending,
+            ]}>
             {item.tone === 'failed' ? 'Gagal' : 'Menunggu'}
           </Text>
         </View>
       </View>
-      <Text style={[styles.cardBody, item.tone === 'failed' ? styles.cardBodyFailed : styles.cardBodyPending]}>
+      <Text
+        style={[
+          styles.cardBody,
+          item.tone === 'failed' ? styles.cardBodyFailed : styles.cardBodyPending,
+        ]}>
         {item.body}
       </Text>
       {item.action && (
@@ -152,8 +161,16 @@ export const SyncIssuesSheet: React.FC<SyncIssuesSheetProps> = ({visible, onClos
           accessibilityLabel={item.action.label}
           onPress={item.action.onPress}
           style={styles.cardAction}>
-          <Icon name={'refresh'} size={16} color={item.tone === 'failed' ? Colors.status.error : Colors.brand.deepGreen} />
-          <Text style={[styles.cardActionText, {color: item.tone === 'failed' ? Colors.status.error : Colors.brand.deepGreen}]}>
+          <Icon
+            name={'refresh'}
+            size={16}
+            color={item.tone === 'failed' ? Colors.status.error : Colors.brand.deepGreen}
+          />
+          <Text
+            style={[
+              styles.cardActionText,
+              {color: item.tone === 'failed' ? Colors.status.error : Colors.brand.deepGreen},
+            ]}>
             {item.action.label}
           </Text>
         </TouchableOpacity>
@@ -163,7 +180,11 @@ export const SyncIssuesSheet: React.FC<SyncIssuesSheetProps> = ({visible, onClos
 
   const renderSection = (title: string, items: IssueItem[], failedTone: boolean) => (
     <>
-      <Text style={[styles.sectionTitle, failedTone ? styles.sectionTitleFailed : styles.sectionTitlePending]}>
+      <Text
+        style={[
+          styles.sectionTitle,
+          failedTone ? styles.sectionTitleFailed : styles.sectionTitlePending,
+        ]}>
         {title} ({items.length})
       </Text>
       {items.map(renderCard)}
@@ -179,8 +200,8 @@ export const SyncIssuesSheet: React.FC<SyncIssuesSheetProps> = ({visible, onClos
             <View style={styles.headingContent}>
               <Text style={styles.title}>Detail Sinkronisasi</Text>
               <Text style={styles.subtitle}>
-                {issues.pending.length} menunggu · {issues.failed.length} gagal — data tetap aman
-                di perangkat
+                {issues.pending.length} menunggu · {issues.failed.length} gagal — data tetap aman di
+                perangkat
               </Text>
             </View>
             <TouchableOpacity
@@ -199,7 +220,8 @@ export const SyncIssuesSheet: React.FC<SyncIssuesSheetProps> = ({visible, onClos
               </View>
             ) : (
               <>
-                {issues.pending.length > 0 && renderSection('Menunggu Kirim', issues.pending, false)}
+                {issues.pending.length > 0 &&
+                  renderSection('Menunggu Kirim', issues.pending, false)}
                 {issues.failed.length > 0 &&
                   renderSection('Gagal — Perlu Tindakan', issues.failed, true)}
               </>

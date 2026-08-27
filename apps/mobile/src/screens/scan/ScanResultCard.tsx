@@ -26,7 +26,12 @@ export const ScanResultCard: React.FC<ScanResultCardProps> = ({task, onSkip, onC
       <KalengInfoCard task={task} />
 
       <View style={styles.actionButtons}>
-        <AppButton label="Tidak Dijemput" variant="outline" onPress={() => onSkip(task)} fullWidth />
+        <AppButton
+          label="Tidak Dijemput"
+          variant="outline"
+          onPress={() => onSkip(task)}
+          fullWidth
+        />
         <AppButton
           label="Lanjutkan"
           icon="arrow-right"

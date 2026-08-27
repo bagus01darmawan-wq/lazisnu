@@ -36,9 +36,7 @@ const SAFE_R = 33; // safe zone Play Store (dp)
 const MAX_OFFSET = 1; // dp
 
 async function main() {
-  const {data, info} = await sharp(FILE)
-    .raw()
-    .toBuffer({resolveWithObject: true});
+  const {data, info} = await sharp(FILE).raw().toBuffer({resolveWithObject: true});
 
   let minX = info.width;
   let minY = info.height;
@@ -72,17 +70,25 @@ async function main() {
   const halfDiag = Math.hypot(widthPx / 2, heightPx / 2) / DP;
 
   if (Math.abs(offX) > MAX_OFFSET || Math.abs(offY) > MAX_OFFSET) {
-    failures.push(`konten tidak terpusat: offset (${offX.toFixed(2)}, ${offY.toFixed(2)}) dp > ${MAX_OFFSET}dp`);
+    failures.push(
+      `konten tidak terpusat: offset (${offX.toFixed(2)}, ${offY.toFixed(2)}) dp > ${MAX_OFFSET}dp`,
+    );
   }
   if (halfDiag > VISIBLE_R) {
-    failures.push(`setengah-diagonal ${halfDiag.toFixed(1)}dp > lingkaran terlihat ${VISIBLE_R}dp → TERPOTONG masker`);
+    failures.push(
+      `setengah-diagonal ${halfDiag.toFixed(1)}dp > lingkaran terlihat ${VISIBLE_R}dp → TERPOTONG masker`,
+    );
   } else if (halfDiag > SAFE_R) {
-    warnings.push(`setengah-diagonal ${halfDiag.toFixed(1)}dp di luar safe zone ${SAFE_R}dp — aman di launcher, tapi untuk Play Store turunkan skala ke 0.56.`);
+    warnings.push(
+      `setengah-diagonal ${halfDiag.toFixed(1)}dp di luar safe zone ${SAFE_R}dp — aman di launcher, tapi untuk Play Store turunkan skala ke 0.56.`,
+    );
   }
 
   console.log(`Foreground: ${widthPx / DP} × ${heightPx / DP} dp (kanvas 108dp)`);
   console.log(`Offset pusat: (${offX.toFixed(2)}, ${offY.toFixed(2)}) dp`);
-  console.log(`Setengah-diagonal: ${halfDiag.toFixed(1)} dp | lingkaran terlihat ${VISIBLE_R}dp | safe zone ${SAFE_R}dp`);
+  console.log(
+    `Setengah-diagonal: ${halfDiag.toFixed(1)} dp | lingkaran terlihat ${VISIBLE_R}dp | safe zone ${SAFE_R}dp`,
+  );
 
   for (const w of warnings) {
     console.warn(`WARN: ${w}`);

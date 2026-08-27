@@ -19,7 +19,9 @@ describe('getErrorMessage — pesan error jujur (tanpa fitnah penyebab)', () => 
   });
 
   it('memetakan timeout/abort ke fakta yang terbukti', () => {
-    expect(getErrorMessage(new Error('Aborted'))).toBe('Waktu tunggu habis — server tidak merespons.');
+    expect(getErrorMessage(new Error('Aborted'))).toBe(
+      'Waktu tunggu habis — server tidak merespons.',
+    );
     expect(getErrorMessage(new Error('timeout of 5000ms exceeded'))).toBe(
       'Waktu tunggu habis — server tidak merespons.',
     );

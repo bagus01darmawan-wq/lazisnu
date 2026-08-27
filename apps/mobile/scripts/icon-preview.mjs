@@ -43,7 +43,10 @@ async function contentArt(file, widthPx) {
     .resize({width: 2048})
     .png()
     .toBuffer();
-  buf = await sharp(buf).trim({background: {r: 0, g: 0, b: 0, alpha: 0}}).png().toBuffer();
+  buf = await sharp(buf)
+    .trim({background: {r: 0, g: 0, b: 0, alpha: 0}})
+    .png()
+    .toBuffer();
   const meta = await sharp(buf).metadata();
   const art = await sharp(buf)
     .resize({width: Math.round(widthPx), kernel: 'lanczos3'})
@@ -96,7 +99,9 @@ async function main() {
     const circlePng = await sharp({
       create: {width: CANVAS, height: CANVAS, channels: 4, background: v.bg},
     })
-      .composite([{input: art, left: Math.round((CANVAS - w) / 2), top: Math.round((CANVAS - h) / 2)}])
+      .composite([
+        {input: art, left: Math.round((CANVAS - w) / 2), top: Math.round((CANVAS - h) / 2)},
+      ])
       .composite([
         {
           input: Buffer.from(

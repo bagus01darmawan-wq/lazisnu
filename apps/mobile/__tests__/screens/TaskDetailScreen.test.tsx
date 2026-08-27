@@ -146,7 +146,11 @@ describe('TaskDetailScreen — detail penjemputan dari kartu tugas', () => {
       pressable?.props?.onPress?.();
     });
 
-    expect(alertSpy).toHaveBeenCalledWith('Tandai Tidak Dijemput', expect.any(String), expect.any(Array));
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Tandai Tidak Dijemput',
+      expect.any(String),
+      expect.any(Array),
+    );
 
     // Pilih konfirmasi "Ya, Tandai"
     const buttons = alertSpy.mock.calls[0][2] as Array<{text: string; onPress?: () => void}>;

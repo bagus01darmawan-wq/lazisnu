@@ -202,10 +202,7 @@ const DashboardScreen: React.FC = () => {
 
           <View style={styles.progressTrack}>
             <View
-              style={[
-                styles.progressFill,
-                {width: `${Math.round(monthTaskProgress * 100)}%`},
-              ]}
+              style={[styles.progressFill, {width: `${Math.round(monthTaskProgress * 100)}%`}]}
             />
           </View>
           <View style={styles.progressLine}>

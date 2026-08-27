@@ -62,12 +62,7 @@ const TaskDetailScreen: React.FC = () => {
         <KalengInfoCard task={task} showPeriod />
 
         <View style={styles.actions}>
-          <AppButton
-            label="Tidak Dijemput"
-            variant="outline"
-            onPress={handleSkip}
-            fullWidth
-          />
+          <AppButton label="Tidak Dijemput" variant="outline" onPress={handleSkip} fullWidth />
           <AppButton
             label="Lanjutkan"
             icon="arrow-right"
