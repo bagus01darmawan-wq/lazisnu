@@ -173,7 +173,7 @@ const HistoryScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, {paddingTop: insets.top + Spacing.sm}]}>
+      <View style={[styles.header, {paddingTop: insets.top + Spacing.lg}]}>
         <Text style={styles.headerTitle}>Riwayat Penjemputan</Text>
         <Text style={styles.headerSubtitle}>Data penjemputan yang sudah tersimpan</Text>
         <View style={styles.headerSummary}>

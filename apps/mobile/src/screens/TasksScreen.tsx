@@ -93,7 +93,7 @@ const TasksScreen: React.FC = () => {
     <View style={styles.container}>
       <LinearGradient
         colors={[Colors.brand.heroStart, Colors.brand.deepGreen, Colors.brand.heroEnd]}
-        style={[styles.header, {paddingTop: insets.top + Spacing.md}]}>
+        style={[styles.header, {paddingTop: insets.top + Spacing.lg}]}>
         <View pointerEvents={'none'} style={styles.heroArcOuter} />
         <View pointerEvents={'none'} style={styles.heroArcInner} />
 
