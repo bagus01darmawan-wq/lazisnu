@@ -63,7 +63,12 @@ const getScreenOptions = ({route}: {route: RouteProp<ParamListBase>}) => ({
       iconName = focused ? 'account-circle' : 'account-circle-outline';
     }
 
-    return <Icon name={iconName} size={size} color={color} />;
+    // Tombol Scan adalah pil hijau emerald: paksa ikon putih agar selalu
+    // kontras dengan latar (warna aktif/inaktif default = emerald/muted
+    // sama dengan latar pil → ikon tampak hilang).
+    const iconColor = route.name === 'Scan' ? Colors.text.white : color;
+
+    return <Icon name={iconName} size={size} color={iconColor} />;
   },
   tabBarActiveTintColor: Colors.brand.emerald,
   tabBarInactiveTintColor: Colors.text.muted,

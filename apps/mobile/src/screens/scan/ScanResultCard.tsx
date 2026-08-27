@@ -26,23 +26,13 @@ export const ScanResultCard: React.FC<ScanResultCardProps> = ({task, onSkip, onC
       <KalengInfoCard task={task} />
 
       <View style={styles.actionButtons}>
-        <View style={styles.actionHalf}>
-          <AppButton
-            label="Tidak Dijemput"
-            variant="outline"
-            icon="cancel"
-            onPress={() => onSkip(task)}
-            fullWidth
-          />
-        </View>
-        <View style={styles.actionHalf}>
-          <AppButton
-            label="Lanjutkan"
-            icon="arrow-right"
-            onPress={() => onContinue(task)}
-            fullWidth
-          />
-        </View>
+        <AppButton label="Tidak Dijemput" variant="outline" onPress={() => onSkip(task)} fullWidth />
+        <AppButton
+          label="Lanjutkan"
+          icon="arrow-right"
+          onPress={() => onContinue(task)}
+          fullWidth
+        />
       </View>
     </View>
   );
@@ -71,12 +61,8 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   actionButtons: {
-    flexDirection: 'row',
     marginTop: Spacing.lg,
     gap: Spacing.md,
-  },
-  actionHalf: {
-    flex: 1,
   },
 });
 

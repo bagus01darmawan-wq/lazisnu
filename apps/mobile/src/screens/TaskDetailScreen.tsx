@@ -61,23 +61,18 @@ const TaskDetailScreen: React.FC = () => {
         <KalengInfoCard task={task} showPeriod />
 
         <View style={styles.actions}>
-          <View style={styles.actionHalf}>
-            <AppButton
-              label="Tidak Dijemput"
-              variant="outline"
-              icon="cancel"
-              onPress={handleSkip}
-              fullWidth
-            />
-          </View>
-          <View style={styles.actionHalf}>
-            <AppButton
-              label="Lanjutkan"
-              icon="arrow-right"
-              onPress={() => navigation.navigate('Collection', {task})}
-              fullWidth
-            />
-          </View>
+          <AppButton
+            label="Tidak Dijemput"
+            variant="outline"
+            onPress={handleSkip}
+            fullWidth
+          />
+          <AppButton
+            label="Lanjutkan"
+            icon="arrow-right"
+            onPress={() => navigation.navigate('Collection', {task})}
+            fullWidth
+          />
         </View>
       </View>
     </View>
@@ -113,12 +108,8 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.sm,
   },
   actions: {
-    flexDirection: 'row',
     marginTop: Spacing.lg,
     gap: Spacing.md,
-  },
-  actionHalf: {
-    flex: 1,
   },
 });
 
