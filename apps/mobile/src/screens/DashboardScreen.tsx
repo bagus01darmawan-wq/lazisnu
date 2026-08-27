@@ -14,11 +14,9 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useAuthStore, useDashboardStore, useSyncStore, useTasksStore} from '../stores';
-import {Colors, DashboardLayout, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
+import {Colors, DashboardLayout, Layout, Radius, Spacing, Typography} from '../theme';
 import {formatCurrency} from '../utils';
 import type {MainNavigationProp} from '../navigation/types';
-import {TaskSummaryCard} from './tasks';
-import {MonthProgressCard} from './dashboard';
 
 const logo = require('../assets/branding/logo-lazisnu-putih.png');
 
@@ -27,7 +25,7 @@ const DashboardScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const user = useAuthStore(state => state.user);
   const {todayStats, monthStats, fetchDashboard, isLoading, error} = useDashboardStore();
-  const {activeCount, completedCount, totalCount, completedNominal, fetchStats} = useTasksStore();
+  const {fetchStats} = useTasksStore();
   const {
     pendingCount,
     permanentFailedCount,
@@ -53,9 +51,9 @@ const DashboardScreen: React.FC = () => {
   };
 
   const collected = todayStats?.collected || 0;
-  const remaining = todayStats?.remaining || 0;
-  const total = collected + remaining;
-  const progress = total ? collected / total : 0;
+  const monthTaskTotal = monthStats?.task_total || 0;
+  const monthTaskCompleted = monthStats?.task_completed || 0;
+  const monthTaskProgress = monthTaskTotal ? monthTaskCompleted / monthTaskTotal : 0;
   const firstName = user?.full_name?.trim().split(/\s+/)[0] || 'Petugas';
   const date = new Intl.DateTimeFormat('id-ID', {
     weekday: 'long',
@@ -144,29 +142,75 @@ const DashboardScreen: React.FC = () => {
         </LinearGradient>
 
         <View style={styles.body}>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>Hari Ini</Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Hari Ini</Text>
             <View style={styles.statsRow}>
-              <Stat value={`${collected}`} label={'Dijemput'} />
+              <View style={styles.statWide}>
+                <Text
+                  style={styles.statValue}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.72}>
+                  {formatCurrency(todayStats?.total_nominal || 0)}
+                </Text>
+                <Text style={styles.statLabel}>Total Infak</Text>
+              </View>
               <View style={styles.statDivider} />
-              <Stat
-                value={formatCurrency(todayStats?.total_nominal || 0)}
-                label={'Total Infak'}
-                wide
-              />
+              <View style={styles.statNarrow}>
+                <Text
+                  style={styles.statValue}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.72}>
+                  {`${collected}`}
+                </Text>
+                <Text style={styles.statLabel}>Dijemput</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.sectionGap} />
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Bulan Ini</Text>
+            <View style={styles.statsRow}>
+              <View style={styles.statWide}>
+                <Text
+                  style={styles.statValue}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.72}>
+                  {formatCurrency(monthStats?.total_nominal || 0)}
+                </Text>
+                <Text style={styles.statLabel}>Total Infak</Text>
+              </View>
               <View style={styles.statDivider} />
-              <Stat value={`${remaining}`} label={'Sisa Tugas'} />
+              <View style={styles.statNarrow}>
+                <Text
+                  style={styles.statValue}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.72}>
+                  {`${monthStats?.collected || 0}`}
+                </Text>
+                <Text style={styles.statLabel}>Dijemput</Text>
+              </View>
             </View>
-            <View style={styles.progressDivider} />
-            <View style={styles.progressHeading}>
-              <Text style={styles.progressLabel}>
-                {collected} dari {total} tugas selesai
-              </Text>
-              <Text style={styles.progressPercent}>{Math.round(progress * 100)}%</Text>
-            </View>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, {width: `${Math.round(progress * 100)}%`}]} />
-            </View>
+          </View>
+
+          <View style={styles.progressTrack}>
+            <View
+              style={[
+                styles.progressFill,
+                {width: `${Math.round(monthTaskProgress * 100)}%`},
+              ]}
+            />
+          </View>
+          <View style={styles.progressLine}>
+            <Text style={styles.progressCaption}>
+              {monthTaskCompleted} dari {monthTaskTotal} tugas selesai
+            </Text>
+            <Text style={styles.progressCaption}>{Math.round(monthTaskProgress * 100)}%</Text>
           </View>
 
           {!!error && !isLoading && (
@@ -182,41 +226,20 @@ const DashboardScreen: React.FC = () => {
             </TouchableOpacity>
           )}
 
-          <MonthProgressCard
-            collected={monthStats?.collected || 0}
-            nominal={monthStats?.total_nominal || 0}
-            taskTotal={monthStats?.task_total || 0}
-            taskCompleted={monthStats?.task_completed || 0}
+          <TouchableOpacity
+            accessibilityRole={'button'}
+            accessibilityLabel={'Buka statistik rekap rentang tanggal'}
             onPress={() => navigation.navigate('RangeStats')}
-          />
-
-          <View style={styles.taskSummaryWrap}>
-            <TaskSummaryCard
-              activeCount={activeCount}
-              completedCount={completedCount}
-              totalCount={totalCount}
-              completedNominal={completedNominal}
-              subtitle={'Rekap sepanjang masa'}
-            />
-          </View>
+            activeOpacity={0.7}
+            style={styles.rekapRow}>
+            <Text style={styles.sectionTitle}>Lihat Rekap</Text>
+            <Icon name={'chevron-right'} size={24} color={Colors.text.secondary} />
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>
   );
 };
-
-const Stat = ({value, label, wide = false}: {value: string; label: string; wide?: boolean}) => (
-  <View style={[styles.stat, wide && styles.statWide]}>
-    <Text
-      style={[styles.statValue, wide && styles.statValueWide]}
-      numberOfLines={1}
-      adjustsFontSizeToFit
-      minimumFontScale={0.72}>
-      {value}
-    </Text>
-    <Text style={styles.statLabel}>{label}</Text>
-  </View>
-);
 
 const styles = StyleSheet.create({
   screen: {flex: 1, backgroundColor: Colors.surface.page},
@@ -299,40 +322,42 @@ const styles = StyleSheet.create({
   greeting: {...Typography.heading1, color: Colors.text.white, fontSize: 23, lineHeight: 29},
   date: {...Typography.body, color: Colors.text.white, opacity: 0.86, marginTop: Spacing.xs},
   body: {paddingHorizontal: Layout.screenPadding},
-  summaryCard: {
-    minHeight: DashboardLayout.summaryMinHeight,
-    backgroundColor: Colors.surface.card,
-    borderRadius: Radius.panel,
-    borderWidth: 1,
-    borderColor: Colors.border.accent,
-    padding: Layout.cardPadding,
-    ...Shadows.medium,
-  },
-  summaryTitle: {...Typography.heading2, color: Colors.brand.deepGreen, marginBottom: Spacing.md},
-  statsRow: {flexDirection: 'row', alignItems: 'center'},
-  stat: {flex: 0.8, alignItems: 'center'},
-  statWide: {flex: 1.6},
-  statValue: {color: Colors.brand.deepGreen, fontSize: 27, lineHeight: 33, fontWeight: '800'},
-  statValueWide: {fontSize: 19},
+  section: {},
+  sectionTitle: {...Typography.heading3, color: Colors.brand.deepGreen},
+  statsRow: {flexDirection: 'row', alignItems: 'center', marginTop: Spacing.md},
+  statWide: {flex: 2.35, alignItems: 'flex-start'},
+  statNarrow: {flex: 1, alignItems: 'center'},
+  statValue: {color: Colors.brand.deepGreen, fontSize: 24, lineHeight: 31, fontWeight: '600'},
   statLabel: {...Typography.bodySmall, color: Colors.text.secondary, marginTop: 2},
-  statDivider: {width: 1, height: 54, backgroundColor: Colors.border.summary},
-  progressDivider: {
-    height: 1,
+  statDivider: {
+    width: 1,
+    height: 54,
     backgroundColor: Colors.border.summary,
-    marginTop: Spacing.md,
-    marginBottom: Spacing.sm,
+    marginHorizontal: 14,
   },
-  progressHeading: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
-  progressLabel: {...Typography.bodySmall, color: Colors.brand.deepGreen, fontWeight: '600'},
-  progressPercent: {...Typography.caption, color: Colors.text.secondary},
+  sectionGap: {height: Spacing.lg},
   progressTrack: {
     height: 10,
     borderRadius: Radius.pill,
     backgroundColor: Colors.surface.progressTrack,
-    marginTop: Spacing.sm,
+    marginTop: Spacing.md,
     overflow: 'hidden',
   },
   progressFill: {height: '100%', borderRadius: Radius.pill, backgroundColor: Colors.brand.emerald},
+  progressLine: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginTop: Spacing.sm,
+  },
+  progressCaption: {...Typography.caption, color: Colors.text.secondary},
+  rekapRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: Spacing.lg,
+    paddingVertical: 4,
+  },
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -343,9 +368,6 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
   },
   errorText: {...Typography.caption, color: Colors.status.error, flex: 1},
-  taskSummaryWrap: {
-    marginTop: Spacing.md,
-  },
 });
 
 export default DashboardScreen;
