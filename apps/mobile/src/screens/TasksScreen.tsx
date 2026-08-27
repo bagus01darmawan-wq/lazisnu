@@ -65,9 +65,14 @@ const TasksScreen: React.FC = () => {
 
   const renderTaskItem = useCallback(
     ({item, index}: {item: Task; index: number}) => (
-      <TaskItem item={item} index={index} onCopy={copyToClipboard} />
+      <TaskItem
+        item={item}
+        index={index}
+        onCopy={copyToClipboard}
+        onPress={task => navigation.navigate('TaskDetail', {task})}
+      />
     ),
-    [copyToClipboard],
+    [copyToClipboard, navigation],
   );
 
   const renderEmpty = () => (

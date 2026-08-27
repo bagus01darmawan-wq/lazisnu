@@ -11,12 +11,14 @@ export interface TaskItemProps {
   item: Task;
   index: number;
   onCopy: (text: string) => void;
+  /** Bila disediakan, seluruh kartu dapat ditekan → halaman detail penjemputan. */
+  onPress?: (task: Task) => void;
 }
 
-export const TaskItem = memo(({item, index, onCopy}: TaskItemProps) => {
+export const TaskItem = memo(({item, index, onCopy, onPress}: TaskItemProps) => {
   const active = item.status === 'ACTIVE';
 
-  return (
+  const card = (
     <Animated.View
       entering={FadeInUp.delay(index * 40).duration(320)}
       layout={AnimatedLayout.springify()}>
@@ -77,6 +79,20 @@ export const TaskItem = memo(({item, index, onCopy}: TaskItemProps) => {
         )}
       </AppCard>
     </Animated.View>
+  );
+
+  if (!onPress) {
+    return card;
+  }
+
+  return (
+    <TouchableOpacity
+      accessibilityRole={'button'}
+      accessibilityLabel={`Buka detail penjemputan ${item.owner_name}`}
+      activeOpacity={0.85}
+      onPress={() => onPress(item)}>
+      {card}
+    </TouchableOpacity>
   );
 });
 

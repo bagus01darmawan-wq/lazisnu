@@ -2,9 +2,10 @@ import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import type {Task} from '@lazisnu/shared-types';
-import {AppButton, AppCard} from '../../components/ui';
+import {AppButton} from '../../components/ui';
 import {Colors, Radius, Spacing, Typography} from '../../theme';
-import {formatCurrency} from '../../utils';
+
+import {KalengInfoCard} from './KalengInfoCard';
 
 export interface ScanResultCardProps {
   task: Task;
@@ -22,60 +23,7 @@ export const ScanResultCard: React.FC<ScanResultCardProps> = ({task, onSkip, onC
 
       <Text style={styles.successTitle}>QR Code Terdeteksi!</Text>
 
-      <AppCard variant="elevated" style={styles.detailCard}>
-        <View style={styles.detailRow}>
-          <Icon name="identifier" size={20} color={Colors.brand.emerald} />
-          <View style={styles.detailContent}>
-            <Text style={styles.detailLabel}>Kode QR</Text>
-            <Text style={styles.detailValue}>{task.qr_code}</Text>
-          </View>
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.detailRow}>
-          <Icon name="account" size={20} color={Colors.brand.emerald} />
-          <View style={styles.detailContent}>
-            <Text style={styles.detailLabel}>Nama Pemilik</Text>
-            <Text style={styles.detailValue}>{task.owner_name}</Text>
-          </View>
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.detailRow}>
-          <Icon name="phone" size={20} color={Colors.brand.emerald} />
-          <View style={styles.detailContent}>
-            <Text style={styles.detailLabel}>Nomor HP</Text>
-            <Text style={styles.detailValue}>{task.owner_phone}</Text>
-          </View>
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.detailRow}>
-          <Icon name="map-marker" size={20} color={Colors.brand.emerald} />
-          <View style={styles.detailContent}>
-            <Text style={styles.detailLabel}>Alamat</Text>
-            <Text style={styles.detailValue}>{task.owner_address || 'Alamat belum tersedia'}</Text>
-          </View>
-        </View>
-
-        {task.last_collection && (
-          <>
-            <View style={styles.divider} />
-            <View style={styles.detailRow}>
-              <Icon name="history" size={20} color={Colors.status.warning} />
-              <View style={styles.detailContent}>
-                <Text style={styles.detailLabel}>Penjemputan Terakhir</Text>
-                <Text style={styles.detailValue}>
-                  {formatCurrency(task.last_collection.nominal)}
-                </Text>
-              </View>
-            </View>
-          </>
-        )}
-      </AppCard>
+      <KalengInfoCard task={task} />
 
       <View style={styles.actionButtons}>
         <View style={styles.actionHalf}>
@@ -121,35 +69,6 @@ const styles = StyleSheet.create({
     color: Colors.brand.deepGreen,
     textAlign: 'center',
     marginBottom: Spacing.lg,
-  },
-  detailCard: {
-    padding: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.border.warm,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingVertical: 8,
-  },
-  detailContent: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  detailLabel: {
-    ...Typography.caption,
-    color: Colors.text.secondary,
-  },
-  detailValue: {
-    ...Typography.body,
-    fontWeight: '600',
-    color: Colors.text.primary,
-    marginTop: 2,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: Colors.border.warm,
-    marginVertical: 4,
   },
   actionButtons: {
     flexDirection: 'row',
