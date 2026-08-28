@@ -319,7 +319,7 @@ describe('HistoryScreen — modal Koreksi', () => {
   const collectionWithAddress = {
     id: 'col-1',
     nominal: 125000,
-    collected_at: '2026-07-06T03:00:00.000Z',
+    collected_at: new Date().toISOString(),
     sync_status: 'COMPLETED',
     can: {
       qr_code: 'LAZ-PNG-25-00009-533',

@@ -35,15 +35,8 @@ jest.mock('react-native-linear-gradient', () => {
   return View;
 });
 
-jest.mock('react-native-reanimated', () => {
-  const {View} = require('react-native');
-  return {
-    __esModule: true,
-    default: {View},
-    FadeInUp: {delay: () => ({duration: () => undefined})},
-    Layout: {springify: () => undefined},
-  };
-});
+// Mock react-native-reanimated disediakan global di jest.setup.js (Proxy
+// fallback, lengkap untuk RNGH GestureDetector + draggable-flatlist).
 
 jest.mock('../../src/stores', () => ({
   useAuthStore: (selector?: (state: any) => unknown) => {
