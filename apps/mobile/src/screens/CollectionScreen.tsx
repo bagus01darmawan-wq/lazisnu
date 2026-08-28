@@ -139,7 +139,7 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
         contentContainerStyle={styles.formContent}
         keyboardShouldPersistTaps={'handled'}
         showsVerticalScrollIndicator={false}>
-        <Text style={styles.sectionTitle}>Detail penerimaan</Text>
+        <Text style={[styles.sectionTitle, styles.sectionTitleFirst]}>Detail penerimaan</Text>
         <AppCard variant={'default'} style={styles.formCard}>
           <Text style={styles.label}>Nominal infaq</Text>
           <View style={styles.nominalRow}>
@@ -257,7 +257,6 @@ const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: Colors.surface.page},
   formContent: {
     paddingHorizontal: Layout.screenPadding,
-    paddingTop: Spacing.md,
     paddingBottom: Spacing.xl,
   },
   detailCard: {
@@ -295,7 +294,12 @@ const styles = StyleSheet.create({
     marginTop: Spacing.lg,
     marginBottom: Spacing.sm,
   },
-  formCard: {padding: Spacing.md},
+  sectionTitleFirst: {marginTop: Spacing.md},
+  formCard: {
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border.warm,
+  },
   label: {...Typography.label, color: Colors.text.primary, marginBottom: Spacing.sm},
   nominalRow: {flexDirection: 'row', alignItems: 'center'},
   nominalInputContainer: {flex: 1},
@@ -334,7 +338,12 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xs,
     marginBottom: Spacing.lg,
   },
-  summaryCard: {width: '100%', padding: Spacing.md},
+  summaryCard: {
+    width: '100%',
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border.warm,
+  },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

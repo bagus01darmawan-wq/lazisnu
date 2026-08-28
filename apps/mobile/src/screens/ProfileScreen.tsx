@@ -131,7 +131,7 @@ const ProfileScreen: React.FC = () => {
         />
       </View>
 
-      <Text style={styles.sectionTitle}>Informasi akun</Text>
+      <Text style={[styles.sectionTitle, styles.sectionTitleFirst]}>Informasi akun</Text>
       <AppCard variant={'elevated'} style={styles.infoCard}>
         <InfoRow
           icon={'account-outline'}
@@ -314,7 +314,13 @@ const styles = StyleSheet.create({
     marginTop: Spacing.lg,
     marginBottom: Spacing.sm,
   },
-  infoCard: {marginHorizontal: Layout.screenPadding, padding: 0},
+  sectionTitleFirst: {marginTop: Spacing.md},
+  infoCard: {
+    marginHorizontal: Layout.screenPadding,
+    padding: 0,
+    borderWidth: 1,
+    borderColor: Colors.border.warm,
+  },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',

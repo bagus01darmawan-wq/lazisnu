@@ -54,3 +54,6 @@ nginx/upstream.conf
 
 # Redis persistence data (generated at runtime)
 redis-data/
+
+# Hermes (local agent)
+.hermes/

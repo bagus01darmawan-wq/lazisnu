@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 const logo = require('../assets/branding/logo-lazisnu-putih.png');
+import {APP_VERSION} from '../config/appConfig';
 import {useNavigation} from '@react-navigation/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -236,6 +237,7 @@ const LoginScreen: React.FC = () => {
           <Text style={styles.footerText}>
             Hubungi admin ranting jika akun Anda belum terdaftar.
           </Text>
+          <Text style={styles.versionText}>Versi {APP_VERSION}</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -371,6 +373,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginHorizontal: Spacing.xl,
     marginTop: Spacing.lg,
+  },
+  versionText: {
+    ...Typography.caption,
+    color: Colors.text.muted,
+    textAlign: 'center',
+    marginTop: Spacing.xs,
   },
 });
 

@@ -203,7 +203,9 @@ const HistoryScreen: React.FC = () => {
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
-          collections.length ? <Text style={styles.listTitle}>Terbaru</Text> : null
+          collections.length ? (
+            <Text style={[styles.sectionTitle, styles.sectionTitleFirst]}>Terbaru</Text>
+          ) : null
         }
         ListEmptyComponent={
           !isLoading ? (
@@ -325,11 +327,16 @@ const styles = StyleSheet.create({
   summaryLabel: {...Typography.caption, color: Colors.brand.deepGreen},
   listContent: {
     paddingHorizontal: Layout.screenPadding,
-    paddingTop: Spacing.md,
     paddingBottom: Spacing.xl,
     flexGrow: 1,
   },
-  listTitle: {...Typography.heading3, color: Colors.brand.deepGreen, marginBottom: Spacing.sm},
+  sectionTitle: {
+    ...Typography.heading3,
+    color: Colors.brand.deepGreen,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.sm,
+  },
+  sectionTitleFirst: {marginTop: Spacing.md},
   emptyContainer: {flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 70},
   emptyIcon: {
     width: 84,

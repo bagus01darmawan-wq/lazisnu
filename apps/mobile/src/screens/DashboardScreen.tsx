@@ -145,7 +145,7 @@ const DashboardScreen: React.FC = () => {
 
         <View style={styles.body}>
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Hari Ini</Text>
+            <Text style={[styles.sectionTitle, styles.sectionTitleFirst]}>Hari Ini</Text>
             <View style={styles.statsRow}>
               <View style={styles.statWide}>
                 <Text
@@ -324,6 +324,7 @@ const styles = StyleSheet.create({
   body: {paddingHorizontal: Layout.screenPadding},
   section: {},
   sectionTitle: {...Typography.heading3, color: Colors.brand.deepGreen},
+  sectionTitleFirst: {marginTop: Spacing.md},
   statsRow: {flexDirection: 'row', alignItems: 'center', marginTop: Spacing.md},
   statWide: {flex: 2.35, alignItems: 'flex-start'},
   statNarrow: {flex: 1, alignItems: 'center'},

@@ -53,10 +53,10 @@ const getApiOrigin = (): string => {
   if (process.env.API_URL) {
     return process.env.API_URL;
   }
-  // Fallback: local dev (React Native CLI tanpa EAS)
-  if (__DEV__) {
-    return 'http://10.0.2.2:3001';
-  }
+  // Fallback: React Native CLI tanpa EAS (HP fisik & emulator).
+  // 10.0.2.2 hanya valid di emulator AVD — di HP fisik menyebabkan
+  // kegagalan koneksi yang keliru dilaporkan "tidak ada koneksi internet".
+  // Debug mengikuti API produksi agar perilaku = release.
   return 'https://api.lazisnu.site';
 };
 
