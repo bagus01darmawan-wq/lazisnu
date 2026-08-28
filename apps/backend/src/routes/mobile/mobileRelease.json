@@ -1,7 +1,7 @@
 {
-  "version": "1.1.3",
-  "versionCode": 21,
-  "apkUrl": "https://apk.lazisnu.site/lazisnu-1.1.3.apk",
-  "changelog": "- Unduhan pembaruan dalam aplikasi diperbaiki (tidak lagi macet di 0%)\n- Pesan kesalahan jujur - tidak ada lagi tuduhan 'periksa sinyal' tanpa bukti\n- Beranda baru: ringkasan Hari Ini & Bulan Ini tanpa kartu, akses cepat Lihat Rekap\n- Halaman Daftar Tugas baru: satu baris judul, pencarian tetap, tanpa tombol filter\n- Halaman 'Detail Penjemputan' dari kartu tugas (Tidak Dijemput / Lanjutkan)\n- Tombol Scan putih selalu terlihat di tab bar; aksi detail kaleng lebih jelas\n- Riwayat penjemputan lebih ringkas: status ikon, ID kaleng di atas, koreksi sejajar nominal\n- Halaman Profil: menu 'Danger Area' dengan tombol merah (Selesai Periode, Keluar Akun)\n- Login biometrik hanya meminta sidik jari saat masuk atau diaktifkan\n- 'Detail Sinkronisasi': lihat item yang belum terkirim/gagal beserta langkah tindakan\n- Ikon aplikasi baru terpusat",
+  "version": "1.1.4",
+  "versionCode": 22,
+  "apkUrl": "https://apk.lazisnu.site/lazisnu-1.1.4.apk",
+  "changelog": "- Aplikasi tidak lagi tertutup paksa saat ada kendala tampilan - error dicatat & petugas tetap bisa bekerja\n- Perbaikan tampilan halaman login (form & ikon lebih stabil)\n- Perbaikan unduhan pembaruan & pesan kesalahan jujur (lanjutan v1.1.3)",
   "minimumVersionCode": 0
 }
