@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -10,11 +10,12 @@ import {
   View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import type {Collection} from '@lazisnu/shared-types';
 import {correctionQueue, QueuedCorrection} from '../services/offline/corrections';
 import {useCollectionsStore, useSyncStore, useTasksStore} from '../stores';
-import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
+import {Colors, ComponentSizes, Layout, Radius, Spacing, Typography} from '../theme';
 import {
   HistoryCorrectionData,
   HistoryCorrectionFailureModal,
@@ -28,8 +29,16 @@ export const updatePendingCollectionNominal = (offlineId: string, nominal: numbe
 
 const HistoryScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const {collections, fetchCollections, loadMore, isLoading, error, page, totalPages, total} =
+  const {collections, fetchCollections, loadMore, isLoading, error, page, totalPages} =
     useCollectionsStore();
+  const collectionsThisMonth = useMemo(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    return collections.filter(c => {
+      const t = Date.parse(String(c.collected_at).replace(' ', 'T'));
+      return !isNaN(t) && t >= start;
+    });
+  }, [collections]);
   const {checkStatus, failedCorrectionsCount} = useSyncStore();
   const [correction, setCorrection] = useState<HistoryCorrectionData | null>(null);
   const [reason, setReason] = useState('');
@@ -173,19 +182,19 @@ const HistoryScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, {paddingTop: insets.top + Spacing.lg}]}>
+      <LinearGradient
+        colors={[Colors.brand.heroStart, Colors.brand.deepGreen, Colors.brand.heroEnd]}
+        style={[styles.header, {paddingTop: insets.top + Spacing.lg}]}>
         <Text style={styles.headerTitle}>Riwayat Penjemputan</Text>
         <Text style={styles.headerSubtitle}>Data penjemputan yang sudah tersimpan</Text>
         <View style={styles.headerSummary}>
-          <View style={styles.summaryIcon}>
-            <Icon name={'history'} size={24} color={Colors.brand.deepGreen} />
-          </View>
-          <View>
-            <Text style={styles.summaryValue}>{total}</Text>
-            <Text style={styles.summaryLabel}>Total riwayat penjemputan</Text>
+          <Icon name={'history'} size={ComponentSizes.fieldIconSize} color={Colors.brand.deepGreen} />
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryValue}>{collectionsThisMonth.length}</Text>
+            <Text style={styles.summaryLabel}>Kaleng terjemput bulan ini</Text>
           </View>
         </View>
-      </View>
+      </LinearGradient>
 
       {error && !isLoading && (
         <View style={styles.errorBanner}>
@@ -198,7 +207,7 @@ const HistoryScreen: React.FC = () => {
       )}
 
       <FlatList
-        data={collections}
+        data={collectionsThisMonth}
         renderItem={renderItem}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
@@ -294,10 +303,9 @@ const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: Colors.surface.page},
   header: {
     paddingHorizontal: Layout.screenPadding,
-    paddingBottom: Spacing.lg,
-    backgroundColor: Colors.brand.deepGreen,
-    borderBottomLeftRadius: Radius.panel,
-    borderBottomRightRadius: Radius.panel,
+    paddingBottom: Spacing.md,
+    borderBottomLeftRadius: Radius.hero,
+    borderBottomRightRadius: Radius.hero,
   },
   headerTitle: {
     ...Typography.heading1,
@@ -305,26 +313,24 @@ const styles = StyleSheet.create({
     fontSize: 23,
     lineHeight: 29,
   },
-  headerSubtitle: {...Typography.bodySmall, color: Colors.text.white, opacity: 0.78, marginTop: 3},
+  headerSubtitle: {...Typography.body, color: Colors.text.white, opacity: 0.86, marginTop: Spacing.xs},
   headerSummary: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.brand.mutedSand,
     borderRadius: Radius.lg,
     padding: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    minHeight: ComponentSizes.fieldHeight,
+    gap: ComponentSizes.fieldIconGap,
     marginTop: Spacing.md,
   },
-  summaryIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.overlay.lightGlass,
+  summaryRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: Spacing.sm,
   },
   summaryValue: {...Typography.heading2, color: Colors.brand.deepGreen},
-  summaryLabel: {...Typography.caption, color: Colors.brand.deepGreen},
+  summaryLabel: {...Typography.caption, color: Colors.brand.deepGreen, marginLeft: Spacing.sm},
   listContent: {
     paddingHorizontal: Layout.screenPadding,
     paddingBottom: Spacing.xl,

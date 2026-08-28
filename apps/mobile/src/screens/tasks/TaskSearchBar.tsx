@@ -1,7 +1,7 @@
 import React from 'react';
 import {StyleSheet, TextInput, TouchableOpacity, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import {Colors, Radius, Spacing, Typography} from '../../theme';
+import {Colors, ComponentSizes, Radius, Spacing, Typography} from '../../theme';
 
 export interface TaskSearchBarProps {
   searchQuery: string;
@@ -16,7 +16,7 @@ export const TaskSearchBar: React.FC<TaskSearchBarProps> = ({
 }) => {
   return (
     <View style={styles.searchContainer}>
-      <Icon name={'magnify'} size={24} color={Colors.brand.deepGreen} />
+      <Icon name={'magnify'} size={ComponentSizes.fieldIconSize} color={Colors.brand.deepGreen} />
       <TextInput
         placeholder={'Cari nama donatur atau alamat...'}
         placeholderTextColor={Colors.brand.deepGreen + '70'}
@@ -43,11 +43,12 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xs - 2,
     paddingHorizontal: Spacing.md,
     marginTop: Spacing.md,
+    minHeight: ComponentSizes.fieldHeight,
     borderRadius: Radius.lg,
     backgroundColor: Colors.brand.mutedSand,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    gap: ComponentSizes.fieldIconGap,
   },
   searchInput: {
     flex: 1,
