@@ -95,7 +95,6 @@ const DashboardScreen: React.FC = () => {
         <LinearGradient
           colors={[Colors.brand.heroStart, Colors.brand.deepGreen, Colors.brand.heroEnd]}
           style={[styles.hero, {paddingTop: insets.top + Spacing.md}]}>
-
           <View style={styles.topRow}>
             <View style={styles.logoContainer}>
               <Image source={logo} style={styles.logo} resizeMode={'contain'} />

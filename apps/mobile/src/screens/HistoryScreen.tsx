@@ -188,7 +188,11 @@ const HistoryScreen: React.FC = () => {
         <Text style={styles.headerTitle}>Riwayat Penjemputan</Text>
         <Text style={styles.headerSubtitle}>Data penjemputan yang sudah tersimpan</Text>
         <View style={styles.headerSummary}>
-          <Icon name={'history'} size={ComponentSizes.fieldIconSize} color={Colors.brand.deepGreen} />
+          <Icon
+            name={'history'}
+            size={ComponentSizes.fieldIconSize}
+            color={Colors.brand.deepGreen}
+          />
           <View style={styles.summaryRow}>
             <Text style={styles.summaryValue}>{collectionsThisMonth.length}</Text>
             <Text style={styles.summaryLabel}>Kaleng terjemput bulan ini</Text>
@@ -313,7 +317,12 @@ const styles = StyleSheet.create({
     fontSize: 23,
     lineHeight: 29,
   },
-  headerSubtitle: {...Typography.body, color: Colors.text.white, opacity: 0.86, marginTop: Spacing.xs},
+  headerSubtitle: {
+    ...Typography.body,
+    color: Colors.text.white,
+    opacity: 0.86,
+    marginTop: Spacing.xs,
+  },
   headerSummary: {
     flexDirection: 'row',
     alignItems: 'center',

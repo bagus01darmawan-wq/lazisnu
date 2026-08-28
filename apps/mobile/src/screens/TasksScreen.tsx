@@ -14,10 +14,7 @@ import {useNavigation} from '@react-navigation/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
-import DraggableFlatList, {
-  RenderItemParams,
-  ScaleDecorator,
-} from 'react-native-draggable-flatlist';
+import DraggableFlatList, {RenderItemParams, ScaleDecorator} from 'react-native-draggable-flatlist';
 import type {Task} from '@lazisnu/shared-types';
 import {useTasksStore, useSyncStore} from '../stores';
 import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
@@ -38,8 +35,17 @@ const TasksScreen: React.FC = () => {
   } = useSyncStore();
   const totalSyncIssues =
     pendingCount + permanentFailedCount + pendingCorrectionsCount + failedCorrectionsCount;
-  const {tasks, fetchTasks, loadMore, isLoading, error, page, totalPages, fetchStats, reorderTasks} =
-    useTasksStore();
+  const {
+    tasks,
+    fetchTasks,
+    loadMore,
+    isLoading,
+    error,
+    page,
+    totalPages,
+    fetchStats,
+    reorderTasks,
+  } = useTasksStore();
   const [searchQuery, setSearchQuery] = useState('');
   // Urutan pribadi hanya bermakna pada daftar penuh — saat mencari, drag dinonaktifkan.
   const dragEnabled = !searchQuery.trim();
@@ -98,12 +104,13 @@ const TasksScreen: React.FC = () => {
       <LinearGradient
         colors={[Colors.brand.heroStart, Colors.brand.deepGreen, Colors.brand.heroEnd]}
         style={[styles.header, {paddingTop: insets.top + Spacing.lg}]}>
-
         <View style={styles.titleRow}>
           <View style={styles.titleColumn}>
             <Text style={styles.headerTitle}>Daftar Tugas</Text>
             <Text style={styles.headerSubtitle}>
-              {isLoading && page === 1 ? 'Memuat penugasan...' : `${tasks.length} tugas ditampilkan`}
+              {isLoading && page === 1
+                ? 'Memuat penugasan...'
+                : `${tasks.length} tugas ditampilkan`}
             </Text>
           </View>
           <TouchableOpacity
