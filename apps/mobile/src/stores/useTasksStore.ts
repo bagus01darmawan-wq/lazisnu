@@ -6,6 +6,7 @@ import NetInfo from '@react-native-community/netinfo';
 import {tasksStatsCache} from '../services/offline/cache';
 import {offlineQueue} from '../services/offline/queue';
 import {taskCache} from '../services/offline/tasks';
+import {taskOrderCache} from '../services/offline/taskOrderCache';
 import {getErrorMessage} from '../utils/error';
 
 let latestTasksRequestId = 0;
@@ -53,6 +54,33 @@ export const reconcileTasks = (serverTasks: Task[], status: 'ACTIVE' | 'COMPLETE
 
     return dedupeTasksById([...queuedTasks, ...serverCompleted]);
   }
+};
+
+/**
+ * Terapkan urutan pribadi (hasil drag petugas) di atas urutan server.
+ * Tugas dengan id yang dikenal cache → ikut urutan pribadi; tugas baru
+ * dari server (id tak dikenal) → tetap di bawah sesuai urutan aslinya.
+ */
+const applyCustomOrder = (tasks: Task[]): Task[] => {
+  const order = taskOrderCache.get();
+  if (order.length === 0) {
+    return tasks;
+  }
+  const byId = new Map(tasks.map(task => [task.id, task]));
+  const ordered: Task[] = [];
+  for (const id of order) {
+    const task = byId.get(id);
+    if (task) {
+      ordered.push(task);
+      byId.delete(id);
+    }
+  }
+  for (const task of tasks) {
+    if (byId.has(task.id)) {
+      ordered.push(task);
+    }
+  }
+  return ordered;
 };
 
 const TASK_PAGE_LIMIT = 1000;
@@ -139,6 +167,7 @@ interface TasksState {
   setCurrentTask: (task: Task | null) => void;
   markTaskComplete: (taskId: string, nominal?: number) => void;
   adjustCompletedNominal: (delta: number) => void;
+  reorderTasks: (ids: string[]) => void;
   skipAssignment: (taskId: string) => Promise<{
     success: boolean;
     code?: string;
@@ -262,7 +291,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
       const cached = taskCache.getTasks(status);
       const reconciled = reconcileTasks(cached, status);
       set({
-        tasks: reconciled,
+        tasks: applyCustomOrder(reconciled),
         page: 1,
         totalPages: 1,
         isLoading: false,
@@ -300,7 +329,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
     }
 
     set({
-      tasks: reconcileTasks(taskCache.getTasks(status), status),
+      tasks: applyCustomOrder(reconcileTasks(taskCache.getTasks(status), status)),
       page: 1,
       totalPages: 1,
       isLoading: false,
@@ -325,7 +354,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
         const combined = dedupeTasksById([...tasks, ...newTasks]);
         const reconciled = reconcileTasks(combined, status || 'ACTIVE');
         set({
-          tasks: reconciled,
+          tasks: applyCustomOrder(reconciled),
           page: result.data.pagination.page || page + 1,
           totalPages: result.data.pagination.total_pages || totalPages,
           isLoading: false,
@@ -342,7 +371,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
     const {tasks, activeCount, completedCount, totalCount, completedNominal} = get();
     const moved = taskCache.markCompleted(taskId);
 
-    set({tasks: tasks.filter(task => task.id !== taskId)});
+    set({tasks: applyCustomOrder(tasks.filter(task => task.id !== taskId))});
     if (!moved) {
       return;
     }
@@ -359,6 +388,26 @@ export const useTasksStore = create<TasksState>((set, get) => ({
       completedCount: stats.completed,
       completedNominal: stats.completedNominal,
     });
+  },
+
+  reorderTasks: ids => {
+    const {tasks} = get();
+    taskOrderCache.set(ids);
+    const byId = new Map(tasks.map(task => [task.id, task]));
+    const next: Task[] = [];
+    for (const id of ids) {
+      const task = byId.get(id);
+      if (task) {
+        next.push(task);
+        byId.delete(id);
+      }
+    }
+    for (const task of tasks) {
+      if (byId.has(task.id)) {
+        next.push(task);
+      }
+    }
+    set({tasks: next});
   },
 
   adjustCompletedNominal: (delta: number) => {
@@ -382,7 +431,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
       if (result.success) {
         const {tasks, activeCount, completedCount, totalCount} = get();
         set({
-          tasks: tasks.filter(task => task.id !== taskId),
+          tasks: applyCustomOrder(tasks.filter(task => task.id !== taskId)),
         });
         taskCache.markCompleted(taskId);
         tasksStatsCache.set({

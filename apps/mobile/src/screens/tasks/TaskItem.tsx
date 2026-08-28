@@ -13,9 +13,11 @@ export interface TaskItemProps {
   onCopy: (text: string) => void;
   /** Bila disediakan, seluruh kartu dapat ditekan → halaman detail penjemputan. */
   onPress?: (task: Task) => void;
+  /** Bila disediakan, long-press pada kartu memulai drag untuk mengubah urutan. */
+  onLongPressDrag?: () => void;
 }
 
-export const TaskItem = memo(({item, index, onCopy, onPress}: TaskItemProps) => {
+export const TaskItem = memo(({item, index, onCopy, onPress, onLongPressDrag}: TaskItemProps) => {
   const active = item.status === 'ACTIVE';
 
   const card = (
@@ -90,6 +92,8 @@ export const TaskItem = memo(({item, index, onCopy, onPress}: TaskItemProps) => 
       accessibilityRole={'button'}
       accessibilityLabel={`Buka detail penjemputan ${item.owner_name}`}
       activeOpacity={0.85}
+      delayLongPress={220}
+      onLongPress={onLongPressDrag}
       onPress={() => onPress(item)}>
       {card}
     </TouchableOpacity>

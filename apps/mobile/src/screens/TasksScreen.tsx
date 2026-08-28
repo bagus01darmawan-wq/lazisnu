@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   Clipboard,
-  FlatList,
   RefreshControl,
   StyleSheet,
   Text,
@@ -15,6 +14,10 @@ import {useNavigation} from '@react-navigation/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
+import DraggableFlatList, {
+  RenderItemParams,
+  ScaleDecorator,
+} from 'react-native-draggable-flatlist';
 import type {Task} from '@lazisnu/shared-types';
 import {useTasksStore, useSyncStore} from '../stores';
 import {Colors, DashboardLayout, Layout, Radius, Spacing, Typography} from '../theme';
@@ -35,9 +38,11 @@ const TasksScreen: React.FC = () => {
   } = useSyncStore();
   const totalSyncIssues =
     pendingCount + permanentFailedCount + pendingCorrectionsCount + failedCorrectionsCount;
-  const {tasks, fetchTasks, loadMore, isLoading, error, page, totalPages, fetchStats} =
+  const {tasks, fetchTasks, loadMore, isLoading, error, page, totalPages, fetchStats, reorderTasks} =
     useTasksStore();
   const [searchQuery, setSearchQuery] = useState('');
+  // Urutan pribadi hanya bermakna pada daftar penuh — saat mencari, drag dinonaktifkan.
+  const dragEnabled = !searchQuery.trim();
   const [issuesVisible, setIssuesVisible] = useState(false);
 
   useEffect(() => {
@@ -64,15 +69,18 @@ const TasksScreen: React.FC = () => {
   });
 
   const renderTaskItem = useCallback(
-    ({item, index}: {item: Task; index: number}) => (
-      <TaskItem
-        item={item}
-        index={index}
-        onCopy={copyToClipboard}
-        onPress={task => navigation.navigate('TaskDetail', {task})}
-      />
+    ({item, drag, getIndex}: RenderItemParams<Task>) => (
+      <ScaleDecorator activeScale={1.05}>
+        <TaskItem
+          item={item}
+          index={getIndex() ?? 0}
+          onCopy={copyToClipboard}
+          onPress={task => navigation.navigate('TaskDetail', {task})}
+          onLongPressDrag={dragEnabled ? drag : undefined}
+        />
+      </ScaleDecorator>
     ),
-    [copyToClipboard, navigation],
+    [copyToClipboard, navigation, dragEnabled],
   );
 
   const renderEmpty = () => (
@@ -144,6 +152,8 @@ const TasksScreen: React.FC = () => {
         />
       </LinearGradient>
 
+      <Text style={[styles.sectionTitle, styles.sectionTitleFirst]}>Perlu Dijemput</Text>
+
       {!!error && !isLoading && (
         <TouchableOpacity
           accessibilityRole={'button'}
@@ -156,10 +166,11 @@ const TasksScreen: React.FC = () => {
         </TouchableOpacity>
       )}
 
-      <FlatList
+      <DraggableFlatList
         data={filteredTasks}
         renderItem={renderTaskItem}
         keyExtractor={item => item.id}
+        onDragEnd={({data}) => reorderTasks(data.map(task => task.id))}
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           isLoading ? (
@@ -278,10 +289,17 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     paddingHorizontal: Layout.screenPadding,
-    paddingTop: Spacing.md,
     paddingBottom: Spacing.xl,
     flexGrow: 1,
   },
+  sectionTitle: {
+    ...Typography.heading3,
+    color: Colors.brand.deepGreen,
+    marginHorizontal: Layout.screenPadding,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.sm,
+  },
+  sectionTitleFirst: {marginTop: Spacing.md},
   errorBanner: {
     minHeight: 48,
     flexDirection: 'row',
