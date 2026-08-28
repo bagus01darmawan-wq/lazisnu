@@ -1,71 +1,163 @@
 name: CI
 
+# ============================================================================
+#  Lazisnu Monorepo — Build, Test & Deploy
+#
+#  KONTRAK PENTING (jangan diubah tanpa cek):
+#  - `release.yml` memanggil: gh workflow run ci.yml --ref <tag>
+#    → workflow ini WAJIB tetap menangani push tag v* dan workflow_dispatch
+#      dengan alur: build image → deploy production (blue-green).
+#  - Deploy production hanya jalan pada ref `refs/tags/v*`.
+#  - Deploy staging otomatis pada push ke `main`.
+#  - Secrets yang dipakai: VM_HOST, VM_USER, VM_SSH_KEY (GITHUB_TOKEN bawaan).
+#  - Deploy bergantung pada scripts/deploy-blue-green.sh di dalam repo.
+#
+#  Perubahan vs versi sebelumnya:
+#   1. concurrency → run PR lama dibatalkan (hemat runner); deploy tetap serial.
+#   2. timeout-minutes di tiap job → tidak ada job gantung tanpa batas.
+#   3. permissions least-privilege (contents:read di level workflow).
+#   4. Job verify/test dipisah → gagal lebih cepat & jelas sumber error-nya.
+#   5. pnpm store + dependensi di-cache lintas job (setup-node cache: pnpm).
+#   6. Token/secret tidak lagi disisipkan langsung ke script shell (env:).
+# ============================================================================
+
 on:
   push:
-    branches: [ main, master ]
-    paths-ignore: ['docs/**', '*.md']  # docs-only → skip workflow
-  pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
+    tags: ['v*']
     paths-ignore: ['docs/**', '*.md']
-  workflow_dispatch:  # Manual trigger untuk deploy
+  pull_request:
+    branches: [main, master]
+    paths-ignore: ['docs/**', '*.md']
+  workflow_dispatch: # Dipakai release.yml dan juga bisa dipicu manual
+
+# Batalkan run lama pada PR yang diganti commit baru.
+# cancel-in-progress: false untuk main/tag → deploy tidak pernah dibatalkan
+# di tengah jalan (menhindari setengah deploy).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME_BACKEND: ${{ github.repository }}/backend
   IMAGE_NAME_WEB: ${{ github.repository }}/web
+  NODE_VERSION: '24'
 
 jobs:
-  # ─── Deteksi area perubahan (path filter) ────────────────────────────────
-  # CI penuh (build image + deploy) hanya jika backend/web/infra berubah.
-  # Perubahan mobile/docs → hanya test mobile (cepat); tag/dispatch → full.
+  # ─── Deteksi area yang berubah ────────────────────────────────────────────
+  # Supaya perubahan mobile saja tidak memicu build image + deploy backend/web.
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
-      backend: ${{ steps.filter.outputs.backend || steps.filter-manual.outputs.backend }}
-      web: ${{ steps.filter.outputs.web || steps.filter-manual.outputs.web }}
-      mobile: ${{ steps.filter.outputs.mobile || steps.filter-manual.outputs.mobile }}
-      infra: ${{ steps.filter.outputs.infra || steps.filter-manual.outputs.infra }}
+      backend: ${{ steps.filter.outputs.backend || steps.fallback.outputs.backend }}
+      web: ${{ steps.filter.outputs.web || steps.fallback.outputs.web }}
+      mobile: ${{ steps.filter.outputs.mobile || steps.fallback.outputs.mobile }}
+      infra: ${{ steps.filter.outputs.infra || steps.fallback.outputs.infra }}
     steps:
-    - uses: actions/checkout@v7
-      with:
-        fetch-depth: 0
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
-    - id: filter
-      if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-      uses: dorny/paths-filter@v4
-      with:
-        filters: |
-          backend:
-            - 'apps/backend/**'
-            - 'packages/shared-types/**'
-            - 'pnpm-lock.yaml'
-            - 'pnpm-workspace.yaml'
-          web:
-            - 'apps/web/**'
-          mobile:
-            - 'apps/mobile/**'
-          infra:
-            - 'docker-compose*.yml'
-            - 'nginx/**'
-            - 'prometheus/**'
-            - 'scripts/**'
-            - '.github/workflows/**'
+      - id: filter
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            backend:
+              - 'apps/backend/**'
+              - 'packages/shared-types/**'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+            web:
+              - 'apps/web/**'
+              - 'packages/shared-types/**'
+              - 'pnpm-lock.yaml'
+            mobile:
+              - 'apps/mobile/**'
+              - 'packages/shared-types/**'
+              - 'pnpm-lock.yaml'
+            infra:
+              - 'docker-compose*.yml'
+              - 'nginx/**'
+              - 'prometheus/**'
+              - 'scripts/**'
+              - '.github/workflows/**'
 
-    # Tag push / workflow_dispatch: path filter tidak relevan → CI penuh
-    - id: filter-manual
-      if: steps.filter.outputs.backend == ''
-      run: |
-        echo "backend=true" >> "$GITHUB_OUTPUT"
-        echo "web=true" >> "$GITHUB_OUTPUT"
-        echo "mobile=true" >> "$GITHUB_OUTPUT"
-        echo "infra=true" >> "$GITHUB_OUTPUT"
+      # Tag push / workflow_dispatch: filter path tidak relevan → jalankan semua.
+      - id: fallback
+        if: steps.filter.outputs.backend == ''
+        run: |
+          echo "backend=true"  >> "$GITHUB_OUTPUT"
+          echo "web=true"      >> "$GITHUB_OUTPUT"
+          echo "mobile=true"   >> "$GITHUB_OUTPUT"
+          echo "infra=true"    >> "$GITHUB_OUTPUT"
 
-  lint-and-typecheck:
+  # ─── Gerbang mutu: install, build shared types, lint, format, typecheck ───
+  # Tidak butuh service (Postgres/Redis) → cepat, dan jadi gate semua job lain.
+  verify:
+    name: Verify (lint · format · typecheck)
     needs: changes
-    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile == 'true' || needs.changes.outputs.infra == 'true'
+    if: >-
+      needs.changes.outputs.backend == 'true' ||
+      needs.changes.outputs.web    == 'true' ||
+      needs.changes.outputs.mobile == 'true' ||
+      needs.changes.outputs.infra  == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
 
-    # Postgres service untuk test integrasi (kredensial match apps/backend/.env.test)
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared types
+        run: pnpm build:shared
+
+      - name: Lint backend
+        if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.infra == 'true'
+        run: pnpm --filter lazisnu-backend run lint
+
+      - name: Lint web
+        if: needs.changes.outputs.web == 'true' || needs.changes.outputs.infra == 'true'
+        run: pnpm --filter web run lint
+
+      - name: Lint mobile
+        if: needs.changes.outputs.mobile == 'true' || needs.changes.outputs.infra == 'true'
+        run: pnpm --filter lazisnu-collector-app run lint
+
+      - name: Prettier check (mobile)
+        if: needs.changes.outputs.mobile == 'true'
+        run: pnpm --filter lazisnu-collector-app run format:check
+
+      - name: Typecheck (semua workspace)
+        run: pnpm -r exec tsc --noEmit
+
+      - name: Cek migration orphans
+        if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.infra == 'true'
+        run: pnpm --filter lazisnu-backend db:check-orphans
+
+  # ─── Test backend (butuh Postgres + Redis) ────────────────────────────────
+  test-backend:
+    name: Test backend (unit + integration)
+    needs: [changes, verify]
+    if: >-
+      needs.verify.result == 'success' &&
+      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.infra == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
     services:
       postgres:
         image: postgres:16
@@ -73,8 +165,7 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: lazisnu_test_2026
           POSTGRES_DB: lazisnu_test
-        ports:
-          - 5432:5432
+        ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s
@@ -82,283 +173,339 @@ jobs:
           --health-retries 10
       redis:
         image: redis:7-alpine
-        ports:
-          - 6379:6379
+        ports: ['6379:6379']
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
 
+    env:
+      DATABASE_URL: postgresql://postgres:lazisnu_test_2026@localhost:5432/lazisnu_test
+      REDIS_URL: redis://localhost:6379
+
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
 
-    - name: Install pnpm
-      uses: pnpm/action-setup@v6
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v7
-      with:
-        node-version: '24'
-        cache: 'pnpm'
+      - name: Build shared types
+        run: pnpm build:shared
 
-    - name: Install dependencies
-      run: pnpm install --frozen-lockfile
+      - name: Jalankan migrasi di database test
+        run: pnpm --filter lazisnu-backend db:migrate
 
-    - name: Build Shared Types (Wajib untuk Monorepo)
-      run: pnpm build:shared
+      - name: Unit test
+        run: pnpm --filter lazisnu-backend test:unit
 
-    - name: Check migration orphans
-      if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.infra == 'true'
-      run: pnpm --filter lazisnu-backend db:check-orphans
+      - name: Integration test
+        run: pnpm --filter lazisnu-backend test:integration
 
-    - name: Run lint
-      if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile == 'true' || needs.changes.outputs.infra == 'true'
-      run: pnpm -r --no-bail run lint
+  # ─── Test mobile ─────────────────────────────────────────────────────────
+  test-mobile:
+    name: Test mobile
+    needs: [changes, verify]
+    if: >-
+      needs.verify.result == 'success' &&
+      (needs.changes.outputs.mobile == 'true' || needs.changes.outputs.infra == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
 
-    - name: Check code formatting (Prettier)
-      if: needs.changes.outputs.mobile == 'true'
-      run: pnpm --filter lazisnu-collector-app run format:check
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-    - name: Run type check
-      if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile == 'true' || needs.changes.outputs.infra == 'true'
-      run: pnpm -r exec tsc --noEmit
+      - name: Build shared types
+        run: pnpm build:shared
 
-    - name: Run DB migrations di test database
-      if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.infra == 'true'
-      run: pnpm --filter lazisnu-backend db:migrate
-      env:
-        DATABASE_URL: postgresql://postgres:lazisnu_test_2026@localhost:5432/lazisnu_test
+      - name: Unit test + coverage
+        run: pnpm --filter lazisnu-collector-app run test:coverage
 
-    - name: Run unit tests
-      run: |
-        if [ "${{ needs.changes.outputs.backend == 'true' || needs.changes.outputs.infra == 'true' }}" = "true" ]; then
-          pnpm --filter lazisnu-backend test:unit
-        fi
-        if [ "${{ needs.changes.outputs.mobile == 'true' }}" = "true" ]; then
-          pnpm --filter lazisnu-collector-app run test:coverage
-        fi
-
-    - name: Run integration tests
-      if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.infra == 'true'
-      run: pnpm --filter lazisnu-backend test:integration
-      env:
-        DATABASE_URL: postgresql://postgres:lazisnu_test_2026@localhost:5432/lazisnu_test
-        REDIS_URL: redis://localhost:6379
-
-  # ─── Mobile: Build Android Debug APK (05-CI) ───
+  # ─── Mobile: verifikasi Gradle debug APK ─────────────────────────────────
   build-android-debug:
-    name: Build Android Debug (APK Verification)
-    needs: [changes, lint-and-typecheck]
-    if: needs.changes.outputs.mobile == 'true' || needs.changes.outputs.infra == 'true' || github.event_name == 'workflow_dispatch'
+    name: Build Android Debug (APK verification)
+    needs: [changes, verify, test-mobile]
+    if: >-
+      always() && !cancelled() &&
+      needs.verify.result == 'success' &&
+      needs.test-mobile.result != 'failure' &&
+      (needs.changes.outputs.mobile == 'true' ||
+       needs.changes.outputs.infra == 'true' ||
+       github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
-
+    timeout-minutes: 45
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
 
-    - name: Install pnpm
-      uses: pnpm/action-setup@v6
+      - uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v7
-      with:
-        node-version: '24'
-        cache: 'pnpm'
+      - uses: gradle/actions/setup-gradle@v4
 
-    - name: Setup Java JDK (Java 17)
-      uses: actions/setup-java@v6
-      with:
-        distribution: 'temurin'
-        java-version: '17'
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v4
+      - name: Build shared types
+        run: pnpm build:shared
 
-    - name: Install dependencies
-      run: pnpm install --frozen-lockfile
+      - name: Build Android Debug APK
+        working-directory: apps/mobile/android
+        run: ./gradlew assembleDebug --no-daemon
 
-    - name: Build Shared Types
-      run: pnpm build:shared
-
-    - name: Build Android Debug APK
-      working-directory: apps/mobile/android
-      run: ./gradlew assembleDebug --no-daemon
-
-  # ─── 07-B2-1: Build & Push Docker Images ke GHCR ───
+  # ─── Build & push image ke GHCR ──────────────────────────────────────────
   build-image:
-    needs: [lint-and-typecheck, changes]
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) ||
-      (github.event_name == 'push' && (needs.changes.outputs.backend == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.infra == 'true'))
+    name: Build & push Docker images
+    needs: [changes, verify, test-backend, test-mobile]
+    # always() + !cancelled() supaya job ini tetap dievaluasi meski job test
+    # di-skip (mis. hanya mobile yang berubah) — tanpa ini job ikut ter-skip.
+    if: >-
+      always() && !cancelled() &&
+      needs.verify.result == 'success' &&
+      needs.test-backend.result != 'failure' &&
+      needs.test-mobile.result != 'failure' &&
+      (github.event_name == 'workflow_dispatch' ||
+       startsWith(github.ref, 'refs/tags/') ||
+       (github.event_name == 'push' &&
+        (needs.changes.outputs.backend == 'true' ||
+         needs.changes.outputs.web    == 'true' ||
+         needs.changes.outputs.infra  == 'true')))
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     permissions:
       contents: read
       packages: write
-
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v7
+      - uses: actions/checkout@v7
 
-    - name: Log in to GitHub Container Registry
-      uses: docker/login-action@v4.5.2
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Login ke GHCR
+        uses: docker/login-action@v4.5.2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@v4
 
-    - name: Build & Push Backend Image
-      uses: docker/build-push-action@v7
-      with:
-        context: .
-        file: apps/backend/Dockerfile
-        push: true
-        tags: |
-          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:latest
-          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:${{ github.sha }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+      - name: Build & push backend
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-    - name: Build & Push Web Image
-      uses: docker/build-push-action@v7
-      with:
-        context: .
-        file: apps/web/Dockerfile
-        push: true
-        build-args: |
-          NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'https://api.lazisnu.site' }}
-        tags: |
-          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:latest
-          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:${{ github.sha }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+      - name: Build & push web (production)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'https://api.lazisnu.site' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-    - name: Build & Push Web Image (Staging)
-      uses: docker/build-push-action@v7
-      with:
-        context: .
-        file: apps/web/Dockerfile
-        push: true
-        build-args: |
-          NEXT_PUBLIC_API_URL=https://staging-api.lazisnu.site
-        tags: |
-          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:staging
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+      - name: Build & push web (staging)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://staging-api.lazisnu.site
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:staging
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-  # ─── 07-B2-2: Deploy ke Production (tag v*) — blue-green (08-C3, zero downtime) ───
+  # ─── Deploy PRODUCTION (hanya tag v*) — blue-green, zero downtime ────────
   deploy:
-    needs: [lint-and-typecheck, build-image]
-    if: startsWith(github.ref, 'refs/tags/v')
-    # Seriakan deploy prod: dua rilis berurutan tidak boleh menabrak (2026-08-25:
-    # push beruntun membuat deploy staging bertabrakan di docker compose).
+    name: Deploy production
+    needs: [changes, verify, test-backend, test-mobile, build-image]
+    if: >-
+      always() && !cancelled() &&
+      needs.build-image.result == 'success' &&
+      startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: Production
+    # Serialkan deploy: dua rilis berurutan tidak boleh saling tabrak.
     concurrency:
       group: lazisnu-deploy-prod
       cancel-in-progress: false
-    runs-on: ubuntu-latest
-    environment: Production
-
+    env:
+      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GHCR_USER: ${{ github.actor }}
+      GHCR_REPO: ${{ github.repository }}
+      IMAGE_TAG: ${{ github.sha }}
+      VM_HOST: ${{ secrets.VM_HOST }}
+      VM_USER: ${{ secrets.VM_USER }}
+      VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v7
+      - uses: actions/checkout@v7
 
-    - name: Deploy to VM via SSH (blue-green)
-      uses: appleboy/ssh-action@v1.2.2
-      with:
-        host: ${{ secrets.VM_HOST }}
-        username: ${{ secrets.VM_USER }}
-        key: ${{ secrets.VM_SSH_KEY }}
-        script: |
-          set -eo pipefail
-          cd /opt/lazisnu
+      - name: Deploy ke VM via SSH (blue-green)
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ env.VM_HOST }}
+          username: ${{ env.VM_USER }}
+          key: ${{ env.VM_SSH_KEY }}
+          # PENTING: appleboy/ssh-action TIDAK mewarisi env runner ke shell
+          # remote. Tanpa `envs`, $GHCR_TOKEN / $IMAGE_TAG akan kosong di VM.
+          envs: GHCR_TOKEN,GHCR_USER,GHCR_REPO,IMAGE_TAG
+          script: |
+            set -eo pipefail
+            cd /opt/lazisnu
 
-          # Sinkronkan source ke versi tag (ops lokal di-stash agar tidak konflik)
-          git stash push -m "pre-deploy $(date -Iseconds)" || true
-          git fetch origin --tags
-          git checkout -f ${{ github.sha }}
-          echo "✓ Repository updated to ${{ github.sha }}"
+            # Sinkronkan source ke versi tag (perubahan lokal di-stash dulu)
+            git stash push -m "pre-deploy $(date -Iseconds)" || true
+            git fetch origin --tags
+            git checkout -f $IMAGE_TAG
+            echo "✓ Repository updated to $IMAGE_TAG"
 
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
-          # Deploy blue-green tanpa downtime (pull image baru, smoke test, switch nginx, teardown warna lama)
-          GHCR_REPO=${{ github.repository }} \
-          IMAGE_TAG=${{ github.sha }} \
-          AUTO_TEARDOWN=1 \
-            bash scripts/deploy-blue-green.sh deploy
+            GHCR_REPO=$GHCR_REPO IMAGE_TAG=$IMAGE_TAG AUTO_TEARDOWN=1 \
+              bash scripts/deploy-blue-green.sh deploy
 
-          # Health check publik
-          curl -sf https://api.lazisnu.site/health/ready && echo "✅ Backend healthy" || { echo "❌ Backend DOWN"; exit 1; }
-          curl -sf https://dashboard.lazisnu.site && echo "✅ Web healthy" || { echo "❌ Web DOWN"; exit 1; }
+            # Health check lewat domain publik.
+            # Kalau gagal: kembalikan ke warna sebelumnya dulu, barulah keluar
+            # dengan status gagal. Skrip deploy-blue-green.sh sudah punya mode
+            # rollback (baris 264) — sebelumnya tidak pernah dipanggil, sehingga
+            # deploy yang gagal harus dibenahi manual.
+            if ! curl -sf https://api.lazisnu.site/health/ready; then
+              echo "❌ Backend DOWN — menjalankan rollback"
+              bash scripts/deploy-blue-green.sh rollback || true
+              exit 1
+            fi
+            echo "✅ Backend healthy"
 
-          # Housekeeping otomatis: hapus image unused/dangling pasca deploy
-          # (image container yang berjalan otomatis dilindungi; digest lama + lokal legacy dibersihkan)
-          docker image prune -af >/dev/null 2>&1 || true
-          docker builder prune -f >/dev/null 2>&1 || true
+            if ! curl -sf https://dashboard.lazisnu.site; then
+              echo "❌ Web DOWN — menjalankan rollback"
+              bash scripts/deploy-blue-green.sh rollback || true
+              exit 1
+            fi
+            echo "✅ Web healthy"
 
-  # ─── 07-E3-4: Deploy ke Staging (auto dari push main) ───
+            # Housekeeping: image lama/dangling dibersihkan (yang berjalan aman)
+            docker image prune -af >/dev/null 2>&1 || true
+            docker builder prune -f >/dev/null 2>&1 || true
+
+  # ─── Deploy STAGING (otomatis dari push main) ────────────────────────────
   deploy-staging:
-    needs: [lint-and-typecheck, build-image, changes]
-    if: >
+    name: Deploy staging
+    needs: [changes, verify, test-backend, test-mobile, build-image]
+    if: >-
+      always() && !cancelled() &&
+      needs.build-image.result == 'success' &&
       github.ref == 'refs/heads/main' &&
-      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.infra == 'true')
-    # Seriakan deploy staging (2026-08-25: push beruntun → 5 deploy bersamaan
-    # → konflik container docker compose; hanya 1 yang menang).
+      (needs.changes.outputs.backend == 'true' ||
+       needs.changes.outputs.web    == 'true' ||
+       needs.changes.outputs.infra  == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
     concurrency:
       group: lazisnu-deploy-staging
       cancel-in-progress: false
-    runs-on: ubuntu-latest
-    environment: staging
-
+    env:
+      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GHCR_USER: ${{ github.actor }}
+      GHCR_REPO: ${{ github.repository }}
+      VM_HOST: ${{ secrets.VM_HOST }}
+      VM_USER: ${{ secrets.VM_USER }}
+      VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v7
+      - uses: actions/checkout@v7
 
-    - name: Deploy Staging to VM via SSH
-      uses: appleboy/ssh-action@v1.2.2
-      with:
-        host: ${{ secrets.VM_HOST }}
-        username: ${{ secrets.VM_USER }}
-        key: ${{ secrets.VM_SSH_KEY }}
-        script: |
-          set -e
-          cd /opt/lazisnu
+      - name: Deploy staging ke VM via SSH
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ env.VM_HOST }}
+          username: ${{ env.VM_USER }}
+          key: ${{ env.VM_SSH_KEY }}
+          # Lihat catatan `envs` di job deploy production.
+          envs: GHCR_TOKEN,GHCR_USER,GHCR_REPO
+          script: |
+            set -e
+            cd /opt/lazisnu
 
-          # Sinkronkan source ke main terbaru (ops lokal di-stash agar tidak konflik)
-          git stash push -m "pre-staging-deploy $(date -Iseconds)" || true
-          git fetch origin
-          git checkout -f origin/main
-          echo "✓ Repository updated"
+            git stash push -m "pre-staging-deploy $(date -Iseconds)" || true
+            git fetch origin
+            git checkout -f origin/main
+            echo "✓ Repository updated"
 
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:latest
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:latest
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:staging
+            docker pull ghcr.io/$GHCR_REPO/backend:latest
+            docker pull ghcr.io/$GHCR_REPO/web:latest
+            docker pull ghcr.io/$GHCR_REPO/web:staging
 
-          # Deploy staging
-          docker compose -f docker-compose.staging.yml down
-          docker compose -f docker-compose.staging.yml up -d
+            docker compose -f docker-compose.staging.yml down
+            docker compose -f docker-compose.staging.yml up -d
 
-          # Reload nginx: muat nginx.conf terbaru dari checkout + re-resolve upstream
-          # (container staging baru = IP baru; nginx cache DNS saat startup)
-          docker exec lazisnu-nginx-1 nginx -s reload || true
+            # Reload nginx: container staging baru = IP baru (nginx cache DNS)
+            docker exec lazisnu-nginx-1 nginx -s reload || true
 
-          # Smoke test (07-E3-5): lewat URL publik (end-to-end via nginx)
-          # + retry loop — cold start Next.js bisa >10 detik
-          ok=0
-          i=0
-          while [ $i -lt 12 ]; do
-            if curl -sf https://staging-api.lazisnu.site/health >/dev/null && curl -sf https://staging.lazisnu.site >/dev/null; then ok=1; break; fi
-            i=$((i+1))
-            sleep 5
+            # Smoke test via URL publik + retry (cold start Next.js bisa >10s)
+            ok=0
+            i=0
+            while [ $i -lt 12 ]; do
+              if curl -sf https://staging-api.lazisnu.site/health >/dev/null && curl -sf https://staging.lazisnu.site >/dev/null; then
+                ok=1; break
+              fi
+              i=$((i+1))
+              sleep 5
+            done
+            if [ "$ok" = "1" ]; then echo "✅ Staging healthy"; else echo "❌ Staging DOWN"; exit 1; fi
+
+            docker image prune -af >/dev/null 2>&1 || true
+            docker builder prune -f >/dev/null 2>&1 || true
+
+  # ─── Ringkasan status (memudahkan baca hasil di tab Actions) ─────────────
+  ci-status:
+    name: CI status
+    needs: [verify, test-backend, test-mobile, build-image]
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Evaluasi hasil
+        run: |
+          echo "verify        : ${{ needs.verify.result }}"
+          echo "test-backend  : ${{ needs.test-backend.result }}"
+          echo "test-mobile   : ${{ needs.test-mobile.result }}"
+          echo "build-image   : ${{ needs.build-image.result }}"
+          for r in "${{ needs.verify.result }}" "${{ needs.test-backend.result }}" "${{ needs.test-mobile.result }}" "${{ needs.build-image.result }}"; do
+            if [ "$r" = "failure" ]; then
+              echo "::error::Ada job yang gagal — pipeline dihentikan."
+              exit 1
+            fi
           done
-          if [ "$ok" = "1" ]; then echo "✅ Staging healthy"; else echo "❌ Staging DOWN"; exit 1; fi
-
-          # Housekeeping otomatis: hapus image unused/dangling pasca deploy staging
-          docker image prune -af >/dev/null 2>&1 || true
-          docker builder prune -f >/dev/null 2>&1 || true
+          echo "✅ Semua job relevan lolos."
