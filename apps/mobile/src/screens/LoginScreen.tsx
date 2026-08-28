@@ -16,6 +16,7 @@ const logo = require('../assets/branding/logo-lazisnu-putih.png');
 import {APP_VERSION} from '../config/appConfig';
 import {useNavigation} from '@react-navigation/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useAuthStore} from '../stores';
 import {AppButton, AppCard, AppTextInput, SegmentedControl} from '../components/ui';
@@ -114,11 +115,13 @@ const LoginScreen: React.FC = () => {
           keyboardShouldPersistTaps={'handled'}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}>
-          <View style={[styles.hero, {paddingTop: insets.top + Spacing.xl}]}>
+          <LinearGradient
+            colors={[Colors.brand.heroStart, Colors.brand.deepGreen, Colors.brand.heroEnd]}
+            style={[styles.hero, {paddingTop: insets.top + Spacing.xl}]}>
             <Image source={logo} style={styles.logo} resizeMode={'contain'} />
             <Text style={styles.taglineLine1}>Lembaga Amil Zakat</Text>
             <Text style={styles.taglineLine2}>Infak dan Sedekah Nahdlatul Ulama</Text>
-          </View>
+          </LinearGradient>
 
           <AppCard variant={'elevated'} style={styles.loginCard}>
             {showRecoveryPanel && (
@@ -249,12 +252,11 @@ const styles = StyleSheet.create({
   keyboardView: {flex: 1},
   scrollContent: {flexGrow: 1, paddingBottom: Spacing.xl},
   hero: {
-    backgroundColor: Colors.brand.deepGreen,
     alignItems: 'center',
     paddingHorizontal: Layout.screenPadding,
     paddingBottom: 52,
-    borderBottomLeftRadius: Radius.panel,
-    borderBottomRightRadius: Radius.panel,
+    borderBottomLeftRadius: Radius.hero,
+    borderBottomRightRadius: Radius.hero,
   },
   logo: {
     width: 240,

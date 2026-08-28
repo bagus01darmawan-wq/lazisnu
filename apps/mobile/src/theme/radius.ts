@@ -4,5 +4,6 @@ export const Radius = {
   lg: 16,
   card: 20,
   panel: 24,
+  hero: 32,
   pill: 999,
 };

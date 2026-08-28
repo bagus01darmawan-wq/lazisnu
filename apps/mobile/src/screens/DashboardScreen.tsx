@@ -14,7 +14,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useAuthStore, useDashboardStore, useSyncStore, useTasksStore} from '../stores';
-import {Colors, DashboardLayout, Layout, Radius, Spacing, Typography} from '../theme';
+import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
 import {formatCurrency} from '../utils';
 import {SyncIssuesSheet} from '../components/SyncIssuesSheet';
 import type {MainNavigationProp} from '../navigation/types';
@@ -95,8 +95,6 @@ const DashboardScreen: React.FC = () => {
         <LinearGradient
           colors={[Colors.brand.heroStart, Colors.brand.deepGreen, Colors.brand.heroEnd]}
           style={[styles.hero, {paddingTop: insets.top + Spacing.md}]}>
-          <View pointerEvents={'none'} style={styles.heroArcOuter} />
-          <View pointerEvents={'none'} style={styles.heroArcInner} />
 
           <View style={styles.topRow}>
             <View style={styles.logoContainer}>
@@ -248,28 +246,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     paddingHorizontal: Layout.screenPadding,
     paddingBottom: Spacing.md,
-    borderBottomLeftRadius: DashboardLayout.heroCornerRadius,
-    borderBottomRightRadius: DashboardLayout.heroCornerRadius,
-  },
-  heroArcOuter: {
-    position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    borderWidth: 1,
-    borderColor: Colors.overlay.sandSoft,
-    top: -200,
-    right: -132,
-  },
-  heroArcInner: {
-    position: 'absolute',
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    borderWidth: 1,
-    borderColor: Colors.overlay.sandSubtle,
-    top: -156,
-    right: -102,
+    borderBottomLeftRadius: Radius.hero,
+    borderBottomRightRadius: Radius.hero,
   },
   topRow: {
     flexDirection: 'row',

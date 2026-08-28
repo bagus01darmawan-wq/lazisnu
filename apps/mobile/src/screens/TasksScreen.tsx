@@ -20,7 +20,7 @@ import DraggableFlatList, {
 } from 'react-native-draggable-flatlist';
 import type {Task} from '@lazisnu/shared-types';
 import {useTasksStore, useSyncStore} from '../stores';
-import {Colors, DashboardLayout, Layout, Radius, Spacing, Typography} from '../theme';
+import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
 import type {MainNavigationProp} from '../navigation/types';
 import {TaskItem, TaskSearchBar} from './tasks';
 import {SyncIssuesSheet} from '../components/SyncIssuesSheet';
@@ -98,11 +98,14 @@ const TasksScreen: React.FC = () => {
       <LinearGradient
         colors={[Colors.brand.heroStart, Colors.brand.deepGreen, Colors.brand.heroEnd]}
         style={[styles.header, {paddingTop: insets.top + Spacing.lg}]}>
-        <View pointerEvents={'none'} style={styles.heroArcOuter} />
-        <View pointerEvents={'none'} style={styles.heroArcInner} />
 
         <View style={styles.titleRow}>
-          <Text style={styles.headerTitle}>Daftar Tugas</Text>
+          <View style={styles.titleColumn}>
+            <Text style={styles.headerTitle}>Daftar Tugas</Text>
+            <Text style={styles.headerSubtitle}>
+              {isLoading && page === 1 ? 'Memuat penugasan...' : `${tasks.length} tugas ditampilkan`}
+            </Text>
+          </View>
           <TouchableOpacity
             accessibilityRole={totalSyncIssues ? 'button' : undefined}
             accessibilityLabel={
@@ -140,10 +143,6 @@ const TasksScreen: React.FC = () => {
             )}
           </TouchableOpacity>
         </View>
-
-        <Text style={styles.headerSubtitle}>
-          {isLoading && page === 1 ? 'Memuat penugasan...' : `${tasks.length} tugas ditampilkan`}
-        </Text>
 
         <TaskSearchBar
           searchQuery={searchQuery}
@@ -223,33 +222,17 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     paddingHorizontal: Layout.screenPadding,
     paddingBottom: Spacing.md,
-    borderBottomLeftRadius: DashboardLayout.heroCornerRadius,
-    borderBottomRightRadius: DashboardLayout.heroCornerRadius,
-  },
-  heroArcOuter: {
-    position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    borderWidth: 1,
-    borderColor: Colors.overlay.sandSoft,
-    top: -200,
-    right: -132,
-  },
-  heroArcInner: {
-    position: 'absolute',
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    borderWidth: 1,
-    borderColor: Colors.overlay.sandSubtle,
-    top: -156,
-    right: -102,
+    borderBottomLeftRadius: Radius.hero,
+    borderBottomRightRadius: Radius.hero,
   },
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
+  },
+  titleColumn: {
+    flex: 1,
+    marginRight: Spacing.sm,
   },
   iconButton: {
     width: 44,

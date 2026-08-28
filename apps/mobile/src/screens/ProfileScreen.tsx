@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useAuthStore, useTasksStore, useUpdateStore} from '../stores';
 import {getBiometryType, isBiometricAvailable} from '../services/biometric';
@@ -118,7 +119,9 @@ const ProfileScreen: React.FC = () => {
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}>
-      <View style={[styles.header, {paddingTop: insets.top + Spacing.lg}]}>
+      <LinearGradient
+        colors={[Colors.brand.heroStart, Colors.brand.deepGreen, Colors.brand.heroEnd]}
+        style={[styles.header, {paddingTop: insets.top + Spacing.lg}]}>
         <Text style={styles.headerLabel}>Profil Petugas</Text>
         <View style={styles.avatar}>
           <Icon name={'account'} size={52} color={Colors.brand.deepGreen} />
@@ -129,7 +132,7 @@ const ProfileScreen: React.FC = () => {
           status={user?.is_active === false ? 'error' : 'success'}
           label={user?.is_active === false ? 'Tidak Aktif' : 'Aktif'}
         />
-      </View>
+      </LinearGradient>
 
       <Text style={[styles.sectionTitle, styles.sectionTitleFirst]}>Informasi akun</Text>
       <AppCard variant={'elevated'} style={styles.infoCard}>
@@ -276,9 +279,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: Layout.screenPadding,
     paddingBottom: Spacing.xl,
-    backgroundColor: Colors.brand.deepGreen,
-    borderBottomLeftRadius: Radius.panel,
-    borderBottomRightRadius: Radius.panel,
+    borderBottomLeftRadius: Radius.hero,
+    borderBottomRightRadius: Radius.hero,
     ...Shadows.soft,
   },
   headerLabel: {
