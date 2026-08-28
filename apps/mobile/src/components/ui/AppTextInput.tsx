@@ -20,7 +20,7 @@ export const AppTextInput: React.FC<AppTextInputProps> = ({
   onIconPress,
   iconAccessibilityLabel,
   style,
-  ...props
+  ...restProps
 }) => {
   const [isFocused, setIsFocused] = useState(false);
   const iconColor = error ? Colors.status.error : Colors.text.muted;
@@ -31,23 +31,23 @@ export const AppTextInput: React.FC<AppTextInputProps> = ({
       <View
         style={[
           styles.inputContainer,
-          props.multiline && styles.inputContainerMultiline,
+          restProps.multiline && styles.inputContainerMultiline,
           isFocused && styles.inputFocused,
           !!error && styles.inputError,
-          props.editable === false && styles.inputDisabled,
+          restProps.editable === false && styles.inputDisabled,
         ]}>
         <TextInput
-          style={[styles.input, props.multiline && styles.inputMultiline, style]}
+          style={[styles.input, restProps.multiline && styles.inputMultiline, style]}
           placeholderTextColor={Colors.text.muted}
           onFocus={event => {
             setIsFocused(true);
-            props.onFocus?.(event);
+            restProps.onFocus?.(event);
           }}
           onBlur={event => {
             setIsFocused(false);
-            props.onBlur?.(event);
+            restProps.onBlur?.(event);
           }}
-          {...props}
+          {...restProps}
         />
         {!!icon && onIconPress ? (
           <Pressable
