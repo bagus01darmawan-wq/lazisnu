@@ -16,9 +16,13 @@ describe('REPRO crash Icon — uji komponen dengan icon props seperti LoginScree
   });
 
   it('AppButton icon=fingerprint/login/whatsapp', () => {
-    const tree = renderer.create(<AppButton label="Masuk" icon={'fingerprint'} onPress={jest.fn()} />);
+    const tree = renderer.create(
+      <AppButton label="Masuk" icon={'fingerprint'} onPress={jest.fn()} />,
+    );
     expect(tree.toJSON()).not.toBeNull();
-    const tree2 = renderer.create(<AppButton label="Masuk" icon={'whatsapp'} onPress={jest.fn()} />);
+    const tree2 = renderer.create(
+      <AppButton label="Masuk" icon={'whatsapp'} onPress={jest.fn()} />,
+    );
     expect(tree2.toJSON()).not.toBeNull();
   });
 
@@ -45,7 +49,6 @@ describe('REPRO crash Icon — uji komponen dengan icon props seperti LoginScree
         return selector ? selector(state) : state;
       },
     }));
-
 
     const LoginScreen = require('../src/screens/LoginScreen').default;
     const tree = renderer.create(<LoginScreen />);
