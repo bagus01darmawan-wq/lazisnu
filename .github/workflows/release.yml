@@ -1,55 +1,120 @@
-name: "Release APK (CI-build — tanpa kuota EAS)"
+name: "Release APK (per-ABI + universal fallback)"
 
 # Rilis APK satu-tombol. Dipicu oleh tag v* — dibuat oleh scripts/release-bump.mjs --publish.
-# Alur: [1] build APK bertanda tangan produksi via Gradle di runner GitHub
-#       → [2] gerbang mutu (.apk tunggal, isi lib/, ukuran)
-#       → [3] unggah ke R2 (apk.lazisnu.site) → [4] verifikasi URL publik
-#       → [5] dispatch ci.yml pada ref tag (build image + deploy prod blue-green).
-# Fail-closed: kalau unggah R2 gagal, tidak ada dispatch → produksi tetap di versi lama.
-#
-# 2026-08-26: mesin build pindah dari EAS ke GitHub Actions runner
-# (RENCANA-SPLIT-ABI §G4-equivalent terbukti; kuota EAS Free terbatas).
-# Keystore produksi dibaca dari Actions Secrets (sumber: Bitwarden PO).
+# Alur: [1] build 3 APK bertanda tangan produksi via Gradle di runner GitHub:
+#             - arm64-v8a (khusus HP ARM 64-bit)
+#             - armeabi-v7a (khusus HP ARM 32-bit)
+#             - universal-ARM (fallback untuk aplikasi lama yang hanya tahu apk_url)
+#       → [2] gate per artefak: tepat 1 APK, ABI eksak, ukuran terkalibrasi
+#       → [3] gate agregat: ketiga APK wajib tersedia
+#       → [4] unggah ketiganya ke R2 dan verifikasi URL publik
+#       → [5] dispatch ci.yml tepat sekali pada ref tag.
+# Fail-closed: satu build/gate/upload gagal → tidak ada dispatch → produksi tetap versi lama.
 
 on:
   push:
-    tags: ['v*']
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       version:
-        description: 'Versi (override untuk dry-run; kosongkan = baca build.gradle)'
+        description: "Versi (override untuk dry-run; kosongkan = baca build.gradle)"
         required: false
       dry_run:
-        description: 'true = build+gate saja (tanpa R2 & tanpa dispatch deploy)'
+        description: "true = build+gate saja (tanpa R2 & tanpa dispatch deploy)"
         required: false
-        default: 'false'
+        default: "false"
 
 permissions:
   contents: read
-  actions: write   # untuk gh workflow run (dispatch ci.yml)
+  # actions:write SENGAJA tidak di level workflow: semua job akan mewarisinya.
+  # Hanya job verify-publish-release yang memerlukannya (dispatch ci.yml),
+  # dan itu dideklarasikan persis di job tersebut (lihat bawah).
+
+# Mencegah dua rilis saling menimpa di R2, tetapi tetap membolehkan matrix
+# tiga target berjalan paralel di dalam satu run.
+concurrency:
+  group: lazisnu-release-apk
+  cancel-in-progress: false
 
 jobs:
-  build-upload-release:
+  prepare:
+    name: Siapkan metadata rilis
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    concurrency:
-      group: lazisnu-release-apk
-      cancel-in-progress: false
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      code: ${{ steps.ver.outputs.code }}
     steps:
-      - name: Checkout pada ref tag
+      - name: Checkout pada ref pemicu
         uses: actions/checkout@v7
         with:
           fetch-depth: 1
+          persist-credentials: false
 
-      - name: Baca versionName/versionCode dari build.gradle (satu-sumber)
+      - name: Baca dan validasi versionName/versionCode
         id: ver
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
+          set -euo pipefail
           VERSION=$(grep -m1 'versionName "' apps/mobile/android/app/build.gradle | sed -E 's/.*versionName "([^"]+)".*/\1/')
           CODE=$(grep -m1 'versionCode ' apps/mobile/android/app/build.gradle | sed -E 's/.*versionCode ([0-9]+).*/\1/')
-          if [ -n "${{ github.event.inputs.version }}" ]; then VERSION="${{ github.event.inputs.version }}"; fi
+
+          if [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
+          fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$CODE" =~ ^[0-9]+$ ]]; then
+            echo "::error::versionName/versionCode tidak valid: version=$VERSION code=$CODE"
+            exit 1
+          fi
+          if [ "$EVENT_NAME" = "push" ] && [ "$REF_NAME" != "v$VERSION" ]; then
+            echo "::error::Tag $REF_NAME tidak cocok dengan versionName v$VERSION"
+            exit 1
+          fi
+
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
-          echo "building v$VERSION (vc $CODE)"
+          echo "Membangun v$VERSION (versionCode $CODE)"
+
+  build-release-apks:
+    name: Build ${{ matrix.target }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: arm64-v8a
+            abi_filter: arm64-v8a
+            rn_architectures: arm64-v8a
+            expected_abis: arm64-v8a
+            file_suffix: "-arm64-v8a"
+            min_mib: 25
+            max_mib: 35
+          - target: armeabi-v7a
+            abi_filter: armeabi-v7a
+            rn_architectures: armeabi-v7a
+            expected_abis: armeabi-v7a
+            file_suffix: "-armeabi-v7a"
+            min_mib: 18
+            max_mib: 28
+          - target: universal-arm
+            abi_filter: "armeabi-v7a,arm64-v8a"
+            rn_architectures: "armeabi-v7a,arm64-v8a"
+            expected_abis: "arm64-v8a,armeabi-v7a"
+            file_suffix: ""
+            min_mib: 34
+            max_mib: 46
+
+    steps:
+      - name: Checkout pada ref pemicu
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
@@ -57,14 +122,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '24'
-          cache: 'pnpm'
+          node-version: "24"
+          cache: "pnpm"
 
       - name: Setup Java JDK (Java 17)
         uses: actions/setup-java@v6
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: "temurin"
+          java-version: "17"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -79,107 +144,202 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
+          set -euo pipefail
           echo "$KEYSTORE_BASE64" | base64 -d > apps/mobile/android/app/lazisnu-production.keystore
-          ls -la apps/mobile/android/app/lazisnu-production.keystore
+          test -s apps/mobile/android/app/lazisnu-production.keystore
 
-      - name: Sidik jari sertifikat (bukti rantai kepercayaan)
+      - name: Sidik jari sertifikat
         working-directory: apps/mobile/android/app
+        env:
+          STORE_PASSWORD: ${{ secrets.KEYSTORE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEYSTORE_KEY_ALIAS }}
         run: |
           keytool -list -v -keystore lazisnu-production.keystore \
-            -storepass "${{ secrets.KEYSTORE_STORE_PASSWORD }}" \
-            -alias "${{ secrets.KEYSTORE_KEY_ALIAS }}" 2>/dev/null \
+            -storepass "$STORE_PASSWORD" \
+            -alias "$KEY_ALIAS" 2>/dev/null \
             | grep -E 'SHA1:|SHA256:|Valid' | tee /tmp/cert-fp.txt
 
-      - name: Build APK universal bertanda tangan produksi
+      - name: AssembleRelease (${{ matrix.target }})
         working-directory: apps/mobile/android
+        env:
+          STORE_PASSWORD: ${{ secrets.KEYSTORE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEYSTORE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
         run: |
           ./gradlew assembleRelease --no-daemon \
+            "-PabiFilter=${{ matrix.abi_filter }}" \
+            "-PreactNativeArchitectures=${{ matrix.rn_architectures }}" \
             -PMYAPP_UPLOAD_STORE_FILE=lazisnu-production.keystore \
-            -PMYAPP_UPLOAD_STORE_PASSWORD=${{ secrets.KEYSTORE_STORE_PASSWORD }} \
-            -PMYAPP_UPLOAD_KEY_ALIAS=${{ secrets.KEYSTORE_KEY_ALIAS }} \
-            -PMYAPP_UPLOAD_KEY_PASSWORD=${{ secrets.KEYSTORE_KEY_PASSWORD }}
+            "-PMYAPP_UPLOAD_STORE_PASSWORD=$STORE_PASSWORD" \
+            "-PMYAPP_UPLOAD_KEY_ALIAS=$KEY_ALIAS" \
+            "-PMYAPP_UPLOAD_KEY_PASSWORD=$KEY_PASSWORD"
 
-      - name: Gate rilis — tepat satu .apk, nol arsip
+      - name: Gate artefak — tepat satu APK dengan ABI dan ukuran benar
         working-directory: apps/mobile/android/app/build/outputs/apk/release
+        env:
+          TARGET: ${{ matrix.target }}
+          EXPECTED_ABIS: ${{ matrix.expected_abis }}
+          MIN_MIB: ${{ matrix.min_mib }}
+          MAX_MIB: ${{ matrix.max_mib }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          FILE_SUFFIX: ${{ matrix.file_suffix }}
         run: |
-          set -eo pipefail
-          APK_COUNT=$(find . -maxdepth 1 -name '*.apk' | wc -l)
-          ARCHIVE_COUNT=$(find . -maxdepth 1 \( -name '*.tar.gz' -o -name '*.zip' \) | wc -l)
-          echo "apk=$APK_COUNT archive=$ARCHIVE_COUNT"
-          if [ "$APK_COUNT" -ne 1 ] || [ "$ARCHIVE_COUNT" -ne 0 ]; then
-            echo "::error::GATE GAGAL — harus tepat 1 .apk dan nol arsip"; exit 1
+          set -euo pipefail
+          shopt -s nullglob
+          APKS=(*.apk)
+          ARCHIVES=(*.tar.gz *.zip)
+          echo "apk=${#APKS[@]} archive=${#ARCHIVES[@]}"
+          if [ "${#APKS[@]}" -ne 1 ] || [ "${#ARCHIVES[@]}" -ne 0 ]; then
+            echo "::error::Harus tepat 1 APK dan nol arsip untuk $TARGET"
+            exit 1
           fi
 
-      - name: Gate rilis universal — kedua ABI arm ada, x86 nol
-        working-directory: apps/mobile/android/app/build/outputs/apk/release
-        run: |
-          set -eo pipefail
-          APK=$(ls *.apk)
-          LIBS=$(unzip -l "$APK" | grep -o 'lib/[^/]*/' | sort -u)
-          echo "$LIBS"
-          echo "$LIBS" | grep -q 'lib/arm64-v8a/'    || { echo "::error::arm64 hilang"; exit 1; }
-          echo "$LIBS" | grep -q 'lib/armeabi-v7a/' || { echo "::error::armv7 hilang"; exit 1; }
-          if echo "$LIBS" | grep -qE 'lib/(x86|x86_64)/'; then
-            echo "::error::x86 bocor"; exit 1
+          APK="${APKS[0]}"
+          ACTUAL_ABIS=$(unzip -Z1 "$APK" | awk -F/ '$1 == "lib" && NF >= 3 {print $2}' | sort -u | paste -sd, -)
+          echo "ABI aktual=$ACTUAL_ABIS; ABI diharapkan=$EXPECTED_ABIS"
+          if [ "$ACTUAL_ABIS" != "$EXPECTED_ABIS" ]; then
+            echo "::error::Isi ABI salah untuk $TARGET"
+            exit 1
           fi
 
-      - name: Gate rilis — ukuran wajar (34–46 MB)
-        working-directory: apps/mobile/android/app/build/outputs/apk/release
-        run: |
-          set -eo pipefail
-          APK=$(ls *.apk)
-          SIZE_MB=$(du -m "$APK" | cut -f1)
-          echo "ukuran: ${SIZE_MB} MB"
-          if [ "$SIZE_MB" -lt 34 ] || [ "$SIZE_MB" -gt 46 ]; then
-            echo "::error::ukuran di luar jangkauan wajar universal"; exit 1
+          SIZE_BYTES=$(stat -c%s "$APK")
+          MIN_BYTES=$((MIN_MIB * 1024 * 1024))
+          MAX_BYTES=$((MAX_MIB * 1024 * 1024))
+          echo "ukuran=$SIZE_BYTES byte; rentang=${MIN_MIB}–${MAX_MIB} MiB"
+          if [ "$SIZE_BYTES" -lt "$MIN_BYTES" ] || [ "$SIZE_BYTES" -gt "$MAX_BYTES" ]; then
+            echo "::error::Ukuran APK $TARGET di luar rentang terkalibrasi"
+            exit 1
           fi
 
-      - name: Siapkan nama artefak rilis
-        working-directory: apps/mobile/android/app/build/outputs/apk/release
-        run: cp *.apk "lazisnu-${{ steps.ver.outputs.version }}.apk"
+          DEST="lazisnu-${VERSION}${FILE_SUFFIX}.apk"
+          mv "$APK" "$DEST"
+          sha256sum "$DEST"
 
-      - name: Upload artefak bukti build
+      - name: Upload artefak build ${{ matrix.target }}
         uses: actions/upload-artifact@v4
         with:
-          name: release-apk-${{ steps.ver.outputs.version }}
-          path: apps/mobile/android/app/build/outputs/apk/release/lazisnu-*.apk
+          name: release-apk-${{ needs.prepare.outputs.version }}-${{ matrix.target }}
+          path: apps/mobile/android/app/build/outputs/apk/release/lazisnu-${{ needs.prepare.outputs.version }}${{ matrix.file_suffix }}.apk
+          if-no-files-found: error
+          compression-level: 0
           retention-days: 30
 
-      - name: Dry-run berhenti di sini
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true'
-        run: echo "DRY RUN — build+gate lolos. R2 & deploy dilewati."
+  verify-publish-release:
+    name: Verifikasi set, unggah R2, dan dispatch deploy
+    needs: [prepare, build-release-apks]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Satu-satunya job yang butuh actions:write (gh workflow run ci.yml).
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Unduh ketiga artefak matrix
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-apk-${{ needs.prepare.outputs.version }}-*
+          path: release-apks
+          merge-multiple: true
 
-      - name: Unggah ke R2 (apk.lazisnu.site)
+      - name: Gate agregat — dua APK khusus ABI + universal wajib lengkap
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          APKS=(release-apks/*.apk)
+          if [ "${#APKS[@]}" -ne 3 ]; then
+            echo "::error::Harus tersedia tepat 3 APK hasil matrix; ditemukan ${#APKS[@]}"
+            exit 1
+          fi
+
+          EXPECTED=(
+            "release-apks/lazisnu-${VERSION}-arm64-v8a.apk"
+            "release-apks/lazisnu-${VERSION}-armeabi-v7a.apk"
+            "release-apks/lazisnu-${VERSION}.apk"
+          )
+          for FILE in "${EXPECTED[@]}"; do
+            if [ ! -s "$FILE" ]; then
+              echo "::error::Artefak wajib hilang/kosong: $FILE"
+              exit 1
+            fi
+            sha256sum "$FILE"
+          done
+
+      - name: Dry-run berhenti setelah seluruh gate hijau
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true'
+        run: echo "DRY RUN — 2 APK per-ABI + 1 universal lolos; R2 dan deploy dilewati."
+
+      - name: Unggah ketiga APK ke R2
         if: github.event_name == 'push' || github.event.inputs.dry_run != 'true'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_EC2_METADATA_DISABLED: 'true'
+          AWS_EC2_METADATA_DISABLED: "true"
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
         run: |
-          cd apps/mobile/android/app/build/outputs/apk/release
-          aws s3 cp "lazisnu-${{ steps.ver.outputs.version }}.apk" \
-            "s3://lazisnu-apk/lazisnu-${{ steps.ver.outputs.version }}.apk" \
-            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com" \
-            --content-type application/vnd.android.package-archive \
-            --cache-control 'public, max-age=31536000, immutable'
+          set -euo pipefail
+          for FILE in release-apks/*.apk; do
+            NAME=$(basename "$FILE")
+            aws s3 cp "$FILE" "s3://lazisnu-apk/$NAME" \
+              --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+              --content-type application/vnd.android.package-archive \
+              --cache-control 'public, max-age=31536000, immutable'
+          done
 
-      - name: Verifikasi URL publik
+      - name: Verifikasi ketiga URL publik
         if: github.event_name == 'push' || github.event.inputs.dry_run != 'true'
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          URL="https://apk.lazisnu.site/lazisnu-${{ steps.ver.outputs.version }}.apk"
-          CODE=$(curl -s -o /dev/null -w '%{http_code} %{size_download}' "$URL")
-          echo "URL: $URL -> $CODE"
-          case "$CODE" in 200*) ;; *) echo "PUBLIC URL NOT HEALTHY"; exit 1;; esac
+          set -euo pipefail
+          PAIRS=(
+            "lazisnu-${VERSION}-arm64-v8a.apk"
+            "lazisnu-${VERSION}-armeabi-v7a.apk"
+            "lazisnu-${VERSION}.apk"
+          )
+          for FILE in "${PAIRS[@]}"; do
+            LOCAL="release-apks/$FILE"
+            URL="https://apk.lazisnu.site/$FILE"
+            REMOTE="release-apks/.remote-$FILE"
+            CODE=$(curl -sSL -o "$REMOTE" -w '%{http_code}' "$URL")
+            REMOTE_HASH=$(sha256sum "$REMOTE" | awk '{print $1}')
+            REMOTE_SIZE=$(stat -c%s "$REMOTE")
+            LOCAL_HASH=$(sha256sum "$LOCAL" | awk '{print $1}')
+            LOCAL_SIZE=$(stat -c%s "$LOCAL")
+            echo "$URL -> HTTP $CODE, $REMOTE_SIZE byte (lokal $LOCAL_SIZE byte)"
+            if [ "$CODE" != "200" ] || [ "$REMOTE_HASH" != "$LOCAL_HASH" ] || [ "$REMOTE_SIZE" != "$LOCAL_SIZE" ]; then
+              echo "::error::URL publik tidak identik dengan APK lokal: $URL"
+              exit 1
+            fi
+            rm -f "$REMOTE"
+          done
 
-      - name: Dispatch ci.yml (build image + deploy prod blue-green) pada ref tag
+      - name: Dispatch ci.yml tepat sekali pada ref tag
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF_NAME: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          gh workflow run ci.yml --ref "${{ github.ref_name }}" --repo "${{ github.repository }}"
-          echo "ci.yml dispatched pada ref ${{ github.ref_name }} — deploy prod menyusul."
+          gh workflow run ci.yml --ref "$REF_NAME" --repo "$REPOSITORY"
+          echo "ci.yml dispatched pada ref $REF_NAME — deploy prod menyusul."
 
       - name: Ringkasan
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          EVENT_NAME: ${{ github.event_name }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
-          echo "Rilis APK v${{ steps.ver.outputs.version }} selesai di R2."
-          echo "URL: https://apk.lazisnu.site/lazisnu-${{ steps.ver.outputs.version }}.apk"
+          {
+            echo "### APK v${VERSION}"
+            echo ""
+            echo "- \`lazisnu-${VERSION}-arm64-v8a.apk\` — khusus ARM 64-bit"
+            echo "- \`lazisnu-${VERSION}-armeabi-v7a.apk\` — khusus ARM 32-bit"
+            echo "- \`lazisnu-${VERSION}.apk\` — universal-ARM, fallback aplikasi lama"
+            if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$DRY_RUN" = "true" ]; then
+              echo "- Mode: dry-run; tidak ada unggahan R2 atau deploy"
+            else
+              echo "- Basis URL: https://apk.lazisnu.site/"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

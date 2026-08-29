@@ -8,8 +8,8 @@
  *
  * Tanpa --publish: hanya mengedit 3 file (dry-run, belum di-commit).
  * Dengan --publish: git add+commit → push main → buat tag vX.Y.Z (baru,
- * TANPA force-push; tag sudah ada = ABORAT) → push tag. Push tag
- * mengotori workflow release.yml (build EAS → R2 → deploy).
+ * TANPA force-push; tag sudah ada = ABORAT) → push tag. Push tag memicu
+ * release.yml (2 APK per-ABI + 1 universal via Gradle CI → R2 → deploy).
  *
  * File yang dijaga agar sinkron:
  *   1. apps/mobile/android/app/build.gradle  (versionName + versionCode literal)
@@ -106,7 +106,7 @@ if (publish) {
   execSync(`git push origin HEAD`, {cwd: ROOT, stdio: 'inherit'});
   execSync(`git tag ${tag}`, {cwd: ROOT});
   execSync(`git push origin ${tag}`, {cwd: ROOT, stdio: 'inherit'});
-  console.log(`✔ Tag ${tag} dibuat & di-push — release.yml otomatis jalan (build EAS → R2 → deploy).`);
+  console.log(`✔ Tag ${tag} dibuat & di-push — release.yml membangun 2 APK per-ABI + 1 universal → R2 → deploy.`);
 } else {
   console.log('(dry-run: file sudah diedit, belum di-commit. Ulangi dengan --publish untuk rilis.)');
 }

@@ -4,10 +4,11 @@ name: CI
 #  Lazisnu Monorepo — Build, Test & Deploy
 #
 #  KONTRAK PENTING (jangan diubah tanpa cek):
-#  - `release.yml` memanggil: gh workflow run ci.yml --ref <tag>
-#    → workflow ini WAJIB tetap menangani push tag v* dan workflow_dispatch
-#      dengan alur: build image → deploy production (blue-green).
-#  - Deploy production hanya jalan pada ref `refs/tags/v*`.
+#  - `release.yml` memanggil: gh workflow run ci.yml --ref <tag> SETELAH APK
+#    lolos gate dan URL R2 sehat.
+#  - Tag v* SENGAJA tidak menjadi trigger langsung di sini: trigger tag akan
+#    melewati fail-closed R2 dan menggandakan deploy.
+#  - Deploy production hanya jalan via workflow_dispatch pada ref `refs/tags/v*`.
 #  - Deploy staging otomatis pada push ke `main`.
 #  - Secrets yang dipakai: VM_HOST, VM_USER, VM_SSH_KEY (GITHUB_TOKEN bawaan).
 #  - Deploy bergantung pada scripts/deploy-blue-green.sh di dalam repo.
@@ -24,7 +25,6 @@ name: CI
 on:
   push:
     branches: [main, master]
-    tags: ['v*']
     paths-ignore: ['docs/**', '*.md']
   pull_request:
     branches: [main, master]
@@ -88,7 +88,8 @@ jobs:
               - 'scripts/**'
               - '.github/workflows/**'
 
-      # Tag push / workflow_dispatch: filter path tidak relevan → jalankan semua.
+      # workflow_dispatch (termasuk ref tag dari release.yml): filter path tidak
+      # relevan → jalankan semua.
       - id: fallback
         if: steps.filter.outputs.backend == ''
         run: |
@@ -283,7 +284,6 @@ jobs:
       needs.test-backend.result != 'failure' &&
       needs.test-mobile.result != 'failure' &&
       (github.event_name == 'workflow_dispatch' ||
-       startsWith(github.ref, 'refs/tags/') ||
        (github.event_name == 'push' &&
         (needs.changes.outputs.backend == 'true' ||
          needs.changes.outputs.web    == 'true' ||
@@ -344,7 +344,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ─── Deploy PRODUCTION (hanya tag v*) — blue-green, zero downtime ────────
+  # ─── Deploy PRODUCTION (dispatch release pada ref tag v*) — blue-green ───
   deploy:
     name: Deploy production
     needs: [changes, verify, test-backend, test-mobile, build-image]
