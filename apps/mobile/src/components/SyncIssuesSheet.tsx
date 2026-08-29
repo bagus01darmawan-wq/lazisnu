@@ -1,7 +1,7 @@
 import React, {useMemo, useState} from 'react';
-import {FlatList, Modal, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
+import {FlatList, Modal, StyleSheet, Text, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import {AppButton} from './ui';
+import {AppButton, AppPressable} from './ui';
 import {Colors, Radius, Spacing, Typography} from '../theme';
 import {formatCurrency, formatDate} from '../utils';
 import {offlineQueue} from '../services/offline/queue';
@@ -165,7 +165,7 @@ export const SyncIssuesSheet: React.FC<SyncIssuesSheetProps> = ({visible, onClos
         {item.body}
       </Text>
       {item.action && (
-        <TouchableOpacity
+        <AppPressable
           accessibilityRole={'button'}
           accessibilityLabel={item.action.label}
           onPress={item.action.onPress}
@@ -182,7 +182,7 @@ export const SyncIssuesSheet: React.FC<SyncIssuesSheetProps> = ({visible, onClos
             ]}>
             {item.action.label}
           </Text>
-        </TouchableOpacity>
+        </AppPressable>
       )}
     </View>
   );
@@ -251,13 +251,13 @@ export const SyncIssuesSheet: React.FC<SyncIssuesSheetProps> = ({visible, onClos
                 perangkat
               </Text>
             </View>
-            <TouchableOpacity
+            <AppPressable
               accessibilityRole={'button'}
               accessibilityLabel={'Tutup detail sinkronisasi'}
               onPress={onClose}
               style={styles.closeButton}>
               <Icon name={'close'} size={24} color={Colors.text.muted} />
-            </TouchableOpacity>
+            </AppPressable>
           </View>
 
           <FlatList
