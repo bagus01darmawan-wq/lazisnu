@@ -147,6 +147,8 @@ Aplikasi ini menangani **transaksi keuangan (infaq)**, sehingga keamanannya meng
 4. **Migrasi screen lama** mengikuti urutan `03-migrasi-auth-screens.md` dan `04-migrasi-main-screens.md`; checklist di `06-execution-checklist.md` WAJIB dicentang saat pekerjaannya selesai (jangan dibiarkan basi).
 5. Ikon hanya dari `react-native-vector-icons` set yang sudah dipakai; aset gambar hanya di `src/assets/`.
 6. Ukuran file screen SEBAIKNYA ≤ 300 baris; lebih dari itu ekstrak subkomponen ke folder screen.
+7. **Komponen sentuh BARU** WAJIB memakai `AppPressable` (`src/components/ui/AppPressable.tsx` — `Pressable` + feedback opacity; keputusan 2026-08-29). `TouchableOpacity` hanya untuk kode lama yang sudah ada; pemakaian baru di `src/components/ui/` kena warning lint (`no-restricted-syntax`).
+8. **Daftar dinamis berpotensi >50 item** WAJIB memakai `FlatList` (virtualized), JANGAN `ScrollView`+`.map()`. Contoh referensi: `SyncIssuesSheet.tsx` — satu FlatList induk (baris interleave judul section → kartu → catatan sisa), batas tampilan 50 item per jenis + footer "…dan X lainnya".
 
 ---
 
