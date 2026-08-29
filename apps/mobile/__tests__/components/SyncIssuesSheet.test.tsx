@@ -11,6 +11,30 @@ jest.mock('react-native', () => {
       if (prop === 'Modal') {
         return ({children}: {children: React.ReactNode}) => children;
       }
+      if (prop === 'FlatList') {
+        // Shim uji: merender SEMUA baris. Virtualization adalah perilaku RN
+        // (butuh onLayout/ukuran yang tak ada di react-test-renderer); yang
+        // kita uji = model baris komponen (slice 50 + catatan sisa).
+        const ReactModule = require('react');
+        return function TestFlatList(props: {
+          data: unknown[];
+          renderItem: (info: {item: unknown; index: number}) => React.ReactNode;
+          keyExtractor?: (item: unknown, index: number) => string;
+        }) {
+          const {data, renderItem, keyExtractor} = props;
+          return ReactModule.createElement(
+            ReactModule.Fragment,
+            null,
+            data.map((item, index) =>
+              ReactModule.createElement(
+                ReactModule.Fragment,
+                {key: keyExtractor ? keyExtractor(item, index) : String(index)},
+                renderItem({item, index}),
+              ),
+            ),
+          );
+        };
+      }
       return target[prop];
     },
   });
@@ -199,5 +223,30 @@ describe('SyncIssuesSheet — Detail Sinkronisasi', () => {
     });
 
     expect(mockTriggerSync).toHaveBeenCalled();
+  });
+
+  it('batas tampilan: 60 menunggu → judul tetap (60), 50 kartu + catatan sisa', () => {
+    mockCollectionQueue.mockReturnValue(
+      Array.from({length: 60}, (_, i) => ({
+        offline_id: `of${i}`,
+        assignment_id: `ta${i}`,
+        can_id: `c${i}`,
+        nominal: 10000 + i,
+        collected_at: '2026-08-28T08:00:00.000Z',
+        retry_attempts: 0,
+      })),
+    );
+    const tree = renderSheet();
+    const text = allText(tree);
+
+    // Judul section tetap menghitung SEMUA item, bukan yang tampil.
+    expect(text).toContain('Menunggu Kirim (60)');
+    // Hanya 50 kartu yang dirender (masing-masing punya tombol Kirim Sekarang).
+    const actionButtons = tree.root
+      .findAllByType(require('react-native').Text)
+      .filter(n => collectText(n.props.children) === 'Kirim Sekarang');
+    expect(actionButtons).toHaveLength(50);
+    // Catatan sisa muncul.
+    expect(text).toContain('…dan 10 lainnya');
   });
 });

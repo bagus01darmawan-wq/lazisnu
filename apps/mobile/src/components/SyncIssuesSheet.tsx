@@ -1,5 +1,5 @@
 import React, {useMemo, useState} from 'react';
-import {Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
+import {FlatList, Modal, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {AppButton} from './ui';
 import {Colors, Radius, Spacing, Typography} from '../theme';
@@ -23,6 +23,15 @@ type IssueItem = {
   tone: 'pending' | 'failed';
   action?: {label: string; onPress: () => void};
 };
+
+/** Baris interleave untuk FlatList induk tunggal (judul → kartu → catatan sisa). */
+type SectionRow =
+  | {kind: 'sectionTitle'; key: string; title: string; failedTone: boolean; count: number}
+  | {kind: 'moreNote'; key: string; hidden: number}
+  | {kind: 'card'; key: string; item: IssueItem};
+
+/** Batas tampilan per jenis: sheet = alat triase, bukan arsip. */
+const MAX_RENDERED = 50;
 
 /**
  * "Detail Sinkronisasi" — daftar item yang belum sampai ke server.
@@ -178,18 +187,56 @@ export const SyncIssuesSheet: React.FC<SyncIssuesSheetProps> = ({visible, onClos
     </View>
   );
 
-  const renderSection = (title: string, items: IssueItem[], failedTone: boolean) => (
-    <>
-      <Text
-        style={[
-          styles.sectionTitle,
-          failedTone ? styles.sectionTitleFailed : styles.sectionTitlePending,
-        ]}>
-        {title} ({items.length})
-      </Text>
-      {items.map(renderCard)}
-    </>
-  );
+  /** Model baris: judul section → maks 50 kartu → catatan sisa. Satu FlatList
+   *  induk = satu VirtualizedList (aturan RN), scroll tetap milik sheet. */
+  const rows = useMemo(() => {
+    const build = (
+      prefix: string,
+      title: string,
+      items: IssueItem[],
+      failedTone: boolean,
+    ): SectionRow[] => {
+      const shown = items.slice(0, MAX_RENDERED);
+      const hidden = items.length - shown.length;
+      const out: SectionRow[] = [
+        {kind: 'sectionTitle', key: `${prefix}-title`, title, failedTone, count: items.length},
+      ];
+      for (const item of shown) {
+        out.push({kind: 'card', key: item.key, item});
+      }
+      if (hidden > 0) {
+        out.push({kind: 'moreNote', key: `${prefix}-more`, hidden});
+      }
+      return out;
+    };
+    return [
+      ...build('p', 'Menunggu Kirim', issues.pending, false),
+      ...build('f', 'Gagal — Perlu Tindakan', issues.failed, true),
+    ];
+  }, [issues]);
+
+  const renderRow = ({item}: {item: SectionRow}) => {
+    switch (item.kind) {
+      case 'sectionTitle':
+        return (
+          <Text
+            style={[
+              styles.sectionTitle,
+              item.failedTone ? styles.sectionTitleFailed : styles.sectionTitlePending,
+            ]}>
+            {item.title} ({item.count})
+          </Text>
+        );
+      case 'moreNote':
+        return (
+          <Text style={styles.moreNote}>
+            …dan {item.hidden} lainnya — lakukan "Kirim Semua Sekarang" untuk mengosongkan
+          </Text>
+        );
+      case 'card':
+        return renderCard(item.item);
+    }
+  };
 
   return (
     <Modal visible={visible} transparent animationType={'slide'} onRequestClose={onClose}>
@@ -213,20 +260,21 @@ export const SyncIssuesSheet: React.FC<SyncIssuesSheetProps> = ({visible, onClos
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
-            {total === 0 ? (
-              <View style={styles.emptyWrap}>
-                <Text style={styles.emptyText}>Tidak ada masalah sinkronisasi.</Text>
-              </View>
-            ) : (
-              <>
-                {issues.pending.length > 0 &&
-                  renderSection('Menunggu Kirim', issues.pending, false)}
-                {issues.failed.length > 0 &&
-                  renderSection('Gagal — Perlu Tindakan', issues.failed, true)}
-              </>
-            )}
-          </ScrollView>
+          <FlatList
+            style={styles.list}
+            data={total === 0 ? [] : rows}
+            keyExtractor={row => row.key}
+            renderItem={renderRow}
+            showsVerticalScrollIndicator={false}
+            initialNumToRender={12}
+            maxToRenderPerBatch={12}
+            windowSize={7}
+          />
+          {total === 0 && (
+            <View style={styles.emptyWrap}>
+              <Text style={styles.emptyText}>Tidak ada masalah sinkronisasi.</Text>
+            </View>
+          )}
 
           {total > 0 && (
             <View style={styles.footer}>
@@ -331,6 +379,12 @@ const styles = StyleSheet.create({
   cardActionText: {...Typography.label},
   emptyWrap: {alignItems: 'center', paddingVertical: Spacing.xl},
   emptyText: {...Typography.body, color: Colors.text.secondary},
+  moreNote: {
+    ...Typography.caption,
+    color: Colors.text.muted,
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.sm,
+  },
   footer: {marginTop: Spacing.sm},
 });
 
