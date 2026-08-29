@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Varian verifikasi (branch saja): label launcher dibedakan agar mudah
+     dikenali berdampingan dengan app produksi. TIDAK ada di main. -->
+<resources>
+    <string name="app_name">LAZISNU Debug</string>
+</resources>
