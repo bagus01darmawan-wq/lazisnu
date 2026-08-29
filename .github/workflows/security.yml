@@ -1,0 +1,83 @@
+name: Security
+
+# Workflow tambahan — tidak mengubah alur build/deploy di ci.yml.
+# Tiga lapis:
+#   1. Dependency review  → setiap PR, blokir dependensi baru ber-vulnerability/license buruk.
+#   2. CodeQL             → analisis statis JS/TS (injection, XSS, path traversal, dll).
+#   3. pnpm audit         → pemindaian terjadwal + manual.
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+  schedule:
+    # Setiap Senin 03:00 UTC (10:00 WIB)
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
+
+  codeql:
+    name: CodeQL (JS/TS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          # Monorepo: abaikan kode hasil build & native Android.
+          queries: security-and-quality
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: '/language:${{ matrix.language }}'
+
+  audit:
+    name: pnpm audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit dependensi (level moderate+)
+        # Catatan: sengaja `|| true` agar tidak memblokir pipeline saat ini.
+        # Setelah temuan awal dibersihkan, ganti menjadi tanpa `|| true`
+        # supaya kerentanan baru menggagalkan build.
+        run: pnpm audit --audit-level moderate || true
