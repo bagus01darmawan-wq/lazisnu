@@ -283,10 +283,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           if (yRes.success && yRes.data) {
             let collected = yRes.data.collected;
             let nominal = yRes.data.total_nominal;
-            for (const item of [
-              ...offlineQueue.getQueue(),
-              ...offlineQueue.getFailedPermanent(),
-            ]) {
+            for (const item of [...offlineQueue.getQueue(), ...offlineQueue.getFailedPermanent()]) {
               if (isYesterday(item.collected_at)) {
                 collected += 1;
                 nominal += item.nominal;
