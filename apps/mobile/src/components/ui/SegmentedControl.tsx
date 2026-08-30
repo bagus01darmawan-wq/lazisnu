@@ -1,5 +1,5 @@
 import React from 'react';
-import {View, Text, TouchableOpacity, StyleSheet} from 'react-native';
+import {StyleProp, View, Text, TouchableOpacity, ViewStyle, StyleSheet} from 'react-native';
 import {Colors, Radius, Spacing, Typography} from '../../theme';
 
 export type SegmentOption<T extends string> = {
@@ -11,15 +11,17 @@ type SegmentedControlProps<T extends string> = {
   options: SegmentOption<T>[];
   value: T;
   onChange: (value: T) => void;
+  style?: StyleProp<ViewStyle>;
 };
 
 export function SegmentedControl<T extends string>({
   options,
   value,
   onChange,
+  style,
 }: SegmentedControlProps<T>) {
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, style]}>
       {options.map(option => {
         const isSelected = value === option.value;
         return (

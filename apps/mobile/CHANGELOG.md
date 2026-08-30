@@ -11,6 +11,7 @@ dan proyek ini menganut prinsip [Semantic Versioning (SemVer 2.0.0)](https://sem
 
 ### Added
 
+- **Beranda "Emerald Royal"**: desain ulang dasbor petugas — kartu ringkasan bersegmen _Hari Ini/Minggu Ini_ dengan chip tren vs kemarin, kartu _Bulan Ini_ dengan ring progres emas (react-native-svg), baris _Lihat Rekap Lengkap_, watermark logo lembaga pada hero, avatar inisial, serta tab bar mengambang dengan FAB Scan kotak rounded berikon pindai.
 - Integrasi CI mobile GitHub Actions: lint + typecheck otomatis dan alur uji coba perakitan APK Android debug di cloud.
 - Konfigurasi Minify/R8 dan pemangkasan resource aset (`shrinkResources`) untuk rilis produksi yang lebih ramping.
 

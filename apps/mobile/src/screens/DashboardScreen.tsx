@@ -12,20 +12,75 @@ import {
 import {useNavigation} from '@react-navigation/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
+import Svg, {Circle} from 'react-native-svg';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useAuthStore, useDashboardStore, useSyncStore, useTasksStore} from '../stores';
-import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
-import {formatCurrency} from '../utils';
+import {Colors, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
+import {formatCurrency, getInitials} from '../utils';
+import {AppPressable, SegmentedControl} from '../components/ui';
 import {SyncIssuesSheet} from '../components/SyncIssuesSheet';
 import type {MainNavigationProp} from '../navigation/types';
 
 const logo = require('../assets/branding/logo-lazisnu-putih.png');
 
+type PeriodFilter = 'today' | 'week';
+
+const PERIOD_OPTIONS: {label: string; value: PeriodFilter}[] = [
+  {label: 'Hari Ini', value: 'today'},
+  {label: 'Minggu Ini', value: 'week'},
+];
+
+const RING_SIZE = 74;
+const RING_STROKE = 7;
+const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
+const RING_CIRC = 2 * Math.PI * RING_RADIUS;
+
+// Ring progres via react-native-svg: lintas emas terisi sesuai progres
+// (strokeDasharray), mulai dari arah jam 12.
+const RingProgress: React.FC<{progress: number}> = ({progress}) => {
+  const clamped = Math.max(0, Math.min(1, progress));
+  const percent = Math.round(clamped * 100);
+
+  return (
+    <View style={styles.ring}>
+      <Svg width={RING_SIZE} height={RING_SIZE}>
+        <Circle
+          cx={RING_SIZE / 2}
+          cy={RING_SIZE / 2}
+          r={RING_RADIUS}
+          stroke={Colors.overlay.lightSubtle}
+          strokeWidth={RING_STROKE}
+          fill="none"
+        />
+        {clamped > 0 && (
+          <Circle
+            cx={RING_SIZE / 2}
+            cy={RING_SIZE / 2}
+            r={RING_RADIUS}
+            stroke={Colors.brand.mutedSand}
+            strokeWidth={RING_STROKE}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray={`${RING_CIRC * clamped} ${RING_CIRC}`}
+            rotation={-90}
+            origin={`${RING_SIZE / 2}, ${RING_SIZE / 2}`}
+          />
+        )}
+      </Svg>
+      <View style={styles.ringCenter}>
+        <Text style={styles.ringPercent}>{percent}%</Text>
+        <Text style={styles.ringCaption}>TUGAS</Text>
+      </View>
+    </View>
+  );
+};
+
 const DashboardScreen: React.FC = () => {
   const navigation = useNavigation<MainNavigationProp>();
   const insets = useSafeAreaInsets();
   const user = useAuthStore(state => state.user);
-  const {todayStats, monthStats, fetchDashboard, isLoading, error} = useDashboardStore();
+  const {todayStats, weekStats, monthStats, yesterdayStats, fetchDashboard, isLoading, error} =
+    useDashboardStore();
   const {fetchStats} = useTasksStore();
   const {
     pendingCount,
@@ -39,6 +94,7 @@ const DashboardScreen: React.FC = () => {
   const totalReview = permanentFailedCount + failedCorrectionsCount;
   const totalSyncIssues = totalWaiting + totalReview;
   const [issuesVisible, setIssuesVisible] = useState(false);
+  const [period, setPeriod] = useState<PeriodFilter>('today');
 
   useEffect(() => {
     fetchDashboard();
@@ -52,7 +108,20 @@ const DashboardScreen: React.FC = () => {
     checkStatus();
   };
 
-  const collected = todayStats?.collected || 0;
+  const periodStats = period === 'today' ? todayStats : weekStats;
+  const periodNominal = periodStats?.total_nominal || 0;
+  const periodCollected = periodStats?.collected || 0;
+
+  // Chip tren: perbandingan nominal periode aktif terhadap nominal kemarin.
+  // Periode belum ada nominal atau tanpa data kemarin → 0% (konsisten antar
+  // segmen, tidak menampilkan -100% saat hari berjalan masih kosong).
+  const yesterdayNominal = yesterdayStats?.total_nominal || 0;
+  const chipPct =
+    periodNominal > 0 && yesterdayNominal > 0
+      ? Math.round(((periodNominal - yesterdayNominal) / yesterdayNominal) * 100)
+      : 0;
+  const chipUp = chipPct >= 0;
+
   const monthTaskTotal = monthStats?.task_total || 0;
   const monthTaskCompleted = monthStats?.task_completed || 0;
   const monthTaskProgress = monthTaskTotal ? monthTaskCompleted / monthTaskTotal : 0;
@@ -95,6 +164,7 @@ const DashboardScreen: React.FC = () => {
         <LinearGradient
           colors={[Colors.brand.heroStart, Colors.brand.deepGreen, Colors.brand.heroEnd]}
           style={[styles.hero, {paddingTop: insets.top + Spacing.md}]}>
+          <Image source={logo} style={styles.heroWatermark} resizeMode={'contain'} />
           <View style={styles.topRow}>
             <View style={styles.logoContainer}>
               <Image source={logo} style={styles.logo} resizeMode={'contain'} />
@@ -131,7 +201,7 @@ const DashboardScreen: React.FC = () => {
                 accessibilityLabel={'Buka profil'}
                 onPress={() => navigation.navigate('Profile')}
                 style={styles.avatar}>
-                <Icon name={'account'} size={29} color={Colors.brand.deepGreen} />
+                <Text style={styles.avatarText}>{getInitials(user?.full_name)}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -141,76 +211,88 @@ const DashboardScreen: React.FC = () => {
         </LinearGradient>
 
         <View style={styles.body}>
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, styles.sectionTitleFirst]}>Hari Ini</Text>
-            <View style={styles.statsRow}>
-              <View style={styles.statWide}>
-                <Text
-                  style={styles.statValue}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.72}>
-                  {formatCurrency(todayStats?.total_nominal || 0)}
-                </Text>
-                <Text style={styles.statLabel}>Total Infak</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statNarrow}>
-                <Text
-                  style={styles.statValue}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.72}>
-                  {`${collected}`}
-                </Text>
-                <Text style={styles.statLabel}>Dijemput</Text>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.sectionGap} />
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Bulan Ini</Text>
-            <View style={styles.statsRow}>
-              <View style={styles.statWide}>
-                <Text
-                  style={styles.statValue}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.72}>
-                  {formatCurrency(monthStats?.total_nominal || 0)}
-                </Text>
-                <Text style={styles.statLabel}>Total Infak</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statNarrow}>
-                <Text
-                  style={styles.statValue}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.72}>
-                  {`${monthStats?.collected || 0}`}
-                </Text>
-                <Text style={styles.statLabel}>Dijemput</Text>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.progressTrack}>
-            <View
-              style={[styles.progressFill, {width: `${Math.round(monthTaskProgress * 100)}%`}]}
+          <View style={styles.mainCard}>
+            <SegmentedControl
+              options={PERIOD_OPTIONS}
+              value={period}
+              onChange={setPeriod}
+              style={styles.periodControl}
             />
+            <Text style={styles.totalLabel}>TOTAL INFAK TERKUMPUL</Text>
+            <View style={styles.totalRow}>
+              <Text
+                style={styles.totalValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.72}>
+                {formatCurrency(periodNominal)}
+              </Text>
+              <View
+                style={[styles.trendChip, !chipUp && {backgroundColor: Colors.surface.errorSoft}]}>
+                <Icon
+                  name={chipUp ? 'arrow-up' : 'arrow-down'}
+                  size={12}
+                  color={chipUp ? Colors.status.success : Colors.status.error}
+                />
+                <Text style={[styles.trendChipText, !chipUp && {color: Colors.status.error}]}>
+                  {chipPct}%
+                </Text>
+              </View>
+            </View>
+            <View style={styles.metaRow}>
+              <View style={styles.metaItem}>
+                <View style={[styles.metaIcon, {backgroundColor: Colors.surface.successSoft}]}>
+                  <Icon name={'hand-heart-outline'} size={18} color={Colors.brand.emerald} />
+                </View>
+                <View style={styles.metaTextWrap}>
+                  <Text style={styles.metaNum}>{periodCollected}</Text>
+                  <Text style={styles.metaTxt}>Kaleng dijemput</Text>
+                </View>
+              </View>
+              <View style={styles.metaDivider} />
+              <AppPressable
+                accessibilityRole={totalSyncIssues ? 'button' : undefined}
+                accessibilityLabel={
+                  totalSyncIssues ? `${totalSyncIssues} data belum tersinkronisasi` : undefined
+                }
+                disabled={!totalSyncIssues}
+                onPress={openSyncIssue}
+                style={styles.metaItem}>
+                <View style={[styles.metaIcon, {backgroundColor: Colors.surface.warningSoft}]}>
+                  <Icon name={'cloud-sync-outline'} size={18} color={Colors.brand.accentGold} />
+                </View>
+                <View style={styles.metaTextWrap}>
+                  <Text style={styles.metaNum}>{totalWaiting}</Text>
+                  <Text style={styles.metaTxt}>Menunggu sinkron</Text>
+                </View>
+              </AppPressable>
+            </View>
           </View>
-          <View style={styles.progressLine}>
-            <Text style={styles.progressCaption}>
-              {monthTaskCompleted} dari {monthTaskTotal} tugas selesai
-            </Text>
-            <Text style={styles.progressCaption}>{Math.round(monthTaskProgress * 100)}%</Text>
-          </View>
+
+          <LinearGradient
+            colors={[Colors.brand.heroStart, Colors.brand.heroEnd]}
+            start={{x: 0, y: 0}}
+            end={{x: 1, y: 1}}
+            style={styles.monthCard}>
+            <View style={styles.monthTextWrap}>
+              <Text style={styles.monthLabel}>BULAN INI</Text>
+              <Text
+                style={styles.monthValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.72}>
+                {formatCurrency(monthStats?.total_nominal || 0)}
+              </Text>
+              <Text style={styles.monthSub}>
+                {monthStats?.collected || 0} kaleng · {monthTaskCompleted} dari {monthTaskTotal}{' '}
+                tugas
+              </Text>
+            </View>
+            <RingProgress progress={monthTaskProgress} />
+          </LinearGradient>
 
           {!!error && !isLoading && (
-            <TouchableOpacity
+            <AppPressable
               accessibilityRole={'button'}
               accessibilityLabel={'Coba lagi memperbarui ringkasan'}
               style={styles.errorBanner}
@@ -219,18 +301,23 @@ const DashboardScreen: React.FC = () => {
               <Text style={styles.errorText}>
                 Ringkasan gagal diperbarui. Ketuk untuk mencoba lagi.
               </Text>
-            </TouchableOpacity>
+            </AppPressable>
           )}
 
-          <TouchableOpacity
+          <AppPressable
             accessibilityRole={'button'}
             accessibilityLabel={'Buka statistik rekap rentang tanggal'}
             onPress={() => navigation.navigate('RangeStats')}
-            activeOpacity={0.7}
             style={styles.rekapRow}>
-            <Text style={styles.sectionTitle}>Lihat Rekap</Text>
+            <View style={styles.rekapIcon}>
+              <Icon name={'chart-bar'} size={20} color={Colors.brand.accentGold} />
+            </View>
+            <View style={styles.rekapTextWrap}>
+              <Text style={styles.rekapTitle}>Lihat Rekap Lengkap</Text>
+              <Text style={styles.rekapSub}>Statistik per rentang tanggal</Text>
+            </View>
             <Icon name={'chevron-right'} size={24} color={Colors.text.secondary} />
-          </TouchableOpacity>
+          </AppPressable>
         </View>
       </ScrollView>
       <SyncIssuesSheet visible={issuesVisible} onClose={() => setIssuesVisible(false)} />
@@ -296,45 +383,143 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  avatarText: {
+    color: Colors.brand.deepGreen,
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
   greeting: {...Typography.heading1, color: Colors.text.white, fontSize: 23, lineHeight: 29},
   date: {...Typography.body, color: Colors.text.white, opacity: 0.86, marginTop: Spacing.xs},
+  heroWatermark: {
+    position: 'absolute',
+    right: -140,
+    bottom: -92,
+    width: 440,
+    height: 233,
+    opacity: 0.12,
+  },
   body: {paddingHorizontal: Layout.screenPadding},
-  section: {},
-  sectionTitle: {...Typography.heading3, color: Colors.brand.deepGreen},
-  sectionTitleFirst: {marginTop: Spacing.md},
-  statsRow: {flexDirection: 'row', alignItems: 'center', marginTop: Spacing.md},
-  statWide: {flex: 2.35, alignItems: 'flex-start'},
-  statNarrow: {flex: 1, alignItems: 'center'},
-  statValue: {color: Colors.brand.deepGreen, fontSize: 24, lineHeight: 31, fontWeight: '600'},
-  statLabel: {...Typography.bodySmall, color: Colors.text.secondary, marginTop: 2},
-  statDivider: {
-    width: 1,
-    height: 54,
-    backgroundColor: Colors.border.summary,
-    marginHorizontal: 14,
-  },
-  sectionGap: {height: Spacing.lg},
-  progressTrack: {
-    height: 10,
-    borderRadius: Radius.pill,
-    backgroundColor: Colors.surface.progressTrack,
+  mainCard: {
     marginTop: Spacing.md,
-    overflow: 'hidden',
+    backgroundColor: Colors.surface.card,
+    borderRadius: Radius.panel,
+    borderWidth: 1,
+    borderColor: Colors.border.warm,
+    padding: Layout.cardPadding,
+    ...Shadows.medium,
   },
-  progressFill: {height: '100%', borderRadius: Radius.pill, backgroundColor: Colors.brand.emerald},
-  progressLine: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    marginTop: Spacing.sm,
+  periodControl: {backgroundColor: Colors.surface.sunken},
+  totalLabel: {
+    ...Typography.caption,
+    color: Colors.text.secondary,
+    letterSpacing: 0.6,
+    marginTop: Spacing.md,
   },
-  progressCaption: {...Typography.caption, color: Colors.text.secondary},
-  rekapRow: {
+  totalValue: {
+    color: Colors.brand.deepGreen,
+    fontSize: 30,
+    lineHeight: 38,
+    fontWeight: '800',
+    letterSpacing: -0.8,
+    marginTop: 2,
+  },
+  totalRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: Spacing.lg,
-    paddingVertical: 4,
+    gap: Spacing.sm,
+  },
+  trendChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.surface.successSoft,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 9,
+  },
+  trendChipText: {fontSize: 11, fontWeight: '700', color: Colors.status.success},
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border.warm,
+    borderStyle: 'dashed',
+  },
+  metaItem: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10},
+  metaIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  metaTextWrap: {flex: 1},
+  metaNum: {
+    color: Colors.brand.deepGreen,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  metaTxt: {...Typography.caption, color: Colors.text.secondary, marginTop: 1},
+  metaDivider: {
+    width: 1,
+    height: 34,
+    backgroundColor: Colors.border.warm,
+    marginHorizontal: Spacing.sm,
+  },
+  monthCard: {
+    marginTop: Spacing.md,
+    borderRadius: Radius.panel,
+    padding: Layout.cardPadding + 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+    ...Shadows.medium,
+  },
+  monthTextWrap: {flex: 1},
+  monthLabel: {
+    ...Typography.caption,
+    color: Colors.text.white,
+    opacity: 0.72,
+    letterSpacing: 0.6,
+  },
+  monthValue: {
+    color: Colors.text.white,
+    fontSize: 24,
+    lineHeight: 31,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    marginTop: 4,
+  },
+  monthSub: {
+    ...Typography.caption,
+    color: Colors.text.white,
+    opacity: 0.72,
+    marginTop: 5,
+  },
+  ring: {
+    width: RING_SIZE,
+    height: RING_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ringCenter: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ringPercent: {color: Colors.text.white, fontSize: 16, fontWeight: '800'},
+  ringCaption: {
+    color: Colors.text.white,
+    opacity: 0.66,
+    fontSize: 9,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    marginTop: 1,
   },
   errorBanner: {
     flexDirection: 'row',
@@ -346,6 +531,28 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
   },
   errorText: {...Typography.caption, color: Colors.status.error, flex: 1},
+  rekapRow: {
+    marginTop: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface.card,
+    borderWidth: 1,
+    borderColor: Colors.border.warm,
+    borderRadius: Radius.lg,
+    padding: Layout.cardPadding,
+    gap: 12,
+  },
+  rekapIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.surface.avatar,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rekapTextWrap: {flex: 1},
+  rekapTitle: {...Typography.label, color: Colors.brand.deepGreen},
+  rekapSub: {...Typography.caption, color: Colors.text.secondary, marginTop: 1},
 });
 
 export default DashboardScreen;

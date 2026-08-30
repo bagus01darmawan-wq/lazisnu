@@ -9,6 +9,7 @@ import {APP_VERSION} from '../config/appConfig';
 import {AppButton, AppCard, StatusBadge} from '../components/ui';
 import {Colors, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
 import {getErrorMessage} from '../utils/error';
+import {getInitials} from '../utils';
 
 const roleLabels: Record<string, string> = {
   PETUGAS: 'Petugas Penjemputan',
@@ -124,7 +125,7 @@ const ProfileScreen: React.FC = () => {
         style={[styles.header, {paddingTop: insets.top + Spacing.lg}]}>
         <Text style={styles.headerLabel}>Profil Petugas</Text>
         <View style={styles.avatar}>
-          <Icon name={'account'} size={52} color={Colors.brand.deepGreen} />
+          <Text style={styles.avatarText}>{getInitials(user?.full_name)}</Text>
         </View>
         <Text style={styles.userName}>{user?.full_name || 'Petugas'}</Text>
         <Text style={styles.userRole}>{role}</Text>
@@ -282,6 +283,12 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: Radius.hero,
     borderBottomRightRadius: Radius.hero,
     ...Shadows.soft,
+  },
+  avatarText: {
+    color: Colors.brand.deepGreen,
+    fontSize: 34,
+    fontWeight: '800',
+    letterSpacing: 1,
   },
   headerLabel: {
     ...Typography.heading1,

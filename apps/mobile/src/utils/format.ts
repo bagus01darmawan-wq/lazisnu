@@ -55,6 +55,19 @@ export const formatDate = (
 };
 
 /**
+ * Mengambil satu huruf inisial kapital dari nama lengkap (huruf pertama kata
+ * pertama). Contoh: "Bagus Darmawan" -> "B". Nama kosong menghasilkan "P"
+ * (Petugas).
+ */
+export const getInitials = (name?: string | null): string => {
+  const firstWord = (name || '').trim().split(/\s+/).filter(Boolean)[0];
+  if (!firstWord) {
+    return 'P';
+  }
+  return firstWord.charAt(0).toUpperCase() || 'P';
+};
+
+/**
  * Memformat string periode YYYY-MM menjadi nama bulan dan tahun (contoh: "2026-08" -> "Agustus 2026").
  */
 export const formatPeriod = (period: string): string => {

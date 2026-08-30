@@ -14,6 +14,7 @@ export const Colors = {
     page: '#F4F1EA',
     card: '#FFFCF7',
     cardMuted: '#FFFAF1',
+    sunken: '#F1EBDD',
     avatar: '#F8F1E5',
     successSubtle: '#E8F0E9',
     successSoft: '#E8F5EC',

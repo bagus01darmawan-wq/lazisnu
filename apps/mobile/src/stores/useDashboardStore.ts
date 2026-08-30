@@ -1,5 +1,5 @@
 import {create} from 'zustand';
-import {dashboardService} from '../services/api';
+import {dashboardService, tasksService} from '../services/api';
 import {
   TodayStats,
   WeekStats,
@@ -22,6 +22,17 @@ const isToday = (dateStr: string): boolean => {
     d.getDate() === now.getDate() &&
     d.getMonth() === now.getMonth() &&
     d.getFullYear() === now.getFullYear()
+  );
+};
+
+const isYesterday = (dateStr: string): boolean => {
+  const d = new Date(dateStr);
+  const y = new Date();
+  y.setDate(y.getDate() - 1);
+  return (
+    d.getDate() === y.getDate() &&
+    d.getMonth() === y.getMonth() &&
+    d.getFullYear() === y.getFullYear()
   );
 };
 
@@ -170,6 +181,7 @@ interface DashboardState {
   todayStats: TodayStats | null;
   weekStats: WeekStats | null;
   monthStats: MonthStats | null;
+  yesterdayStats: {collected: number; total_nominal: number} | null;
   pendingTasks: DashboardTaskItem[];
   recentCollections: RecentCollectionSummary[];
   isLoading: boolean;
@@ -186,6 +198,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   todayStats: null,
   weekStats: null,
   monthStats: null,
+  yesterdayStats: null,
   pendingTasks: [],
   recentCollections: [],
   isLoading: false,
@@ -224,6 +237,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       }
       set({
         ...merged,
+        yesterdayStats: null,
         isLoading: false,
       });
       return;
@@ -256,8 +270,40 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           month_stats ?? dashboardCache.getMonthStats(),
         );
 
+        // Statistik kemarin untuk chip tren "vs kemarin". Gagal/kosong = null
+        // (UI menampilkan 0%).
+        let yesterdayStats: {collected: number; total_nominal: number} | null = null;
+        try {
+          const y = new Date();
+          y.setDate(y.getDate() - 1);
+          const yStr = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(
+            y.getDate(),
+          ).padStart(2, '0')}`;
+          const yRes = await tasksService.getRangeStats(yStr, yStr);
+          if (yRes.success && yRes.data) {
+            let collected = yRes.data.collected;
+            let nominal = yRes.data.total_nominal;
+            for (const item of [
+              ...offlineQueue.getQueue(),
+              ...offlineQueue.getFailedPermanent(),
+            ]) {
+              if (isYesterday(item.collected_at)) {
+                collected += 1;
+                nominal += item.nominal;
+              }
+            }
+            yesterdayStats = {collected, total_nominal: nominal};
+          }
+        } catch {
+          yesterdayStats = null;
+        }
+        if (!isLatestRequest()) {
+          return;
+        }
+
         set({
           ...merged,
+          yesterdayStats,
           isLoading: false,
         });
       } else {

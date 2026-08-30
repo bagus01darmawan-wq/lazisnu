@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3 Arah Desain — Beranda LAZISNU</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1c2b25;
+    --muted:#6b7a72;
+    --line:#e7dfcd;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:'Plus Jakarta Sans',system-ui,sans-serif;
+    background:#efece4;
+    color:var(--ink);
+    padding:56px 40px 80px;
+  }
+  header.page{max-width:1300px;margin:0 auto 40px}
+  header.page h1{font-size:30px;font-weight:800;letter-spacing:-0.5px}
+  header.page p{margin-top:8px;color:var(--muted);font-size:14px;max-width:720px;line-height:1.6}
+  .row{
+    display:flex;gap:44px;align-items:flex-start;justify-content:center;
+    flex-wrap:wrap;
+  }
+  .col{width:420px;flex:none}
+  .spec{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .spec h2{font-size:18px;font-weight:800;letter-spacing:-0.2px}
+  .dots{display:flex;gap:5px}
+  .dots span{width:16px;height:16px;border-radius:50%;border:1px solid rgba(0,0,0,.12)}
+  .rationale{margin:16px 4px 0;font-size:13px;color:var(--muted);line-height:1.65}
+  .rationale li{margin-bottom:5px;margin-left:16px}
+  .rationale b{color:var(--ink)}
+
+  /* ===== Phone frame ===== */
+  .phone{
+    width:390px;height:844px;flex:none;margin:0 auto;
+    border-radius:52px;border:11px solid #101411;
+    box-shadow:0 30px 60px -18px rgba(20,30,25,.45), 0 2px 0 rgba(255,255,255,.4) inset;
+    overflow:hidden;position:relative;background:#fff;
+  }
+  .notch{
+    position:absolute;top:12px;left:50%;transform:translateX(-50%);
+    width:112px;height:30px;border-radius:18px;background:#101411;z-index:50;
+  }
+  .statusbar{
+    height:50px;display:flex;align-items:center;justify-content:space-between;
+    padding:6px 26px 0;font-size:14px;font-weight:600;position:relative;z-index:40;
+  }
+  .batt{display:flex;align-items:center;gap:6px}
+  .tabbar{
+    position:absolute;left:0;right:0;bottom:0;z-index:40;
+  }
+  .navitem{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10.5px;font-weight:600;width:62px}
+  svg{display:block}
+
+  /* ============================================================
+     MOCKUP A — EMERALD ROYAL (evolusi premium dari desain kini)
+     ============================================================ */
+  .a-screen{position:absolute;inset:0;background:#f5f1e8}
+  .a-hero{
+    position:relative;padding:0 22px 32px;
+    background:linear-gradient(160deg,#0f3d30 0%,#0e5b41 52%,#0d6e47 100%);
+    border-bottom-left-radius:36px;border-bottom-right-radius:36px;
+    color:#fff;overflow:hidden;
+  }
+  .a-watermark{
+    position:absolute;right:-140px;bottom:-92px;width:440px;opacity:.12;
+    pointer-events:none;
+  }
+  .a-logo{height:50px;width:auto;filter:drop-shadow(0 2px 6px rgba(0,0,0,.2))}
+  .a-toprow{position:relative;display:flex;align-items:center;justify-content:space-between;margin-top:8px}
+  .a-actions{display:flex;align-items:center;gap:10px}
+  .a-iconbtn{
+    position:relative;width:40px;height:40px;border-radius:50%;
+    background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.2);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .a-badge{
+    position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 5px;
+    border-radius:9px;background:#e2574c;color:#fff;font-size:10px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;border:2px solid #0e5039;
+  }
+  .a-avatar{
+    width:40px;height:40px;border-radius:50%;background:#f2e6cd;color:#5a451a;
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;
+    border:2px solid rgba(255,255,255,.85);
+  }
+  .a-greet{position:relative;margin-top:36px}
+  .a-greet .salam{font-family:'Fraunces',serif;font-style:italic;font-weight:500;font-size:17px;color:#d9e8dd;opacity:.95}
+  .a-greet .nama{font-family:'Fraunces',serif;font-weight:600;font-size:33px;letter-spacing:-.3px;margin-top:2px}
+  .a-date{display:flex;align-items:center;gap:7px;margin-top:10px;font-size:12.5px;color:#cfe0d3;font-weight:500}
+
+  .a-body{padding:0 20px;position:relative;z-index:5}
+  .a-float{
+    margin-top:22px;background:#fffdf8;border-radius:24px;padding:21px 20px 19px;
+    box-shadow:0 18px 36px -14px rgba(24,52,40,.35);border:1px solid #efe6d2;
+  }
+  .a-seg{display:flex;background:#f1ebdd;border-radius:13px;padding:4px}
+  .a-seg div{flex:1;text-align:center;font-size:12.5px;font-weight:700;padding:8px 0;border-radius:10px;color:#7a7466}
+  .a-seg .on{background:#fffdf8;color:#0e5039;box-shadow:0 2px 6px rgba(30,50,40,.12)}
+  .a-total{margin-top:16px;display:flex;align-items:flex-end;justify-content:space-between}
+  .a-total .lbl{font-size:11.5px;font-weight:600;color:#8a8172;letter-spacing:.3px;text-transform:uppercase}
+  .a-total .val{font-family:'Inter',sans-serif;font-weight:800;font-size:31px;letter-spacing:-.8px;color:#142a20;margin-top:3px}
+  .a-chip{
+    background:#e6f3ea;color:#146c3e;font-size:11px;font-weight:700;
+    padding:5px 9px;border-radius:9px;display:flex;align-items:center;gap:4px;margin-bottom:6px;
+  }
+  .a-meta{display:flex;align-items:center;margin-top:14px;padding-top:14px;border-top:1px dashed #e8dfc9}
+  .a-meta .item{flex:1;display:flex;align-items:center;gap:9px}
+  .a-meta .ic{
+    width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;
+  }
+  .a-meta .num{font-family:'Inter',sans-serif;font-weight:700;font-size:15.5px;color:#142a20}
+  .a-meta .txt{font-size:11px;color:#8a8172;font-weight:500;margin-top:1px}
+  .a-meta .vr{width:1px;height:32px;background:#ece3cf;margin:0 12px}
+
+  .a-month{
+    margin-top:22px;background:linear-gradient(135deg,#123b2f,#0e5039);border-radius:24px;
+    padding:21px 20px;color:#fff;display:flex;align-items:center;justify-content:space-between;
+    box-shadow:0 14px 28px -12px rgba(18,59,47,.5);position:relative;overflow:hidden;
+  }
+  .a-month .lbl{font-size:11.5px;font-weight:600;color:#b9d2c2;letter-spacing:.3px;text-transform:uppercase}
+  .a-month .val{font-family:'Inter',sans-serif;font-weight:800;font-size:23px;letter-spacing:-.5px;margin-top:4px}
+  .a-month .sub2{font-size:11.5px;color:#a8c6b2;margin-top:5px;font-weight:500}
+  .a-ringwrap{position:relative;width:74px;height:74px;flex:none}
+  .a-ringwrap .pct{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .a-ringwrap .pct b{font-family:'Inter',sans-serif;font-size:16px;font-weight:800}
+  .a-ringwrap .pct span{font-size:8.5px;color:#a8c6b2;font-weight:600;letter-spacing:.4px}
+
+  .a-rekap{
+    margin-top:22px;display:flex;align-items:center;justify-content:space-between;
+    background:#fffdf8;border:1px solid #efe6d2;border-radius:18px;padding:18px 18px;
+  }
+  .a-rekap .l{display:flex;align-items:center;gap:11px}
+  .a-rekap .ic{width:36px;height:36px;border-radius:12px;background:#f6ecd4;display:flex;align-items:center;justify-content:center}
+  .a-rekap b{font-size:13.5px;font-weight:700;color:#142a20}
+  .a-rekap span{display:block;font-size:11px;color:#8a8172;font-weight:500;margin-top:1px}
+
+  .a-tabbar{
+    margin:0 16px 18px;background:rgba(255,253,248,.94);backdrop-filter:blur(10px);
+    border:1px solid #ece2cd;border-radius:26px;height:70px;
+    display:flex;align-items:center;justify-content:space-around;
+    box-shadow:0 12px 28px -10px rgba(24,52,40,.28);
+    position:absolute;left:0;right:0;bottom:0;
+  }
+  .a-tabbar .navitem{color:#9a917f}
+  .a-tabbar .navitem.on{color:#0e5039}
+  .a-fab{
+    width:56px;height:56px;border-radius:50%;margin-top:-34px;
+    background:linear-gradient(145deg,#18a05e,#0d6e47);
+    display:flex;align-items:center;justify-content:center;color:#fff;
+    border:4px solid #f5f1e8;box-shadow:0 10px 20px -6px rgba(13,110,71,.55);
+  }
+
+  /* ============================================================
+     MOCKUP B — TERANG BERSIH (clean minimal, bento grid)
+     ============================================================ */
+  .b-screen{position:absolute;inset:0;background:#faf8f3}
+  .b-head{display:flex;align-items:center;justify-content:space-between;padding:8px 22px 0}
+  .b-id{display:flex;align-items:center;gap:11px}
+  .b-avatar{
+    width:42px;height:42px;border-radius:50%;background:#17804b;color:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;
+  }
+  .b-id .halo{font-size:11.5px;color:#8a8172;font-weight:600}
+  .b-id .nama{font-size:15px;font-weight:800;color:#1c2b25;margin-top:1px}
+  .b-bell{
+    position:relative;width:40px;height:40px;border-radius:50%;background:#fff;
+    border:1px solid #eae2d2;display:flex;align-items:center;justify-content:center;color:#4a5a52;
+  }
+  .b-bell .dot{position:absolute;top:9px;right:10px;width:8px;height:8px;border-radius:50%;background:#e2574c;border:2px solid #fff}
+
+  .b-hero{padding:34px 22px 0}
+  .b-hero .lbl{font-size:12px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#17804b}
+  .b-hero .val{font-family:'Inter',sans-serif;font-size:46px;font-weight:800;letter-spacing:-1.8px;color:#14231c;margin-top:6px}
+  .b-hero .meta{display:flex;align-items:center;gap:8px;margin-top:10px}
+  .b-chip{font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:99px;display:flex;align-items:center;gap:5px}
+  .b-chip.green{background:#e6f3ea;color:#146c3e}
+  .b-chip.plain{background:#fff;border:1px solid #eae2d2;color:#7a7466}
+
+  .b-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:26px 22px 0}
+  .b-card{
+    background:#fff;border:1px solid #eae2d2;border-radius:20px;padding:15px 16px;
+    box-shadow:0 4px 14px -6px rgba(30,45,38,.07);
+  }
+  .b-card .lbl{font-size:11px;font-weight:700;color:#8a8172;letter-spacing:.2px}
+  .b-card .val{font-family:'Inter',sans-serif;font-size:20px;font-weight:800;letter-spacing:-.5px;color:#14231c;margin-top:6px}
+  .b-card .sub{font-size:10.5px;color:#9a917f;font-weight:600;margin-top:3px}
+  .b-card .ic{width:30px;height:30px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:9px}
+  .b-card.tint-g{background:#f0f7f1;border-color:#dcecdf}
+  .b-card.tint-s{background:#fbf5e7;border-color:#f0e4c8}
+  .b-bar{height:7px;border-radius:4px;background:#efe9da;margin-top:11px;overflow:hidden}
+  .b-bar i{display:block;height:100%;border-radius:4px;background:#17804b}
+
+  .b-cta{
+    margin:26px 22px 0;display:flex;align-items:center;justify-content:center;gap:8px;
+    border:1.5px solid #17804b;color:#146c3e;font-size:13.5px;font-weight:700;
+    padding:14px 0;border-radius:16px;background:#fff;
+  }
+  .b-note{position:absolute;bottom:94px;left:0;right:0;text-align:center;font-size:10.5px;color:#9a917f;font-weight:600}
+
+  .b-tabbar{
+    height:78px;background:#fff;border-top:1px solid #ece5d5;
+    display:flex;align-items:flex-start;justify-content:space-around;padding-top:12px;
+  }
+  .b-tabbar .navitem{color:#a39a86}
+  .b-tabbar .navitem.on{color:#146c3e}
+  .b-scan{
+    width:46px;height:46px;border-radius:15px;background:#17804b;color:#fff;
+    display:flex;align-items:center;justify-content:center;margin-top:-2px;
+    box-shadow:0 8px 16px -6px rgba(23,128,75,.5);
+  }
+
+  /* ============================================================
+     MOCKUP C — MALAM BERKELAS (dark premium, emerald glow + emas)
+     ============================================================ */
+  .c-screen{position:absolute;inset:0;background:#0b1611;overflow:hidden}
+  .c-glow{
+    position:absolute;top:-140px;left:50%;transform:translateX(-50%);
+    width:480px;height:380px;border-radius:50%;
+    background:radial-gradient(closest-side,rgba(38,178,110,.28),rgba(38,178,110,0));
+    pointer-events:none;
+  }
+  .c-statusbar{color:#eaf2ec}
+  .c-head{display:flex;align-items:center;justify-content:space-between;padding:10px 22px 0;position:relative}
+  .c-id .salam{font-size:11.5px;color:#8fa89a;font-weight:600;letter-spacing:.3px}
+  .c-id .nama{font-family:'Fraunces',serif;font-size:21px;font-weight:600;color:#f4efe2;margin-top:2px}
+  .c-id .tgl{font-size:11px;color:#6f8a7c;font-weight:500;margin-top:4px}
+  .c-avatar{
+    width:44px;height:44px;border-radius:50%;color:#0b1611;font-weight:800;font-size:15px;
+    background:linear-gradient(140deg,#f0d48a,#c9a227);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 0 0 2px #0b1611,0 0 0 4px rgba(201,162,39,.45);
+  }
+  .c-sync{
+    margin:26px 22px 0;display:inline-flex;align-items:center;gap:8px;
+    background:rgba(47,191,113,.12);border:1px solid rgba(47,191,113,.35);
+    color:#7fe0ac;font-size:11.5px;font-weight:700;padding:8px 13px;border-radius:99px;
+  }
+  .c-sync .pulse{width:7px;height:7px;border-radius:50%;background:#2fbf71;box-shadow:0 0 10px #2fbf71}
+
+  .c-card{
+    margin:18px 22px 0;background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.09);border-radius:24px;padding:23px 22px;
+    backdrop-filter:blur(8px);position:relative;
+  }
+  .c-card .lbl{font-size:11px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:#8fa89a}
+  .c-card .val{
+    font-family:'Inter',sans-serif;font-size:33px;font-weight:800;letter-spacing:-1px;margin-top:7px;
+    background:linear-gradient(120deg,#f5e2a8,#d9b452);-webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .c-card .meta{display:flex;align-items:center;gap:14px;margin-top:12px}
+  .c-pill{
+    display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;color:#c3d5c9;
+    background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);
+    padding:7px 11px;border-radius:11px;
+  }
+  .c-pill b{font-family:'Inter',sans-serif;color:#f0ead6}
+  .c-month{display:flex;align-items:center;justify-content:space-between}
+  .c-month .val{font-size:24px}
+  .c-month .sub2{font-size:11.5px;color:#6f8a7c;font-weight:500;margin-top:6px}
+  .c-ringwrap{position:relative;width:78px;height:78px;flex:none}
+  .c-ringwrap .pct{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .c-ringwrap .pct b{font-family:'Inter',sans-serif;font-size:17px;font-weight:800;color:#f0ead6}
+  .c-ringwrap .pct span{font-size:8.5px;color:#6f8a7c;font-weight:600;letter-spacing:.4px}
+
+  .c-rekap{
+    margin:18px 22px 0;display:flex;align-items:center;justify-content:space-between;
+    background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);
+    border-radius:18px;padding:18px 18px;
+  }
+  .c-rekap .l{display:flex;align-items:center;gap:11px}
+  .c-rekap b{font-size:13.5px;font-weight:700;color:#f0ead6}
+  .c-rekap span{display:block;font-size:11px;color:#6f8a7c;font-weight:500;margin-top:2px}
+
+  .c-tabbar{
+    margin:0 14px 16px;height:72px;border-radius:24px;
+    background:rgba(16,28,22,.92);backdrop-filter:blur(12px);
+    border:1px solid rgba(255,255,255,.08);
+    display:flex;align-items:center;justify-content:space-around;
+    position:absolute;left:0;right:0;bottom:0;
+    box-shadow:0 -8px 30px rgba(0,0,0,.35);
+  }
+  .c-tabbar .navitem{color:#5f7a6b}
+  .c-tabbar .navitem.on{color:#e4c46c}
+  .c-fab{
+    width:54px;height:54px;border-radius:50%;margin-top:-30px;
+    background:linear-gradient(145deg,#f0d48a,#c9a227);color:#231a05;
+    display:flex;align-items:center;justify-content:center;
+    border:4px solid #0b1611;box-shadow:0 0 24px rgba(201,162,39,.4);
+  }
+</style>
+</head>
+<body>
+
+<header class="page">
+  <h1>3 Arah Desain — Halaman Beranda LAZISNU</h1>
+  <p>Tiga konsep visual untuk DashboardScreen petugas, semuanya memakai data &amp; struktur konten yang sama (sapaan, sinkronisasi, Hari Ini, Bulan Ini, progres tugas, rekap, navigasi 5 tab). Bingkai 390×844 · font contoh Fraunces / Plus Jakarta Sans / Inter.</p>
+</header>
+
+<div class="row">
+
+  <!-- ================= MOCKUP A ================= -->
+  <div class="col">
+    <div class="spec">
+      <h2>A · Emerald Royal</h2>
+      <div class="dots"><span style="background:#0e5039"></span><span style="background:#18a05e"></span><span style="background:#f5f1e8"></span><span style="background:#c9a227"></span></div>
+    </div>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="a-screen">
+        <div class="a-hero">
+          <img class="a-watermark" src="logo-lazisnu-putih.png" alt="">
+          <div class="statusbar" style="color:#fff">
+            <span>09:41</span>
+            <span class="batt">
+              <svg width="18" height="12" viewBox="0 0 20 12"><rect x="0.5" y="0.5" width="16" height="11" rx="3" fill="none" stroke="currentColor" opacity=".5"/><rect x="2.5" y="2.5" width="10" height="7" rx="1.5" fill="currentColor"/><rect x="17.8" y="3.8" width="2" height="4.4" rx="1" fill="currentColor" opacity=".5"/></svg>
+            </span>
+          </div>
+          <div class="a-toprow">
+            <img class="a-logo" src="logo-lazisnu-putih.png" alt="Logo LAZISNU">
+            <div class="a-actions">
+              <div class="a-iconbtn">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4.5 4.5 0 1 1 .7-8.94A6 6 0 0 1 19 11.4 3.8 3.8 0 0 1 18.3 18H7z"/><path d="m9.4 13.4 1.9 1.9 3.4-3.4"/></svg>
+                <span class="a-badge">3</span>
+              </div>
+              <div class="a-avatar">B</div>
+            </div>
+          </div>
+          <div class="a-greet">
+            <div class="salam">Assalamu&rsquo;alaikum,</div>
+            <div class="nama">Bagus</div>
+            <div class="a-date">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M3.5 10h17M8.5 3v4M15.5 3v4"/></svg>
+              Minggu, 30 Agustus 2026
+            </div>
+          </div>
+        </div>
+
+        <div class="a-body">
+          <div class="a-float">
+            <div class="a-seg"><div class="on">Hari Ini</div><div>Minggu Ini</div></div>
+            <div class="a-total">
+              <div>
+                <div class="lbl">Total Infak Terkumpul</div>
+                <div class="val">Rp1.850.000</div>
+              </div>
+              <div class="a-chip">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>
+                18%
+              </div>
+            </div>
+            <div class="a-meta">
+              <div class="item">
+                <div class="ic" style="background:#e6f3ea">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#146c3e" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-9.5-9C1 8.5 3.2 5 6.4 5c2 0 3.6 1 4.6 2.6C12 6 13.6 5 15.6 5c3.2 0 5.4 3.5 3.9 7-2 4.4-7.5 9-7.5 9z"/></svg>
+                </div>
+                <div><div class="num">12</div><div class="txt">Kaleng dijemput</div></div>
+              </div>
+              <div class="vr"></div>
+              <div class="item">
+                <div class="ic" style="background:#f6ecd4">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#8a6a1f" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4.5 4.5 0 1 1 .7-8.94A6 6 0 0 1 19 11.4 3.8 3.8 0 0 1 18.3 18H7z"/><path d="M12 12.5v3.5"/></svg>
+                </div>
+                <div><div class="num">3</div><div class="txt">Menunggu sinkron</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="a-month">
+            <div>
+              <div class="lbl">Bulan Ini</div>
+              <div class="val">Rp42.750.000</div>
+              <div class="sub2">268 kaleng · 268 dari 340 tugas</div>
+            </div>
+            <div class="a-ringwrap">
+              <svg width="74" height="74" viewBox="0 0 74 74">
+                <circle cx="37" cy="37" r="29" stroke="rgba(255,255,255,.16)" stroke-width="7" fill="none"/>
+                <circle cx="37" cy="37" r="29" stroke="#f0d48a" stroke-width="7" fill="none" stroke-linecap="round" stroke-dasharray="182.2" stroke-dashoffset="38.3" transform="rotate(-90 37 37)"/>
+              </svg>
+              <div class="pct"><b>79%</b><span>TUGAS</span></div>
+            </div>
+          </div>
+
+          <div class="a-rekap">
+            <div class="l">
+              <div class="ic">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8a6a1f" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V9M10 20V4M16 20v-8M22 20H2"/></svg>
+              </div>
+              <div><b>Lihat Rekap Lengkap</b><span>Statistik per rentang tanggal</span></div>
+            </div>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9a917f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>
+          </div>
+        </div>
+
+        <div class="tabbar a-tabbar">
+          <div class="navitem on">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.8 12 3l9 7.8"/><path d="M5.2 9.6V20a1 1 0 0 0 1 1h3.6v-5.4h4.4V21h3.6a1 1 0 0 0 1-1V9.6"/></svg>
+            Beranda
+          </div>
+          <div class="navitem">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.3" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.3" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.3" cy="18" r="1.3" fill="currentColor" stroke="none"/></svg>
+            Tugas
+          </div>
+          <div class="navitem">
+            <div class="a-fab">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M4 12h16"/></svg>
+            </div>
+            Scan
+          </div>
+          <div class="navitem">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 2.8-6.5L3 8"/><path d="M3 3v5h5"/><path d="M12 7.5V12l3.5 2"/></svg>
+            Riwayat
+          </div>
+          <div class="navitem">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></svg>
+            Profil
+          </div>
+        </div>
+      </div>
+    </div>
+    <ul class="rationale">
+      <li><b>Logo asli aplikasi</b> — logo putih LAZISNU tampil sendiri di hero; motif latar diganti watermark logo lembaga besar yang terpotong tepi kanan-bawah layar.</li>
+      <li><b>Hero dan kartu terpisah tegas</b> — tidak ada lagi tumpang tindih; segmented control “Hari Ini / Minggu Ini” menggantikan filter “Bulan Ini”.</li>
+      <li><b>Aksen emas &amp; ring progres</b> memberi kesan premium-amanah; tombol Scan dibuat FAB menonjol karena itu aksi utama petugas.</li>
+    </ul>
+  </div>
+
+  <!-- ================= MOCKUP B ================= -->
+  <div class="col">
+    <div class="spec">
+      <h2>B · Terang Bersih</h2>
+      <div class="dots"><span style="background:#faf8f3"></span><span style="background:#17804b"></span><span style="background:#e6f3ea"></span><span style="background:#fbf5e7"></span></div>
+    </div>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="b-screen">
+        <div class="statusbar" style="color:#1c2b25">
+          <span>09:41</span>
+          <span class="batt">
+            <svg width="18" height="12" viewBox="0 0 20 12"><rect x="0.5" y="0.5" width="16" height="11" rx="3" fill="none" stroke="currentColor" opacity=".5"/><rect x="2.5" y="2.5" width="10" height="7" rx="1.5" fill="currentColor"/><rect x="17.8" y="3.8" width="2" height="4.4" rx="1" fill="currentColor" opacity=".5"/></svg>
+          </span>
+        </div>
+        <div class="b-head">
+          <div class="b-id">
+            <div class="b-avatar">B</div>
+            <div>
+              <div class="halo">Assalamu&rsquo;alaikum,</div>
+              <div class="nama">Bagus</div>
+            </div>
+          </div>
+          <div class="b-bell">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 9.8a5.8 5.8 0 1 1 11.6 0c0 3.9 1.5 5.3 1.5 5.3H4.7s1.5-1.4 1.5-5.3"/><path d="M10.2 19a1.9 1.9 0 0 0 3.6 0"/></svg>
+            <span class="dot"></span>
+          </div>
+        </div>
+
+        <div class="b-hero">
+          <div class="lbl">Terkumpul Hari Ini</div>
+          <div class="val">Rp1.850.000</div>
+          <div class="meta">
+            <span class="b-chip green">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>
+              18% vs kemarin
+            </span>
+            <span class="b-chip plain">Minggu, 30 Agu 2026</span>
+          </div>
+        </div>
+
+        <div class="b-grid">
+          <div class="b-card tint-g">
+            <div class="ic" style="background:#dcecdf">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#146c3e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-9.5-9C1 8.5 3.2 5 6.4 5c2 0 3.6 1 4.6 2.6C12 6 13.6 5 15.6 5c3.2 0 5.4 3.5 3.9 7-2 4.4-7.5 9-7.5 9z"/></svg>
+            </div>
+            <div class="lbl">Bulan Ini</div>
+            <div class="val">Rp42,75 jt</div>
+            <div class="sub">dari 268 kaleng</div>
+          </div>
+          <div class="b-card">
+            <div class="ic" style="background:#f0ece2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5a5344" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8l7-4 7 4v8l-7 4-7-4z"/><path d="M5 8l7 4 7-4M12 12v8"/></svg>
+            </div>
+            <div class="lbl">Dijemput Hari Ini</div>
+            <div class="val">12 kaleng</div>
+            <div class="sub">3 menunggu sinkron</div>
+          </div>
+          <div class="b-card tint-s" style="grid-column:span 2">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div>
+                <div class="lbl">Target Tugas Bulan Ini</div>
+                <div class="val" style="margin-top:5px">268 <span style="font-size:13px;color:#9a917f;font-weight:700">/ 340 tugas</span></div>
+              </div>
+              <div style="font-family:'Inter',sans-serif;font-weight:800;font-size:22px;color:#146c3e">79%</div>
+            </div>
+            <div class="bar b-bar"><i style="width:79%"></i></div>
+          </div>
+        </div>
+
+        <div class="b-cta">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V9M10 20V4M16 20v-8M22 20H2"/></svg>
+          Lihat Rekap Lengkap
+        </div>
+        <div class="b-note">Terakhir disinkronkan 09.38 · semua data aman</div>
+
+        <div class="tabbar b-tabbar">
+          <div class="navitem on">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.8 12 3l9 7.8"/><path d="M5.2 9.6V20a1 1 0 0 0 1 1h3.6v-5.4h4.4V21h3.6a1 1 0 0 0 1-1V9.6"/></svg>
+            Beranda
+          </div>
+          <div class="navitem">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.3" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.3" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.3" cy="18" r="1.3" fill="currentColor" stroke="none"/></svg>
+            Tugas
+          </div>
+          <div class="navitem">
+            <div class="b-scan">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M4 12h16"/></svg>
+            </div>
+            Scan
+          </div>
+          <div class="navitem">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 2.8-6.5L3 8"/><path d="M3 3v5h5"/><path d="M12 7.5V12l3.5 2"/></svg>
+            Riwayat
+          </div>
+          <div class="navitem">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></svg>
+            Profil
+          </div>
+        </div>
+      </div>
+    </div>
+    <ul class="rationale">
+      <li><b>Angka adalah pahlawan</b> — nominal hari ini tampil 46px; cocok untuk petugas yang melihat sekilas di lapangan (kontras tinggi, latar terang).</li>
+      <li><b>Bento grid modular</b> — setiap metrik jadi kartu mandiri; mudah dikembangkan (tambah kartu zakat, waqaf, dst.).</li>
+      <li><b>Paling ringan dirender</b> — nyaris tanpa gradien/bayangan berat; ramah perangkat Android kelas menengah ke bawah.</li>
+    </ul>
+  </div>
+
+  <!-- ================= MOCKUP C ================= -->
+  <div class="col">
+    <div class="spec">
+      <h2>C · Malam Berkelas</h2>
+      <div class="dots"><span style="background:#0b1611"></span><span style="background:#2fbf71"></span><span style="background:#e4c46c"></span><span style="background:#101c16"></span></div>
+    </div>
+    <div class="phone" style="border-color:#050a08">
+      <div class="notch" style="background:#050a08"></div>
+      <div class="c-screen">
+        <div class="c-glow"></div>
+        <div class="statusbar c-statusbar">
+          <span>09:41</span>
+          <span class="batt">
+            <svg width="18" height="12" viewBox="0 0 20 12"><rect x="0.5" y="0.5" width="16" height="11" rx="3" fill="none" stroke="currentColor" opacity=".5"/><rect x="2.5" y="2.5" width="10" height="7" rx="1.5" fill="currentColor"/><rect x="17.8" y="3.8" width="2" height="4.4" rx="1" fill="currentColor" opacity=".5"/></svg>
+          </span>
+        </div>
+        <div class="c-head">
+          <div class="c-id">
+            <div class="salam">Assalamu&rsquo;alaikum,</div>
+            <div class="nama">Bagus</div>
+            <div class="tgl">Minggu, 30 Agustus 2026</div>
+          </div>
+          <div class="c-avatar">B</div>
+        </div>
+
+        <div class="c-sync">
+          <span class="pulse"></span>
+          Semua data tersinkron · 09.38
+        </div>
+
+        <div class="c-card">
+          <div class="lbl">Terkumpul Hari Ini</div>
+          <div class="val">Rp1.850.000</div>
+          <div class="meta">
+            <span class="c-pill">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#e4c46c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-9.5-9C1 8.5 3.2 5 6.4 5c2 0 3.6 1 4.6 2.6C12 6 13.6 5 15.6 5c3.2 0 5.4 3.5 3.9 7-2 4.4-7.5 9-7.5 9z"/></svg>
+              <b>12</b> kaleng
+            </span>
+            <span class="c-pill">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7fe0ac" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>
+              <b>+18%</b> vs kemarin
+            </span>
+          </div>
+        </div>
+
+        <div class="c-card c-month">
+          <div>
+            <div class="lbl">Bulan Ini</div>
+            <div class="val">Rp42.750.000</div>
+            <div class="sub2">268 dari 340 tugas selesai</div>
+          </div>
+          <div class="c-ringwrap">
+            <svg width="78" height="78" viewBox="0 0 78 78">
+              <circle cx="39" cy="39" r="30" stroke="rgba(255,255,255,.1)" stroke-width="7" fill="none"/>
+              <circle cx="39" cy="39" r="30" stroke="#e4c46c" stroke-width="7" fill="none" stroke-linecap="round" stroke-dasharray="188.5" stroke-dashoffset="39.6" transform="rotate(-90 39 39)" style="filter:drop-shadow(0 0 6px rgba(228,196,108,.55))"/>
+            </svg>
+            <div class="pct"><b>79%</b><span>TUGAS</span></div>
+          </div>
+        </div>
+
+        <div class="c-rekap">
+          <div class="l">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#e4c46c" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V9M10 20V4M16 20v-8M22 20H2"/></svg>
+            <div><b>Lihat Rekap Lengkap</b><span>Statistik per rentang tanggal</span></div>
+          </div>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6f8a7c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>
+        </div>
+
+        <div class="tabbar c-tabbar">
+          <div class="navitem on">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.8 12 3l9 7.8"/><path d="M5.2 9.6V20a1 1 0 0 0 1 1h3.6v-5.4h4.4V21h3.6a1 1 0 0 0 1-1V9.6"/></svg>
+            Beranda
+          </div>
+          <div class="navitem">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.3" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.3" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.3" cy="18" r="1.3" fill="currentColor" stroke="none"/></svg>
+            Tugas
+          </div>
+          <div class="navitem">
+            <div class="c-fab">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M4 12h16"/></svg>
+            </div>
+            Scan
+          </div>
+          <div class="navitem">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 2.8-6.5L3 8"/><path d="M3 3v5h5"/><path d="M12 7.5V12l3.5 2"/></svg>
+            Riwayat
+          </div>
+          <div class="navitem">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></svg>
+            Profil
+          </div>
+        </div>
+      </div>
+    </div>
+    <ul class="rationale">
+      <li><b>Mode gelap premium</b> — nyaman untuk rekap malam hari; glow emerald + angka gradasi emas memberi nuansa “fintech amanah”.</li>
+      <li><b>Status sinkron jadi pill hidup</b> — indikator denyut hijau mengomunikasikan “semua aman” tanpa harus membuka detail.</li>
+      <li><b>Paling berani &amp; berbeda</b> — glass card + ring bercahaya; cocok jika ingin aplikasi terasa modern dibanding aplikasi lembaga sejenis.</li>
+    </ul>
+  </div>
+
+</div>
+
+</body>
+</html>
