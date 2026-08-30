@@ -1,12 +1,12 @@
 {
-  "version": "1.1.6",
-  "versionCode": 24,
-  "apkUrl": "https://apk.lazisnu.site/lazisnu-1.1.6.apk",
+  "version": "1.1.7",
+  "versionCode": 25,
+  "apkUrl": "https://apk.lazisnu.site/lazisnu-1.1.7.apk",
   "apkUrls": {
-    "arm64_v8a": "https://apk.lazisnu.site/lazisnu-1.1.6-arm64-v8a.apk",
-    "armeabi_v7a": "https://apk.lazisnu.site/lazisnu-1.1.6-armeabi-v7a.apk",
-    "universal": "https://apk.lazisnu.site/lazisnu-1.1.6.apk"
+    "arm64_v8a": "https://apk.lazisnu.site/lazisnu-1.1.7-arm64-v8a.apk",
+    "armeabi_v7a": "https://apk.lazisnu.site/lazisnu-1.1.7-armeabi-v7a.apk",
+    "universal": "https://apk.lazisnu.site/lazisnu-1.1.7.apk"
   },
-  "changelog": "- Pembaruan kini memilih APK sesuai arsitektur perangkat (arm64/armv7) — unduhan lebih kecil & cepat\n- Modal pembaruan menampilkan varian unduhan khusus perangkat Anda\n- Perbaikan alur sinkronisasi & sentuhan (dari pembaruan sebelumnya)",
+  "changelog": "- Redesign beranda Emerald Royal: kartu Hari Ini/Minggu Ini dengan chip tren vs kemarin, ring progres emas Bulan Ini, tab bar mengambang dengan FAB Scan, avatar inisial.",
   "minimumVersionCode": 0
 }
