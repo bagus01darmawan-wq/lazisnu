@@ -15,4 +15,4 @@
  * APP_VERSION) dan label versi tampil kosong di aplikasi — padahal
  * semua tes Jest hijau (Jest memprioritaskan .ts).
  */
-export const APP_VERSION: string = '1.1.7';
+export const APP_VERSION: string = '1.1.8';
