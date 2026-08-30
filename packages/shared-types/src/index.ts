@@ -465,7 +465,13 @@ export interface BatchSyncResponse {
 export interface MobileVersionInfo {
   version: string;
   version_code: number;
+  /** APK universal (nama lama) — dipakai app lama & fallback. */
   apk_url: string;
+  /**
+   * APK per-arsitektur: kunci `arm64_v8a` | `armeabi_v7a` | `universal`.
+   * App ≥ v1.1.6 memilih sesuai ABI perangkat; kunci tak dikenal = fallback apk_url.
+   */
+  apk_urls: Record<string, string>;
   changelog: string;
   minimum_version_code: number;
 }

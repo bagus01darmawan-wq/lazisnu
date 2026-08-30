@@ -20,6 +20,14 @@ const mobileReleaseSchema = z.object({
   version: z.string().min(1),
   versionCode: z.number().int().positive(),
   apkUrl: z.string().url(),
+  // APK per-arsitektur (kontrak app ≥ v1.1.6). Kunci tetap: arm64_v8a,
+  // armeabi_v7a, universal. Semua di-commit bersama tiap rilis oleh
+  // scripts/release-bump.mjs — mismatch = server menolak start (fail-fast).
+  apkUrls: z.object({
+    arm64_v8a: z.string().url(),
+    armeabi_v7a: z.string().url(),
+    universal: z.string().url(),
+  }),
   changelog: z.string(),
   minimumVersionCode: z.number().int().nonnegative(),
 });

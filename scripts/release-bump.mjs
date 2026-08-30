@@ -87,6 +87,13 @@ const release = JSON.parse(readFileSync(F.release, 'utf8'));
 release.version = version;
 release.versionCode = Number(versionCode);
 release.apkUrl = `https://apk.lazisnu.site/lazisnu-${version}.apk`;
+// Kontrak app ≥ v1.1.6: APK per-arsitektur (kunci tetap; zod di version.ts
+// menolak server start bila salah satu hilang — fail-fast).
+release.apkUrls = {
+  arm64_v8a: `https://apk.lazisnu.site/lazisnu-${version}-arm64-v8a.apk`,
+  armeabi_v7a: `https://apk.lazisnu.site/lazisnu-${version}-armeabi-v7a.apk`,
+  universal: `https://apk.lazisnu.site/lazisnu-${version}.apk`,
+};
 if (changelog) release.changelog = changelog;
 writeFileSync(F.release, JSON.stringify(release, null, 2) + '\n', 'utf8');
 

@@ -35,6 +35,7 @@ describe('Mobile Version Endpoint (fitur update-in-app Tingkat 1)', () => {
     expect(data.version).toBe(rawRelease.version);
     expect(data.version_code).toBe(rawRelease.versionCode);
     expect(data.apk_url).toBe(rawRelease.apkUrl);
+    expect(data.apk_urls).toEqual(rawRelease.apkUrls);
     expect(data.changelog).toBe(rawRelease.changelog);
     expect(data.minimum_version_code).toBe(rawRelease.minimumVersionCode);
   });

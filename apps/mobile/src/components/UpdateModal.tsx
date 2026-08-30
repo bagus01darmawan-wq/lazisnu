@@ -23,6 +23,7 @@ const UpdateModal = () => {
     startDownload,
     install,
     handleAppActive,
+    abiLabel,
   } = useUpdateStore();
 
   // Setelah petugas kembali dari layar pemasangan sistem, tutup modal.
@@ -83,6 +84,11 @@ const UpdateModal = () => {
           <Text style={styles.subtitle}>
             Versi {releaseInfo.version} — saat ini {APP_VERSION}
           </Text>
+          {abiLabel && abiLabel !== 'universal' && (
+            <Text style={styles.abiHint}>
+              Unduhan khusus perangkat Anda (varian {abiLabel}) — lebih kecil &amp; cepat.
+            </Text>
+          )}
 
           {changelogLines.length > 0 && (
             <View style={styles.changelog}>
@@ -139,6 +145,11 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     ...Typography.body,
+    color: Colors.text.muted,
+    marginBottom: Spacing.md,
+  },
+  abiHint: {
+    ...Typography.caption,
     color: Colors.text.muted,
     marginBottom: Spacing.md,
   },

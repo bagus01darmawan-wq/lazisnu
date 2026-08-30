@@ -7,6 +7,7 @@ import {
   isForcedUpdate,
 } from '../services/updates/versionCheck';
 import {downloadApk, installApk} from '../services/updates/apkDownload';
+import {getDeviceAbiKey, abiKeyToLabel} from '../services/updates/abi';
 import {getUpdateStorage, DISMISSED_VERSION_CODE_KEY} from '../services/updates/storage';
 import {getErrorMessage} from '../utils/error';
 
@@ -23,6 +24,10 @@ interface UpdateState {
   apkPath: string | null;
   /** true setelah tombol "Pasang" ditekan (layar sistem terbuka) */
   installAttempted: boolean;
+  /** URL APK terpilih sesuai ABI perangkat (fallback universal). */
+  downloadUrl: string | null;
+  /** Label ABI untuk tampilan modal: 'arm64' | 'armv7' | 'universal'. */
+  abiLabel: string | null;
 
   /** Cek senyap saat aplikasi dibuka — gagal/offline = diam total. */
   checkOnLaunch: () => Promise<void>;
@@ -37,7 +42,7 @@ interface UpdateState {
 }
 
 export const useUpdateStore = create<UpdateState>((set, get) => {
-  const applyRelease = (release: MobileVersionInfo): 'up-to-date' | 'available' => {
+  const applyRelease = async (release: MobileVersionInfo): Promise<'up-to-date' | 'available'> => {
     // getBuildNumber() = versionCode pada Android — nilai asli dari APK yang
     // disuntikkan EAS (appVersionSource: remote), sumber kebenaran pembanding.
     const installedCode = Number(DeviceInfo.getBuildNumber());
@@ -46,6 +51,11 @@ export const useUpdateStore = create<UpdateState>((set, get) => {
     if (!shouldShowUpdate(installedCode, release, dismissed)) {
       return 'up-to-date';
     }
+
+    // Pilih APK sesuai ABI perangkat; kegagalan deteksi tetap jatuh ke
+    // universal (tidak pernah memblokir pembaruan).
+    const abiKey = await getDeviceAbiKey();
+    const downloadUrl = release.apk_urls?.[abiKey] ?? release.apk_url;
 
     set({
       releaseInfo: release,
@@ -56,6 +66,8 @@ export const useUpdateStore = create<UpdateState>((set, get) => {
       downloadError: null,
       apkPath: null,
       installAttempted: false,
+      downloadUrl,
+      abiLabel: abiKeyToLabel(abiKey),
     });
     return 'available';
   };
@@ -69,11 +81,13 @@ export const useUpdateStore = create<UpdateState>((set, get) => {
     downloadError: null,
     apkPath: null,
     installAttempted: false,
+    downloadUrl: null,
+    abiLabel: null,
 
     checkOnLaunch: async () => {
       try {
         const release = await fetchMobileVersion();
-        applyRelease(release);
+        await applyRelease(release);
       } catch {
         // Offline / endpoint bermasalah: diam total — prinsip offline-first
         // tidak boleh diganggu oleh fitur pembaruan.
@@ -94,18 +108,22 @@ export const useUpdateStore = create<UpdateState>((set, get) => {
     },
 
     startDownload: async () => {
-      const {releaseInfo} = get();
+      const {releaseInfo, downloadUrl} = get();
       if (!releaseInfo) {
         return;
       }
       set({downloadState: 'downloading', downloadProgress: 0, downloadError: null});
       try {
         const fileName = `lazisnu-${releaseInfo.version}.apk`;
-        const path = await downloadApk(releaseInfo.apk_url, fileName, ({received, total}) => {
-          if (total > 0) {
-            set({downloadProgress: Math.min(100, Math.round((received / total) * 100))});
-          }
-        });
+        const path = await downloadApk(
+          downloadUrl ?? releaseInfo.apk_url,
+          fileName,
+          ({received, total}) => {
+            if (total > 0) {
+              set({downloadProgress: Math.min(100, Math.round((received / total) * 100))});
+            }
+          },
+        );
         set({downloadState: 'ready', apkPath: path, downloadProgress: 100});
       } catch (error) {
         set({

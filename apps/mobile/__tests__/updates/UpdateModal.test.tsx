@@ -7,6 +7,11 @@ const baseRelease = {
   version: '1.1.1',
   version_code: 18,
   apk_url: 'https://apk.lazisnu.site/lazisnu-1.1.1.apk',
+  apk_urls: {
+    arm64_v8a: 'https://apk.lazisnu.site/lazisnu-1.1.1-arm64-v8a.apk',
+    armeabi_v7a: 'https://apk.lazisnu.site/lazisnu-1.1.1-armeabi-v7a.apk',
+    universal: 'https://apk.lazisnu.site/lazisnu-1.1.1.apk',
+  },
   changelog: '- Label versi tampil\n- Modal pembaruan',
   minimum_version_code: 0,
 };

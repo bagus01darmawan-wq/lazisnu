@@ -2,6 +2,11 @@
   "version": "1.1.5",
   "versionCode": 23,
   "apkUrl": "https://apk.lazisnu.site/lazisnu-1.1.5.apk",
+  "apkUrls": {
+    "arm64_v8a": "https://apk.lazisnu.site/lazisnu-1.1.5-arm64-v8a.apk",
+    "armeabi_v7a": "https://apk.lazisnu.site/lazisnu-1.1.5-armeabi-v7a.apk",
+    "universal": "https://apk.lazisnu.site/lazisnu-1.1.5.apk"
+  },
   "changelog": "- Penyempurnaan Detail Sinkronisasi: daftar isu kini virtual & dibatasi 50 tampilan per jenis\n- Sentuhan tombol & daftar lebih responsif (pola Pressable modern)\n- Distribusi APK per-arsitektur (arm64-v8a & armeabi-v7a) + universal fallback",
   "minimumVersionCode": 0
 }
