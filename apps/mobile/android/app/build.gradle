@@ -107,8 +107,8 @@ android {
         ndk {
             abiFilters abiFilter.split(',')
         }
-        versionCode 26
-        versionName "1.1.8"
+        versionCode 27
+        versionName "1.1.9"
     }
     signingConfigs {
         debug {
