@@ -420,29 +420,74 @@ jobs:
             git checkout -f $IMAGE_TAG
             echo "✓ Repository updated to $IMAGE_TAG"
 
+            # Verifikasi kode di VM benar-benar berada di commit yang diminta.
+            # Tanpa ini, deploy bisa saja berjalan memakai sisa kode lama
+            # tanpa ada yang tahu.
+            VM_SHA=$(git rev-parse HEAD)
+            if [ "$VM_SHA" != "$IMAGE_TAG" ]; then
+              echo "❌ Kode di VM ($VM_SHA) bukan commit yang diminta ($IMAGE_TAG)"
+              exit 1
+            fi
+            echo "✓ Kode terverifikasi di commit $VM_SHA"
+
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
-            GHCR_REPO=$GHCR_REPO IMAGE_TAG=$IMAGE_TAG AUTO_TEARDOWN=1 \
+            # Catat warna yang sedang live SEBELUM deploy. Dipakai untuk
+            # rollback bila verifikasi di bawah gagal, dan untuk teardown
+            # setelah verifikasi lolos.
+            PREV_COLOR=$(bash scripts/deploy-blue-green.sh active)
+            echo "Warna live sebelum deploy: ${PREV_COLOR:-tidak ada}"
+
+            # KEEP_OLD_COLOR=1 — BUKAN AUTO_TEARDOWN=1.
+            # Dulu warna lama dibongkar di titik ini, sehingga saat health
+            # check publik di bawah gagal, skrip rollback menolak jalan karena
+            # warna lama sudah mati. Rollback jadi mustahil — persis yang
+            # terjadi pada run 33348805795. Sekarang warna lama dibiarkan
+            # hidup sampai verifikasi publik benar-benar lolos.
+            GHCR_REPO=$GHCR_REPO IMAGE_TAG=$IMAGE_TAG KEEP_OLD_COLOR=1 \
               bash scripts/deploy-blue-green.sh deploy
 
-            # Health check lewat domain publik.
-            # Kalau gagal: kembalikan ke warna sebelumnya dulu, barulah keluar
-            # dengan status gagal. Skrip deploy-blue-green.sh sudah punya mode
-            # rollback (baris 264) — sebelumnya tidak pernah dipanggil, sehingga
-            # deploy yang gagal harus dibenahi manual.
-            if ! curl -sf https://api.lazisnu.site/health/ready; then
-              echo "❌ Backend DOWN — menjalankan rollback"
-              bash scripts/deploy-blue-green.sh rollback || true
+            # ─── Verifikasi lewat domain publik ──────────────────────────
+            # Warna lama masih hidup di sini, jadi rollback benar-benar bisa
+            # jalan. Jangan akhiri pemanggilan rollback dengan `|| true`:
+            # kalau rollback ikut gagal, produksi butuh penanganan manual dan
+            # itu harus terlihat jelas di log.
+            gagal() {
+              echo "❌ $1"
+              if ! bash scripts/deploy-blue-green.sh rollback; then
+                echo "❌ Rollback GAGAL — produksi butuh penanganan manual SEKARANG"
+              fi
               exit 1
-            fi
-            echo "✅ Backend healthy"
+            }
 
+            # 1. Backend siap — cek isi respons, bukan sekadar HTTP 200.
+            #    /health/ready mengembalikan 503 kalau DB atau Redis mati.
+            if ! curl -sf https://api.lazisnu.site/health/ready | grep -q '"status":"ready"'; then
+              gagal "Backend /health/ready tidak ready (DB atau Redis bermasalah)"
+            fi
+            echo "✅ Backend ready — DB dan Redis ok"
+
+            # 2. Web
             if ! curl -sf https://dashboard.lazisnu.site/api/health | grep -q '"status":"ok"'; then
-              echo "❌ Web DOWN — menjalankan rollback"
-              bash scripts/deploy-blue-green.sh rollback || true
-              exit 1
+              gagal "Web /api/health tidak ok"
             fi
             echo "✅ Web healthy"
+
+            # 3. Lapis autentikasi hidup dan masih menolak permintaan tanpa
+            #    token. Harus 401 — kalau 500, berarti verifikasi JWT rusak.
+            AUTH_CODE=$(curl -s -o /dev/null -w '%{http_code}' https://api.lazisnu.site/v1/auth/me)
+            if [ "$AUTH_CODE" != "401" ]; then
+              gagal "GET /v1/auth/me tanpa token mengembalikan $AUTH_CODE, seharusnya 401"
+            fi
+            echo "✅ Autentikasi menolak permintaan tanpa token (401)"
+
+            # ─── Verifikasi lolos — warna lama aman dibongkar ────────────
+            # Perintah teardown menolak membongkar warna yang sedang live,
+            # jadi salah hitung warna tidak akan mematikan produksi.
+            if [ -n "$PREV_COLOR" ]; then
+              bash scripts/deploy-blue-green.sh teardown "$PREV_COLOR" \
+                || echo "⚠️  Teardown $PREV_COLOR gagal — tidak fatal, warna baru sudah live"
+            fi
 
             # Housekeeping: image lama/dangling dibersihkan (yang berjalan aman)
             docker image prune -af >/dev/null 2>&1 || true
