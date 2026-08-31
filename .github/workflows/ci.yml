@@ -264,12 +264,16 @@ jobs:
   build-android-debug:
     name: Build Android Debug (APK verification)
     needs: [changes, verify, test-mobile]
+    # Android cukup dibangun bila kode mobile berubah, atau saat rilis
+    # (workflow_dispatch dari release.yml). Kategori "infra" sengaja TIDAK
+    # lagi memicu job ini: berisi docker-compose/nginx/prometheus/scripts/
+    # workflows yang tidak berpengaruh pada hasil assemble Gradle, sehingga
+    # mengedit ci.yml atau skrip deploy dulu membuang ~4 menit build Android.
     if: >-
       always() && !cancelled() &&
       needs.verify.result == 'success' &&
       needs.test-mobile.result != 'failure' &&
       (needs.changes.outputs.mobile == 'true' ||
-       needs.changes.outputs.infra == 'true' ||
        github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 45
