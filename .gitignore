@@ -57,3 +57,7 @@ redis-data/
 
 # Hermes (local agent)
 .hermes/
+
+# env berisi kredensial nyata — tidak boleh di-commit
+.env.staging
+.env.production

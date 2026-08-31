@@ -1,8 +1,41 @@
-# Dependabot: pantau versi GitHub Actions otomatis
+# Dependabot: pemantauan versi GitHub Actions dan dependensi npm/pnpm
 # Bagian dari migrasi CI node24 (RENCANA-V2-CI-ACTION-UPGRADE.md, keputusan D5)
+#
+# PENTING — yang diatur berkas ini dan yang tidak:
+#   Berkas ini HANYA mengatur *version updates* (peningkatan versi rutin).
+#   Dependabot *alerts* dan *security updates* diatur dari
+#   Settings -> Code security and analysis, dan bekerja dari dependency graph
+#   yang dibaca otomatis dari pnpm-lock.yaml — tidak bergantung pada berkas ini.
+#   Jadi keamanan tidak bertumpu pada berkas ini; ini urusan kerapian versi.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+
+  # package-ecosystem "npm" juga berlaku untuk pnpm — TIDAK ADA nilai "pnpm".
+  # Ini bukan kekeliruan: GitHub memakai nilai YAML ekosistem, dan pnpm
+  # dipetakan ke "npm" (sama seperti yarn). Menulis "pnpm" akan ditolak.
+  - package-ecosystem: "npm"
+    # Monorepo WAJIB memakai `directories` (jamak). `directory` (tunggal)
+    # hanya menerima satu lokasi dan tidak mendukung banyak direktori.
+    directories:
+      - "/"                      # package.json + pnpm-lock.yaml induk
+      - "/apps/backend"
+      - "/apps/web"
+      - "/packages/shared-types"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    # Satu PR per nama dependensi, digabung lintas direktori.
+    # Tanpa ini, monorepo menghasilkan satu PR per direktori per dependensi.
+    groups:
+      npm-monorepo:
+        group-by: "dependency-name"
+
+# apps/mobile SENGAJA tidak dicantumkan di atas: peningkatan versi React Native
+# terkenal mudah memecahkan build native, jadi sebaiknya dikerjakan manusia.
+# Ini TIDAK mengurangi pemantauan keamanan — pnpm-lock.yaml di root memuat
+# seluruh dependensi semua workspace (termasuk mobile), sehingga Dependabot
+# alerts tetap mencakup mobile.
