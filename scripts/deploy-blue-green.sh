@@ -127,7 +127,9 @@ deploy_color() {
 smoke_test() {
   local color=$1
   local backend_port
+  local web_port
   backend_port=$(get_backend_port "$color")
+  web_port=$(get_web_port "$color")
 
   info "Smoke testing ${YELLOW}${color}${NC} backend (port ${backend_port})..."
 
@@ -135,6 +137,24 @@ smoke_test() {
   while [ $attempt -le $HEALTH_RETRIES ]; do
     if curl -sf "http://localhost:${backend_port}/health/ready" > /dev/null 2>&1; then
       ok "Backend ${color} healthy (attempt ${attempt})"
+      break
+    fi
+    warn "Attempt ${attempt}/${HEALTH_RETRIES} — waiting ${HEALTH_INTERVAL}s..."
+    sleep "$HEALTH_INTERVAL"
+    attempt=$((attempt + 1))
+  done
+  if [ $attempt -gt $HEALTH_RETRIES ]; then
+    err "Backend ${color} FAILED health check after ${HEALTH_RETRIES} attempts"
+    return 1
+  fi
+
+  # Web: marker JSON dari route /api/health (Next.js cold start bisa lambat).
+  info "Smoke testing ${YELLOW}${color}${NC} web (port ${web_port})..."
+
+  attempt=1
+  while [ $attempt -le $HEALTH_RETRIES ]; do
+    if curl -sf "http://localhost:${web_port}/api/health" 2>/dev/null | grep -q '"status":"ok"'; then
+      ok "Web ${color} healthy (attempt ${attempt})"
       return 0
     fi
     warn "Attempt ${attempt}/${HEALTH_RETRIES} — waiting ${HEALTH_INTERVAL}s..."
@@ -142,7 +162,7 @@ smoke_test() {
     attempt=$((attempt + 1))
   done
 
-  err "Backend ${color} FAILED health check after ${HEALTH_RETRIES} attempts"
+  err "Web ${color} FAILED health check after ${HEALTH_RETRIES} attempts"
   return 1
 }
 

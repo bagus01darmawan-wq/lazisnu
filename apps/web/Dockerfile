@@ -12,7 +12,7 @@ COPY apps/web/package.json apps/web/
 COPY packages/shared-types/package.json packages/shared-types/
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 COPY . .
-RUN node packages/shared-types/node_modules/typescript/bin/tsc -p packages/shared-types/tsconfig.json 2>/dev/null || true
+RUN pnpm --filter @lazisnu/shared-types build
 RUN cd apps/web && node_modules/.bin/next build
 
 FROM base AS runner

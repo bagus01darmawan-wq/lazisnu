@@ -13,3 +13,15 @@ dist
 .next
 coverage
 .scannerwork
+apps/mobile
+artifacts
+scratch
+tmp
+.github
+nginx
+prometheus
+grafana
+alertmanager
+redis
+docker-compose*.yml
+*.txt

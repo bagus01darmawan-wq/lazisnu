@@ -48,7 +48,9 @@ export function formatAuditAction(actionType: string): string {
   // Normal mutations
   const parts = type.split(' ');
   const method = parts[0];
-  const path = parts[1] || '';
+  // Path diambil dari string asli (bukan versi uppercase) agar pencocokan
+  // substring seperti '/cans' tidak gagal karena huruf besar/kecil.
+  const path = (actionType || '').split(' ')[1] || '';
 
   if (method === 'POST') {
     if (path.includes('/cans/bulk')) return 'Impor Kaleng Massal';

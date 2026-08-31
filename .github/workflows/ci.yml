@@ -234,6 +234,32 @@ jobs:
       - name: Unit test + coverage
         run: pnpm --filter lazisnu-collector-app run test:coverage
 
+  # ─── Test web ────────────────────────────────────────────────────────────
+  test-web:
+    name: Test web
+    needs: [changes, verify]
+    if: >-
+      needs.verify.result == 'success' &&
+      (needs.changes.outputs.web == 'true' || needs.changes.outputs.infra == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared types
+        run: pnpm build:shared
+
+      - name: Unit test + render test
+        run: pnpm --filter web run test
+
   # ─── Mobile: verifikasi Gradle debug APK ─────────────────────────────────
   build-android-debug:
     name: Build Android Debug (APK verification)
@@ -275,7 +301,7 @@ jobs:
   # ─── Build & push image ke GHCR ──────────────────────────────────────────
   build-image:
     name: Build & push Docker images
-    needs: [changes, verify, test-backend, test-mobile]
+    needs: [changes, verify, test-backend, test-mobile, test-web]
     # always() + !cancelled() supaya job ini tetap dievaluasi meski job test
     # di-skip (mis. hanya mobile yang berubah) — tanpa ini job ikut ter-skip.
     if: >-
@@ -283,6 +309,7 @@ jobs:
       needs.verify.result == 'success' &&
       needs.test-backend.result != 'failure' &&
       needs.test-mobile.result != 'failure' &&
+      needs.test-web.result != 'failure' &&
       (github.event_name == 'workflow_dispatch' ||
        (github.event_name == 'push' &&
         (needs.changes.outputs.backend == 'true' ||
@@ -347,7 +374,7 @@ jobs:
   # ─── Deploy PRODUCTION (dispatch release pada ref tag v*) — blue-green ───
   deploy:
     name: Deploy production
-    needs: [changes, verify, test-backend, test-mobile, build-image]
+    needs: [changes, verify, test-backend, test-mobile, test-web, build-image]
     if: >-
       always() && !cancelled() &&
       needs.build-image.result == 'success' &&
@@ -406,7 +433,7 @@ jobs:
             fi
             echo "✅ Backend healthy"
 
-            if ! curl -sf https://dashboard.lazisnu.site; then
+            if ! curl -sf https://dashboard.lazisnu.site/api/health | grep -q '"status":"ok"'; then
               echo "❌ Web DOWN — menjalankan rollback"
               bash scripts/deploy-blue-green.sh rollback || true
               exit 1
@@ -420,7 +447,7 @@ jobs:
   # ─── Deploy STAGING (otomatis dari push main) ────────────────────────────
   deploy-staging:
     name: Deploy staging
-    needs: [changes, verify, test-backend, test-mobile, build-image]
+    needs: [changes, verify, test-backend, test-mobile, test-web, build-image]
     if: >-
       always() && !cancelled() &&
       needs.build-image.result == 'success' &&
@@ -491,7 +518,7 @@ jobs:
   # ─── Ringkasan status (memudahkan baca hasil di tab Actions) ─────────────
   ci-status:
     name: CI status
-    needs: [verify, test-backend, test-mobile, build-image]
+    needs: [verify, test-backend, test-mobile, test-web, build-image]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -501,8 +528,9 @@ jobs:
           echo "verify        : ${{ needs.verify.result }}"
           echo "test-backend  : ${{ needs.test-backend.result }}"
           echo "test-mobile   : ${{ needs.test-mobile.result }}"
+          echo "test-web      : ${{ needs.test-web.result }}"
           echo "build-image   : ${{ needs.build-image.result }}"
-          for r in "${{ needs.verify.result }}" "${{ needs.test-backend.result }}" "${{ needs.test-mobile.result }}" "${{ needs.build-image.result }}"; do
+          for r in "${{ needs.verify.result }}" "${{ needs.test-backend.result }}" "${{ needs.test-mobile.result }}" "${{ needs.test-web.result }}" "${{ needs.build-image.result }}"; do
             if [ "$r" = "failure" ]; then
               echo "::error::Ada job yang gagal — pipeline dihentikan."
               exit 1
