@@ -5,9 +5,13 @@ set -eo pipefail
 # Lazisnu Blue-Green Deploy Script
 # ============================================
 # Usage:
-#   ./scripts/deploy-blue-green.sh blue    # deploy ke blue
-#   ./scripts/deploy-blue-green.sh green   # deploy ke green
-#   ./scripts/deploy-blue-green.sh status  # cek status blue & green
+#   ./scripts/deploy-blue-green.sh blue      # deploy ke blue
+#   ./scripts/deploy-blue-green.sh green     # deploy ke green
+#   ./scripts/deploy-blue-green.sh status    # cek status blue & green
+#   ./scripts/deploy-blue-green.sh active    # cetak warna yang sedang live
+#   ./scripts/deploy-blue-green.sh teardown <warna>  # bongkar warna lama
+#   ./scripts/deploy-blue-green.sh migrate     # hanya jalankan migrasi database
+#   ./scripts/deploy-blue-green.sh rollback  # kembali ke warna sebelumnya
 #
 # Prasyarat VM:
 #   1. docker compose sudah terinstall
@@ -21,7 +25,19 @@ set -eo pipefail
 #   3. Smoke test: curl /health/ready ke target
 #   4. Switch nginx upstream ke warna target
 #   5. Graceful reload nginx
-#   6. Opsional: teardown warna lama (bisa ditahan untuk rollback cepat)
+#   6. Teardown warna lama — HANYA setelah verifikasi publik lolos (lihat bawah)
+# ============================================
+#
+# TENTANG TEARDOWN DAN ROLLBACK — baca sebelum mengubah apa pun di sini:
+#   Rollback hanya mungkin kalau warna lama MASIH HIDUP. Karena itu CI tidak
+#   lagi memakai AUTO_TEARDOWN=1, melainkan KEEP_OLD_COLOR=1: warna lama
+#   dibiarkan hidup sampai verifikasi lewat domain publik benar-benar lolos.
+#   Urutan yang benar:
+#     PREV=$(./deploy-blue-green.sh active)
+#     KEEP_OLD_COLOR=1 ./deploy-blue-green.sh deploy
+#     <verifikasi publik>  ->  kalau gagal: ./deploy-blue-green.sh rollback
+#     ./deploy-blue-green.sh teardown "$PREV"
+#   Jangan pernah teardown sebelum verifikasi publik selesai.
 # ============================================
 
 set -a
@@ -34,6 +50,11 @@ GHCR_REPO="${GHCR_REPO:-bagus01darmawan-wq/lazisnu}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 NGINX_UPSTREAM_FILE="${NGINX_UPSTREAM_FILE:-$PROJECT_DIR/nginx/upstream.conf}"
 NGINX_CONTAINER="${NGINX_CONTAINER:-lazisnu-nginx-1}"
+# KEEP_OLD_COLOR=1 -> warna lama DIBIARKAN HIDUP, tanpa prompt interaktif.
+# Dipakai CI supaya rollback masih mungkin setelah health check publik.
+# (Prompt `read` tidak bisa dipakai di CI: tanpa stdin ia gagal dan
+#  menghentikan skrip karena `set -e`.)
+KEEP_OLD_COLOR="${KEEP_OLD_COLOR:-0}"
 AUTO_TEARDOWN="${AUTO_TEARDOWN:-0}"
 BACKEND_PORT_BLUE=3001
 BACKEND_PORT_GREEN=3101
@@ -220,6 +241,29 @@ teardown_color() {
   ok "Old ${color} torn down"
 }
 
+# ─── Fungsi: jalankan migrasi database ─────────────────────────────────
+# Migrasi dijalankan dari dalam image backend yang baru, memakai kredensial
+# yang sudah ada di apps/backend/.env — jadi tidak perlu menambah secret.
+#
+# Catatan: drizzle-kit adalah devDependency, sehingga TIDAK ada di dalam image
+# produksi (Dockerfile memasang dengan --prod). Yang dipakai karena itu
+# migrator bawaan drizzle-orm, melalui dist/database/migrate-cli.js.
+run_migrations() {
+  local image="ghcr.io/${GHCR_REPO}/backend:${IMAGE_TAG}"
+  if [ ! -f "$PROJECT_DIR/apps/backend/.env" ]; then
+    err "apps/backend/.env tidak ditemukan — butuh DATABASE_URL untuk migrasi."
+    return 1
+  fi
+  info "Menjalankan migrasi database dari image ${YELLOW}${image}${NC}..."
+  cd "$PROJECT_DIR"
+  docker run --rm \
+    --env-file apps/backend/.env \
+    -e NODE_ENV=production \
+    "$image" \
+    node apps/backend/dist/database/migrate-cli.js
+  ok "Migrasi selesai — skema sudah mutakhir."
+}
+
 # ─── Fungsi: status ───
 show_status() {
   echo ""
@@ -281,6 +325,39 @@ case "$COMMAND" in
     setup_nginx
     exit 0
     ;;
+  active)
+    # Cetak warna yang sedang live ke stdout (kosong kalau belum ada).
+    # Dipakai CI untuk mengingat warna lama sebelum deploy.
+    get_active_color
+    exit 0
+    ;;
+  migrate)
+    # Hanya menjalankan migrasi database, tanpa menyentuh deploy.
+    # Berguna untuk menerapkan skema lebih dulu sebelum rilis yang
+    # membutuhkannya. Aman dijalankan berulang: migrator mencatat apa
+    # yang sudah diterapkan dan hanya menjalankan yang belum.
+    run_migrations
+    exit 0
+    ;;
+  teardown)
+    # Bongkar warna tertentu. Dipanggil CI SETELAH verifikasi publik lolos.
+    if [ -z "$2" ]; then
+      err "Pakai: $0 teardown <blue|green>"
+      exit 1
+    fi
+    if [ "$2" != "blue" ] && [ "$2" != "green" ]; then
+      err "Warna tidak dikenal: $2 (harus blue atau green)"
+      exit 1
+    fi
+    CURRENT=$(get_active_color)
+    if [ "$2" = "$CURRENT" ]; then
+      err "Menolak membongkar $2 — itu warna yang SEDANG LIVE."
+      err "Menjalankan ini akan mematikan produksi."
+      exit 1
+    fi
+    teardown_color "$2"
+    exit 0
+    ;;
   rollback)
     # Rollback: switch ke warna lama
     ACTIVE=$(get_active_color)
@@ -322,6 +399,9 @@ case "$COMMAND" in
     echo "  blue       Deploy ke environment blue"
     echo "  green      Deploy ke environment green"
     echo "  deploy     Auto-detect idle color dan deploy"
+    echo "  active     Cetak warna yang sedang live"
+    echo "  teardown   Bongkar warna lama: $0 teardown <blue|green>"
+    echo "  migrate    Hanya jalankan migrasi database (tanpa deploy)"
     echo "  rollback   Switch ke environment sebelumnya"
     echo "  status     Tampilkan status blue & green"
     echo "  setup      Setup nginx untuk blue-green (dijalankan sekali)"
@@ -365,6 +445,31 @@ if ! smoke_test "$TARGET"; then
   exit 1
 fi
 
+# ─── Step 3.5: Migrasi database ────────────────────────────────────────
+# Dijalankan SEBELUM lalu lintas dialihkan. Kalau migrasi gagal, nginx tidak
+# diswitch dan produksi tetap dilayani warna lama.
+#
+# DEFAULT 0 (NONAKTIF) — ini disengaja, bukan kelupaan. Alasannya:
+#   Skema produksi dibuat dengan `drizzle-kit push`, yang TIDAK mencatat apa
+#   pun ke tabel penanda migrasi. Akibatnya migrator menganggap semua berkas
+#   migrasi belum pernah dijalankan, lalu mencoba mengulang semuanya dari
+#   0000 — dan akan gagal karena tabelnya sudah ada.
+#   Aktifkan hanya setelah jurnal migrasi direkonsiliasi, yaitu menandai
+#   migrasi yang sudah diterapkan agar tidak diulang. Lihat
+#   docs/audit-cicd-2026-08-31.md dan docs/implementation/03-data-model-database.md.
+if [ "${RUN_MIGRATIONS:-0}" = "1" ]; then
+  if ! run_migrations; then
+    err "Migrasi GAGAL — ${TARGET} TIDAK dialihkan ke nginx."
+    warn "Lalu lintas tetap di ${ACTIVE:-warna sebelumnya}. Perbaiki, lalu ulangi."
+    warn "Untuk melewati: RUN_MIGRATIONS=0 $0 $TARGET"
+    exit 1
+  fi
+else
+  warn "RUN_MIGRATIONS tidak aktif — migrasi DILEWATI."
+  warn "Kalau rilis ini mengubah skema, terapkan manual dulu:"
+  warn "  bash scripts/deploy-blue-green.sh migrate"
+fi
+
 # ─── Step 4: Switch nginx ───
 update_nginx_upstream "$TARGET"
 if ! reload_nginx "$TARGET"; then
@@ -375,7 +480,12 @@ fi
 # ─── Step 5: Teardown warna lama (opsional) ───
 if [ -n "$ACTIVE" ] && [ "$ACTIVE" != "$TARGET" ]; then
   echo ""
-  if [ "$AUTO_TEARDOWN" = "1" ]; then
+  if [ "$KEEP_OLD_COLOR" = "1" ]; then
+    # Mode CI: biarkan warna lama hidup. Rollback masih mungkin kalau
+    # verifikasi publik di langkah berikutnya gagal.
+    warn "KEEP_OLD_COLOR=1 — ${ACTIVE} DIBIARKAN HIDUP untuk jaga-jaga rollback."
+    warn "Setelah verifikasi publik lolos jalankan: $0 teardown ${ACTIVE}"
+  elif [ "$AUTO_TEARDOWN" = "1" ]; then
     teardown_color "$ACTIVE"
   else
     read -r -p "$(echo -e "${YELLOW}Tear down old ${ACTIVE}? [y/N] ${NC}")" CONFIRM

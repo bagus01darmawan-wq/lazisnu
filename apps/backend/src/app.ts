@@ -47,6 +47,12 @@ export async function buildApp() {
   await server.register(jwt, {
     secret: config.JWT_ACCESS_SECRET,
     sign: { expiresIn: config.JWT_EXPIRES_IN },
+    // KUNCI: wajibkan HS256 saat memverifikasi. Tanpa ini, penyerang bisa
+    // mengirim token yang mengeklaim algoritma lain (algorithm confusion).
+    // PERHATIAN: nama opsi yang dipakai fast-jwt@4.0.5 adalah `algorithms`.
+    // Menulis `allowedAlgorithms` akan DIABAIKAN tanpa peringatan — pengamanan
+    // terlihat ada, tetapi diam-diam tidak berfungsi. Jangan diganti.
+    verify: { algorithms: ['HS256'] },
   });
 
   await server.register(rateLimit, {

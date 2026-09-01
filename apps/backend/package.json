@@ -20,6 +20,7 @@
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:migrate:prod": "node dist/database/migrate-cli.js",
     "db:reset-test": "bash scripts/db-sync-test.sh",
     "db:check-orphans": "node scripts/check-migration-orphans.js"
   },
