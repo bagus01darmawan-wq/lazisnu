@@ -74,7 +74,16 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          # Dependabot untuk workspace sub-folder kadang tidak ikut
+          # meng-update pnpm-lock.yaml (ERR_PNPM_OUTDATED_LOCKFILE).
+          # Untuk PR dependabot izinkan lockfile diperbarui otomatis;
+          # selain itu tetap enforce --frozen-lockfile.
+          if [ "${{ github.actor }}" = "dependabot[bot]" ]; then
+            pnpm install --no-frozen-lockfile
+          else
+            pnpm install --frozen-lockfile
+          fi
 
       - name: Audit dependensi (level moderate+)
         # Catatan: sengaja `|| true` agar tidak memblokir pipeline saat ini.
