@@ -10,6 +10,17 @@ overrides:
   'joi': 17.13.4
   '@babel/plugin-transform-modules-systemjs': 7.29.7
   '@typescript-eslint/typescript-estree>minimatch': 9.0.7
+  # Transitive rentan — diblokir dependabot (security_update_not_possible):
+  # - nanoid < 3.3.18 (GHSA-2v37-7h3g-55p8) — di-pin eas-cli@22.2.0
+  # - js-yaml@3 < 3.15.1 (GHSA-5p4m-2wfm-xmqj, CVE-2026-59870) — via @oclif/core dkk
+  #   (js-yaml@4 tetap aman 4.3.2, hanya override @3)
+  # - fast-uri < 2.4.4 (GHSA-q3j6, v39h, 7p8r) — via @fastify/ajv-compiler dkk
+  # - decode-uri-component <= 0.4.2 (GHSA-vcc3-ghjq-m6fr) — via query-string
+  'nanoid': 3.3.18
+  'js-yaml@3': 3.15.2
+  'js-yaml@4': 4.3.2
+  'fast-uri': 2.4.4
+  'decode-uri-component': 0.5.0
 
 allowBuilds:
   '@firebase/util': true
