@@ -25,11 +25,13 @@ overrides:
   # US1: Critical & High — override transitive. Selector per-major agar versi
   # yang sudah aman di tree TIDAK di-downgrade/diubah.
   # shell-quote <=1.8.4 (CVE-2026-XXXXX) — naik dari 1.8.4 (di atas)
-  'tar@7': 7.5.21                      # tar <=7.5.20 (GHSA-xxxx) — via eas-cli dkk; tar@6 (cacache) tak rentan
+  'tar@7': 7.5.22                      # tar <=7.5.20 (GHSA-xxxx) — via eas-cli dll
+  'tar@6': 7.5.22                       # tar@6 dari @expo/cli (dependency langsung, bukan via cacache);
+  'cacache@18': 19.0.1                 #   tidak ada patched 6.x; major bump 6→7 untuk build-tooling
   'brace-expansion@<2': 1.1.18         # 1.x <1.1.16/17/18 (GHSA-xxxx)
   'brace-expansion@>=2 <5': 2.1.4      # 2.x <2.1.4 (GHSA-xxxx)
   'brace-expansion@>=5': 5.0.9         # >=3 <5.0.9 (GHSA-xxxx); 5.0.5 di tree rentan
-  'protobufjs': 7.6.1                  # <=7.6.0 (GHSA-8gq9-2x98-8v72) — allowBuilds sudah ada
+  'protobufjs': 7.6.6                  # <=7.6.4 (GHSA-8gq9-2x98-8v72) — 7.6.6 di luar rentang; allowBuilds ada
   '@xmldom/xmldom@<0.8.13': 0.8.13     # <0.8.13 (GHSA-xxx) — 0.8.13/0.9.10 di tree tetap
   'minimatch@5': 5.1.8                 # 5.x <5.1.8 (GHSA-xxxx) — @9/@10 di tree tetap
   'ws@6': 6.2.6                        # 6.x <6.2.4 (GHSA-xxxx) — 6.2.3 di tree
@@ -37,11 +39,18 @@ overrides:
   '@grpc/grpc-js@>=1.14.0 <1.14.4': 1.14.4  # GHSA-xxxx — 1.9.16 di tree tetap
   'form-data@<2.5.6': 2.5.6           # 2.x <2.5.6 (GHSA-xxxx) — 2.5.5 di tree
   'form-data@>=4.0.0 <4.0.6': 4.0.6   # 4.x <4.0.6 (GHSA-xxxx) — 4.0.5 di tree; 3.x tetap
-  'postcss@>=8.0.0 <8.5.18': 8.5.18   # <=8.5.17 (GHSA-xxxx) — 8.5.26 & 4.2.4 di tree tetap
+  'postcss@>=8.0.0 <8.5.26': 8.5.26   # <=8.5.22 (GHSA-xxxx) — 8.5.26 & 4.2.4 di tree tetap
   'tmp': 0.2.7                         # <0.2.7 (GHSA-7c78-jf6q-g5cm) — 0.2.5/0.2.6 di tree rentan
   'websocket-driver': 0.7.5            # <0.7.5 (GHSA-xxxx) — 0.7.4 di tree
   'fast-xml-builder': 1.1.7            # <=1.1.6 (GHSA-xxxx) — 1.1.5 di tree
   'sharp': 0.35.4                      # <0.35.0 (GHSA-xxxx) — 0.34.5 di tree; mobile sudah 0.35.4
+  'qs@6': 6.16.0                       # >=6.11.1 <=6.15.1 (GHSA-xxxx) — via superagent (test)
+  'yaml@2': 2.9.0                      # >=2.0.0 <2.8.3 (GHSA-xxxx) — via eas-cli; yaml@1 tetap
+  'ajv@8': 8.20.0                      # >=7.0.0-alpha.0 <8.18.0 (GHSA-xxxx) — via eas-cli dkk; ajv@6 tetap
+  'uuid@11': 11.1.1                    # <11.1.1 (GHSA-xxxx) — via firebase-admin; uuid 7/8/9 di tree TETAP
+  'send@0.18': 0.19.2                  # <0.19.0 (GHSA-xxxx) — via @expo/cli; bump minor tooling
+  'diff@7': 8.0.3                      # >=6.0.0 <8.0.3 (GHSA-xxxx) — via eas-cli; diff 8 API kompatibel
+  'esbuild@0.27': 0.28.2               # >=0.27.3 <0.28.1 (GHSA-xxxx) — via tsx/vite; bump patch minor
   # fast-jwt (4 critical): DISELESAIKAN via upgrade @fastify/jwt@8 → @10
   #   (yang membawa fast-jwt@^6.2.4) — BUKAN override, agar plugin tetap kompatibel.
   # image-size <=2.0.2: NO-FIX — akan di-dismiss berjustifikasi.
