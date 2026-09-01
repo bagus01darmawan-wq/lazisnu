@@ -459,11 +459,26 @@ jobs:
             set -eo pipefail
             cd /opt/lazisnu
 
-            # Sinkronkan source ke versi tag (perubahan lokal di-stash dulu)
-            git stash push -m "pre-deploy $(date -Iseconds)" || true
+            # Backup .env files — amankan kalau ada sisa conflict merge
+            if [ -f apps/backend/.env ]; then
+              cp apps/backend/.env /tmp/.env.deploy.bak
+            fi
+            if [ -f apps/backend/.env.staging ]; then
+              cp apps/backend/.env.staging /tmp/.env.staging.deploy.bak
+            fi
+
+            # Sinkronkan repo — reset --hard tidak sentuh untracked files
             git fetch origin --tags
-            git checkout -f $IMAGE_TAG
+            git reset --hard $IMAGE_TAG
             echo "✓ Repository updated to $IMAGE_TAG"
+
+            # Restore .env dari backup (safety net)
+            if [ -f /tmp/.env.deploy.bak ]; then
+              mv /tmp/.env.deploy.bak apps/backend/.env
+            fi
+            if [ -f /tmp/.env.staging.deploy.bak ]; then
+              mv /tmp/.env.staging.deploy.bak apps/backend/.env.staging
+            fi
 
             # Verifikasi kode di VM benar-benar berada di commit yang diminta.
             # Tanpa ini, deploy bisa saja berjalan memakai sisa kode lama
@@ -577,10 +592,26 @@ jobs:
             set -e
             cd /opt/lazisnu
 
-            git stash push -m "pre-staging-deploy $(date -Iseconds)" || true
+            # Backup .env files — amankan kalau ada sisa conflict merge
+            if [ -f apps/backend/.env.staging ]; then
+              cp apps/backend/.env.staging /tmp/.env.staging.deploy.bak
+            fi
+            if [ -f apps/backend/.env ]; then
+              cp apps/backend/.env /tmp/.env.deploy.bak
+            fi
+
+            # Sinkronkan repo — reset --hard tidak sentuh untracked files
             git fetch origin
-            git checkout -f origin/main
-            echo "✓ Repository updated"
+            git reset --hard origin/main
+            echo "✓ Repository synchronized"
+
+            # Restore .env dari backup (safety net)
+            if [ -f /tmp/.env.staging.deploy.bak ]; then
+              mv /tmp/.env.staging.deploy.bak apps/backend/.env.staging
+            fi
+            if [ -f /tmp/.env.deploy.bak ]; then
+              mv /tmp/.env.deploy.bak apps/backend/.env
+            fi
 
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
