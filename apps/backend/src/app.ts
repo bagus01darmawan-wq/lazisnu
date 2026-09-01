@@ -147,13 +147,15 @@ export async function buildApp() {
     }
 
     // 3. Fastify schema validation
-    if (error.validation) {
+    // fastify 5: parameter error bertipe unknown — narrow manual ke FastifyError shape
+    const fastifyError = error as { validation?: unknown };
+    if (fastifyError.validation) {
       return reply.status(400).send({
         success: false,
         error: {
           code: 'VALIDATION_ERROR',
           message: 'Input tidak valid',
-          details: error.validation,
+          details: fastifyError.validation,
         },
       });
     }
@@ -203,7 +205,7 @@ export async function buildApp() {
     }
 
     // 7. Unknown error — sanitize: log detail di server, response generik
-    captureError(error, {
+    captureError(error instanceof Error ? error : new Error(String(error)), {
       requestId: request.id,
       method: request.method,
       url: request.url,
