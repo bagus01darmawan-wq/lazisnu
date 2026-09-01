@@ -28,6 +28,8 @@ overrides:
   'tar@7': 7.5.22                      # tar <=7.5.20 (GHSA-xxxx) — via eas-cli dll
   'tar@6': 7.5.22                       # tar@6 dari @expo/cli (dependency langsung, bukan via cacache);
   'cacache@18': 19.0.1                 #   tidak ada patched 6.x; major bump 6→7 untuk build-tooling
+  '@babel/core@7.29.0': 7.29.7         # <=7.29.0 (GHSA-4x5r-pxfx-6jf8) — via mobile; 7.29.7 di tree aman
+  '@tootallnate/once@<2.0.1': 2.0.1    # <2.0.1 (GHSA-vpq2-c234-7xj6) — via dev tooling
   'brace-expansion@<2': 1.1.18         # 1.x <1.1.16/17/18 (GHSA-xxxx)
   'brace-expansion@>=2 <5': 2.1.4      # 2.x <2.1.4 (GHSA-xxxx)
   'brace-expansion@>=5': 5.0.9         # >=3 <5.0.9 (GHSA-xxxx); 5.0.5 di tree rentan
