@@ -1,0 +1,67 @@
+name: Fix lockfile (Dependabot)
+
+# ============================================================================
+#  Dependabot + pnpm monorepo: bump dependensi di workspace sub-folder
+#  (apps/backend, apps/web) sering hanya mengubah package.json dan TIDAK
+#  meng-update pnpm-lock.yaml di root → CI gagal dengan
+#  ERR_PNPM_OUTDATED_LOCKFILE.
+#
+#  Workflow ini berjalan saat PR dependabot dibuka/di-update, menjalankan
+#  `pnpm install --no-frozen-lockfile` untuk menyinkronkan lockfile, lalu
+#  meng-commit hasilnya KEMBALI ke branch dependabot. Setelah itu CI normal
+#  (dengan --frozen-lockfile) bisa lulus, dan merge ke main tidak membawa
+#  lockfile stale.
+#
+#  KEAMANAN:
+#  - Trigger `pull_request_target` diperlukan karena GITHUB_TOKEN pada PR
+#    dependabot read-only (tidak bisa push). Workflow file diambil dari BASE
+#    branch (main), bukan dari PR — kode PR tidak dieksekusi di luar konteks
+#    pnpm install yang juga dijalankan CI biasa.
+#  - Guard ketat: hanya berjalan jika actor = dependabot[bot].
+#  - Push memicu synchronize → workflow jalan lagi → lockfile sudah sinkron
+#    → tidak ada commit baru → berhenti. Tidak ada infinite loop.
+# ============================================================================
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+    branches: [main, master]
+
+permissions:
+  contents: write
+
+jobs:
+  fix-lockfile:
+    name: Sync pnpm-lock.yaml
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Checkout HEAD branch PR dependabot (bukan base).
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Sinkronkan lockfile dengan manifest
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Commit & push lockfile ke branch dependabot
+        run: |
+          if git diff --quiet -- pnpm-lock.yaml; then
+            echo "✅ Lockfile sudah sinkron — tidak ada perubahan."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add pnpm-lock.yaml
+            git commit -m "chore(deps): sinkronkan pnpm-lock.yaml dengan package.json"
+            git push origin "${{ github.event.pull_request.head.ref }}"
+            echo "✅ Lockfile disinkronkan & di-push ke ${{ github.event.pull_request.head.ref }}"
+          fi
