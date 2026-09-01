@@ -38,7 +38,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@testing-library/react": "^16",
-    "@types/node": "^20",
+    "@types/node": "^26",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9.14.0",

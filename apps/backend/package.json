@@ -52,7 +52,7 @@
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/jest": "^30.0.0",
-    "@types/node": "^20.19.39",
+    "@types/node": "^26.4.0",
     "@types/qrcode": "^1.5.5",
     "@types/supertest": "^7.2.0",
     "@types/uuid": "^9.0.8",
