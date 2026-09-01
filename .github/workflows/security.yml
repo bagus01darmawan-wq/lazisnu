@@ -85,8 +85,14 @@ jobs:
             pnpm install --frozen-lockfile
           fi
 
-      - name: Audit dependensi (level moderate+)
-        # Catatan: sengaja `|| true` agar tidak memblokir pipeline saat ini.
-        # Setelah temuan awal dibersihkan, ganti menjadi tanpa `|| true`
-        # supaya kerentanan baru menggagalkan build.
-        run: pnpm audit --audit-level moderate || true
+      - name: Audit dependensi (gerbang basis-banding)
+        # Keadaan nyata (2026-09-01): 8 temuan (6 moderate, 2 high); dua
+        # di antaranya (image-size via metro) TANPA patch (patched <0.0.0).
+        # Gerbang sengaja TIDAK memakai `|| true` — itu mematikan alarm
+        # sepenuhnya (temuan lama maupun baru sama-sama lolos).
+        # Skrip ini gagal (exit 1) HANYA bila muncul advisory baru di luar
+        # security/audit-baseline.json; --strict juga menggagalkan CI bila
+        # ada entri basis yang sudah tidak muncul lagi (mencegah basis
+        # menumpuk sampah).
+        # Perbarui basis: node scripts/audit-baseline.mjs --update
+        run: node scripts/audit-baseline.mjs --strict

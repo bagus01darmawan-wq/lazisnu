@@ -1,0 +1,42 @@
+{
+  "_caraPakai": "Daftar kerentanan yang sudah dikenal dan diterima. Gerbang CI gagal hanya bila muncul id yang BELUM ada di sini. Perbarui dengan: node scripts/audit-baseline.mjs --update",
+  "updatedAt": "2026-09-01T16:45:36.529Z",
+  "advisories": {
+    "GHSA-5p2g-fcmc-qvqq": {
+      "module": "image-size",
+      "severity": "high",
+      "url": "https://github.com/advisories/GHSA-5p2g-fcmc-qvqq",
+      "patched": "<0.0.0"
+    },
+    "GHSA-67mh-4wv8-2f99": {
+      "module": "esbuild",
+      "severity": "moderate",
+      "url": "https://github.com/advisories/GHSA-67mh-4wv8-2f99",
+      "patched": ">=0.25.0"
+    },
+    "GHSA-87mf-gv2c-c62c": {
+      "module": "ts-deepmerge",
+      "severity": "moderate",
+      "url": "https://github.com/advisories/GHSA-87mf-gv2c-c62c",
+      "patched": ">=8.0.0"
+    },
+    "GHSA-gh4j-gqv2-49f6": {
+      "module": "fast-xml-parser",
+      "severity": "moderate",
+      "url": "https://github.com/advisories/GHSA-gh4j-gqv2-49f6",
+      "patched": ">=5.7.0"
+    },
+    "GHSA-w3rx-r6r6-pgpr": {
+      "module": "image-size",
+      "severity": "high",
+      "url": "https://github.com/advisories/GHSA-w3rx-r6r6-pgpr",
+      "patched": "<0.0.0"
+    },
+    "GHSA-w5hq-g745-h8pq": {
+      "module": "uuid",
+      "severity": "moderate",
+      "url": "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
+      "patched": ">=11.1.1"
+    }
+  }
+}
