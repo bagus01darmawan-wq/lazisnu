@@ -64,7 +64,7 @@ def enableProguardInReleaseBuilds = true
  *
  * Default: 2 ABI arm (build lokal/universal — status quo, tidak berubah).
  * Build per-ABI: kirim -PabiFilter=arm64-v8a ATAU -PabiFilter=armeabi-v7a
- * lewat profil eas.json `production-arm64` / `production-armv7`.
+ * (dipicu matriks ABI di .github/workflows/release.yml).
  *
  * Catatan lapangan: reactNativeArchitectures di gradle.properties TIDAK
  * memfilter lib native pihak ketiga (ML Kit, Firebase, dll) — filter final

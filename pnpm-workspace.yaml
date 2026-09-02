@@ -20,13 +20,13 @@ overrides:
   '@types/react': 18.2.79
   '@typescript-eslint/typescript-estree>minimatch': 9.0.7
   '@xmldom/xmldom@<0.8.13': 0.8.13 # <0.8.13 (GHSA-xxx) — 0.8.13/0.9.10 di tree tetap
-  'ajv@8': 8.20.0 # >=7.0.0-alpha.0 <8.18.0 (GHSA-xxxx) — via eas-cli dkk; ajv@6 tetap
+  'ajv@8': 8.20.0 # >=7.0.0-alpha.0 <8.18.0 (GHSA-xxxx) — dulu via eas-cli (dihapus 2026-09-02) dkk; ajv@6 tetap
   'brace-expansion@<2': 1.1.18 # 1.x <1.1.16/17/18 (GHSA-xxxx)
   'brace-expansion@>=2 <5': 2.1.4 # 2.x <2.1.4 (GHSA-xxxx)
   'brace-expansion@>=5': 5.0.9 # >=3 <5.0.9 (GHSA-xxxx); 5.0.5 di tree rentan
   'cacache@18': 19.0.1 #   tidak ada patched 6.x; major bump 6→7 untuk build-tooling
   'decode-uri-component': 0.5.0
-  'diff@7': 8.0.3 # >=6.0.0 <8.0.3 (GHSA-xxxx) — via eas-cli; diff 8 API kompatibel
+  'diff@7': 8.0.3 # >=6.0.0 <8.0.3 (GHSA-xxxx) — dulu via eas-cli (dihapus 2026-09-02); diff 8 API kompatibel
   'esbuild@0.27': 0.28.2 # >=0.27.3 <0.28.1 (GHSA-xxxx) — via tsx/vite; bump patch minor
   'fast-uri': 2.4.4
   'fast-xml-builder': 1.1.7 # <=1.1.6 (GHSA-xxxx) — 1.1.5 di tree
@@ -37,7 +37,7 @@ overrides:
   'js-yaml@4': 4.3.2
   'minimatch@5': 5.1.8 # 5.x <5.1.8 (GHSA-xxxx) — @9/@10 di tree tetap
   # Transitive rentan — diblokir dependabot (security_update_not_possible):
-  # - nanoid < 3.3.18 (GHSA-2v37-7h3g-55p8) — di-pin eas-cli@22.2.0
+  # - nanoid < 3.3.18 (GHSA-2v37-7h3g-55p8) — dulu di-pin eas-cli@22.2.0 (eas-cli dihapus 2026-09-02)
   # - js-yaml@3 < 3.15.1 (GHSA-5p4m-2wfm-xmqj, CVE-2026-59870) — via @oclif/core dkk
   #   (js-yaml@4 tetap aman 4.3.2, hanya override @3)
   # - fast-uri < 2.4.4 (GHSA-q3j6, v39h, 7p8r) — via @fastify/ajv-compiler dkk
@@ -54,13 +54,13 @@ overrides:
   # US1: Critical & High — override transitive. Selector per-major agar versi
   # yang sudah aman di tree TIDAK di-downgrade/diubah.
   # shell-quote <=1.8.4 (CVE-2026-XXXXX) — naik dari 1.8.4 (di atas)
-  'tar@7': 7.5.22 # tar <=7.5.20 (GHSA-xxxx) — via eas-cli dll
+  'tar@7': 7.5.22 # tar <=7.5.20 (GHSA-xxxx) — dulu via eas-cli (dihapus 2026-09-02) dll
   'tmp': 0.2.7 # <0.2.7 (GHSA-7c78-jf6q-g5cm) — 0.2.5/0.2.6 di tree rentan
   'uuid@11': 11.1.1 # <11.1.1 (GHSA-xxxx) — via firebase-admin; uuid 7/8/9 di tree TETAP
   'websocket-driver': 0.7.5 # <0.7.5 (GHSA-xxxx) — 0.7.4 di tree
   'ws@6': 6.2.6 # 6.x <6.2.4 (GHSA-xxxx) — 6.2.3 di tree
   'ws@7': 7.5.11 # 7.x <7.5.11 (GHSA-xxxx) — 7.5.10 di tree
-  'yaml@2': 2.9.0 # >=2.0.0 <2.8.3 (GHSA-xxxx) — via eas-cli; yaml@1 tetap
+  'yaml@2': 2.9.0 # >=2.0.0 <2.8.3 (GHSA-xxxx) — dulu via eas-cli (dihapus 2026-09-02); yaml@1 tetap
   # fast-jwt (4 critical): DISELESAIKAN via upgrade @fastify/jwt@8 → @10
   #   (yang membawa fast-jwt@^6.2.4) — BUKAN override, agar plugin tetap kompatibel.
   # image-size <=2.0.2: NO-FIX — akan di-dismiss berjustifikasi.
