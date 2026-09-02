@@ -495,3 +495,411 @@ Rotasi adalah satu-satunya perbaikan yang benar; menghapus riwayat hanya kosmeti
 > **Catatan commit:** semua perubahan berkas di atas masih di working tree, belum
 > di-commit/dorong. Saran: commit sekarang, lalu rilis berikutnya akan memakai
 > alur rollback yang baru.
+
+
+---
+
+## Audit ulang — 1 September 2026 (status setelah eksekusi)
+
+Pertanyaan yang sama diajukan ulang untuk mengukur kemajuan. Semua angka di bawah
+diambil dari API GitHub dan pemeriksaan lokal hari ini, bukan dari ingatan.
+
+### Ringkasan perubahan
+
+| # | Temuan | 31 Agu 2026 | 1 Sep 2026 |
+|---|--------|-------------|------------|
+| 1 | Rollback biru-hijau | Mustahil — warna lama dibongkar sebelum health check | `KEEP_OLD_COLOR=1`; warna lama dibongkar hanya setelah 3 verifikasi publik lolos |
+| 2 | Perlindungan cabang `main` | Tidak ada (HTTP 404) | `required_status_checks: ["CI status"]` |
+| 3 | Kerentanan dependensi | 154 (5 kritis, 87 tinggi) disembunyikan `\|\| true` | 8 tersisa (6 sedang, 2 tinggi) — keduanya alat build mobile |
+| 4 | Migrasi DB di jalur deploy | Tidak ada | Alat siap (`migrate-cli.ts`), `RUN_MIGRATIONS=0` — sengaja belum aktif |
+| 5 | Environment Production | `protection_rules: []` | `required_reviewers`: bagus01darmawan-wq |
+| 6 | Verifikasi pasca-deploy | 2 curl dangkal | 3 lapis: isi `/health/ready`, health web, `/v1/auth/me` harus 401 |
+| 7 | `g4-trial-build.yml` | Usang | Dihapus |
+| 9 | Verifikasi kode di VM | Tidak ada | `VM_SHA` dibandingkan dengan `IMAGE_TAG` |
+| 10 | Alarm keamanan | Semua mati | Dependabot alerts + security updates + secret scanning + push protection AKTIF |
+| 11 | Dependabot pantau npm | Hanya Actions | Ekosistem npm aktif; 28 alert ditandai fixed |
+| 12 | `.env.staging` di repo publik | Terbuka | **SEBAGIAN — lihat bawah** |
+
+### Yang sudah tuntas
+
+- **Dependabot alerts terbuka: 0.** Dari 30 alert yang pernah muncul: 28 fixed, 2 dismissed.
+- **Kerentanan lokal: 154 -> 8.** `pnpm audit --audit-level moderate` sekarang
+  mengembalikan 6 sedang + 2 tinggi. Dua yang tinggi sama-sama `image-size` lewat
+  `apps/mobile > @react-native/metro-config > metro-config > metro > image-size` —
+  alat bundling build-time, tidak ikut terkemas ke aplikasi yang dipakai pengguna.
+- **Gerbang `CI status` terbukti tidak mengunci PR.** PR #67 (fastify 4->5, 106
+  perbaikan) merge dengan `CI status: completed/success`. Ini mengonfirmasi koreksi
+  pada R5: mewajibkan empat job terpisah akan mengunci semua PR selamanya, karena
+  job yang dilewati path filter tidak pernah melapor sukses.
+- **30 workflow run terakhir:** 24 sukses, 2 gagal, 3 dilewati, 1 dibatalkan.
+  Dua kegagalan bukan kerusakan:
+  - `Security` (33501276625) — dependency review **menolak** PR
+    `001-vulnerability-cleanup`. Ini alarm bekerja sebagaimana mestinya.
+  - Dependabot `@tootallnate/once` — `security_update_not_possible` sementara;
+    sudah dibereskan manual di commit `737a94a`.
+- **Secret scanning:** 1 alert, sudah `resolved` sebagai `false_positive`
+  (`google_api_key`, 16 Jun 2026). Tidak ada kebocoran baru terdeteksi.
+
+### Yang BELUM selesai — dan ini yang paling penting
+
+**12. `.env.staging` masih bisa dibaca dari riwayat git. Repo ini PUBLIK.**
+
+Berkas sudah dilepas dari pelacakan dan `.gitignore` sudah diperluas — itu benar.
+Tetapi isinya tidak hilang:
+
+```
+$ git rev-list --all --objects | grep apps/backend/.env.staging
+b73c96b7...  apps/backend/.env.staging   (570fc9e, 27 Jul 2026)
+8b31e65c...  apps/backend/.env.staging   (cc60423, 29 Jul 2026)
+17c9683b...  apps/backend/.env.staging   (39787ab, 1 Agu 2026)
+```
+
+Tiga versi berkas itu masih tersimpan sebagai objek git yang bisa dijangkau dari
+ref mana pun. Siapa pun — termasuk bot pemindai kredensial yang menyisir GitHub —
+bisa mengunduhnya. Sudah terbuka sejak **27 Juli 2026**.
+
+Menghapus berkas dari `HEAD` tidak menghapusnya dari riwayat. Satu-satunya
+perbaikan yang benar adalah **rotasi**:
+
+- [ ] Password database (Supabase) — `DATABASE_URL`, `DIRECT_URL`
+- [ ] Tiga secret JWT (akses, refresh, dan satu lagi)
+- [ ] `WA_ACCESS_TOKEN`
+- [ ] Access key + secret R2 (sama dengan secret backup)
+- [ ] `INTERNAL_API_KEY`
+- [ ] `APP_SECRET`
+
+Setelah rotasi, riwayat bisa dibersihkan dengan `git filter-repo`, tetapi itu hanya
+kosmetik — anggap kredensial lama sudah pernah terlihat orang lain.
+
+**Catatan jujur:** rotasi adalah satu-satunya butir yang tidak bisa saya verifikasi
+dari luar. Saya bisa membuktikan berkasnya masih terbaca; saya tidak bisa
+membuktikan kuncinya sudah diganti.
+
+### Butir lain yang belum tuntas
+
+- **R2:** `|| true` masih ada di `security.yml:92`. Sudah boleh dicabut sekarang —
+  sisa 8 temuan berada dalam batas yang bisa dikelola, dan alarm yang jujur lebih
+  berguna daripada alarm yang disumpal.
+- **Rekonsiliasi jurnal migrasi:** `RUN_MIGRATIONS` masih `0` karena skema produksi
+  dibuat dengan `drizzle-kit push`, yang tidak menulis tabel penanda migrasi.
+  Mengaktifkannya sekarang akan mengulang semua migrasi dari `0000` lalu gagal.
+- **`EAS_ACCESS_TOKEN`:** status belum diperiksa ulang pada audit ini.
+- **`.env.test`** masih terlacak, tetapi isinya nilai uji — risiko rendah.
+
+### Kesimpulan
+
+Fondasinya sekarang **kokoh untuk urusan rilis**. Rilis yang gagal bisa ditarik
+kembali, `main` tidak bisa didorong sembarangan, produksi butuh persetujuan, dan
+alarmnya hidup. Loncatan terbesarnya justru datang dari Anda sendiri: 106
+kerentanan dibereskan dan Fastify 4->5 selesai — padahal semula saya catat sebagai
+pekerjaan yang butuh perencanaan tersendiri.
+
+Yang belum kokoh adalah **kebersihan masa lalu**: ada kredensial yang pernah
+terpublikasi dan belum tentu diganti. Itu bukan masalah CI/CD — itu masalah kunci
+pintu yang sudah pernah terfoto orang.
+
+
+---
+
+## Tindak lanjut — rotasi kredensial (1 Sep 2026, malam)
+
+Pion melapor: "kredensial di `.env.staging` sudah dirotasi semua, aman."
+
+### Yang bisa saya buktikan, dan yang tidak
+
+- **`.env.staging` berhenti dilacak git** — TERBUKTI (`git ls-files` tidak memuatnya).
+- **Isinya sudah diganti** — **TIDAK DAPAT DIVERIFIKASI.** Berkas itu tidak ada
+  di mesin ini; ia hidup di VM. Saya tidak bisa membuktikan rotasi, hanya
+  menerima laporannya.
+- **Tiga blob riwayat git masih bisa dibaca** — TERBUKTI (`git rev-list --all --objects`).
+- **`.env.test` dan `.env.example` aman** — TERBUKTI (nilainya berbeda dari yang bocor).
+- **Token WhatsApp dan kunci R2 di berkas dev lokal masih bernilai lama** — TERBUKTI
+  (perbandingan per-kunci, lihat bawah).
+
+### Koreksi atas audit 31 Agustus
+
+Audit sebelumnya menyebut `.env.test` "isinya nilai uji — risiko rendah" **sebagai
+dugaan, tanpa pernah diperiksa**. Malam ini nilainya benar-benar dibandingkan:
+
+- `apps/backend/.env.test` — `DATABASE_URL` menunjuk `localhost:5432/lazisnu_test`;
+  keempat secret JWT berbeda dari yang bocor. **Aman.**
+- `apps/backend/.env.example` — `username:***@localhost:5432/lazisnu_db`; semua
+  nilai placeholder. **Aman.**
+- `apps/web/.env.example` — berbeda dari yang bocor. **Aman.**
+
+Pemindaian heuristik sempat menandai ketiganya "curiga" karena ada string acak
+panjang dan pola `supabase`. Itu **alarm palsu** — perbandingan langsung
+membuktikan sebaliknya. Pelajaran yang saya catat: string acak panjang bukan
+bukti rahasia sungguhan; yang menentukan adalah apakah nilainya **sama** dengan
+yang bocor.
+
+### Temuan baru: kredensial WhatsApp dan R2 belum tentu mati
+
+`apps/backend/.env` di mesin pengembangan adalah **berkas dev lokal**
+(`NODE_ENV=development`, `PORT=3001`, terakhir diubah **27 Juli 2026 08:36**,
+tidak terlacak git). Berkas ini masih memuat empat nilai yang **sama persis**
+dengan yang ada di riwayat git publik:
+
+- `WA_ACCESS_TOKEN` (Fonnte)
+- `R2_ACCOUNT_ID`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+
+Dua kemungkinan:
+
+1. **Rotasi dilakukan di sisi penyedia** — kebocoran sudah netral. Berkas dev ini
+   tinggal usang; perlu diperbarui supaya dev lokal tidak error.
+2. **Nilainya hanya diganti di berkas** — kunci lama **masih hidup** dan masih bisa
+   dipakai siapa pun yang membaca riwayat git.
+
+**Rotasi yang benar adalah mencabut kredensial lama di dashboard penyedianya**,
+bukan mengganti teks di berkas. Mengganti nomor di buku catatan tidak mematikan
+kunci lama — kuncinya harus diganti di pabriknya.
+
+Perlu diingat: kunci R2 ini **sama dengan kredensial backup**. Kalau ternyata masih
+hidup, orang lain bukan hanya bisa membaca berkas, tetapi juga menghapus backup.
+
+### Cara memastikan sendiri (lima menit)
+
+- **Fonnte** — buka dashboard, token lama harusnya sudah dicabut. Kalau masih ada
+  di daftar, cabut sekarang.
+- **Cloudflare R2** — dashboard, R2, *Manage R2 API tokens*. `R2_ACCESS_KEY_ID`
+  yang lama harusnya tidak aktif lagi. Kalau masih aktif, hapus.
+- **Uji langsung** — coba pakai nilai lama (dari riwayat git) ke penyedianya.
+  Kalau masih diterima, rotasi belum sampai ke pabriknya.
+
+### Setelah itu, barulah bersihkan riwayat
+
+Begitu kredensial lama dipastikan mati, riwayat git bisa dibersihkan dengan
+`git filter-repo` supaya tiga blob itu tidak bisa diunduh lagi. Perlu force-push,
+dan semua pihak yang pernah clone harus menarik ulang. Ini bukan keharusan —
+nilainya lebih ke kerapian dan menghentikan bot pemindai yang terus menandai repo.
+
+
+---
+
+## Verifikasi mandiri — uji langsung ke penyedia (1 Sep 2026, malam)
+
+Sebuah review eksternal menyimpulkan "rotasi WA + R2 = EFEKTIF". Kesimpulan itu
+**hanya sebagian yang benar**. Berikut hasil uji langsung.
+
+### Metode: percobaan pembanding
+
+Menguji kunci lama lalu berhenti di situ bisa menipu. `AccessDenied` bisa berarti
+"kunci mati" ATAU "kunci hidup tetapi tidak berhak". Karena itu setiap pengujian
+dijalankan dua kali:
+
+1. memakai kunci asli yang bocor, dan
+2. memakai kunci yang sengaja dirusak satu karakternya, sebagai kontrol.
+
+Kalau hasilnya sama, kunci asli diperlakukan persis seperti kunci palsu — berarti
+mati. Kalau berbeda, penyedia masih mengenali kunci asli — berarti hidup.
+
+### Hasil R2 (Cloudflare) — KUNCI MASIH HIDUP
+
+| Pengujian | Kunci asli (bocor) | Kunci rusak (kontrol) | Kesimpulan |
+|---|---|---|---|
+| ListBuckets | 403 AccessDenied | 403 AccessDenied | tidak menyimpulkan (token R2 memang tidak berhak mendaftar bucket) |
+| Daftar isi `lazisnu-backups` | **HTTP 200 BERHASIL** | 403 SignatureDoesNotMatch | **KUNCI MASIH HIDUP** |
+
+Kredensial R2 yang terekspos di riwayat git publik **masih diterima Cloudflare**
+dan **bisa mendaftar isi bucket backup**. Siapa pun yang membaca riwayat repo ini
+bisa melihat berkas backup dan, bergantung hak akses tokennya, berpotensi
+menghapusnya.
+
+Ini persis skenario yang diperingatkan beberapa jam sebelumnya: nilainya diganti
+di berkas `.env.staging`, tetapi **kunci lama tidak pernah dicabut di penyedia**.
+Membuat token baru tidak mematikan token lama — keduanya hidup berdampingan.
+
+**TINDAKAN YANG TIDAK BISA DIWAKILKAN:**
+
+1. Cloudflare Dashboard, R2, *Manage R2 API Tokens*.
+2. Cari token dengan Access Key ID berawalan `61da` (berakhir `213e`).
+3. **Hapus** token itu. Mengganti nilainya di berkas tidak cukup.
+4. Setelah dihapus, pengujian di atas bisa diulang untuk memastikan.
+
+### Hasil WA (Fonnte) — rotasi efektif
+
+Diuji lewat endpoint baca-saja `/device`, bukan `/send`, sehingga tidak ada
+pesan WhatsApp yang terkirim dalam keadaan apa pun:
+
+```
+POST https://api.fonnte.com/device
+-> HTTP 200  {"reason":"token invalid","status":false}
+```
+
+Token lama ditolak penyedia. **Rotasi WA terbukti efektif.**
+
+### Koreksi angka Dependabot — saya yang keliru
+
+Audit sebelumnya menyebut "30 alert pernah muncul: 28 fixed, 2 dismissed". Angka
+itu **salah**: `gh api` mengembalikan 30 baris per halaman dan saya tidak meminta
+halaman berikutnya. Dengan paginasi penuh:
+
+| Kondisi | Kritis | Tinggi | Sedang | Rendah | Jumlah |
+|---|---|---|---|---|---|
+| fixed | 5 | 91 | 57 | 12 | **165** |
+| dismissed | 0 | 2 | 5 | 0 | **7** |
+| open | 0 | 0 | 0 | 0 | **0** |
+
+Total 172 alert. Angka review (165 / 7 / 0) benar; angka saya kemarin hanya satu
+halaman. Pelajaran: sebelum mengutip jumlah dari API, pastikan semua halaman
+sudah ditarik.
+
+### Pelajaran yang dicatat
+
+- **Berkas yang berbeda bukan kredensial yang dicabut.** Review menyimpulkan R2
+  aman karena hash di VM berbeda dari hash yang bocor. Itu hanya membuktikan
+  berkasnya diganti, bukan kuncinya dimatikan. Bukti baru ada kalau penyedianya
+  sendiri menolak kunci lama.
+- **Satu penolakan bisa punya dua arti.** `AccessDenied` tidak sama dengan
+  `InvalidAccessKeyId` atau `SignatureDoesNotMatch`. Tanpa percobaan pembanding,
+  ketiganya mudah tertukar — dan salah bacanya bisa berakibat fatal.
+- **Jangan menguji kredensial bocor ke endpoint yang bisa berefek nyata.**
+  Menguji token WA lewat `/send` berisiko benar-benar mengirim pesan seandainya
+  token itu masih hidup. Pakai endpoint baca-saja.
+
+
+---
+
+## Status akhir — kredensial (1 Sep 2026, 22:36)
+
+Setelah token lama dicabut lewat dashboard Cloudflare, pengujian diulang tiga
+kali dengan percobaan pembanding yang sama:
+
+```
+percobaan 1   kunci lama: HTTP 401 Unauthorized   kunci palsu: HTTP 401 Unauthorized
+percobaan 2   kunci lama: HTTP 401 Unauthorized   kunci palsu: HTTP 401 Unauthorized
+percobaan 3   kunci lama: HTTP 401 Unauthorized   kunci palsu: HTTP 401 Unauthorized
+```
+
+Kunci lama kini diperlakukan **persis seperti kunci palsu**. Bandingkan dengan
+hasil delapan jam sebelumnya pada pengujian yang sama: `HTTP 200 BERHASIL`.
+
+### Keadaan tiap kredensial yang pernah terekspos
+
+| Kredensial | Sebelum | Sekarang | Bukti |
+|---|---|---|---|
+| Token WA (Fonnte) | hidup | **MATI** | `POST /device` -> `token invalid` |
+| Kunci R2 (Cloudflare) | **hidup, bisa buka bucket backup** | **MATI** | 3x uji banding: 401, sama dengan kunci palsu |
+| Password database, 3 secret JWT, `INTERNAL_API_KEY`, `APP_SECRET` | nilai diganti di berkas | nilai diganti di berkas | tidak diuji ke penyedia — lihat catatan |
+
+**Catatan jujur:** hanya WA dan R2 yang saya uji langsung ke penyedianya. Untuk
+password database dan secret JWT, buktinya baru sebatas "nilainya berbeda dari
+yang bocor". Itu belum sama dengan "kunci lamanya sudah dimatikan". Bila ingin
+pasti, uji koneksi memakai **nilai lama** dari riwayat git ke database staging —
+kalau masih bisa masuk, berarti belum selesai.
+
+### Yang sudah Anda kerjakan
+
+- Token baru `lazisnu-backup-v2` dibuat; diuji LIST 200 (119 objek), PUT 200,
+  DEL 204.
+- `.env.backup` di VM memakai kunci baru (`R2_*` dan `AWS_*`).
+- Backup produksi jam 02:00 memakai kunci baru.
+- Token lama `61da...213e` dihapus lewat dashboard.
+
+### Saran tambahan: kunci bucket backup (bucket lock)
+
+Token baru itu bisa `PUT` **dan** `DELETE`. Itu wajar untuk rotasi backup, tetapi
+berarti kunci ini bisa menghapus backup — persis kemampuan yang satu jam lalu
+masih bisa dipakai orang lain dari riwayat git.
+
+Cloudflare R2 punya **bucket lock** (retensi objek): mencegah objek dihapus atau
+ditimpa selama periode tertentu, bahkan oleh pemilik kunci. Ini jaring pengaman
+kalau kunci ini suatu hari bocor lagi.
+
+Ada trade-off yang perlu dipertimbangkan: retensi tanpa batas akan menghentikan
+pembersihan backup lama (DEL tidak akan jalan lagi). Retensi pendek — misal 7
+sampai 14 hari — masih memberi perlindungan terhadap penghapusan massal, sambil
+tetap mengizinkan rotasi backup. Keputusannya di tangan Anda.
+
+### Yang tersisa, urut dari yang paling berharga
+
+1. Pastikan password database dan secret JWT juga dicabut di penyedianya
+   (baru terbukti "nilainya beda", belum terbukti "kunci lama mati").
+2. Perbarui `apps/backend/.env` di komputer Anda — nilainya usang sejak 27 Juli
+   dan sekarang pasti error (token WA invalid, kunci R2 sudah dicabut).
+3. Cabut `|| true` di `security.yml:92` — sisa 8 temuan sudah dalam batas wajar.
+4. Bersihkan 3 blob riwayat dengan `git filter-repo` — setelah semua kunci
+   dipastikan mati, ini tinggal kosmetik, dan butuh force-push.
+5. Rekonsiliasi jurnal migrasi sebelum `RUN_MIGRATIONS=1`.
+
+
+---
+
+## `|| true` di security.yml — koreksi dan jalan ketiga (1 Sep 2026, 23:10)
+
+Saya menyarankan mencabut `|| true` karena "sudah boleh sekarang". **Saran itu
+keliru** dan dikoreksi oleh Pion. Berikut pemeriksaannya.
+
+### Fakta 1: mencabutnya sekarang membuat CI merah permanen
+
+```
+pnpm audit --audit-level moderate        -> EXIT=1, 8 vuln (6 moderate, 2 high)
+pnpm audit --prod --audit-level moderate -> EXIT=1, 6 vuln (4 moderate, 2 high)
+```
+
+`image-size` (2 high) lewat `metro` **tidak punya patch** (`Patched versions:
+<0.0.0`). Angkanya tidak akan turun sendiri. Mencabut `|| true` hari ini berarti
+setiap push dan PR gagal, selamanya. Pion benar.
+
+### Fakta 2: mempertahankan `|| true` TIDAK membuat "hanya temuan baru yang gagal"
+
+Klaim ini perlu diuji, dan hasilnya negatif. `|| true` membuat perintah itu
+**tidak pernah gagal** — untuk temuan lama maupun baru. Tidak ada mekanisme
+pembeda di dalamnya. Menulis komentar yang menyatakan sebaliknya berarti
+mendokumentasikan keyakinan yang keliru.
+
+### Fakta 3: `--ignore-unfixable` dan `ignoreCves` juga mematikan gerbang
+
+pnpm 10.33.2. Diuji di proyek bersih berisi `minimist@0.0.8` (advisory KRITIS):
+
+| Perintah | Hasil |
+|---|---|
+| `pnpm audit --audit-level moderate` | EXIT=1 — 2 temuan (1 sedang, 1 kritis) |
+| `... --ignore-unfixable` | EXIT=0 — kritisnya ditelan |
+| `... --ignore CVE-2019-10744` (CVE tak terkait) | EXIT=0 — kritisnya ikut hilang |
+| `pnpm audit --audit-level moderate` lagi | EXIT=1 — 2 temuan |
+
+Baris ketiga yang menentukan: mengabaikan satu CVE yang **tidak ada hubungannya**
+saja sudah membuat seluruh audit keluar 0. Jadi `ignoreCves` bukan penyaring
+sempit — ia mematikan gerbang. Ini cacat pnpm, bukan salah konfigurasi.
+
+**Kesimpulan: ketiga-tiganya — `|| true`, `--ignore-unfixable`, `ignoreCves` —
+mematikan alarm sepenuhnya.** Tidak satu pun bisa dipakai sebagai alarm yang
+berbunyi hanya untuk temuan baru.
+
+### Efek samping yang saya timbulkan, sudah dibersihkan
+
+Menjalankan `--ignore-unfixable` membuat pnpm **menulis sendiri** blok
+`auditConfig.ignoreCves` ke `pnpm-workspace.yaml`. Tanpa sengaja saya sempat
+meninggalkan 4 entri abaikan di berkas konfigurasi yang ikut ter-commit.
+
+Blok itu sudah dihapus; audit kembali melapor "8 vulnerabilities found" tanpa
+tanda "(2 ignored)". Perubahan lain di berkas itu (`allowBuilds` dan deretan
+`overrides`) adalah pekerjaan Pion dan tidak disentuh.
+
+### Jalan ketiga: gerbang basis-banding milik sendiri
+
+Karena pnpm tidak bisa diminta "gagal hanya untuk yang baru", perbandingannya
+harus kita pegang sendiri. Sebuah skrip kecil:
+
+1. jalankan `pnpm audit --json`,
+2. kumpulkan id advisory-nya (GHSA/CVE),
+3. bandingkan dengan berkas basis yang ikut ter-commit,
+4. keluar 1 **hanya** bila ada id baru yang belum ada di basis,
+5. keluar 1 juga bila ada id di basis yang sudah tidak muncul, supaya basis
+   tidak menumpuk sampah.
+
+Hasilnya: 8 temuan lama tidak menggagalkan CI, tetapi temuan kesembilan yang
+muncul besok menggagalkannya. Persis yang diinginkan, dan bisa diuji — beda
+dengan `|| true` yang tidak bisa diuji apa-apa.
+
+### Urutan yang disarankan
+
+1. Bereskan yang bisa dibereskan. `uuid` paling penting karena jalurnya lewat
+   `firebase-admin` di **produksi**, bukan sekadar alat dev.
+2. Pasang gerbang basis-banding sebagai pengganti `|| true`.
+3. Perbarui komentar `security.yml:89-90` agar menyebut keadaan nyata: 8 temuan,
+   2 tanpa patch, dan bahwa gerbangnya memakai basis, bukan `|| true`.
+4. Setelah `image-size` mendapat patch, hapus entri basisnya.

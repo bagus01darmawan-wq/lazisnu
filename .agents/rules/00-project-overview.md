@@ -91,10 +91,9 @@ Officer opens app
 - **Staging**: auto-deploy dari push main (`docker-compose.staging.yml`, port 4000/4001)
 - **Production**: deploy via tag `v*` (docker-compose.yml, port 80/443)
 
-**Mobile build profiles** (`eas.json`):
-- `development`: API → `http://10.0.2.2:3001`
-- `preview`: API → `https://staging-api.lazisnu.site`
-- `production`: API → `https://api.lazisnu.site`
+**Mobile build** (runner GitHub Actions — EAS dihapus 2026-09-02):
+- Tag `v*` → `release.yml`: matriks 3 APK (arm64-v8a, armeabi-v7a, universal) → R2 `apk.lazisnu.site`
+- API origin: fallback `https://api.lazisnu.site` (`apps/mobile/src/services/api.ts`); override lokal via env `API_URL` (emulator AVD: `http://10.0.2.2:3001`)
 
 ## User Roles
 

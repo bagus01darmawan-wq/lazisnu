@@ -46,14 +46,14 @@ export function getAuthStorage(): MMKV {
 }
 
 const getApiOrigin = (): string => {
-  // API_URL di-inject oleh EAS Build per profile (eas.json).
-  // development: http://10.0.2.2:3001
-  // preview:     https://staging-api.lazisnu.site
+  // API_URL di-inline saat bundling via
+  // babel-plugin-transform-inline-environment-variables (set di .env).
+  // development: http://10.0.2.2:3001 (backend lokal, dari emulator AVD)
   // production:  https://api.lazisnu.site
   if (process.env.API_URL) {
     return process.env.API_URL;
   }
-  // Fallback: React Native CLI tanpa EAS (HP fisik & emulator).
+  // Fallback: bundle tanpa API_URL ter-inline (HP fisik & emulator).
   // 10.0.2.2 hanya valid di emulator AVD — di HP fisik menyebabkan
   // kegagalan koneksi yang keliru dilaporkan "tidak ada koneksi internet".
   // Debug mengikuti API produksi agar perilaku = release.

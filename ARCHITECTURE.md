@@ -35,14 +35,16 @@ Aplikasi petugas dirancang untuk bekerja di area dengan koneksi internet yang ti
 3. **Exponential Backoff:** Jika gagal (server down atau sinyal lemah), sistem akan mencoba kembali dengan jeda waktu yang meningkat secara eksponensial (1s, 2s, 4s, dst) hingga maksimal 3 kali percobaan per sesi.
 4. **Deduplication:** Server menggunakan `offline_id` untuk memastikan tidak ada data ganda jika terjadi kegagalan koneksi di tengah proses pengiriman.
 
-## 3. Distribusi Aplikasi & Update (EAS)
+## 3. Distribusi Aplikasi & Update
 
-Sistem menggunakan **Expo EAS Update** untuk pengiriman pembaruan Over-The-Air (OTA).
+Pembaruan aplikasi disebarkan lewat mekanisme **update-in-app**: aplikasi membandingkan
+`versionCode` APK-nya dengan endpoint publik `GET /v1/mobile/version`, lalu menampilkan
+modal pembaruan dan mengunduh APK per-ABI dari `apk.lazisnu.site` (Cloudflare R2).
 
 ### Konfigurasi:
-- `CHANNEL`: Menentukan target rilis (misal: `staging`, `production`).
-- `RUNTIME_VERSION`: Memastikan kecocokan antara kode JavaScript dan kode native aplikasi.
-- Migrasi dari App Center/CodePush dilakukan sepenuhnya ke Expo EAS untuk menjamin keberlangsungan rilis aplikasi Android.
+- `versionName`/`versionCode` ditulis literal di `apps/mobile/android/app/build.gradle` (deterministik, tanpa auto-increment).
+- Rilis: push tag `v*` → `.github/workflows/release.yml` (Gradle di runner GitHub, matriks 3 APK: arm64-v8a, armeabi-v7a, universal) → unggah R2 → dispatch `ci.yml` untuk deploy blue-green.
+- EAS/OTA (Expo EAS Update) sudah tidak dipakai — dibongkar 2026-09-02.
 
 ## 4. Keamanan API
 
