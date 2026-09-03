@@ -23,7 +23,6 @@
   },
   "dependencies": {
     "@lazisnu/shared-types": "file:../../packages/shared-types",
-    "@react-native-community/blur": "^4.4.1",
     "@react-native-community/netinfo": "^11.5.2",
     "@react-native-firebase/app": "^24.1.1",
     "@react-native-firebase/crashlytics": "^24.1.1",
