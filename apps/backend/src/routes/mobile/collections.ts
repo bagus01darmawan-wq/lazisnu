@@ -11,7 +11,7 @@ import { Errors } from '../../utils/errorCatalog';
 import { correctCollection } from '../../services/collectionCorrectionService';
 
 import { validateAssignmentForSubmit, submitCollection, getLatestCollectionCondition } from '../../services/collectionSubmission';
-import { getErrorMessage, isHttpRouteError, isPostgresError } from '../../utils/error-guards';
+import { getErrorMessage, getPostgresError, isHttpRouteError } from '../../utils/error-guards';
 
 type MobileHistoryCollection = {
   id: string;
@@ -131,7 +131,7 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
       if (isAppError(error)) {
         return sendError(reply, error.statusCode, error.code, error.message);
       }
-      if (isPostgresError(error) && error.code === '23505') {
+      if (getPostgresError(error)?.code === '23505') {
         return sendSuccess(reply, {
           sync_status: 'ALREADY_SYNCED',
           message: 'Data sudah pernah di-submit',

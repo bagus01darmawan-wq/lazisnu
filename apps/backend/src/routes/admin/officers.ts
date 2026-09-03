@@ -11,7 +11,7 @@ import { getOfficerDetailWithStats } from '../../services/officerService';
 import { z } from 'zod';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import { isPostgresError } from '../../utils/error-guards';
+import { getPostgresError } from '../../utils/error-guards';
 
 const rantingOrKec = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
 
@@ -164,8 +164,10 @@ export async function officersRoutes(fastify: FastifyInstance) {
       }
       
       // Handle Unique Constraint Violations (Postgres 23505)
-      if (isPostgresError(error) && error.code === '23505') {
-        const detail = error.detail || '';
+      // drizzle membungkus error driver dalam DrizzleQueryError, jadi unwrap dulu via getPostgresError
+      const pgError = getPostgresError(error);
+      if (pgError && pgError.code === '23505') {
+        const detail = pgError.detail || '';
         let message = 'Data petugas sudah terdaftar';
         
         if (detail.includes('phone')) {
