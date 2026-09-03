@@ -203,10 +203,14 @@ export default function CansPage() {
 
   const onSubmit = async (values: CanFormValues) => {
     try {
+      // ADMIN_RANTING tidak boleh pindah ranting: kunci ke branch asal.
+      const payloadBranchId = user?.role === 'ADMIN_RANTING' && editingCan
+        ? editingCan.branch_id
+        : values.branch_id;
       const payload = {
         owner_name: values.owner_name,
         owner_whatsapp: values.owner_whatsapp,
-        branch_id: values.branch_id,
+        branch_id: payloadBranchId,
         dukuh_id: values.dukuh_id,
         rt: values.rt,
         rw: values.rw,
@@ -214,12 +218,25 @@ export default function CansPage() {
       };
 
       if (editingCan) {
+        const isBranchMove = payloadBranchId !== editingCan.branch_id;
         const response = await api.put(`/admin/cans/${editingCan.id}`, payload) as unknown as ApiResponse<CanExtended>;
         if (response.success) {
+          const movedBranchName = isBranchMove
+            ? branches.find((b) => b.id === payloadBranchId)?.name
+            : null;
           setIsModalOpen(false);
           setEditingCan(null);
-          await fetchData();
-          toast.success('Data kaleng berhasil diperbarui');
+          if (isBranchMove && branchFilter) {
+            // Datanya sudah pindah ranting, filter lama tidak akan menampilkannya.
+            // Reset filter agar hasilnya terlihat, useEffect akan refetch otomatis.
+            setBranchFilter('');
+            setCurrentPage(1);
+          } else {
+            await fetchData();
+          }
+          toast.success(movedBranchName
+            ? `Data kaleng berhasil dipindahkan ke ${cleanBranchName(movedBranchName)}`
+            : 'Data kaleng berhasil diperbarui');
         }
       } else {
         const response = await api.post('/admin/cans', payload) as unknown as ApiResponse<CanExtended>;
