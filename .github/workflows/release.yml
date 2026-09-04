@@ -220,7 +220,7 @@ jobs:
           sha256sum "$DEST"
 
       - name: Upload artefak build ${{ matrix.target }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-apk-${{ needs.prepare.outputs.version }}-${{ matrix.target }}
           path: apps/mobile/android/app/build/outputs/apk/release/lazisnu-${{ needs.prepare.outputs.version }}${{ matrix.file_suffix }}.apk
