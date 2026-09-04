@@ -372,9 +372,15 @@ jobs:
         working-directory: apps/mobile/android
         run: ./gradlew assembleDebug --no-daemon
 
-  # ─── Build & push image ke GHCR ──────────────────────────────────────────
+  # ─── Build & push image ke GHCR (matrix paralel) ─────────────────────────
+  # Tiga image dibangun di runner terpisah secara paralel; dinding ≈ image
+  # terlambat (~3 mnt) bukan jumlah ketiganya (~6 mnt). fail-fast default
+  # (true) dipertahankan supaya gagal satu = setop, mirip sekuensial dulu.
+  # Scope cache GHA dipisah per image agar tulisan paralel tidak saling
+  # timpa; baris `type=gha` polos hanya baca cache lama era pra-matrix
+  # (transisi hangat, boleh dihapus setelah beberapa minggu).
   build-image:
-    name: Build & push Docker images
+    name: Build & push Docker images (${{ matrix.name }})
     needs: [changes, verify, test-backend, test-mobile, test-web]
     # always() + !cancelled() supaya job ini tetap dievaluasi meski job test
     # di-skip (mis. hanya mobile yang berubah) — tanpa ini job ikut ter-skip.
@@ -389,6 +395,30 @@ jobs:
         (needs.changes.outputs.backend == 'true' ||
          needs.changes.outputs.web    == 'true' ||
          needs.changes.outputs.infra  == 'true')))
+    strategy:
+      matrix:
+        include:
+          - name: backend
+            file: apps/backend/Dockerfile
+            scope: backend
+            tags: |
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:latest
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:${{ github.sha }}
+          - name: web-prod
+            file: apps/web/Dockerfile
+            scope: web-prod
+            build_args: |
+              NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'https://api.lazisnu.site' }}
+            tags: |
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:latest
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:${{ github.sha }}
+          - name: web-staging
+            file: apps/web/Dockerfile
+            scope: web-staging
+            build_args: |
+              NEXT_PUBLIC_API_URL=https://staging-api.lazisnu.site
+            tags: |
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:staging
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -406,44 +436,18 @@ jobs:
 
       - uses: docker/setup-buildx-action@v4
 
-      - name: Build & push backend
+      - name: Build & push ${{ matrix.name }}
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: apps/backend/Dockerfile
+          file: ${{ matrix.file }}
           push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build & push web (production)
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: apps/web/Dockerfile
-          push: true
-          build-args: |
-            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'https://api.lazisnu.site' }}
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build & push web (staging)
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: apps/web/Dockerfile
-          push: true
-          build-args: |
-            NEXT_PUBLIC_API_URL=https://staging-api.lazisnu.site
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:staging
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ matrix.tags }}
+          build-args: ${{ matrix.build_args }}
+          cache-from: |
+            type=gha,scope=${{ matrix.scope }}
+            type=gha
+          cache-to: type=gha,mode=max,scope=${{ matrix.scope }}
 
   # ─── Deploy PRODUCTION (dispatch release pada ref tag v*) — blue-green ───
   deploy:
