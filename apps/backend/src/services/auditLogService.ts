@@ -16,7 +16,11 @@ export interface AuditLogInput {
 
 export function sanitizeAuditData(data: unknown): unknown {
   if (data === null || data === undefined) return data;
-  
+
+  // Kolom drizzle ber-mode 'bigint' (mis. cans.total_collected, collections.nominal)
+  // menghasilkan JS BigInt yang membuat JSON.stringify meledak saat insert ke jsonb.
+  if (typeof data === 'bigint') return Number(data);
+
   if (Array.isArray(data)) {
     return data.map(sanitizeAuditData);
   }

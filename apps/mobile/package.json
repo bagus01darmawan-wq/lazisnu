@@ -19,12 +19,10 @@
     "typecheck": "tsc --noEmit",
     "build:android": "react-native build-android --mode release",
     "build:debug": "react-native build-android --mode debug",
-    "postinstall": "patch-package",
-    "eas-build-post-install": "pnpm --filter @lazisnu/shared-types build"
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@lazisnu/shared-types": "file:../../packages/shared-types",
-    "@react-native-community/blur": "^4.4.1",
     "@react-native-community/netinfo": "^11.5.2",
     "@react-native-firebase/app": "^24.1.1",
     "@react-native-firebase/crashlytics": "^24.1.1",
@@ -66,7 +64,6 @@
     "@types/react-test-renderer": "^19.1.0",
     "babel-jest": "^29.7.0",
     "babel-plugin-transform-inline-environment-variables": "^0.4.4",
-    "eas-cli": "^22.2.0",
     "eslint": "^8.57.1",
     "eslint-plugin-eslint-comments": "^3.2.0",
     "eslint-plugin-ft-flow": "^3.0.11",

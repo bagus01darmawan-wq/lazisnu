@@ -81,6 +81,9 @@ export async function cansRoutes(fastify: FastifyInstance) {
       };
       return sendSuccess(reply, can);
     } catch (error) {
+       if (error instanceof z.ZodError) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+      }
        if (error instanceof AppError) {
         return sendError(reply, error.statusCode, error.code, error.message);
       }

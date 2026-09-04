@@ -447,7 +447,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Deploy ke VM via SSH (blue-green)
-        uses: appleboy/ssh-action@v1.2.2
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ env.VM_HOST }}
           username: ${{ env.VM_USER }}
@@ -581,7 +581,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Deploy staging ke VM via SSH
-        uses: appleboy/ssh-action@v1.2.2
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ env.VM_HOST }}
           username: ${{ env.VM_USER }}

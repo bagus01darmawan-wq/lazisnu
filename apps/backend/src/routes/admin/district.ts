@@ -6,7 +6,7 @@ import { alias } from 'drizzle-orm/pg-core';
 import { authorize } from '../../middleware/auth';
 import { assertBranchAccess, assertDukuhAccess } from '../../middleware/ownership';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
-import { isPostgresError } from '../../utils/error-guards';
+import { getPostgresError } from '../../utils/error-guards';
 import { z } from 'zod';
 
 const branchSchema = z.object({
@@ -59,7 +59,7 @@ export async function districtRoutes(fastify: FastifyInstance) {
       if (error instanceof z.ZodError) {
         return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
       }
-      if (isPostgresError(error) && error.code === '23505') {
+      if (getPostgresError(error)?.code === '23505') {
         return sendError(reply, 400, 'DUPLICATE_CODE', 'Kode ranting sudah digunakan');
       }
       return sendInternalError(reply, error, fastify.log);
