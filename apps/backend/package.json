@@ -25,8 +25,8 @@
     "db:check-orphans": "node scripts/check-migration-orphans.js"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1034.0",
-    "@aws-sdk/s3-request-presigner": "^3.1034.0",
+    "@aws-sdk/client-s3": "^3.1123.0",
+    "@aws-sdk/s3-request-presigner": "^3.1123.0",
     "@fastify/cors": "^11.3.0",
     "@fastify/jwt": "^10.2.2",
     "@fastify/rate-limit": "^11.2.0",
