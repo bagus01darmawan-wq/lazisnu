@@ -401,24 +401,28 @@ jobs:
           - name: backend
             file: apps/backend/Dockerfile
             scope: backend
+            # CATATAN: konteks `env` tidak tersedia di strategy.matrix
+            # (hanya github/inputs/needs/vars). `ghcr.io` = nilai env.REGISTRY
+            # dan trailing path = IMAGE_NAME_*; hasilnya identik dengan versi
+            # sekuensial. Jangan ganti REGISTRY tanpa ubah sini.
             tags: |
-              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:latest
-              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:${{ github.sha }}
+              ghcr.io/${{ github.repository }}/backend:latest
+              ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
           - name: web-prod
             file: apps/web/Dockerfile
             scope: web-prod
             build_args: |
               NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'https://api.lazisnu.site' }}
             tags: |
-              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:latest
-              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:${{ github.sha }}
+              ghcr.io/${{ github.repository }}/web:latest
+              ghcr.io/${{ github.repository }}/web:${{ github.sha }}
           - name: web-staging
             file: apps/web/Dockerfile
             scope: web-staging
             build_args: |
               NEXT_PUBLIC_API_URL=https://staging-api.lazisnu.site
             tags: |
-              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:staging
+              ghcr.io/${{ github.repository }}/web:staging
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
