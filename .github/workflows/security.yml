@@ -9,8 +9,12 @@ name: Security
 on:
   pull_request:
     branches: [main, master]
+    # Sama seperti ci.yml: markdown tidak bisa menambah kerentanan atau
+    # mengubah hasil CodeQL/audit, jadi PR docs-only skip workflow ini.
+    paths-ignore: ['docs/**', '*.md']
   push:
     branches: [main, master]
+    paths-ignore: ['docs/**', '*.md']
   schedule:
     # Setiap Senin 03:00 UTC (10:00 WIB)
     - cron: '0 3 * * 1'
