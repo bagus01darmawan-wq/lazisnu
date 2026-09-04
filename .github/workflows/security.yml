@@ -4,7 +4,8 @@ name: Security
 # Tiga lapis:
 #   1. Dependency review  → setiap PR, blokir dependensi baru ber-vulnerability/license buruk.
 #   2. CodeQL             → analisis statis JS/TS (injection, XSS, path traversal, dll).
-#   3. pnpm audit         → pemindaian terjadwal + manual.
+#   3. pnpm audit         → terjadwal + manual selalu jalan; di PR hanya
+#                             jalan bila ada perubahan dependensi (hemat ~4 mnt).
 
 on:
   pull_request:
@@ -28,6 +29,32 @@ permissions:
   contents: read
 
 jobs:
+  # Hasil audit hanya fungsi dari pohon dependensi: PR tanpa perubahan dep
+  # pasti identik dengan main, jadi scan 4 mnt-nya di-skip. Job ini HANYA
+  # jalan di PR (dipakai gerbang audit di bawah); schedule/push/dispatch
+  # tidak butuh filter dan auditnya selalu jalan.
+  changes:
+    name: Deteksi perubahan dependensi
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      deps: ${{ steps.filter.outputs.deps }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - id: filter
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            deps:
+              - 'pnpm-lock.yaml'
+              - '**/package.json'
+              - 'pnpm-workspace.yaml'
+              - 'security/**'
+
   dependency-review:
     name: Dependency review
     if: github.event_name == 'pull_request'
@@ -67,6 +94,14 @@ jobs:
 
   audit:
     name: pnpm audit
+    needs: [changes]
+    # always() wajib: job changes di-skip pada non-PR, dan tanpa ini audit
+    # ikut ter-skip (jadwal Senin ikut mati — justru backstop terpenting).
+    # `!= 'false'` (bukan `== 'true'`) sengaja fail-closed: bila filter gagal
+    # dan output kosong, audit TETAP jalan daripada lolos diam-diam.
+    if: >-
+      always() && !cancelled() &&
+      (github.event_name != 'pull_request' || needs.changes.outputs.deps != 'false')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
