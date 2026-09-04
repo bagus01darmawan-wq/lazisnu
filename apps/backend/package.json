@@ -34,7 +34,7 @@
     "@fastify/swagger-ui": "^6.1.1",
     "@lazisnu/shared-types": "file:../../packages/shared-types",
     "bcryptjs": "^3.0.3",
-    "bullmq": "^5.74.1",
+    "bullmq": "^6.3.3",
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.12.1",
