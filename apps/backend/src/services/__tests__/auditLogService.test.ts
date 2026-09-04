@@ -63,6 +63,43 @@ describe('auditLogService — sanitizeAuditData', () => {
   });
 });
 
+describe('auditLogService — sanitizeAuditData BigInt (regression cans.totalCollected)', () => {
+  it('konversi BigInt ke Number agar aman di-JSON.stringify', () => {
+    const raw = { totalCollected: BigInt(0), ownerName: 'Budi' };
+
+    const sanitized = sanitizeAuditData(raw) as any;
+
+    expect(sanitized.totalCollected).toBe(0);
+    expect(typeof sanitized.totalCollected).toBe('number');
+  });
+
+  it('konversi BigInt secara rekursif di nested object & array', () => {
+    const raw = {
+      can: { totalCollected: BigInt(150000), collectionCount: 2 },
+      history: [{ nominal: BigInt(50000) }, { nominal: BigInt(100000) }]
+    };
+
+    const sanitized = sanitizeAuditData(raw) as any;
+
+    expect(sanitized.can.totalCollected).toBe(150000);
+    expect(sanitized.history[0].nominal).toBe(50000);
+    expect(sanitized.history[1].nominal).toBe(100000);
+  });
+
+  it('hasil sanitasi harus bisa di-JSON.stringify tanpa error (gejala produksi: "Do not know how to serialize a BigInt")', () => {
+    const canRow = {
+      id: '198d07b8-342b-4392-a1d5-bdd63906f4b6',
+      ownerName: 'Helmy Mubarok1',
+      totalCollected: BigInt(0),
+      isActive: true,
+    };
+
+    const sanitized = sanitizeAuditData({ newData: canRow, oldData: { ...canRow } });
+
+    expect(() => JSON.stringify(sanitized)).not.toThrow();
+  });
+});
+
 describe('auditLogService — insertActivityLog', () => {
   beforeEach(() => {
     jest.clearAllMocks();

@@ -36,6 +36,21 @@ export function isPostgresError(error: unknown): error is PostgresErrorLike {
     typeof (error as { code?: unknown }).code === 'string';
 }
 
+/**
+ * drizzle-orm (>= 0.44) membungkus error driver database dalam DrizzleQueryError,
+ * sehingga kode error Postgres (mis. 23505) pindah ke properti `cause` dan tidak
+ * lagi terbaca langsung dari objek error. Helper ini mengembalikan error Postgres
+ * asli — baik yang mentah maupun yang terbungkus — atau null bila bukan error PG.
+ */
+export function getPostgresError(error: unknown): PostgresErrorLike | null {
+  if (isPostgresError(error)) return error;
+  if (typeof error === 'object' && error !== null && 'cause' in error) {
+    const cause = (error as { cause?: unknown }).cause;
+    if (isPostgresError(cause)) return cause;
+  }
+  return null;
+}
+
 export function isHttpRouteError(error: unknown): error is HttpRouteErrorLike {
   return typeof error === 'object' &&
     error !== null &&

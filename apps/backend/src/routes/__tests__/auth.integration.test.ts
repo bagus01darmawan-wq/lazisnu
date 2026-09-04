@@ -423,8 +423,8 @@ describe('Session Management (04-F1)', () => {
   let sessionToken: string | null = null;
   let sessionRefresh: string | null = null;
 
-  // Impor jwt untuk decode token
-  const jwt = require('jsonwebtoken');
+  // Decode token via @fastify/jwt (sudah terdaftar di app, lihat buildApp())
+  // — tidak lagi pakai `jsonwebtoken` (tidak dideklarasikan di deps, cacat pra-ada).
   const { revokeDeviceSession, revokeAllUserSessions } = require('../../services/tokenService');
 
   beforeEach(async () => {
@@ -528,7 +528,7 @@ describe('Session Management (04-F1)', () => {
     const tokenB = loginB.body.data.refresh_token;
 
     // ── 2. Decode token, revoke device A via Redis ──
-    const decodedA: any = jwt.decode(tokenA);
+    const decodedA: any = app.jwt.decode(tokenA);
     const deviceIdA = decodedA.did || decodedA.jti;
     await revokeDeviceSession(decodedA.userId, deviceIdA);
 
@@ -578,7 +578,7 @@ describe('Session Management (04-F1)', () => {
     const tokenB = loginB.body.data.refresh_token;
 
     // Device B adalah "current" yang dikecualikan
-    const decodedB: any = jwt.decode(tokenB);
+    const decodedB: any = app.jwt.decode(tokenB);
     const userId = decodedB.userId;
     const exceptDeviceId = decodedB.did || decodedB.jti;
 

@@ -5,13 +5,13 @@ RUN corepack enable && corepack prepare pnpm@10 --activate
 
 FROM base AS build
 WORKDIR /app
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/backend/package.json apps/backend/
-COPY packages/shared-types/package.json packages/shared-types/
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+# Salin SELURUH source + manifest dulu, lalu install SEKALIGUS.
+# (Pola pnpm-in-Docker kanonik: hindari COPY . . menimpa node_modules
+#  hasil pnpm install, yang memicu "Cannot find module typescript/bin/tsc".)
 COPY . .
-RUN node packages/shared-types/node_modules/typescript/bin/tsc -p packages/shared-types/tsconfig.json 2>/dev/null || true
-RUN node apps/backend/node_modules/typescript/bin/tsc -p apps/backend/tsconfig.json
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+RUN pnpm --filter @lazisnu/shared-types build || true
+RUN pnpm --filter lazisnu-backend build
 
 FROM base AS runner
 WORKDIR /app

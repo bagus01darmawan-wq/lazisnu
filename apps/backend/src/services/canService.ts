@@ -21,6 +21,7 @@ export interface CreateCanInput {
 }
 
 export interface UpdateCanInput {
+  branch_id?: string | null;
   owner_name?: string | null;
   owner_whatsapp?: string | null;
   owner_phone?: string | null;
@@ -218,20 +219,46 @@ export async function updateCan(canId: string, body: UpdateCanInput, ctx: Access
 
   await checkAccess(ctx, existing, 'Kaleng bukan milik ranting/kecamatan Anda');
 
+  // Branch move: hanya ADMIN_KECAMATAN yang boleh pindah ranting dalam satu kecamatan.
+  // Nilai '' dari preprocess zod sudah menjadi undefined, null/undefined berarti tidak pindah.
+  const requestedBranchId = (typeof body.branch_id === 'string' && body.branch_id !== '')
+    ? body.branch_id
+    : undefined;
+  let newBranchId = existing.branchId;
+  const isBranchMove = requestedBranchId !== undefined && requestedBranchId !== existing.branchId;
+  if (isBranchMove) {
+    if (ctx.role === 'ADMIN_RANTING') {
+      throw Errors.FORBIDDEN('Ranting tidak dapat memindahkan kaleng ke ranting lain');
+    }
+    const targetBranch = await db.query.branches.findFirst({ where: eq(schema.branches.id, requestedBranchId as string) });
+    if (!targetBranch) throw new AppError('NOT_FOUND', 'Ranting tujuan tidak ditemukan', 404);
+    if (ctx.role === 'ADMIN_KECAMATAN' && targetBranch.districtId !== ctx.districtId) {
+      throw Errors.FORBIDDEN('Ranting tujuan bukan dalam kecamatan Anda');
+    }
+    newBranchId = targetBranch.id;
+  }
+
   let newDukuhName = existing.dukuh;
   let newDukuhId = existing.dukuhId;
   if (body.dukuh_id !== undefined) {
-    if (body.dukuh_id === '') {
+    if (body.dukuh_id === '' || body.dukuh_id === null) {
       newDukuhId = null;
       newDukuhName = null;
     } else {
-      newDukuhId = body.dukuh_id;
       const dukuhRecord = await db.query.dukuhs.findFirst({ where: eq(schema.dukuhs.id, body.dukuh_id as string) });
-      if (dukuhRecord) newDukuhName = dukuhRecord.name;
+      if (!dukuhRecord) throw Errors.VALIDATION_ERROR('Dukuh tidak ditemukan');
+      if (dukuhRecord.branchId !== newBranchId) throw Errors.VALIDATION_ERROR('Dukuh bukan milik ranting tujuan');
+      newDukuhId = dukuhRecord.id;
+      newDukuhName = dukuhRecord.name;
     }
+  } else if (isBranchMove) {
+    // Pindah ranting tanpa dukuh baru: jangan gantung ke dukuh ranting lama.
+    newDukuhId = null;
+    newDukuhName = null;
   }
 
   const updated = await db.update(schema.cans).set({
+    branchId: newBranchId,
     ownerName: body.owner_name ?? existing.ownerName,
     ownerPhone: body.owner_whatsapp || body.owner_phone || existing.ownerPhone,
     ownerAddress: body.owner_address !== undefined ? body.owner_address : existing.ownerAddress,
