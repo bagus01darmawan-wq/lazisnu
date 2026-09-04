@@ -114,6 +114,11 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v6
+        with:
+          # Pin eksak = packageManager di root package.json (pnpm@10.33.2).
+          # Tanpa ini action menginstal pnpm latest (v11) lalu downgrade
+          # diri (~3 mnt di runner dingin). Upgrade pnpm = ubah sini + packageManager.
+          version: 10.33.2
 
       - uses: actions/setup-node@v7
         with:
@@ -197,6 +202,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
+        with:
+          # Pin eksak = packageManager di root package.json (pnpm@10.33.2).
+          # Tanpa ini action menginstal pnpm latest (v11) lalu downgrade
+          # diri (~3 mnt di runner dingin). Upgrade pnpm = ubah sini + packageManager.
+          version: 10.33.2
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -238,6 +248,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
+        with:
+          # Pin eksak = packageManager di root package.json (pnpm@10.33.2).
+          # Tanpa ini action menginstal pnpm latest (v11) lalu downgrade
+          # diri (~3 mnt di runner dingin). Upgrade pnpm = ubah sini + packageManager.
+          version: 10.33.2
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -273,6 +288,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
+        with:
+          # Pin eksak = packageManager di root package.json (pnpm@10.33.2).
+          # Tanpa ini action menginstal pnpm latest (v11) lalu downgrade
+          # diri (~3 mnt di runner dingin). Upgrade pnpm = ubah sini + packageManager.
+          version: 10.33.2
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -316,6 +336,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
+        with:
+          # Pin eksak = packageManager di root package.json (pnpm@10.33.2).
+          # Tanpa ini action menginstal pnpm latest (v11) lalu downgrade
+          # diri (~3 mnt di runner dingin). Upgrade pnpm = ubah sini + packageManager.
+          version: 10.33.2
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}

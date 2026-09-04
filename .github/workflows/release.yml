@@ -118,6 +118,10 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
+        with:
+          # Pin eksak = packageManager di root package.json (pnpm@10.33.2).
+          # Tanpa ini action menginstal pnpm latest (v11) lalu downgrade diri.
+          version: 10.33.2
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
