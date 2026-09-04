@@ -61,7 +61,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          # Dangkal 100, bukan 0: paths-filter hanya butuh merge-base PR
+          # (PR di sini divergen <10 commit). Gagal berisik bila kurang —
+          # bukan diam-diam salah deteksi. Hemat tumbuh seiring repo menua.
+          fetch-depth: 100
 
       - id: filter
         if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'

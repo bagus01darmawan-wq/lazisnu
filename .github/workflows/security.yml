@@ -43,7 +43,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          # Sama seperti job changes di ci.yml: dangkal 100 cukup untuk
+          # merge-base PR; gagal berisik (bukan salah diam-diam) bila kurang.
+          fetch-depth: 100
 
       - id: filter
         uses: dorny/paths-filter@v4
