@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { eq, and, asc, inArray, sql } from 'drizzle-orm';
+import { eq, and, asc, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { batchCollectionSchema } from './schemas';

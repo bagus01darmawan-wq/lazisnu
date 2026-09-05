@@ -4,7 +4,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { eq, and, asc, gte, lte, inArray, sql } from 'drizzle-orm';
+import { eq, and, gte, lte, inArray, sql } from 'drizzle-orm';
 import { config } from '../config/env';
 import { getLatestCollectionCondition } from '../services/collectionSubmission';
 import { findCansWithoutAssignment, buildFirstOfficerAssignments, insertAssignments } from '../services/assignmentGenerator';

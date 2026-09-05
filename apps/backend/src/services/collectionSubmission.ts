@@ -2,8 +2,7 @@ import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { eq, and, sql, ExtractTablesWithRelations } from 'drizzle-orm';
 import { alias, PgTransaction } from 'drizzle-orm/pg-core';
-import { AppError } from '../utils/AppError';
-import { ErrorCode, Errors } from '../utils/errorCatalog';
+import { Errors } from '../utils/errorCatalog';
 
 type Transaction = PgTransaction<
   any,

@@ -203,14 +203,8 @@ describe('TC-QR-02: Scan QR bukan penugasan — tidak bocor data owner', () => {
 
 describe('QR Scan — various officer scenarios', () => {
   it('assignment dengan officerId berbeda tetap tidak bocor data', () => {
-    const differentOfficerAssignment: AssignmentData = {
-      id: 'assignment-other',
-      status: 'ACTIVE',
-      officerId: 'other-officer',
-    };
-
-    // Simulasikan: DB query assignment with where officerId = currentOfficer
-    // → jika tidak cocok, activeAssignment = null
+    // Simulasikan: assignment milik officer lain → query route tidak cocok
+    // → activeAssignment = null
     const activeAssignment = null;
 
     const result = buildScanResponse(mockCan, activeAssignment, null);
@@ -221,12 +215,6 @@ describe('QR Scan — various officer scenarios', () => {
 
   it('assignment non-ACTIVE dianggap tidak aktif', () => {
     // Assignment COMPLETED/POSTPONED/REASSIGNED → bukan active
-    const completedAssignment: AssignmentData = {
-      id: 'assignment-done',
-      status: 'COMPLETED',
-      officerId: 'officer-789',
-    };
-
     // Route hanya query assignment dengan status = 'ACTIVE'
     // Kalau tidak ketemu → QR_NOT_ASSIGNED
     const result = buildScanResponse(mockCan, null, null);

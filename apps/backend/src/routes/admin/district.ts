@@ -88,7 +88,6 @@ export async function districtRoutes(fastify: FastifyInstance) {
       if (!updatedBranch) return sendError(reply, 404, 'NOT_FOUND', 'Ranting tidak ditemukan');
       
       // Set audit context
-      const existing = { name: updatedBranch.name, code: updatedBranch.code, districtId: updatedBranch.districtId }; // simplified since we don't fetch before update here to save query
       request.auditContext = {
         oldData: null, // Since we didn't fetch before, we can fetch it first if we want full detail
         newData: updatedBranch

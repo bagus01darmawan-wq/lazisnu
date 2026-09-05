@@ -1,5 +1,5 @@
 import pino from 'pino';
-import { config, isProduction } from './env';
+import { isProduction } from './env';
 
 /**
  * Shared Pino logger — digunakan oleh worker, service, dan kode

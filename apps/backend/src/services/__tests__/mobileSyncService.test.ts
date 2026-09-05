@@ -1,7 +1,7 @@
 import { syncCollectionsBatch } from '../mobileSyncService';
 import { AppError } from '../../utils/AppError';
 import { db } from '../../config/database';
-import { validateAssignmentForSubmit, submitCollection } from '../collectionSubmission';
+import { submitCollection } from '../collectionSubmission';
 
 jest.mock('../../config/database', () => ({
   db: {

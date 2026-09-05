@@ -11,7 +11,7 @@ import { Errors } from '../../utils/errorCatalog';
 import { correctCollection } from '../../services/collectionCorrectionService';
 
 import { validateAssignmentForSubmit, submitCollection, getLatestCollectionCondition } from '../../services/collectionSubmission';
-import { getErrorMessage, getPostgresError, isHttpRouteError } from '../../utils/error-guards';
+import { getPostgresError } from '../../utils/error-guards';
 
 type MobileHistoryCollection = {
   id: string;

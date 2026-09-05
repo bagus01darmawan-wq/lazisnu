@@ -5,8 +5,6 @@ import { sendSuccess, sendError, sendInternalError } from '../utils/response';
 import { getCollectionScope, buildCollectionsQuery, getCollectionsList, getCollectionsExportRows, getResubmitTrackerList } from '../services/collectionQueryService';
 import { getCollectionDetail, getReportSummary, getReportStats } from '../services/collectionReportService';
 import { getBendaharaDashboard } from '../services/dashboardReportService';
-import { db } from '../config/database';
-import * as schema from '../database/schema';
 import { insertActivityLog } from '../services/auditLogService';
 
 export async function bendaharaRoutes(fastify: FastifyInstance) {
