@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { existsSync, writeFileSync, unlinkSync } from 'fs';
+import { existsSync, unlinkSync, openSync, closeSync } from 'fs';
 import { authorize } from '../../middleware/auth';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 
@@ -19,13 +19,18 @@ export async function backupRoutes(fastify: FastifyInstance) {
   });
 
   // POST /admin/backup/start — aktifkan backup (buat flag file)
+  // Flag dibuat atomik O_CREAT|O_EXCL ('wx'): tidak ada jendela TOCTOU
+  // antara existsSync dan tulis (CodeQL js/file-system-race #5).
   fastify.post('/backup/start', { preHandler: [adminOnly] }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      if (existsSync(FLAG_PATH)) {
-        return sendSuccess(reply, { message: 'Backup sudah aktif', active: true });
+      try {
+        closeSync(openSync(FLAG_PATH, 'wx'));
+      } catch (error: any) {
+        if (error?.code === 'EEXIST') {
+          return sendSuccess(reply, { message: 'Backup sudah aktif', active: true });
+        }
+        throw error;
       }
-
-      writeFileSync(FLAG_PATH, '');
       request.auditContext = {
         oldData: null,
         newData: { action: 'backup_started' },

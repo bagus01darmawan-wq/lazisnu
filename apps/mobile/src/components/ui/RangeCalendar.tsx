@@ -86,7 +86,7 @@ export const RangeCalendar: React.FC<RangeCalendarProps> = ({
     }
 
     // Mulai seleksi baru bila belum ada mulai, atau rentang sudah lengkap.
-    if (!startDate || (startDate && endDate)) {
+    if (!startDate || endDate) {
       onChange(tapped, null);
       return;
     }

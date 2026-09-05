@@ -17,11 +17,19 @@
  *   3. apps/backend/src/routes/mobile/mobileRelease.json (version/versionCode/apkUrl)
  */
 import {readFileSync, writeFileSync} from 'node:fs';
-import {execSync} from 'node:child_process';
+import {execFileSync} from 'node:child_process';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+
+// Wrapper git TANPA shell: argumen diteruskan sebagai array (execFileSync),
+// sehingga input (version/tag) tidak pernah di-interpolasi ke string perintah.
+// (CodeQL js/indirect-command-line-injection #6–#9.)
+const git = (args, opts = {}) => {
+  const out = execFileSync('git', args, {cwd: ROOT, ...opts});
+  return out ? out.toString().trim() : '';
+};
 
 // ─── Argumen ────────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -50,14 +58,14 @@ const F = {
 };
 
 // ─── Guard: working tree bersih sebelum publish ─────────────────────────────
-const dirty = execSync('git status --porcelain', {cwd: ROOT}).toString().trim();
+const dirty = git(['status', '--porcelain']);
 if (publish && dirty) {
   console.error('Working tree TIDAK bersih — commit/simpan dulu:\n' + dirty);
   process.exit(1);
 }
 if (publish) {
   const tag = `v${version}`;
-  const exists = execSync(`git tag -l "${tag}"`, {cwd: ROOT}).toString().trim();
+  const exists = git(['tag', '-l', tag]);
   if (exists) {
     console.error(`Tag ${tag} SUDAH ADA — tolak: tag tidak boleh di-force-push/dibuat ulang.`);
     process.exit(1);
@@ -105,14 +113,11 @@ console.log(`  mobileRelease.json → v${version} (vc ${versionCode}) apkUrl = $
 // ─── Publish (commit + push + tag) ──────────────────────────────────────────
 if (publish) {
   const tag = `v${version}`;
-  execSync(`git add -A`, {cwd: ROOT});
-  execSync(
-    `git commit -m "chore(mobile): bump v${version} (versionCode ${versionCode}) — rilis Opsi B"`,
-    {cwd: ROOT}
-  );
-  execSync(`git push origin HEAD`, {cwd: ROOT, stdio: 'inherit'});
-  execSync(`git tag ${tag}`, {cwd: ROOT});
-  execSync(`git push origin ${tag}`, {cwd: ROOT, stdio: 'inherit'});
+  git(['add', '-A']);
+  git(['commit', '-m', `chore(mobile): bump v${version} (versionCode ${versionCode}) — rilis Opsi B`]);
+  git(['push', 'origin', 'HEAD'], {stdio: 'inherit'});
+  git(['tag', tag]);
+  git(['push', 'origin', tag], {stdio: 'inherit'});
   console.log(`✔ Tag ${tag} dibuat & di-push — release.yml membangun 2 APK per-ABI + 1 universal → R2 → deploy.`);
 } else {
   console.log('(dry-run: file sudah diedit, belum di-commit. Ulangi dengan --publish untuk rilis.)');

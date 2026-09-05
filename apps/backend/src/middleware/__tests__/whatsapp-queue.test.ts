@@ -143,36 +143,19 @@ describe('TC-WA-03: WhatsApp Queue — Dead-Letter Queue (DLQ)', () => {
 // ============================================================================
 
 describe('WhatsApp Worker — flow retry', () => {
-  it('1st attempt gagal → retry dengan delay 3s', () => {
-    const attempt = 1;
-    const shouldRetry = attempt < 10;
-    const nextDelay = 3000 * Math.pow(2, attempt - 1);
-
-    expect(shouldRetry).toBe(true);
-    expect(nextDelay).toBe(3000);
-  });
-
-  it('2nd attempt gagal → retry dengan delay 6s', () => {
-    const attempt = 2;
-    const shouldRetry = attempt < 10;
-    const nextDelay = 3000 * Math.pow(2, attempt - 1);
-
-    expect(shouldRetry).toBe(true);
-    expect(nextDelay).toBe(6000);
-  });
-
-  it('10th (last) attempt gagal → job masuk DLQ, tidak ada retry lagi', () => {
-    const attempt = 10;
+  // Table-driven: attempt berasal dari parameter test (bukan literal),
+  // sehingga tidak ada kondisi konstan (CodeQL js/useless-comparison-test #43).
+  // Rumus delay: 3000 * 2^(attempt-1); retry selama attempt < 10.
+  it.each([
+    { attempt: 1, retry: true, delay: 3000, label: '1st attempt gagal → retry dengan delay 3s' },
+    { attempt: 2, retry: true, delay: 6000, label: '2nd attempt gagal → retry dengan delay 6s' },
+    { attempt: 5, retry: true, delay: 48000, label: 'mid-attempt (ke-5) → delay 48s' },
+    { attempt: 10, retry: false, delay: 0, label: '10th (last) attempt gagal → job masuk DLQ, tidak ada retry lagi' },
+  ])('$label', ({ attempt, retry, delay }) => {
     const shouldRetry = attempt < 10;
     const nextDelay = shouldRetry ? 3000 * Math.pow(2, attempt - 1) : 0;
 
-    expect(shouldRetry).toBe(false);
-    expect(nextDelay).toBe(0);
-  });
-
-  it('mid-attempt (ke-5) → delay 48s', () => {
-    const attempt = 5;
-    const nextDelay = 3000 * Math.pow(2, attempt - 1);
-    expect(nextDelay).toBe(48000);
+    expect(shouldRetry).toBe(retry);
+    expect(nextDelay).toBe(delay);
   });
 });
