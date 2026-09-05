@@ -575,3 +575,35 @@ Hasil audit membandingkan `cans/page.tsx` (referensi) vs halaman lain:
 - **DILARANG** warna hardcoded di luar palet resmi tanpa alasan kuat.
 - **DILARANG** membuat komponen modal baru secara inline jika `<Modal>` sudah tersedia.
 - **DILARANG** menggunakan `toast.promise()` — selalu gunakan pola `try/catch` + `toast.success/error`.
+---
+
+## 14. Mobile-First — Android 360px (WAJIB)
+
+Target utama: **Admin Ranting mengakses dashboard dari browser HP Android 360px**.
+Tulis gaya untuk mobile dulu, lalu enhance untuk layar besar via `md:` / `lg:`.
+Acuan verifikasi: Chrome DevTools 360×640 + HP Android fisik.
+
+### 14.1. Pola baku responsif
+
+| Area | Mobile (default) | Desktop (enhance) |
+|---|---|---|
+| Search bar | `w-full` | `lg:w-80` |
+| Toolbar container | `flex-col items-stretch p-4` | `lg:flex-row lg:items-center md:p-5` |
+| Sel tabel (`Table.tsx`) | `px-3 py-3` | `md:px-6 md:py-4` |
+| Chart card (overview) | `h-[320px]` | `md:h-[450px]` |
+| Baris info + aksi (mis. Backup) | `flex-col gap-4` | `sm:flex-row sm:items-center` |
+| Card login | `p-6` | `md:p-8` |
+
+### 14.2. Larangan mobile
+
+- **DILARANG** lebar fix kecil untuk search/input di toolbar (mis. `w-[160px]`) — wajib `w-full` + breakpoint.
+- **DILARANG** breakpoint `xs:` (tidak ada di Tailwind) — gunakan `sm:`.
+- **DILARANG** `items-center` pada container `flex-col` toolbar tanpa `items-stretch` untuk mobile.
+- **DILARANG** sel tabel hanya `px-6` tanpa versi mobile `px-3`.
+- **DILARANG** menonaktifkan zoom viewport (`maximum-scale=1`, `user-scalable=no`).
+
+### 14.3. Yang dipertahankan
+
+- `min-w-[800px]` / `min-w-[1230px]` di dalam `overflow-x-auto` untuk tabel — pola scroll horizontal yang benar, bukan bug.
+- `FilterPills` wajib `max-w-full overflow-x-auto` agar tidak terjepit.
+- Target sentuh minimal 44×44px untuk tombol utama di mobile.

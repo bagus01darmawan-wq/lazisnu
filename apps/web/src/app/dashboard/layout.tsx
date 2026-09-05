@@ -85,8 +85,8 @@ export default function DashboardLayout({
             </button>
 
             <div className="flex items-center gap-2">
-              <span className="text-[#F4F1EA]/70 text-xs md:text-sm font-medium hidden xs:block">Dashboard</span>
-              <span className="text-[#F4F1EA]/50 hidden xs:block">/</span>
+              <span className="text-[#F4F1EA]/70 text-xs md:text-sm font-medium hidden sm:block">Dashboard</span>
+              <span className="text-[#F4F1EA]/50 hidden sm:block">/</span>
               <span className="text-[#F4F1EA] font-bold text-xs md:text-sm capitalize truncate max-w-[150px]">{pageTitle}</span>
             </div>
           </div>

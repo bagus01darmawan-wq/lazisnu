@@ -398,9 +398,9 @@ export default function MasterDataPage() {
       </div>
 
       {/* Transparent Toolbar */}
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-transparent p-4 border-none shadow-none">
+      <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between bg-transparent p-4 border-none shadow-none">
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          <div className="relative w-[160px] group">
+          <div className="relative w-full md:w-80 group">
             <div className="flex h-[35px] items-center bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1 transition-all duration-500 group-focus-within:ring-2 group-focus-within:ring-[#F4F1EA]/20 group-focus-within:border-[#F4F1EA]/30 shadow-lg shadow-black/5">
               <div className="pl-2 pr-1 transition-transform group-focus-within:scale-110">
                 <Search size={14} strokeWidth={3} className="text-[#DE6F4A]" />
