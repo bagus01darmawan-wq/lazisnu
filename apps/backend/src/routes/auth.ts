@@ -754,8 +754,10 @@ export async function authRoutes(fastify: FastifyInstance) {
       }
 
       // Revoke di Redis (FIX P0-2: sebelumnya hanya set revokedAt di DB, Redis tidak disentuh)
-      const deviceId = decoded.did || session.jti;
-      await revokeDeviceSession(decoded.userId, deviceId);
+      // Target = device milik sesi yang dicabut; JANGAN pakai decoded.did
+      // (itu device pemanggil saat ini).
+      const sessionDeviceId = (session as any).deviceId || session.jti;
+      await revokeDeviceSession(decoded.userId, sessionDeviceId);
 
       // Tandai revokedAt di DB
       await db.update(userSessions)
@@ -786,6 +788,7 @@ export async function authRoutes(fastify: FastifyInstance) {
           .set({ revokedAt: new Date() } as any)
           .where(and(
             eq(userSessions.userId, decoded.userId),
+            eq(userSessions.deviceId, did),
             isNull(userSessions.revokedAt),
           ))
           .catch(() => {});
