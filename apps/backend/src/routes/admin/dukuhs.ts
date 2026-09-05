@@ -52,7 +52,7 @@ export async function dukuhsRoutes(fastify: FastifyInstance) {
         orderBy: (dukuhs, { asc }) => [asc(dukuhs.name)]
       });
 
-      if (filter_assigned && branch_id) {
+      if (filter_assigned) {
         const now = new Date();
         const year = now.getFullYear();
         const month = now.getMonth() + 1;
