@@ -19,6 +19,8 @@ const monthNames = [
 export function PeriodPicker({ months, year, onChange, className }: PeriodPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const previouslyFocused = useRef<HTMLElement | null>(null);
 
   const currentYear = new Date().getFullYear();
   const years = [currentYear - 1, currentYear, currentYear + 1];
@@ -31,9 +33,29 @@ export function PeriodPicker({ months, year, onChange, className }: PeriodPicker
         setIsOpen(false);
       }
     };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        setIsOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [isOpen]);
+
+  // Save focus when opening, restore to trigger on close (a11y plan-04).
+  useEffect(() => {
+    if (isOpen) {
+      previouslyFocused.current = document.activeElement as HTMLElement;
+    } else if (previouslyFocused.current) {
+      previouslyFocused.current.focus();
+      previouslyFocused.current = null;
+    }
+  }, [isOpen]);
 
   const toggleMonth = useCallback((m: number) => {
     if (months.includes(m)) {
@@ -66,6 +88,8 @@ export function PeriodPicker({ months, year, onChange, className }: PeriodPicker
   return (
     <div className={cn("relative h-[36px]", className)} ref={containerRef}>
       <button
+        ref={triggerRef}
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
           "flex items-center gap-2 px-4 h-full bg-[#F4F1EA]/10 border border-[#F4F1EA]/20 backdrop-blur-md rounded-2xl text-[11px] font-bold text-[#F4F1EA] hover:bg-[#F4F1EA]/20 transition-all",
