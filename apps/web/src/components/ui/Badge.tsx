@@ -2,11 +2,24 @@ import React from 'react';
 import { cn } from '@/lib/utils';
 
 interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
-  variant?: 'sent' | 'pending' | 'failed' | 'resubmit' | 'default' | 'success' | 'secondary';
+  variant?:
+    | 'sent'
+    | 'pending'
+    | 'failed'
+    | 'resubmit'
+    | 'default'
+    | 'success'
+    | 'secondary'
+    | 'brand'
+    | 'jelly';
 }
 
 const Badge = ({ className, variant = 'default', children, ...props }: BadgeProps) => {
   const variants = {
+    // Brand-aligned (lihat plan-03).
+    brand: 'bg-[#EAD19B]/15 text-[#EAD19B] border-[#EAD19B]/30',
+    jelly: 'bg-[#DE6F4A]/10 text-[#DE6F4A] border-[#DE6F4A]/30',
+    // Status (standar §8 — dipakai semua tabel status, JANGAN dihapus).
     sent: 'bg-green-100 text-green-800 border-green-200',
     pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
     failed: 'bg-red-100 text-red-800 border-red-200',
