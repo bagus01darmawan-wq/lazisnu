@@ -6,7 +6,7 @@ import { createCanSchema, updateCanSchema } from './schemas';
 import { z } from 'zod';
 import { AppError } from '../../utils/AppError';
 import * as canService from '../../services/canService';
-import { generateSingleQRPDF, generateBatchQRPDF } from '../../services/qrPdfService';
+import { generateSingleQRPDF, generateBatchQRPDF, generateQrPreviewDataUrl } from '../../services/qrPdfService';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
 import { inArray } from 'drizzle-orm';
@@ -221,19 +221,31 @@ export async function cansRoutes(fastify: FastifyInstance) {
       const branchCode = cans[0].branch?.code || 'XX';
       
       const { pdfBuffer, r2Key } = await generateBatchQRPDF(mappedCans, branchCode);
-      
+
       let printUrl = '';
       if (r2Key) {
         printUrl = await getSignedDownloadUrl(r2Key) || '';
       }
-      
+
       if (!printUrl) {
         printUrl = `data:application/pdf;base64,${pdfBuffer.toString('base64')}`;
       }
 
+      // Preview PNG per kaleng (on-demand, tidak disimpan ke R2) untuk carousel modal.
+      const previews = await Promise.all(
+        mappedCans
+          .filter(c => c.qrCode)
+          .map(async c => ({
+            qr_code: c.qrCode as string,
+            owner_name: c.ownerName,
+            qr_image_url: await generateQrPreviewDataUrl(c.qrCode as string),
+          }))
+      );
+
       return sendSuccess(reply, {
         count: cans.length,
-        print_url: printUrl
+        print_url: printUrl,
+        previews,
       });
     } catch (error) {
        if (error instanceof AppError) {

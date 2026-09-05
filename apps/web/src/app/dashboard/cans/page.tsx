@@ -65,11 +65,18 @@ interface Dukuh {
   name: string;
 }
 
+interface QrPreviewItem {
+  qr_code: string;
+  owner_name?: string;
+  qr_image_url: string;
+}
+
 interface QrResponseData {
   qr_code?: string;
   qr_image_url?: string;
   print_url: string;
   count?: number;
+  previews?: QrPreviewItem[];
 }
 
 interface ApiError {
@@ -129,6 +136,7 @@ export default function CansPage() {
   const [qrData, setQrData] = useState<QrResponseData | null>(null);
   const [isGeneratingQr, setIsGeneratingQr] = useState(false);
   const [isBulkPrint, setIsBulkPrint] = useState(false);
+  const [qrIndex, setQrIndex] = useState(0);
 
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<CanFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -329,12 +337,33 @@ export default function CansPage() {
     ), { duration: 5000 });
   };
 
+  const handleGenerateQr = async (can: CanExtended) => {
+    setIsGeneratingQr(true);
+    setIsQrModalOpen(true);
+    setIsBulkPrint(false);
+    setQrData(null);
+    setQrIndex(0);
+    try {
+      const response = await api.post(`/admin/cans/${can.id}/generate-qr`) as unknown as ApiResponse<QrResponseData>;
+      if (response.success && response.data) {
+        setQrData(response.data);
+      }
+    } catch (error) {
+      const err = error as ApiError;
+      toast.error(err.message || 'Gagal membuat QR Code');
+      setIsQrModalOpen(false);
+    } finally {
+      setIsGeneratingQr(false);
+    }
+  };
+
   const handleBulkGenerateQr = async () => {
     if (selectedIds.length === 0) return;
     setIsGeneratingQr(true);
     setIsQrModalOpen(true);
     setIsBulkPrint(true);
     setQrData(null);
+    setQrIndex(0);
     try {
       const response = await api.post(`/admin/cans/bulk-generate-qr`, { ids: selectedIds }) as unknown as ApiResponse<QrResponseData>;
       if (response.success && response.data) {
@@ -620,6 +649,17 @@ export default function CansPage() {
 
         return (
           <div className="flex items-center justify-end gap-2">
+            {row.original.qr_code && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-[#1F8243]/10 transition-all duration-300 group"
+                onClick={() => handleGenerateQr(row.original)}
+                title="Generate QR Code"
+              >
+                <QrCode size={14} className="text-[#1F8243] group-hover:text-[#EAD19B]" />
+              </Button>
+            )}
             {isNonActiveRow ? (
               <Button
                 variant="outline"
@@ -1098,39 +1138,79 @@ export default function CansPage() {
             </div>
           ) : qrData ? (
             <>
-              {!isBulkPrint && qrData.qr_image_url && (
-                <div className="bg-white p-4 rounded-2xl shadow-sm border border-white/10 flex flex-col items-center gap-2">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={qrData.qr_image_url} alt="QR Code" className="w-40 h-40 object-contain" />
-                  <p className="text-xs font-bold text-[#F4F1EA]/40 uppercase tracking-widest">{qrData.qr_code}</p>
-                </div>
-              )}
-              {isBulkPrint && (
-                <div className="bg-[#1F8243]/10 p-6 rounded-2xl border border-[#1F8243]/20 flex flex-col items-center text-center">
-                  <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center shadow-sm mb-4">
-                    <Printer size={28} className="text-[#1F8243]" />
+              {(() => {
+                // Satu sumber daftar preview: bulk pakai previews[], single dibungkus array 1 item
+                const items: QrPreviewItem[] = isBulkPrint
+                  ? (qrData.previews || [])
+                  : (qrData.qr_image_url
+                      ? [{ qr_code: qrData.qr_code || '', qr_image_url: qrData.qr_image_url }]
+                      : []);
+                const total = items.length;
+                const idx = Math.min(qrIndex, Math.max(total - 1, 0));
+                const current = items[idx];
+                return (
+                  <div className="flex flex-col items-center w-full space-y-4">
+                    {total > 0 && current ? (
+                      <>
+                        <div className="flex items-center justify-center gap-4 w-full">
+                          <button
+                            onClick={() => setQrIndex(i => Math.max(i - 1, 0))}
+                            disabled={idx === 0}
+                            className="h-10 w-10 shrink-0 rounded-full border border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-white/10 transition-all disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center"
+                            title="Sebelumnya"
+                          >
+                            <ChevronLeft size={20} />
+                          </button>
+                          <div className="bg-white p-4 rounded-2xl shadow-sm border border-white/10 flex flex-col items-center gap-2">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={current.qr_image_url} alt="QR Code" className="w-40 h-40 object-contain" />
+                            <p className="text-xs font-bold text-[#2C473E]/70 uppercase tracking-widest">{current.qr_code}</p>
+                            {current.owner_name && (
+                              <p className="text-[11px] font-semibold text-[#2C473E]/50">{current.owner_name}</p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => setQrIndex(i => Math.min(i + 1, total - 1))}
+                            disabled={idx >= total - 1}
+                            className="h-10 w-10 shrink-0 rounded-full border border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-white/10 transition-all disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center"
+                            title="Berikutnya"
+                          >
+                            <ChevronRight size={20} />
+                          </button>
+                        </div>
+                        <p className="text-xs font-bold text-[#F4F1EA]/40 uppercase tracking-widest">
+                          {idx + 1} / {total}
+                        </p>
+                      </>
+                    ) : (
+                      <div className="bg-[#1F8243]/10 p-6 rounded-2xl border border-[#1F8243]/20 flex flex-col items-center text-center">
+                        <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center shadow-sm mb-4">
+                          <Printer size={28} className="text-[#1F8243]" />
+                        </div>
+                        <h4 className="text-lg font-bold text-[#F4F1EA] mb-1">Berhasil Dirangkai!</h4>
+                        <p className="text-sm text-[#F4F1EA]/60">PDF berisi {qrData.count} label QR Code siap diunduh.</p>
+                      </div>
+                    )}
+                    <div className="w-full flex gap-3 pt-2">
+                      <Button variant="secondary" className="flex-1 rounded-xl h-12 font-bold border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-white/10 hover:text-[#F4F1EA]" onClick={() => setIsQrModalOpen(false)}>Selesai</Button>
+                      <Button
+                        className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] rounded-xl h-12 font-bold shadow-lg shadow-[#EAD19B]/20 flex items-center gap-2 justify-center"
+                        onClick={() => {
+                          const a = document.createElement('a');
+                          a.href = qrData.print_url;
+                          a.download = isBulkPrint ? 'lazisnu-qr-batch.pdf' : `lazisnu-qr-${qrData.qr_code}.pdf`;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                        }}
+                      >
+                        <Printer size={18} />
+                        Unduh {isBulkPrint ? 'PDF Label' : 'Label QR'}
+                      </Button>
+                    </div>
                   </div>
-                  <h4 className="text-lg font-bold text-[#F4F1EA] mb-1">Berhasil Dirangkai!</h4>
-                  <p className="text-sm text-[#F4F1EA]/60">PDF berisi {qrData.count} label QR Code siap diunduh.</p>
-                </div>
-              )}
-              <div className="w-full flex gap-3 pt-2">
-                <Button variant="secondary" className="flex-1 rounded-xl h-12 font-bold border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-white/10 hover:text-[#F4F1EA]" onClick={() => setIsQrModalOpen(false)}>Tutup</Button>
-                <Button
-                  className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] rounded-xl h-12 font-bold shadow-lg shadow-[#EAD19B]/20 flex items-center gap-2 justify-center"
-                  onClick={() => {
-                    const a = document.createElement('a');
-                    a.href = qrData.print_url;
-                    a.download = isBulkPrint ? 'lazisnu-qr-batch.pdf' : `lazisnu-qr-${qrData.qr_code}.pdf`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                  }}
-                >
-                  <Printer size={18} />
-                  Unduh {isBulkPrint ? 'PDF Label' : 'Label QR'}
-                </Button>
-              </div>
+                );
+              })()}
             </>
           ) : (
             <p className="text-red-400">Gagal memuat data QR</p>

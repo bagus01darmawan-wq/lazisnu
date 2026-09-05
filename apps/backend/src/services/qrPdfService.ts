@@ -6,7 +6,7 @@
 import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { eq } from 'drizzle-orm';
-import { PDFDocument, rgb, StandardFonts, PDFFont } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import QRCode from 'qrcode';
 import { uploadToR2, getSignedDownloadUrl } from './r2';
 import { Errors } from '../utils/errorCatalog';
@@ -28,6 +28,16 @@ export interface QRCanData {
   dukuhName?: string | null;
   rt?: string | null;
   rw?: string | null;
+}
+
+/**
+ * Generate PNG preview (base64 data URL) untuk satu nomor QR.
+ * On-demand saja — tidak disimpan ke R2 (QR dibuat deterministik dari qr_code).
+ */
+export async function generateQrPreviewDataUrl(qrCode: string): Promise<string> {
+  return QRCode.toDataURL(qrCode, {
+    width: 300, margin: 2, color: { dark: '#000000', light: '#ffffff' },
+  });
 }
 
 /**
