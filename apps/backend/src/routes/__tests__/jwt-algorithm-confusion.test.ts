@@ -22,7 +22,6 @@
 import crypto from 'node:crypto';
 import request from 'supertest';
 import { getApp, closeApp, resetApp } from './helpers/app-helper';
-import { db } from '../../config/database';
 
 // Mock DB (sama dengan auth.integration.test.ts) — kita tidak akan
 // pernah sampai ke query karena JWT harus ditolak sebelum DB.

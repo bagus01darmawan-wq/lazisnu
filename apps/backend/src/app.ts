@@ -17,7 +17,7 @@ import { httpRequestDurationMs, httpRequestsTotal } from './routes/metrics';
 import { correlationIdHook } from './middleware/correlationId';
 import { auditLogger } from './middleware/audit-logger';
 import { initRollbar, captureError } from './config/rollbar';
-import { AppError, isAppError } from './utils/AppError';
+import { isAppError } from './utils/AppError';
 import { isJwtErrorLike } from './utils/error-guards';
 import { z } from 'zod';
 

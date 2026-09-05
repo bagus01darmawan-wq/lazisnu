@@ -7,7 +7,7 @@
  */
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { eq, and, gte, lt, desc, sql, SQL } from 'drizzle-orm';
+import { eq, and, desc, sql, SQL } from 'drizzle-orm';
 import { getLatestCollectionCondition } from './collectionSubmission';
 
 /** Drizzle SQL expression type — dipakai sebagai parameter date filter */

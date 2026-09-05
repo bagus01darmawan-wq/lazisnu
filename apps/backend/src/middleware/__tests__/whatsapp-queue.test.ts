@@ -97,7 +97,6 @@ describe('TC-WA-03: WhatsApp Queue — Dead-Letter Queue (DLQ)', () => {
     // BullMQ behavior: setelah attempts habis, job masuk state "failed"
     // Failed jobs bisa dilihat via Bull Board atau query Redis
     const attempts = 10;
-    const afterAllAttempts = attempts;
 
     // Simulasikan: setiap attempt gagal
     const attemptResults = Array.from({ length: attempts }, (_, i) => ({

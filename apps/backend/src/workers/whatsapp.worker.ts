@@ -51,7 +51,7 @@ whatsappWorker.on('failed', (job, err) => {
  */
 export async function handleJobFailure(job: Job, err?: Error): Promise<void> {
   if (job.attemptsMade >= (job.opts.attempts || 1)) {
-    const { phone, ownerName, nominal, officerName, collectionId } = job.data;
+    const { phone, ownerName, nominal, collectionId } = job.data;
     const formattedPhone = phone;
     const formattedAmount = new Intl.NumberFormat('id-ID', {
       style: 'currency',

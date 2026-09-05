@@ -3,7 +3,6 @@ import { db } from '../../config/database';
 import * as schema from '../../database/schema';
 import { eq, desc, ilike, or, and, sql, inArray, gte, lt } from 'drizzle-orm';
 import { authorize } from '../../middleware/auth';
-import { UserRole } from '@lazisnu/shared-types';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { getWhatsAppQueue } from '../../services/whatsapp';
 import { getPaginationParams, formatPaginatedResponse } from '../../utils/pagination';

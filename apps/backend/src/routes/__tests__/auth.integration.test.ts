@@ -192,7 +192,6 @@ describe('[POST] /v1/auth/login', () => {
     (db.query.users.findFirst as jest.Mock).mockResolvedValue(mockUser);
     
     // Mock select().from().where() return value for officers list
-    const mockLimit = jest.fn().mockImplementation(async () => [{ id: 'officer-id' }]);
     const mockWhere = jest.fn().mockImplementation(() => [{ id: 'officer-id' }]);
     // In auth.ts line 57: db.select().from(officers).where(eq(officers.userId, user.id))
     // This is a direct await of the where builder or chain
@@ -421,7 +420,6 @@ describe('[POST] /v1/auth/logout', () => {
 
 describe('Session Management (04-F1)', () => {
   let sessionToken: string | null = null;
-  let sessionRefresh: string | null = null;
 
   // Decode token via @fastify/jwt (sudah terdaftar di app, lihat buildApp())
   // — tidak lagi pakai `jsonwebtoken` (tidak dideklarasikan di deps, cacat pra-ada).

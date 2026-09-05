@@ -19,8 +19,6 @@ const ASSETS = resolve(HERE, '..', '..', '..', 'assets');
 const OUT = resolve(process.env.TEMP || '/tmp', 'lazisnu-icon-preview');
 
 const CANVAS = 432; // 108dp @ xxxhdpi (4x)
-const VISIBLE_R = 144; // lingkaran terlihat launcher: 72dp
-const SAFE_R = 132; // safe zone Play Store: 66dp
 
 const VARIANTS = [
   {
@@ -47,7 +45,6 @@ async function contentArt(file, widthPx) {
     .trim({background: {r: 0, g: 0, b: 0, alpha: 0}})
     .png()
     .toBuffer();
-  const meta = await sharp(buf).metadata();
   const art = await sharp(buf)
     .resize({width: Math.round(widthPx), kernel: 'lanczos3'})
     .png()
@@ -91,8 +88,8 @@ async function main() {
       variant: v.label,
       contentDp: `${dpW.toFixed(1)} × ${dpH.toFixed(1)}`,
       halfDiagDp: halfDiag.toFixed(1),
-      fitVisible: halfDiag <= 36 ? 'OK' : 'TERPOTONG',
-      fitSafeZone: halfDiag <= 33 ? 'OK' : 'batas',
+      fitVisible: halfDiag <= 36 ? 'OK' : 'TERPOTONG', // 36dp = radius lingkaran terlihat
+      fitSafeZone: halfDiag <= 33 ? 'OK' : 'batas', // 33dp = safe zone Play Store
     });
 
     // Lingkaran penuh untuk varian circle (r = 108dp/2)

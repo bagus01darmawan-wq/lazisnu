@@ -1,6 +1,6 @@
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { eq, and, inArray, sql, count, sum, desc, asc } from 'drizzle-orm';
+import { eq, and, inArray, sql, desc, asc } from 'drizzle-orm';
 
 export async function getOfficerDetailWithStats(
   officerId: string,

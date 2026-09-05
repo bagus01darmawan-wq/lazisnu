@@ -267,8 +267,6 @@ export async function authRoutes(fastify: FastifyInstance) {
         return sendError(reply, 404, 'USER_NOT_FOUND', 'Pengguna tidak ditemukan');
       }
 
-      const user = officer.user;
-
       // Check rate limit before generating
       const allowed = await otpService.checkRateLimit(body.phone);
       if (!allowed) {

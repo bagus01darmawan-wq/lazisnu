@@ -8,9 +8,6 @@
  */
 
 import { getLatestCollectionCondition } from '../../services/collectionSubmission';
-import * as schema from '../../database/schema';
-import { eq, and, sql } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
 
 // Mock database for unit tests
 jest.mock('../../config/database', () => {

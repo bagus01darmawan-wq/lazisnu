@@ -1,5 +1,3 @@
-import { PaginatedResponse } from '@lazisnu/shared-types';
-
 export interface PaginationParams {
   page: number;
   limit: number;

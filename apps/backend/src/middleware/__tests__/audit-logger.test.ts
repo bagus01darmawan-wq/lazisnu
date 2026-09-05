@@ -14,7 +14,6 @@
 import { auditLogger } from '../audit-logger';
 import * as schema from '../../database/schema';
 
-const insertMock = jest.fn().mockReturnThis();
 const valuesMock = jest.fn().mockResolvedValue(undefined);
 
 jest.mock('../../config/database', () => ({
