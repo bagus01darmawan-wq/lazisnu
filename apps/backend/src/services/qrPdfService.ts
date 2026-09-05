@@ -31,6 +31,16 @@ export interface QRCanData {
 }
 
 /**
+ * Generate PNG preview (base64 data URL) untuk satu nomor QR.
+ * On-demand saja — tidak disimpan ke R2 (QR dibuat deterministik dari qr_code).
+ */
+export async function generateQrPreviewDataUrl(qrCode: string): Promise<string> {
+  return QRCode.toDataURL(qrCode, {
+    width: 300, margin: 2, color: { dark: '#000000', light: '#ffffff' },
+  });
+}
+
+/**
  * Generate single QR PDF untuk satu kaleng.
  * Return qrDataUrl (PNG preview), dan PDF buffer + R2 URL.
  */
