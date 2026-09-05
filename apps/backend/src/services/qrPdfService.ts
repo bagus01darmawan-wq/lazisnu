@@ -6,7 +6,7 @@
 import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { eq } from 'drizzle-orm';
-import { PDFDocument, rgb, StandardFonts, PDFFont } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import QRCode from 'qrcode';
 import { uploadToR2, getSignedDownloadUrl } from './r2';
 import { Errors } from '../utils/errorCatalog';
