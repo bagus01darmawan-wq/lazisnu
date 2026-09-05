@@ -108,12 +108,14 @@ export function generateTokens(payload: JWTPayload, fastify: any, jti?: string, 
     ? (config.JWT_REFRESH_TTL_PETUGAS || '365d')
     : (config.JWT_REFRESH_TTL || '365d');
 
-  const accessToken = fastify.jwt.sign(
-    { ...payload, tokenType: 'access' },
-    { expiresIn: accessTtl, key: config.JWT_ACCESS_SECRET }
-  );
   const refreshJti = jti || uuidv4();
   const did = deviceId || uuidv4();
+  // Access token ikut membawa did agar route yang memakai jwtVerify()
+  // (DELETE /auth/sessions) tahu device pemanggil tanpa tebak-tebakan.
+  const accessToken = fastify.jwt.sign(
+    { ...payload, tokenType: 'access', did },
+    { expiresIn: accessTtl, key: config.JWT_ACCESS_SECRET }
+  );
   const refreshToken = fastify.jwt.sign(
     { ...payload, tokenType: 'refresh', jti: refreshJti, did },
     { expiresIn: refreshTtl, key: config.JWT_REFRESH_SECRET }

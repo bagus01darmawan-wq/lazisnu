@@ -606,6 +606,63 @@ describe('Session Management (04-F1)', () => {
       .send({ refresh_token: tokenB });
     expect(refreshB.status).toBe(200);
   });
+
+  it('DELETE /auth/sessions menandai revoked per-device, bukan massal (CodeQL #42/#28)', async () => {
+    const app = await getApp();
+
+    // ── 1. Login 2 device ──
+    (db.query.users.findFirst as jest.Mock).mockResolvedValue(mockUser);
+    const mockWhere = jest.fn().mockResolvedValue([{ id: 'officer-id' }]);
+    const mockFrom = jest.fn().mockImplementation(() => ({ where: mockWhere }));
+    (db.select as jest.Mock).mockImplementation(() => ({ from: mockFrom }));
+
+    const loginA = await request(app.server).post('/v1/auth/login').send(VALID_ADMIN);
+    const loginB = await request(app.server).post('/v1/auth/login').send(VALID_ADMIN);
+    expect(loginA.status).toBe(200);
+    expect(loginB.status).toBe(200);
+    const tokenB = loginB.body.data.access_token;
+    expect(tokenB).toBeDefined();
+
+    const decodedA: any = app.jwt.decode(loginA.body.data.refresh_token);
+    const didA: string = decodedA.did || decodedA.jti;
+    const decodedB: any = app.jwt.decode(loginB.body.data.refresh_token);
+    const currentDid: string = decodedB.did || decodedB.jti;
+    expect(didA).not.toBe(currentDid);
+
+    // ── 2. Tangkap argumen where() tiap db.update setelah titik ini ──
+    const capturedWheres: any[] = [];
+    (db.update as jest.Mock).mockImplementation(() => ({
+      set: jest.fn().mockImplementation(() => ({
+        where: jest.fn().mockImplementation(async (w: any) => {
+          capturedWheres.push(w);
+          return [{}];
+        }),
+      })),
+    }));
+
+    // ── 3. Cabut semua sesi lain sebagai device B ──
+    const delRes = await request(app.server)
+      .delete('/v1/auth/sessions')
+      .set('Authorization', `Bearer ${tokenB}`);
+    expect(delRes.status).toBe(200);
+    const revokedCount: number = delRes.body.data.revoked_count;
+    expect(revokedCount).toBeGreaterThanOrEqual(1);
+
+    // ── 4. Tiap update WAJIB menyemat deviceId yang dicabut ──
+    // (Kode lama: where tanpa filter device → update massal semua baris
+    // terbuka termasuk device sendiri, N kali.)
+    expect(capturedWheres.length).toBe(revokedCount);
+    const containsValue = (node: any, target: string, seen = new Set<any>()): boolean => {
+      if (node === target) return true;
+      if (!node || typeof node !== 'object' || seen.has(node)) return false;
+      seen.add(node);
+      return Object.values(node).some((v) => containsValue(v, target, seen));
+    };
+    for (const w of capturedWheres) {
+      expect(containsValue(w, currentDid)).toBe(false);
+    }
+    expect(capturedWheres.some((w) => containsValue(w, didA))).toBe(true);
+  });
 });
 
 describe('Rate Limit (Backlog Sesi 31 #1)', () => {
