@@ -229,7 +229,7 @@ export default function AuditLogPage() {
         </div>
       </div>
       {/* Transparent Toolbar */}
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between w-full bg-transparent p-4 border-none shadow-none">
+      <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between w-full bg-transparent p-4 border-none shadow-none">
         <div className="relative group flex-1 md:max-w-[320px]">
           <div className="flex h-[35px] items-center bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1 transition-all duration-500 group-focus-within:ring-2 group-focus-within:ring-[#F4F1EA]/20 group-focus-within:border-[#F4F1EA]/30 shadow-lg shadow-black/5">
             <div className="pl-2 pr-1 transition-transform group-focus-within:scale-110">
@@ -332,7 +332,7 @@ export default function AuditLogPage() {
                   size="sm"
                   disabled={page === 1}
                   onClick={() => handlePageChange(page - 1)}
-                  className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                  className="w-10 h-10 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
                 >
                   <ChevronLeft size={16} strokeWidth={3} />
                 </Button>
@@ -341,7 +341,7 @@ export default function AuditLogPage() {
                   size="sm"
                   disabled={page >= totalPages}
                   onClick={() => handlePageChange(page + 1)}
-                  className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                  className="w-10 h-10 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
                 >
                   <ChevronRight size={16} strokeWidth={3} />
                 </Button>

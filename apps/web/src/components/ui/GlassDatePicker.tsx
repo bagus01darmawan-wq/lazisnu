@@ -90,7 +90,7 @@ export function GlassDatePicker({
         </button>
 
         {isOpen && (
-          <div className="absolute top-full mt-2 left-0 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="absolute top-full mt-2 left-0 z-50 animate-in fade-in slide-in-from-top-2 duration-200 max-w-[calc(100vw-2rem)]">
             <div className="bg-[#F4F1EA]/10 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.4)] overflow-hidden p-3">
               <style>{`
                 .rdp {

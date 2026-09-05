@@ -94,7 +94,7 @@ export default function ExportButton() {
           <p className="text-sm text-[#F4F1EA]/60 mb-4">
             Pilih rentang tanggal penjemputan infaq yang ingin diunduh dalam format CSV.
           </p>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-xs font-bold text-[#F4F1EA]/60 uppercase">Tanggal Mulai</label>
               <GlassDatePicker

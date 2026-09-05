@@ -536,7 +536,7 @@ export default function WAMonitorPage() {
                   </div>
                   <div>
                     <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Total Terkirim</p>
-                    <h3 className="text-2xl font-black text-[#F4F1EA] mt-0.5 tracking-tight">
+                    <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-0.5 tracking-tight break-words">
                       {dbStats?.total_sent?.toLocaleString('id-ID') ?? (dbLoading ? '...' : '0')}
                     </h3>
                     <p className="text-[9px] text-[#F4F1EA]/40">Database historis</p>
@@ -553,7 +553,7 @@ export default function WAMonitorPage() {
                   </div>
                   <div>
                     <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Total Gagal</p>
-                    <h3 className="text-2xl font-black text-[#F4F1EA] mt-0.5 tracking-tight">
+                    <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-0.5 tracking-tight break-words">
                       {dbStats?.total_failed?.toLocaleString('id-ID') ?? (dbLoading ? '...' : '0')}
                     </h3>
                     <p className="text-[9px] text-[#F4F1EA]/40">Database historis</p>
@@ -570,7 +570,7 @@ export default function WAMonitorPage() {
                   </div>
                   <div>
                     <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Success Rate</p>
-                    <h3 className="text-2xl font-black text-[#F4F1EA] mt-0.5 tracking-tight">
+                    <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-0.5 tracking-tight break-words">
                       {dbStats ? `${dbStats.success_rate}%` : (dbLoading ? '...' : '0%')}
                     </h3>
                     <p className="text-[9px] text-[#F4F1EA]/40">Terkirim / (Terkirim + Gagal)</p>
@@ -587,7 +587,7 @@ export default function WAMonitorPage() {
                   </div>
                   <div>
                     <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Total Pending</p>
-                    <h3 className="text-2xl font-black text-[#F4F1EA] mt-0.5 tracking-tight">
+                    <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-0.5 tracking-tight break-words">
                       {dbStats?.total_pending?.toLocaleString('id-ID') ?? (dbLoading ? '...' : '0')}
                     </h3>
                     <p className="text-[9px] text-[#F4F1EA]/40">Masih menunggu antrean</p>
@@ -599,8 +599,8 @@ export default function WAMonitorPage() {
 
           {dailyTrends.length > 0 && <DailyTrendsChart data={dailyTrends} />}
 
-          <div className="flex flex-col lg:flex-row gap-4 items-center justify-between bg-transparent p-5 border-none shadow-none">
-            <div className="relative w-[160px] group">
+          <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center justify-between bg-transparent p-4 md:p-5 border-none shadow-none">
+            <div className="relative w-full lg:w-80 group">
               <div className="flex h-[35px] items-center bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1 transition-all duration-500 group-focus-within:ring-2 group-focus-within:ring-[#F4F1EA]/20 group-focus-within:border-[#F4F1EA]/30 shadow-lg shadow-black/5">
                 <div className="pl-2 pr-1 transition-transform group-focus-within:scale-110">
                   <Search size={14} strokeWidth={3} className="text-[#DE6F4A]" />
@@ -684,7 +684,7 @@ export default function WAMonitorPage() {
                     size="sm"
                     disabled={page <= 1}
                     onClick={() => handlePageChange(page - 1)}
-                    className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                    className="w-10 h-10 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
                   >
                     <div className="w-full h-full flex items-center justify-center">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
@@ -695,7 +695,7 @@ export default function WAMonitorPage() {
                     size="sm"
                     disabled={page >= totalPages}
                     onClick={() => handlePageChange(page + 1)}
-                    className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                    className="w-10 h-10 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
                   >
                     <div className="w-full h-full flex items-center justify-center">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>

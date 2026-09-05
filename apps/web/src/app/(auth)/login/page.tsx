@@ -79,7 +79,7 @@ export default function LoginPage() {
       <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-green-900/20 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '2s' }} />
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03] pointer-events-none" />
 
-      <Card className="w-full max-w-md relative z-10 p-8 shadow-2xl border-white/10 bg-white/5 backdrop-blur-2xl rounded-3xl">
+      <Card className="w-full max-w-md relative z-10 p-6 md:p-8 shadow-2xl border-white/10 bg-white/5 backdrop-blur-2xl rounded-3xl">
         <div className="flex flex-col items-center text-center mb-10">
           <Image
             src="/logo-lazisnu-putih.png"

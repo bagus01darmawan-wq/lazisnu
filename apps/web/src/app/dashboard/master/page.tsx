@@ -398,9 +398,9 @@ export default function MasterDataPage() {
       </div>
 
       {/* Transparent Toolbar */}
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-transparent p-4 border-none shadow-none">
+      <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between bg-transparent p-4 border-none shadow-none">
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          <div className="relative w-[160px] group">
+          <div className="relative w-full md:w-80 group">
             <div className="flex h-[35px] items-center bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1 transition-all duration-500 group-focus-within:ring-2 group-focus-within:ring-[#F4F1EA]/20 group-focus-within:border-[#F4F1EA]/30 shadow-lg shadow-black/5">
               <div className="pl-2 pr-1 transition-transform group-focus-within:scale-110">
                 <Search size={14} strokeWidth={3} className="text-[#DE6F4A]" />
@@ -493,7 +493,7 @@ export default function MasterDataPage() {
                   size="sm"
                   disabled={currentPage === 1}
                   onClick={() => setCurrentPage(prev => prev - 1)}
-                  className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                  className="w-10 h-10 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
                 >
                   <div className="w-full h-full flex items-center justify-center">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
@@ -504,7 +504,7 @@ export default function MasterDataPage() {
                   size="sm"
                   disabled={currentPage >= totalPages}
                   onClick={() => setCurrentPage(prev => prev + 1)}
-                  className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                  className="w-10 h-10 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
                 >
                   <div className="w-full h-full flex items-center justify-center">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>

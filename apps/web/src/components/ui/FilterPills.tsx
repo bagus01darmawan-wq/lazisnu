@@ -14,7 +14,7 @@ export function FilterPills({ options, value, onChange, className }: FilterPills
   const hasHeightClass = className?.includes('h-[');
   return (
     <div className={cn(
-      "flex bg-[#F4F1EA]/10 p-1 rounded-2xl border border-[#F4F1EA]/20 backdrop-blur-md",
+      "flex bg-[#F4F1EA]/10 p-1 rounded-2xl border border-[#F4F1EA]/20 backdrop-blur-md max-w-full overflow-x-auto",
       !hasHeightClass && "h-[36px]",
       className
     )}>

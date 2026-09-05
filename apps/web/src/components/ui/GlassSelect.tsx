@@ -127,7 +127,7 @@ export function GlassSelect({
         </button>
 
         {isOpen && !disabled && (
-          <div className="absolute top-full mt-3 left-0 z-50 animate-in fade-in slide-in-from-top-2 duration-300 w-64">
+          <div className="absolute top-full mt-3 left-0 z-50 animate-in fade-in slide-in-from-top-2 duration-300 w-64 max-w-[calc(100vw-2rem)]">
             <div className="relative overflow-hidden rounded-2xl border border-[#F4F1EA]/15 shadow-[0_20px_50px_rgba(0,0,0,0.35)]">
               <div className="absolute inset-0 bg-[#55675F]/95 backdrop-blur-xl" />
               <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.12)_0%,rgba(255,255,255,0.04)_22%,rgba(0,0,0,0.10)_100%)]" />

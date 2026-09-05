@@ -57,7 +57,7 @@ const Table = <TData,>({ columns, data, className, loading, variant = 'default' 
                   <th
                     key={header.id}
                     className={cn(
-                      "px-6 py-4 font-bold uppercase tracking-tight text-[10px] cursor-pointer transition-colors group",
+                      "px-3 py-3 md:px-6 md:py-4 font-bold uppercase tracking-tight text-[10px] cursor-pointer transition-colors group",
                       variant === 'glass' 
                         ? "text-[#F4F1EA]/60 hover:bg-white/5" 
                         : "text-gray-600 hover:bg-gray-100"
@@ -81,13 +81,13 @@ const Table = <TData,>({ columns, data, className, loading, variant = 'default' 
           )}>
             {loading ? (
               <tr>
-                <td colSpan={columns.length} className="px-6 py-12 text-center text-gray-400 font-medium">
+                <td colSpan={columns.length} className="px-3 md:px-6 py-12 text-center text-gray-400 font-medium">
                    Memuat data...
                 </td>
               </tr>
             ) : data.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="px-6 py-12 text-center text-gray-400 font-medium">
+                <td colSpan={columns.length} className="px-3 md:px-6 py-12 text-center text-gray-400 font-medium">
                    Data tidak ditemukan.
                 </td>
               </tr>
@@ -99,7 +99,7 @@ const Table = <TData,>({ columns, data, className, loading, variant = 'default' 
                 )}>
                   {row.getVisibleCells().map((cell) => (
                     <td key={cell.id} className={cn(
-                      "px-6 py-4 font-medium",
+                      "px-3 py-3 md:px-6 md:py-4 font-medium",
                       variant === 'glass' ? "text-[#F4F1EA]/95" : "text-gray-700"
                     )}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}

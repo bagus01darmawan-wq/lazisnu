@@ -276,7 +276,7 @@ export default function OverviewPage() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Total Infaq</p>
-              <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">
+              <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">
                 Rp {Number(summary.month_collection).toLocaleString('id-ID')}
               </h3>
             </div>
@@ -297,7 +297,7 @@ export default function OverviewPage() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Kaleng Aktif</p>
-              <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">{summary.active_cans}</h3>
+              <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">{summary.active_cans}</h3>
             </div>
             <div className="p-3 bg-[#C959A0]/10 text-[#C959A0] rounded-xl group-hover:bg-[#C959A0] group-hover:text-[#2C473E] transition-all duration-300">
               <Box size={20} />
@@ -314,7 +314,7 @@ export default function OverviewPage() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Petugas Lapangan</p>
-              <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">{summary.total_officers}</h3>
+              <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">{summary.total_officers}</h3>
             </div>
             <div className="p-3 bg-[#6B9E9F]/10 text-[#6B9E9F] rounded-xl group-hover:bg-[#6B9E9F] group-hover:text-[#2C473E] transition-all duration-300">
               <Users size={20} />
@@ -331,7 +331,7 @@ export default function OverviewPage() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Penjemputan</p>
-              <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">{currentRate.toFixed(1)}%</h3>
+              <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">{currentRate.toFixed(1)}%</h3>
             </div>
             <div className="p-3 bg-[#DE6F4A]/10 text-[#DE6F4A] rounded-xl group-hover:bg-[#DE6F4A] group-hover:text-[#2C473E] transition-all duration-300">
               <TrendingUp size={20} />
@@ -350,7 +350,7 @@ export default function OverviewPage() {
       {/* Backup Control — only for ADMIN_KECAMATAN */}
       {user?.role === 'ADMIN_KECAMATAN' && (
         <Card variant="glass" className="border-white/5">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className={`p-3 rounded-xl transition-all duration-300 ${backupActive ? 'bg-[#1F8243]/10 text-[#1F8243]' : 'bg-[#F4F1EA]/5 text-[#F4F1EA]/40'}`}>
                 <Database size={20} />
@@ -364,7 +364,7 @@ export default function OverviewPage() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap justify-start sm:justify-end">
               <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${backupActive ? 'text-[#1F8243] bg-[#1F8243]/10 border-[#1F8243]/20' : 'text-[#F4F1EA]/40 bg-[#F4F1EA]/5 border-[#F4F1EA]/10'}`}>
                 <span className={`w-2 h-2 rounded-full ${backupActive ? 'bg-[#1F8243] animate-pulse' : 'bg-[#F4F1EA]/30'}`} />
                 {backupActive ? 'Aktif' : 'Nonaktif'}
@@ -393,7 +393,7 @@ export default function OverviewPage() {
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <Card variant="glass" className="h-[450px] flex flex-col border-white/5" contentClassName="p-0 flex flex-1 min-h-0 flex-col">
+        <Card variant="glass" className="h-[320px] md:h-[450px] flex flex-col border-white/5" contentClassName="p-0 flex flex-1 min-h-0 flex-col">
           <div className="px-6 py-4 border-b border-white/5">
             <h3 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
               <BarChart2 size={16} className="text-[#EAD19B]" />
@@ -458,7 +458,7 @@ export default function OverviewPage() {
           </div>
         </Card>
 
-        <Card variant="glass" className="h-[450px] flex flex-col border-white/5" contentClassName="p-0 flex flex-1 min-h-0 flex-col">
+        <Card variant="glass" className="h-[320px] md:h-[450px] flex flex-col border-white/5" contentClassName="p-0 flex flex-1 min-h-0 flex-col">
           <div className="px-6 py-4 border-b border-white/5">
             <h3 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
               <TrendingUp size={16} className="text-[#EAD19B]" />
@@ -544,7 +544,7 @@ export default function OverviewPage() {
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Total Infaq Kecamatan</p>
-                  <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">
+                  <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">
                     Rp {Number(data.district.summary.month_collection).toLocaleString('id-ID')}
                   </h3>
                 </div>
@@ -561,7 +561,7 @@ export default function OverviewPage() {
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Kaleng Aktif</p>
-                  <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">{data.district.summary.active_cans}</h3>
+                  <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">{data.district.summary.active_cans}</h3>
                 </div>
                 <div className="p-3 bg-[#C959A0]/10 text-[#C959A0] rounded-xl group-hover:bg-[#C959A0] group-hover:text-[#2C473E] transition-all duration-300">
                   <Box size={20} />
@@ -579,7 +579,7 @@ export default function OverviewPage() {
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Petugas Lapangan</p>
-                  <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">{data.district.summary.total_officers}</h3>
+                  <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">{data.district.summary.total_officers}</h3>
                 </div>
                 <div className="p-3 bg-[#6B9E9F]/10 text-[#6B9E9F] rounded-xl group-hover:bg-[#6B9E9F] group-hover:text-[#2C473E] transition-all duration-300">
                   <Users size={20} />
@@ -596,7 +596,7 @@ export default function OverviewPage() {
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Penjemputan</p>
-                  <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">{dCurrentRate.toFixed(1)}%</h3>
+                  <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">{dCurrentRate.toFixed(1)}%</h3>
                 </div>
                 <div className="p-3 bg-[#DE6F4A]/10 text-[#DE6F4A] rounded-xl group-hover:bg-[#DE6F4A] group-hover:text-[#2C473E] transition-all duration-300">
                   <TrendingUp size={20} />
@@ -614,7 +614,7 @@ export default function OverviewPage() {
 
           {/* District Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <Card variant="glass" className="h-[450px] flex flex-col border-white/5" contentClassName="p-0 flex flex-1 min-h-0 flex-col">
+            <Card variant="glass" className="h-[320px] md:h-[450px] flex flex-col border-white/5" contentClassName="p-0 flex flex-1 min-h-0 flex-col">
               <div className="px-6 py-4 border-b border-white/5">
                 <h3 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
                   <BarChart2 size={16} className="text-[#EAD19B]" />
@@ -662,7 +662,7 @@ export default function OverviewPage() {
               </div>
             </Card>
 
-            <Card variant="glass" className="h-[450px] flex flex-col border-white/5" contentClassName="p-0 flex flex-1 min-h-0 flex-col">
+            <Card variant="glass" className="h-[320px] md:h-[450px] flex flex-col border-white/5" contentClassName="p-0 flex flex-1 min-h-0 flex-col">
               <div className="px-6 py-4 border-b border-white/5">
                 <h3 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
                   <TrendingUp size={16} className="text-[#EAD19B]" />

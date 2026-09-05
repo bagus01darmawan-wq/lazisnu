@@ -775,8 +775,8 @@ export default function CansPage() {
       </div>
 
       {/* Transparent Toolbar Section */}
-      <div className="flex flex-col lg:flex-row gap-4 items-center justify-between bg-transparent p-5 border-none shadow-none">
-        <div className="relative w-[160px] group">
+      <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center justify-between bg-transparent p-4 md:p-5 border-none shadow-none">
+        <div className="relative w-full lg:w-80 group">
           {/* Refined Search Pill Design - Standardized Height */}
           <div className="flex h-[35px] items-center bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1 transition-all duration-500 group-focus-within:ring-2 group-focus-within:ring-[#F4F1EA]/20 group-focus-within:border-[#F4F1EA]/30 shadow-lg shadow-black/5">
             <div className="pl-2 pr-1 transition-transform group-focus-within:scale-110">
@@ -912,7 +912,7 @@ export default function CansPage() {
                   size="sm"
                   disabled={currentPage === 1}
                   onClick={() => setCurrentPage(prev => prev - 1)}
-                  className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                  className="w-10 h-10 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
                 >
                   <ChevronLeft size={16} strokeWidth={3} />
                 </Button>
@@ -921,7 +921,7 @@ export default function CansPage() {
                   size="sm"
                   disabled={currentPage >= Math.ceil(totalItems / pageSize)}
                   onClick={() => setCurrentPage(prev => prev + 1)}
-                  className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                  className="w-10 h-10 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
                 >
                   <ChevronRight size={16} strokeWidth={3} />
                 </Button>

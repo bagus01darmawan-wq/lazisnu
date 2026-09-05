@@ -123,7 +123,7 @@ export function DropdownFilter({
 
       {isOpen && (
         <div className={cn(
-          "absolute top-full mt-3 left-0 bg-[#F4F1EA]/10 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] z-50 p-3 animate-in fade-in slide-in-from-top-2 duration-300",
+          "absolute top-full mt-3 left-0 bg-[#F4F1EA]/10 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0.3)] z-50 p-3 animate-in fade-in slide-in-from-top-2 duration-300 max-w-[calc(100vw-2rem)] overflow-x-auto",
           layout === 'vertical' ? popoverWidth : "w-auto min-w-max"
         )}>
           {showSearch && (

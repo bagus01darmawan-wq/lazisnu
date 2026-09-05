@@ -15,7 +15,12 @@ Platform  : Browser desktop (utama) + browser HP (responsive)
 Framework : Next.js 16 App Router + React 19 + TypeScript + Tailwind CSS 4
 
 Catatan: Admin Ranting mengakses dashboard ini dari HP via browser.
-Pastikan semua halaman responsive dan nyaman dipakai di layar 360px.
+
+## Aturan Mobile-First (WAJIB)
+
+Target utama: **Android 360px**. Semua halaman WAJIB mobile-first:
+tulis gaya mobile sebagai default, enhance via `md:` / `lg:`.
+Pola baku + larangan lengkap: `.agents/rules/12-standar-ui-web.md` §14.
 ```
 
 ---

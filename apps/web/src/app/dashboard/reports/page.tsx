@@ -199,7 +199,7 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Perolehan Total</p>
-                <h3 className="text-2xl font-black text-[#F4F1EA] mt-1.5 tracking-tight">
+                <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1.5 tracking-tight break-words">
                   Rp {totalAmount.toLocaleString('id-ID')}
                 </h3>
               </div>
@@ -221,7 +221,7 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Rata-Rata Per Kaleng</p>
-                <h3 className="text-2xl font-black text-[#F4F1EA] mt-1.5 tracking-tight">
+                <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1.5 tracking-tight break-words">
                   Rp {Math.round(averagePerCan).toLocaleString('id-ID')}
                 </h3>
               </div>
@@ -243,7 +243,7 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Petugas Ditugaskan</p>
-                <h3 className="text-2xl font-black text-[#F4F1EA] mt-1.5 tracking-tight">
+                <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1.5 tracking-tight break-words">
                   {officersAssigned} / {officersTotal}
                 </h3>
               </div>
@@ -265,7 +265,7 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Kaleng Kosong</p>
-                <h3 className="text-2xl font-black text-[#F4F1EA] mt-1.5 tracking-tight">
+                <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1.5 tracking-tight break-words">
                   {zeroNominalCount}
                 </h3>
               </div>
@@ -287,7 +287,7 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Kaleng Tidak Terjemput</p>
-                <h3 className="text-2xl font-black text-[#F4F1EA] mt-1.5 tracking-tight">
+                <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1.5 tracking-tight break-words">
                   {uncollectedCount}
                 </h3>
               </div>
@@ -306,7 +306,7 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
       </div>
 
       {/* Transparent Toolbar Section */}
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-start w-full bg-transparent p-4 border-none shadow-none">
+      <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-start w-full bg-transparent p-4 border-none shadow-none">
         <FilterDropdown />
       </div>
 
