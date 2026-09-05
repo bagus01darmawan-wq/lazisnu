@@ -66,7 +66,7 @@ const Modal = ({
         {/* Header */}
         <div
           className={cn(
-            'flex items-center justify-between px-6 py-4 rounded-t-2xl',
+            'flex items-center justify-between px-4 md:px-6 py-4 rounded-t-2xl',
             variant === 'glass'
               ? 'border-b border-white/10 bg-white/5'
               : 'border-b border-gray-100 bg-gray-50/50'
@@ -83,7 +83,7 @@ const Modal = ({
           <button
             onClick={onClose}
             className={cn(
-              'p-1 rounded-full transition-colors',
+              'p-2 rounded-full transition-colors',
               variant === 'glass'
                 ? 'text-[#F4F1EA]/40 hover:bg-white/10 hover:text-[#F4F1EA]'
                 : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600'
@@ -94,7 +94,7 @@ const Modal = ({
         </div>
 
         {/* Body */}
-        <div className="p-6 overflow-y-auto flex-1">
+        <div className="p-4 md:p-6 overflow-y-auto flex-1">
           {children}
         </div>
 
@@ -102,7 +102,7 @@ const Modal = ({
         {footer && (
           <div
             className={cn(
-              'px-6 py-4 rounded-b-2xl',
+              'px-4 md:px-6 py-4 rounded-b-2xl',
               variant === 'glass'
                 ? 'border-t border-white/10 bg-white/5'
                 : 'border-t border-gray-100 bg-gray-50/50'

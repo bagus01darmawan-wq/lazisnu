@@ -912,7 +912,7 @@ export default function CansPage() {
                   size="sm"
                   disabled={currentPage === 1}
                   onClick={() => setCurrentPage(prev => prev - 1)}
-                  className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                  className="w-10 h-10 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
                 >
                   <ChevronLeft size={16} strokeWidth={3} />
                 </Button>
@@ -921,7 +921,7 @@ export default function CansPage() {
                   size="sm"
                   disabled={currentPage >= Math.ceil(totalItems / pageSize)}
                   onClick={() => setCurrentPage(prev => prev + 1)}
-                  className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                  className="w-10 h-10 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
                 >
                   <ChevronRight size={16} strokeWidth={3} />
                 </Button>

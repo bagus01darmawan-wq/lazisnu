@@ -536,7 +536,7 @@ export default function WAMonitorPage() {
                   </div>
                   <div>
                     <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Total Terkirim</p>
-                    <h3 className="text-2xl font-black text-[#F4F1EA] mt-0.5 tracking-tight">
+                    <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-0.5 tracking-tight break-words">
                       {dbStats?.total_sent?.toLocaleString('id-ID') ?? (dbLoading ? '...' : '0')}
                     </h3>
                     <p className="text-[9px] text-[#F4F1EA]/40">Database historis</p>
@@ -553,7 +553,7 @@ export default function WAMonitorPage() {
                   </div>
                   <div>
                     <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Total Gagal</p>
-                    <h3 className="text-2xl font-black text-[#F4F1EA] mt-0.5 tracking-tight">
+                    <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-0.5 tracking-tight break-words">
                       {dbStats?.total_failed?.toLocaleString('id-ID') ?? (dbLoading ? '...' : '0')}
                     </h3>
                     <p className="text-[9px] text-[#F4F1EA]/40">Database historis</p>
@@ -570,7 +570,7 @@ export default function WAMonitorPage() {
                   </div>
                   <div>
                     <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Success Rate</p>
-                    <h3 className="text-2xl font-black text-[#F4F1EA] mt-0.5 tracking-tight">
+                    <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-0.5 tracking-tight break-words">
                       {dbStats ? `${dbStats.success_rate}%` : (dbLoading ? '...' : '0%')}
                     </h3>
                     <p className="text-[9px] text-[#F4F1EA]/40">Terkirim / (Terkirim + Gagal)</p>
@@ -587,7 +587,7 @@ export default function WAMonitorPage() {
                   </div>
                   <div>
                     <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Total Pending</p>
-                    <h3 className="text-2xl font-black text-[#F4F1EA] mt-0.5 tracking-tight">
+                    <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-0.5 tracking-tight break-words">
                       {dbStats?.total_pending?.toLocaleString('id-ID') ?? (dbLoading ? '...' : '0')}
                     </h3>
                     <p className="text-[9px] text-[#F4F1EA]/40">Masih menunggu antrean</p>
@@ -684,7 +684,7 @@ export default function WAMonitorPage() {
                     size="sm"
                     disabled={page <= 1}
                     onClick={() => handlePageChange(page - 1)}
-                    className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                    className="w-10 h-10 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
                   >
                     <div className="w-full h-full flex items-center justify-center">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
@@ -695,7 +695,7 @@ export default function WAMonitorPage() {
                     size="sm"
                     disabled={page >= totalPages}
                     onClick={() => handlePageChange(page + 1)}
-                    className="w-8 h-8 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
+                    className="w-10 h-10 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
                   >
                     <div className="w-full h-full flex items-center justify-center">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>

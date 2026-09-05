@@ -276,7 +276,7 @@ export default function OverviewPage() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Total Infaq</p>
-              <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">
+              <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">
                 Rp {Number(summary.month_collection).toLocaleString('id-ID')}
               </h3>
             </div>
@@ -297,7 +297,7 @@ export default function OverviewPage() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Kaleng Aktif</p>
-              <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">{summary.active_cans}</h3>
+              <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">{summary.active_cans}</h3>
             </div>
             <div className="p-3 bg-[#C959A0]/10 text-[#C959A0] rounded-xl group-hover:bg-[#C959A0] group-hover:text-[#2C473E] transition-all duration-300">
               <Box size={20} />
@@ -314,7 +314,7 @@ export default function OverviewPage() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Petugas Lapangan</p>
-              <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">{summary.total_officers}</h3>
+              <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">{summary.total_officers}</h3>
             </div>
             <div className="p-3 bg-[#6B9E9F]/10 text-[#6B9E9F] rounded-xl group-hover:bg-[#6B9E9F] group-hover:text-[#2C473E] transition-all duration-300">
               <Users size={20} />
@@ -331,7 +331,7 @@ export default function OverviewPage() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Penjemputan</p>
-              <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">{currentRate.toFixed(1)}%</h3>
+              <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">{currentRate.toFixed(1)}%</h3>
             </div>
             <div className="p-3 bg-[#DE6F4A]/10 text-[#DE6F4A] rounded-xl group-hover:bg-[#DE6F4A] group-hover:text-[#2C473E] transition-all duration-300">
               <TrendingUp size={20} />
@@ -544,7 +544,7 @@ export default function OverviewPage() {
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Total Infaq Kecamatan</p>
-                  <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">
+                  <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">
                     Rp {Number(data.district.summary.month_collection).toLocaleString('id-ID')}
                   </h3>
                 </div>
@@ -561,7 +561,7 @@ export default function OverviewPage() {
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Kaleng Aktif</p>
-                  <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">{data.district.summary.active_cans}</h3>
+                  <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">{data.district.summary.active_cans}</h3>
                 </div>
                 <div className="p-3 bg-[#C959A0]/10 text-[#C959A0] rounded-xl group-hover:bg-[#C959A0] group-hover:text-[#2C473E] transition-all duration-300">
                   <Box size={20} />
@@ -579,7 +579,7 @@ export default function OverviewPage() {
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Petugas Lapangan</p>
-                  <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">{data.district.summary.total_officers}</h3>
+                  <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">{data.district.summary.total_officers}</h3>
                 </div>
                 <div className="p-3 bg-[#6B9E9F]/10 text-[#6B9E9F] rounded-xl group-hover:bg-[#6B9E9F] group-hover:text-[#2C473E] transition-all duration-300">
                   <Users size={20} />
@@ -596,7 +596,7 @@ export default function OverviewPage() {
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Penjemputan</p>
-                  <h3 className="text-2xl font-black text-[#F4F1EA] mt-1">{dCurrentRate.toFixed(1)}%</h3>
+                  <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">{dCurrentRate.toFixed(1)}%</h3>
                 </div>
                 <div className="p-3 bg-[#DE6F4A]/10 text-[#DE6F4A] rounded-xl group-hover:bg-[#DE6F4A] group-hover:text-[#2C473E] transition-all duration-300">
                   <TrendingUp size={20} />

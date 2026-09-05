@@ -34,7 +34,7 @@ export function ConfirmToast({
   const accentColor = variant === 'danger' ? 'border-[#DE6F4A]/30' : 'border-[#EAD19B]/30';
 
   return (
-    <div className={`w-[350px] bg-[#2C473E]/95 backdrop-blur-2xl border ${accentColor} rounded-3xl p-5 shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden relative group`}>
+    <div className={`w-[calc(100vw-3rem)] max-w-[350px] bg-[#2C473E]/95 backdrop-blur-2xl border ${accentColor} rounded-3xl p-5 shadow-[0_20px_50px_rgba(0,0,0.5)] overflow-hidden relative group`}>
       {/* Decorative Glow */}
       <div className={`absolute -top-10 -right-10 w-24 h-24 blur-[50px] opacity-20 rounded-full ${variant === 'danger' ? 'bg-[#DE6F4A]' : 'bg-[#EAD19B]'}`} />
       

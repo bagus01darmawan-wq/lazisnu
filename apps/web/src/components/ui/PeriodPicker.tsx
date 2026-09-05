@@ -80,7 +80,7 @@ export function PeriodPicker({ months, year, onChange, className }: PeriodPicker
       </button>
 
       {isOpen && (
-        <div className="absolute top-full mt-3 left-0 bg-[#F4F1EA]/10 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] z-50 p-3 animate-in fade-in slide-in-from-top-2 duration-300 min-w-[280px]">
+        <div className="absolute top-full mt-3 left-0 bg-[#F4F1EA]/10 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0.3)] z-50 p-3 animate-in fade-in slide-in-from-top-2 duration-300 min-w-[280px] max-w-[calc(100vw-2rem)]">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <p className="text-[9px] font-black text-[#F4F1EA]/30 uppercase tracking-[0.2em] mb-2 px-2">Bulan</p>
