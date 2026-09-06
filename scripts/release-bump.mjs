@@ -70,6 +70,16 @@ if (publish) {
     console.error(`Tag ${tag} SUDAH ADA — tolak: tag tidak boleh di-force-push/dibuat ulang.`);
     process.exit(1);
   }
+  // Alur dua jalur: tag v* menentukan kode yang ter-deploy ke produksi
+  // (release.yml → dispatch ci.yml pada ref tag). `push origin HEAD` dari
+  // branch lain berarti men-deploy kode dapur (mis. staging) yang belum
+  // dicek ke produksi — kunci rilis hanya dari main.
+  const branch = git(['rev-parse', '--abbrev-ref', 'HEAD']).trim();
+  if (branch !== 'main') {
+    console.error(`Branch saat ini '${branch}' — rilis APK (--publish) hanya boleh dari 'main'.`);
+    console.error('Urutan benar: merge staging→main → git checkout main && git pull → release-bump --publish.');
+    process.exit(1);
+  }
 }
 
 // ─── Edit build.gradle ──────────────────────────────────────────────────────
