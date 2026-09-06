@@ -1,22 +1,28 @@
 # ============================================================================
-# PREVIEW STAGING (manual)
+# PREVIEW STAGING
 # ============================================================================
 #  Tujuan:
 #  - Deploy image `web:staging` dari BRANCH fitur ke environment staging,
 #    untuk preview visual SEBELUM branch di-merge ke main.
 #
 #  Cara pakai:
-#    gh workflow run preview-staging.yml --ref <branch-fitur>
-#    (atau tab Actions → Preview staging → Run workflow → pilih branch)
+#    1. Setelah file ini ada di main (sudah ter-merge):
+#         gh workflow run preview-staging.yml --ref <branch-fitur>
+#    2. Sementara file ini hanya ada di branch PR (belum di main):
+#         beri label `preview-staging` pada PR branch tersebut.
+#       Job deploy jalan dari merge-ref PR (same-repo → secrets tersedia),
+#       dan men-deploy image `web:staging` yang SUDAH ada di GHCR
+#       (mis. hasil build ci.yml via `gh workflow run ci.yml --ref <branch>`).
 #
 #  Keamanan:
-#  - Hanya jalan via workflow_dispatch (TIDAK pernah auto-trigger).
+#  - Tidak pernah auto-trigger pada push biasa (hanya workflow_dispatch
+#    atau PR yang diberi label `preview-staging` secara eksplisit).
 #  - Menimpa tag `web:staging` di GHCR dengan build branch — aman karena
 #    production TIDAK memakai tag ini (deploy prod selalu pakai tag sha,
 #    lihat job `deploy` di ci.yml). Push berikutnya ke main otomatis
 #    menimpa balik `web:staging` dengan kode main (self-healing).
-#  - Backend/worker staging tidak disentuh: branch web-only biasanya tidak
-#    mengubah backend, dan `up -d web-staging` hanya recreate web.
+#  - Backend/worker staging tidak disentuh: `up -d web-staging` hanya
+#    recreate container web.
 #  - Secrets dipakai sama dengan job "Deploy staging" ci.yml (environment
 #    `staging`: VM_HOST, VM_USER, VM_SSH_KEY).
 # ============================================================================
@@ -24,7 +30,9 @@
 name: Preview staging
 
 on:
-  workflow_dispatch: # Hanya manual — tidak ada trigger otomatis
+  workflow_dispatch: # Jalur utama setelah file ini ada di main
+  pull_request:
+    types: [labeled] # Jalur bootstrap: file belum di main, picu via label
 
 permissions:
   contents: read
@@ -32,24 +40,19 @@ permissions:
 
 concurrency:
   group: lazisnu-preview-staging
-  cancel-in-progress: true # dispatch baru menggantikan preview lama
+  cancel-in-progress: true
 
 env:
   REGISTRY: ghcr.io
 
 jobs:
-  build-deploy:
-    name: Build web dari branch → deploy staging
+  # Build & push HANYA saat dispatch — token pull_request read-only sehingga
+  # tidak bisa push image (untuk jalur PR, image di-deploy apa adanya).
+  build-push:
+    name: Build web dari branch → push web:staging
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    environment: staging
-    env:
-      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GHCR_USER: ${{ github.actor }}
-      GHCR_REPO: ${{ github.repository }}
-      VM_HOST: ${{ secrets.VM_HOST }}
-      VM_USER: ${{ secrets.VM_USER }}
-      VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
     steps:
       - uses: actions/checkout@v7
 
@@ -77,6 +80,27 @@ jobs:
             type=gha
           cache-to: type=gha,mode=max,scope=web-staging
 
+  # Jalur PR: job build-push ter-skip (bukan failure) → langsung deploy
+  # image `web:staging` yang sudah ada di GHCR.
+  deploy:
+    name: Deploy staging (hanya web)
+    needs: [build-push]
+    if: >-
+      always() && !cancelled() &&
+      needs.build-push.result != 'failure' &&
+      (github.event_name == 'workflow_dispatch' ||
+       github.event.label.name == 'preview-staging')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    env:
+      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GHCR_USER: ${{ github.actor }}
+      GHCR_REPO: ${{ github.repository }}
+      VM_HOST: ${{ secrets.VM_HOST }}
+      VM_USER: ${{ secrets.VM_USER }}
+      VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+    steps:
       - name: Deploy staging ke VM via SSH (hanya web)
         uses: appleboy/ssh-action@v1.2.5
         with:
