@@ -17,15 +17,15 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primary', size = 'md', isLoading, disabled, children, ...props }, ref) => {
     const variants = {
-      // Brand-aligned (rencana migrasi bertahap, lihat plan-03).
-      brand: 'bg-[#EAD19B] text-[#2C473E] hover:bg-[#EAD19B]/90 shadow-lg shadow-[#EAD19B]/20 font-bold',
-      brandOutline: 'border border-[#EAD19B]/30 bg-transparent text-[#EAD19B] hover:bg-[#EAD19B]/10 font-bold',
-      // Legacy (dipertahankan untuk backward compat, lihat plan-03).
-      primary: 'bg-green-600 text-white hover:bg-green-700 shadow-sm',
-      danger: 'bg-red-600 text-white hover:bg-red-700 shadow-sm',
-      secondary: 'bg-gray-200 text-gray-800 hover:bg-gray-300',
-      outline: 'border border-gray-300 bg-transparent hover:bg-gray-50 text-gray-700',
-      ghost: 'bg-transparent hover:bg-gray-100 text-gray-600',
+      // Brand-aligned — memakai token tema agar ikut berubah.
+      brand: 'bg-[var(--primary)] text-[var(--primary-ink)] hover:opacity-90 shadow-lg shadow-[var(--primary)]/20 font-bold',
+      brandOutline: 'border border-[var(--primary)]/30 bg-transparent text-[var(--primary)] hover:bg-[var(--primary)]/10 font-bold',
+      // Legacy (dipertahankan untuk backward compat).
+      primary: 'bg-[var(--primary)] text-[var(--primary-ink)] hover:opacity-90 shadow-sm',
+      danger: 'bg-[var(--danger)] text-white hover:opacity-90 shadow-sm',
+      secondary: 'bg-[var(--surface)] text-[var(--surface-ink)] hover:opacity-90',
+      outline: 'border border-[var(--border)] bg-transparent hover:bg-[var(--hover)] text-[var(--surface-ink)]',
+      ghost: 'bg-transparent hover:bg-[var(--hover)] text-[var(--surface-ink)]',
     };
 
     const sizes = {
