@@ -67,9 +67,9 @@ export function ConfirmToast({
               onConfirm();
             }}
             className={`flex-1 h-10 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-lg ${
-              variant === 'danger' 
-                ? 'bg-[#DE6F4A] text-white hover:bg-[#DE6F4A]/90 shadow-[#DE6F4A]/20' 
-                : 'bg-[#EAD19B] text-[#2C473E] hover:bg-[#EAD19B]/90 shadow-[#EAD19B]/20'
+              variant === 'danger'
+                ? 'bg-[#DE6F4A] text-white hover:bg-[#DE6F4A]/90 shadow-[#DE6F4A]/20'
+                : 'bg-[#EAD19B]/20 text-[#EAD19B] border border-[#EAD19B]/40 hover:bg-[#EAD19B]/30 shadow-none'
             }`}
           >
             {confirmLabel}

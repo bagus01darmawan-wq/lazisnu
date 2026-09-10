@@ -34,6 +34,8 @@ export function DropdownFilter({
   const [activeIndex, setActiveIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const previouslyFocused = useRef<HTMLElement | null>(null);
 
   const selectedOption = options.find(opt => opt.value === value);
 
@@ -59,6 +61,16 @@ export function DropdownFilter({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Save focus when opening, restore to trigger on close (a11y plan-04).
+  useEffect(() => {
+    if (isOpen) {
+      previouslyFocused.current = document.activeElement as HTMLElement;
+    } else if (previouslyFocused.current) {
+      previouslyFocused.current.focus();
+      previouslyFocused.current = null;
+    }
+  }, [isOpen]);
 
   const filteredOptions = options.filter(opt =>
     opt.label.toLowerCase().includes(search.toLowerCase())
@@ -105,6 +117,8 @@ export function DropdownFilter({
       onKeyDown={handleKeyDown}
     >
       <button
+        ref={triggerRef}
+        type="button"
         onClick={() => {
             if (!isOpen) setActiveIndex(-1);
             setIsOpen(!isOpen);

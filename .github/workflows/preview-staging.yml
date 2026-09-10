@@ -1,0 +1,135 @@
+# ============================================================================
+# PREVIEW STAGING
+# ============================================================================
+#  Tujuan:
+#  - Deploy image `web:staging` dari BRANCH fitur ke environment staging,
+#    untuk preview visual SEBELUM branch di-merge ke main.
+#
+#  Cara pakai:
+#    1. Setelah file ini ada di main (sudah ter-merge):
+#         gh workflow run preview-staging.yml --ref <branch-fitur>
+#    2. Sementara file ini hanya ada di branch PR (belum di main):
+#         beri label `preview-staging` pada PR branch tersebut.
+#       Job deploy jalan dari merge-ref PR (same-repo → secrets tersedia),
+#       dan men-deploy image `web:staging` yang SUDAH ada di GHCR
+#       (mis. hasil build ci.yml via `gh workflow run ci.yml --ref <branch>`).
+#
+#  Keamanan:
+#  - Tidak pernah auto-trigger pada push biasa (hanya workflow_dispatch
+#    atau PR yang diberi label `preview-staging` secara eksplisit).
+#  - Menimpa tag `web:staging` di GHCR dengan build branch — aman karena
+#    production TIDAK memakai tag ini (deploy prod selalu pakai tag sha,
+#    lihat job `deploy` di ci.yml). Push berikutnya ke main otomatis
+#    menimpa balik `web:staging` dengan kode main (self-healing).
+#  - Backend/worker staging tidak disentuh: `up -d web-staging` hanya
+#    recreate container web.
+#  - Secrets dipakai sama dengan job "Deploy staging" ci.yml (environment
+#    `staging`: VM_HOST, VM_USER, VM_SSH_KEY).
+# ============================================================================
+
+name: Preview staging
+
+on:
+  workflow_dispatch: # Jalur utama setelah file ini ada di main
+  pull_request:
+    types: [labeled] # Jalur bootstrap: file belum di main, picu via label
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: lazisnu-preview-staging
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # Build & push HANYA saat dispatch — token pull_request read-only sehingga
+  # tidak bisa push image (untuk jalur PR, image di-deploy apa adanya).
+  build-push:
+    name: Build web dari branch → push web:staging
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Login ke GHCR
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build & push web:staging (dari ref branch ini)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          build_args: |
+            NEXT_PUBLIC_API_URL=https://staging-api.lazisnu.site
+          tags: |
+            ghcr.io/${{ github.repository }}/web:staging
+          cache-from: |
+            type=gha,scope=web-staging
+            type=gha
+          cache-to: type=gha,mode=max,scope=web-staging
+
+  # Jalur PR: job build-push ter-skip (bukan failure) → langsung deploy
+  # image `web:staging` yang sudah ada di GHCR.
+  deploy:
+    name: Deploy staging (hanya web)
+    needs: [build-push]
+    if: >-
+      always() && !cancelled() &&
+      needs.build-push.result != 'failure' &&
+      (github.event_name == 'workflow_dispatch' ||
+       github.event.label.name == 'preview-staging')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    env:
+      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GHCR_USER: ${{ github.actor }}
+      GHCR_REPO: ${{ github.repository }}
+      VM_HOST: ${{ secrets.VM_HOST }}
+      VM_USER: ${{ secrets.VM_USER }}
+      VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+    steps:
+      - name: Deploy staging ke VM via SSH (hanya web)
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ env.VM_HOST }}
+          username: ${{ env.VM_USER }}
+          key: ${{ env.VM_SSH_KEY }}
+          envs: GHCR_TOKEN,GHCR_USER,GHCR_REPO
+          script: |
+            set -e
+            cd /opt/lazisnu
+
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+            docker pull ghcr.io/$GHCR_REPO/web:staging
+
+            # Recreate HANYA web-staging — backend/worker/redis staging tetap.
+            docker compose -f docker-compose.staging.yml up -d web-staging
+
+            # Reload nginx: container web baru = IP baru (nginx cache DNS)
+            docker exec lazisnu-nginx-1 nginx -s reload || true
+
+            # Smoke test via URL publik + retry (cold start Next.js bisa >10s)
+            ok=0
+            i=0
+            while [ $i -lt 12 ]; do
+              if curl -sf https://staging-api.lazisnu.site/health >/dev/null && curl -sf https://staging.lazisnu.site >/dev/null; then
+                ok=1; break
+              fi
+              i=$((i+1))
+              sleep 5
+            done
+            if [ "$ok" = "1" ]; then echo "✅ Staging preview healthy"; else echo "❌ Staging DOWN"; exit 1; fi

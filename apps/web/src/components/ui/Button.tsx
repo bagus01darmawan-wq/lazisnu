@@ -2,7 +2,14 @@ import React from 'react';
 import { cn } from '@/lib/utils';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'danger' | 'secondary' | 'outline' | 'ghost';
+  variant?:
+    | 'primary'
+    | 'danger'
+    | 'secondary'
+    | 'outline'
+    | 'ghost'
+    | 'brand'
+    | 'brandOutline';
   size?: 'sm' | 'md' | 'lg';
   isLoading?: boolean;
 }
@@ -10,6 +17,10 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primary', size = 'md', isLoading, disabled, children, ...props }, ref) => {
     const variants = {
+      // Brand-aligned (rencana migrasi bertahap, lihat plan-03).
+      brand: 'bg-[#EAD19B] text-[#2C473E] hover:bg-[#EAD19B]/90 shadow-lg shadow-[#EAD19B]/20 font-bold',
+      brandOutline: 'border border-[#EAD19B]/30 bg-transparent text-[#EAD19B] hover:bg-[#EAD19B]/10 font-bold',
+      // Legacy (dipertahankan untuk backward compat, lihat plan-03).
       primary: 'bg-green-600 text-white hover:bg-green-700 shadow-sm',
       danger: 'bg-red-600 text-white hover:bg-red-700 shadow-sm',
       secondary: 'bg-gray-200 text-gray-800 hover:bg-gray-300',

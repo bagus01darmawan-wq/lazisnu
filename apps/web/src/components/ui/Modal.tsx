@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -24,17 +24,57 @@ const Modal = ({
   className,
   variant = 'default',
 }: ModalProps) => {
+  const modalRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const previouslyFocused = useRef<HTMLElement | null>(null);
+
   useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+    if (!isOpen) return;
+
+    // Save the element that had focus before opening (will be restored on close).
+    previouslyFocused.current = document.activeElement as HTMLElement;
+
+    // Initial focus to close button (safer default than first focusable,
+    // karena close button pasti visible & accessible).
+    const focusTimer = window.setTimeout(() => {
+      closeButtonRef.current?.focus();
+    }, 50);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      // Tab trap: cycle focus within modal so keyboard users can't escape
+      // into the background (inert) content.
+      if (e.key === 'Tab' && modalRef.current) {
+        const focusables = modalRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      window.addEventListener('keydown', handleEsc);
-    }
+
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+
     return () => {
+      window.clearTimeout(focusTimer);
       document.body.style.overflow = 'unset';
-      window.removeEventListener('keydown', handleEsc);
+      window.removeEventListener('keydown', handleKeyDown);
+      // Restore focus to the trigger element.
+      previouslyFocused.current?.focus();
+      previouslyFocused.current = null;
     };
   }, [isOpen, onClose]);
 
@@ -55,6 +95,10 @@ const Modal = ({
 
       {/* Modal Content */}
       <div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={title ? 'modal-title' : undefined}
         className={cn(
           'relative z-10 w-full max-w-2xl transform bg-white rounded-2xl shadow-2xl transition-all flex flex-col max-h-[90vh]',
           variant === 'glass'
@@ -73,6 +117,7 @@ const Modal = ({
           )}
         >
           <h3
+            id="modal-title"
             className={cn(
               'text-lg font-bold',
               variant === 'glass' ? 'text-[#F4F1EA]' : 'text-gray-900'
@@ -81,7 +126,10 @@ const Modal = ({
             {title || 'Detail'}
           </h3>
           <button
+            ref={closeButtonRef}
+            type="button"
             onClick={onClose}
+            aria-label="Tutup dialog"
             className={cn(
               'p-2 rounded-full transition-colors',
               variant === 'glass'
@@ -89,7 +137,7 @@ const Modal = ({
                 : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600'
             )}
           >
-            <X size={20} />
+            <X size={20} aria-hidden="true" />
           </button>
         </div>
 

@@ -1,8 +1,15 @@
 @import "tailwindcss";
 
+/*
+ * Root palette — LAZISNU brand
+ * Sumber otoritatif: .agents/rules/12-standar-ui-web.md
+ * Token ini jadi referensi global lewat utility bg-background / text-foreground.
+ * Komponen dashboard sendiri banyak pakai kelas hardcoded [#2C473E]/[#F4F1EA]
+ * (lihat plan-03 untuk token Tailwind v4 @theme yang lebih luas).
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f4f1ea; /* Warm Beige — dasar halaman publik */
+  --foreground: #2c473e; /* Deep Green — teks utama */
 }
 
 @theme inline {
@@ -12,17 +19,22 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/*
+ * Catatan: blok prefers-color-scheme sebelumnya (dark: #0a0a0a/#ededed) dihapus
+ * karena dashboard LAZISNU memang bernuansa gelap berbasis brand (#2C473E + #F4F1EA),
+ * bukan sistem terang/gelap mengikuti OS. Untuk mode publik (landing lazisnu.org),
+ * warna dasar Warm Beige di atas sudah sesuai.
+ */
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /*
+   * font-family diwariskan dari <html className={geistSans.variable}> lewat
+   * kelas .font-sans Tailwind v4 (di-ekspos lewat @theme inline di atas).
+   * Tidak perlu override eksplisit di body; jika ada kebutuhan override per-halaman,
+   * pakai utility `font-sans` / `font-mono` Tailwind.
+   */
 }
 
 /* Custom Scrollbar for Glass Elements */
