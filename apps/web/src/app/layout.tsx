@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import "../styles/themes.css";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import { Toaster } from 'sonner';
 import FirebaseInit from '../components/FirebaseInit';
 
@@ -49,11 +51,22 @@ export default function RootLayout({
   return (
     <html
       lang="id"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        {/* Anti-FOUC: terapkan tema tersimpan sebelum paint */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('lazisnu-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">
-        <FirebaseInit />
-        {children}
+        <ThemeProvider>
+          <FirebaseInit />
+          {children}
+        </ThemeProvider>
         <Toaster position="top-center" richColors expand={true} closeButton />
       </body>
     </html>

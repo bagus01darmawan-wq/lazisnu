@@ -100,10 +100,10 @@ const Modal = ({
         aria-modal="true"
         aria-labelledby={title ? 'modal-title' : undefined}
         className={cn(
-          'relative z-10 w-full max-w-2xl transform bg-white rounded-2xl shadow-2xl transition-all flex flex-col max-h-[90vh]',
+          'relative z-10 w-full max-w-2xl transform rounded-2xl shadow-2xl transition-all flex flex-col max-h-[90vh]',
           variant === 'glass'
-            ? 'bg-[#F4F1EA]/5 backdrop-blur-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.4)]'
-            : 'bg-white rounded-2xl shadow-2xl',
+            ? 'bg-[var(--glass)] text-[var(--glass-ink)] backdrop-blur-2xl border border-[var(--border)] shadow-[0_20px_50px_rgba(0,0,0,0.4)]'
+            : 'bg-[var(--surface)] text-[var(--surface-ink)]',
           className
         )}
       >
@@ -112,15 +112,15 @@ const Modal = ({
           className={cn(
             'flex items-center justify-between px-4 md:px-6 py-4 rounded-t-2xl',
             variant === 'glass'
-              ? 'border-b border-white/10 bg-white/5'
-              : 'border-b border-gray-100 bg-gray-50/50'
+              ? 'border-b border-[var(--border)] bg-[var(--hover)]'
+              : 'border-b border-[var(--border)] bg-[var(--hover)]'
           )}
         >
           <h3
             id="modal-title"
             className={cn(
               'text-lg font-bold',
-              variant === 'glass' ? 'text-[#F4F1EA]' : 'text-gray-900'
+              variant === 'glass' ? 'text-[var(--glass-ink)]' : 'text-[var(--surface-ink)]'
             )}
           >
             {title || 'Detail'}
@@ -133,8 +133,8 @@ const Modal = ({
             className={cn(
               'p-2 rounded-full transition-colors',
               variant === 'glass'
-                ? 'text-[#F4F1EA]/40 hover:bg-white/10 hover:text-[#F4F1EA]'
-                : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600'
+                ? 'text-[var(--glass-ink)]/40 hover:bg-[var(--hover)] hover:text-[var(--glass-ink)]'
+                : 'text-[var(--surface-ink)]/50 hover:bg-[var(--hover)] hover:text-[var(--surface-ink)]'
             )}
           >
             <X size={20} aria-hidden="true" />
@@ -152,8 +152,8 @@ const Modal = ({
             className={cn(
               'px-4 md:px-6 py-4 rounded-b-2xl',
               variant === 'glass'
-                ? 'border-t border-white/10 bg-white/5'
-                : 'border-t border-gray-100 bg-gray-50/50'
+                ? 'border-t border-[var(--border)] bg-[var(--hover)]'
+                : 'border-t border-[var(--border)] bg-[var(--hover)]'
             )}
           >
             {footer}

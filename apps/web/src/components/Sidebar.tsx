@@ -28,11 +28,11 @@ const Sidebar = ({ role: initialRole, userName: initialUserName, isMobileOpen = 
   if (!role) {
     return (
       <aside className={cn(
-        "w-64 bg-slate-900 flex items-center justify-center h-screen fixed z-50 transition-transform duration-300",
+        "w-64 bg-[var(--canvas)] flex items-center justify-center h-screen fixed z-50 transition-transform duration-300",
         isDesktopVisible ? "lg:translate-x-0" : "lg:-translate-x-full",
         isMobileOpen ? "translate-x-0 visible" : "-translate-x-full invisible lg:visible"
       )} id="sidebar" aria-hidden={!isDesktopVisible && !isMobileOpen}>
-        <Loader2 className="animate-spin text-green-500" size={24} />
+        <Loader2 className="animate-spin text-[var(--primary)]" size={24} />
       </aside>
     );
   }
@@ -44,7 +44,7 @@ const Sidebar = ({ role: initialRole, userName: initialUserName, isMobileOpen = 
       {/* Mobile Overlay */}
       {isMobileOpen && (
         <div
-          className="fixed inset-0 bg-[#2C473E]/40 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 bg-[var(--canvas)]/40 backdrop-blur-sm z-40 lg:hidden"
           onClick={onMobileClose}
           aria-hidden="true"
         />
@@ -52,7 +52,7 @@ const Sidebar = ({ role: initialRole, userName: initialUserName, isMobileOpen = 
 
       <aside
         className={cn(
-          "w-64 bg-[#F4F1EA] text-[#2C473E] flex flex-col h-screen fixed left-0 top-0 z-50 border-r border-[#2C473E]/5 shadow-2xl transition-transform duration-300 ease-in-out",
+          "w-64 bg-[var(--surface)] text-[var(--surface-ink)] flex flex-col h-screen fixed left-0 top-0 z-50 border-r border-[var(--surface-border)] shadow-2xl transition-transform duration-300 ease-in-out",
           isDesktopVisible ? "lg:translate-x-0 lg:visible" : "lg:-translate-x-full lg:invisible",
           isMobileOpen ? "translate-x-0 visible" : "-translate-x-full invisible lg:visible"
         )}
@@ -60,7 +60,7 @@ const Sidebar = ({ role: initialRole, userName: initialUserName, isMobileOpen = 
         aria-hidden={!isDesktopVisible && !isMobileOpen}
       >
         {/* Brand Header */}
-        <div className="py-5 px-6 border-b border-[#2C473E]/10 bg-[#F4F1EA] flex items-center justify-between">
+        <div className="py-5 px-6 border-b border-[var(--surface-border)] bg-[var(--surface)] flex items-center justify-between">
           <div className="flex flex-col items-center gap-1">
             <Image
               src="/logolzs.svg"
@@ -71,15 +71,15 @@ const Sidebar = ({ role: initialRole, userName: initialUserName, isMobileOpen = 
               priority
             />
             <div className="text-center">
-              <h1 className="text-[#2C473E] font-bold tracking-tight">NU-CARE LAZISNU</h1>
-              <p className="text-[10px] text-[#2C473E]/50 uppercase tracking-widest font-bold">Collector Dashboard</p>
+              <h1 className="text-[var(--surface-ink)] font-bold tracking-tight">NU-CARE LAZISNU</h1>
+              <p className="text-[10px] text-[var(--surface-ink)]/50 uppercase tracking-widest font-bold">Collector Dashboard</p>
             </div>
           </div>
 
           {/* Close button for mobile */}
           <button
             onClick={onMobileClose}
-            className="lg:hidden p-3 rounded-xl hover:bg-[#2C473E]/5 text-[#2C473E]/50 transition-all"
+            className="lg:hidden p-3 rounded-xl hover:bg-[var(--surface-hover)] text-[var(--surface-ink)]/50 transition-all"
             aria-label="Tutup menu"
             type="button"
           >
@@ -103,20 +103,20 @@ const Sidebar = ({ role: initialRole, userName: initialUserName, isMobileOpen = 
                 className={cn(
                   'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group',
                   isActive
-                    ? 'bg-[#DE6F4A]/10 text-[#DE6F4A] font-bold'
-                    : 'hover:bg-[#2C473E]/5 text-[#2C473E]/70 hover:text-[#2C473E]'
+                    ? 'bg-[var(--accent)]/10 text-[var(--accent)] font-bold'
+                    : 'hover:bg-[var(--surface-hover)] text-[var(--surface-ink)]/70 hover:text-[var(--surface-ink)]'
                 )}
               >
                 <Icon
                   size={20}
                   className={cn(
                     'transition-transform group-hover:scale-110',
-                    isActive ? 'text-[#DE6F4A]' : 'text-[#2C473E]/40 group-hover:text-[#2C473E]'
+                    isActive ? 'text-[var(--accent)]' : 'text-[var(--surface-ink)]/40 group-hover:text-[var(--surface-ink)]'
                   )}
                 />
                 <span className="text-sm">{item.title}</span>
                 {isActive && (
-                  <div className="ml-auto w-1.5 h-1.5 bg-[#DE6F4A] rounded-full shadow-[0_0_8px_rgba(222,111,74,0.4)]" />
+                  <div className="ml-auto w-1.5 h-1.5 bg-[var(--accent)] rounded-full shadow-[0_0_8px_rgba(222,111,74,0.4)]" />
                 )}
               </Link>
             );
@@ -124,20 +124,20 @@ const Sidebar = ({ role: initialRole, userName: initialUserName, isMobileOpen = 
         </nav>
 
         {/* User Footer Section */}
-        <div className="p-4 bg-[#F4F1EA] border-t border-[#2C473E]/10">
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-[#2C473E]/5 border border-[#2C473E]/5 mb-3">
-            <div className="w-10 h-10 bg-[#2C473E]/10 rounded-full flex items-center justify-center text-[#2C473E]">
+        <div className="p-4 bg-[var(--surface)] border-t border-[var(--surface-border)]">
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--surface-hover)] border border-[var(--surface-border)] mb-3">
+            <div className="w-10 h-10 bg-[var(--surface-hover)] rounded-full flex items-center justify-center text-[var(--surface-ink)]">
               <UserIcon size={18} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold text-[#2C473E] truncate">{userName}</p>
-              <p className="text-[10px] text-[#2C473E]/50 uppercase font-bold">{role.replace('_', ' ')}</p>
+              <p className="text-xs font-bold text-[var(--surface-ink)] truncate">{userName}</p>
+              <p className="text-[10px] text-[var(--surface-ink)]/50 uppercase font-bold">{role.replace('_', ' ')}</p>
             </div>
           </div>
 
           <button
             onClick={() => logout()}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#D97A76]/5 hover:bg-[#D97A76]/15 text-[#D97A76] transition-all duration-300 text-sm font-bold group border border-[#D97A76]/10 hover:border-[#D97A76]/30"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--danger)]/5 hover:bg-[var(--danger)]/15 text-[var(--danger)] transition-all duration-300 text-sm font-bold group border border-[var(--danger)]/10 hover:border-[var(--danger)]/30"
           >
             <LogOut size={18} className="transition-transform group-hover:-translate-x-1" />
             <span>Keluar</span>
