@@ -52,7 +52,7 @@
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
     "@types/jest": "^30.0.0",
-    "@types/node": "^26.4.0",
+    "@types/node": "^26.5.0",
     "@types/qrcode": "^1.5.5",
     "@types/supertest": "^7.2.0",
     "drizzle-kit": "^0.31.10",
