@@ -39,7 +39,7 @@
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.12.1",
     "firebase-admin": "^13.8.0",
-    "ioredis": "^5.4.1",
+    "ioredis": "^6.0.0",
     "pdf-lib": "^1.17.1",
     "pino": "^10.3.1",
     "postgres": "^3.4.9",
