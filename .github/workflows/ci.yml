@@ -53,14 +53,27 @@ env:
 jobs:
   # ─── Deteksi area yang berubah ────────────────────────────────────────────
   # Supaya perubahan mobile saja tidak memicu build image + deploy backend/web.
+  #
+  # PENTING — kenapa hasil paths-filter TIDAK dipercaya begitu saja.
+  # Pada push berupa MERGE COMMIT, dorny/paths-filter@v4 pernah melaporkan
+  # "tidak ada perubahan" padahal push itu membawa 37 berkas. Akibatnya seluruh
+  # pipeline ter-skip, termasuk kedua job deploy, sementara run tetap berakhir
+  # hijau. Kejadian nyata: merge PR #94 (commit 06da308), 12 Sep 2026.
+  # Karena itu langkah `decide` di bawah menghitung ulang diff-nya sendiri dan
+  # memaksa semua area berubah bila filter meleset. Arah yang aman adalah
+  # kelebihan jalan, bukan diam-diam tidak mengerjakan apa pun.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      backend: ${{ steps.filter.outputs.backend || steps.fallback.outputs.backend }}
-      web: ${{ steps.filter.outputs.web || steps.fallback.outputs.web }}
-      mobile: ${{ steps.filter.outputs.mobile || steps.fallback.outputs.mobile }}
-      infra: ${{ steps.filter.outputs.infra || steps.fallback.outputs.infra }}
+      backend: ${{ steps.decide.outputs.backend }}
+      web: ${{ steps.decide.outputs.web }}
+      mobile: ${{ steps.decide.outputs.mobile }}
+      infra: ${{ steps.decide.outputs.infra }}
+      # Apakah ada berkas kode yang benar-benar berubah? Dipakai job
+      # `ci-status` supaya ia menolak melaporkan hijau ketika seluruh job
+      # gerbang ter-skip padahal ada kode yang berubah.
+      code: ${{ steps.decide.outputs.code }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -68,6 +81,30 @@ jobs:
           # (PR di sini divergen <10 commit). Gagal berisik bila kurang —
           # bukan diam-diam salah deteksi. Hemat tumbuh seiring repo menua.
           fetch-depth: 100
+
+      # Base pembanding ditentukan eksplisit supaya langkah `decide` bisa
+      # memverifikasi diff-nya sendiri. `github.event.before` kosong pada
+      # workflow_dispatch, dan bisa menunjuk commit di luar clone dangkal.
+      - name: Tentukan base pembanding
+        id: base
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "pull_request" ]; then
+            echo "value=$PR_BASE" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          b="$BEFORE"
+          case "$b" in
+            ""|0000000000000000000000000000000000000000) b="" ;;
+          esac
+          if [ -z "$b" ] || ! git cat-file -e "${b}^{commit}" 2>/dev/null; then
+            b="$(git rev-parse HEAD^ 2>/dev/null || echo '')"
+          fi
+          echo "value=$b" >> "$GITHUB_OUTPUT"
 
       - id: filter
         if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/staging'
@@ -94,15 +131,72 @@ jobs:
               - 'scripts/**'
               - '.github/workflows/**'
 
-      # workflow_dispatch (termasuk ref tag dari release.yml): filter path tidak
-      # relevan → jalankan semua.
-      - id: fallback
-        if: steps.filter.outputs.backend == ''
+      # Penentu tunggal area yang berubah — menggantikan langkah `fallback`
+      # lama, sekaligus memverifikasi hasil filter terhadap diff yang
+      # dihitung sendiri.
+      - name: Tentukan area yang berubah
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ steps.base.outputs.value }}
+          FILTER: ${{ steps.filter.outcome }}
+          F_BACKEND: ${{ steps.filter.outputs.backend }}
+          F_WEB: ${{ steps.filter.outputs.web }}
+          F_MOBILE: ${{ steps.filter.outputs.mobile }}
+          F_INFRA: ${{ steps.filter.outputs.infra }}
         run: |
-          echo "backend=true"  >> "$GITHUB_OUTPUT"
-          echo "web=true"      >> "$GITHUB_OUTPUT"
-          echo "mobile=true"   >> "$GITHUB_OUTPUT"
-          echo "infra=true"    >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          emit() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
+          semua_berubah() {
+            emit backend true; emit web true; emit mobile true; emit infra true; emit code true
+          }
+
+          # Filter tidak dijalankan (workflow_dispatch / ref tag dari
+          # release.yml): filter path tidak relevan → jalankan semua.
+          if [ "$FILTER" != "success" ] || [ -z "$F_BACKEND" ]; then
+            echo "Filter path tidak dijalankan — semua area dianggap berubah."
+            semua_berubah
+            exit 0
+          fi
+
+          # Hitung sendiri diff-nya, untuk memverifikasi hasil filter.
+          diff_ok=0
+          changed=""
+          if [ -n "$BASE" ] && git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            changed="$(git diff --name-only "$BASE" HEAD -- || true)"
+            diff_ok=1
+          fi
+
+          # Pola di sini sengaja LEBIH LEBAR daripada di paths-filter: langkah
+          # ini hanya jaring pengaman. Salah deteksi ke arah "ada kode berubah"
+          # hanya membuat pipeline jalan berlebih; ke arah sebaliknya berbahaya.
+          code=false
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            case "$f" in
+              apps/*|packages/*|scripts/*|nginx/*|prometheus/*|.github/workflows/*|docker-compose*.yml|pnpm-lock.yaml|pnpm-workspace.yaml)
+                code=true ;;
+            esac
+          done <<< "$changed"
+
+          if [ "$F_BACKEND" = "false" ] && [ "$F_WEB" = "false" ] && [ "$F_MOBILE" = "false" ] && [ "$F_INFRA" = "false" ]; then
+            if [ "$diff_ok" = "0" ]; then
+              echo "::warning::Diff tidak bisa diverifikasi (base '$BASE' tidak tersedia di clone). Semua area dipaksa berubah demi keamanan."
+              semua_berubah
+              exit 0
+            fi
+            if [ "$code" = "true" ]; then
+              echo "::warning::paths-filter melaporkan tidak ada perubahan, tetapi diff $BASE..HEAD memuat berkas kode. Semua area dipaksa berubah demi keamanan."
+              semua_berubah
+              exit 0
+            fi
+          fi
+
+          emit backend "$F_BACKEND"
+          emit web     "$F_WEB"
+          emit mobile  "$F_MOBILE"
+          emit infra   "$F_INFRA"
+          emit code    "$code"
 
   # ─── Gerbang mutu: install, build shared types, lint, format, typecheck ───
   # Tidak butuh service (Postgres/Redis) → cepat, dan jadi gate semua job lain.
@@ -686,24 +780,64 @@ jobs:
             docker builder prune -f >/dev/null 2>&1 || true
 
   # ─── Ringkasan status (memudahkan baca hasil di tab Actions) ─────────────
+  # Job ini adalah SATU-SATUNYA status yang diwajibkan branch protection
+  # `main`. Karena itu ia tidak boleh pernah melaporkan hijau untuk pipeline
+  # yang sebenarnya tidak mengerjakan apa pun. Dulu ia hanya memeriksa
+  # `failure`, sehingga `skipped` dianggap lolos — dan merge PR #94 (12 Sep
+  # 2026) lolos hijau padahal 8 dari 10 job ter-skip dan tidak ada deploy.
   ci-status:
     name: CI status
-    needs: [verify, test-backend, test-mobile, test-web, build-image]
+    needs: [changes, verify, test-backend, test-mobile, test-web, build-image]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Evaluasi hasil
+        env:
+          R_CHANGES: ${{ needs.changes.result }}
+          CODE_CHANGED: ${{ needs.changes.outputs.code }}
+          R_VERIFY: ${{ needs.verify.result }}
+          R_TEST_BACKEND: ${{ needs.test-backend.result }}
+          R_TEST_MOBILE: ${{ needs.test-mobile.result }}
+          R_TEST_WEB: ${{ needs.test-web.result }}
+          R_BUILD_IMAGE: ${{ needs.build-image.result }}
         run: |
-          echo "verify        : ${{ needs.verify.result }}"
-          echo "test-backend  : ${{ needs.test-backend.result }}"
-          echo "test-mobile   : ${{ needs.test-mobile.result }}"
-          echo "test-web      : ${{ needs.test-web.result }}"
-          echo "build-image   : ${{ needs.build-image.result }}"
-          for r in "${{ needs.verify.result }}" "${{ needs.test-backend.result }}" "${{ needs.test-mobile.result }}" "${{ needs.test-web.result }}" "${{ needs.build-image.result }}"; do
-            if [ "$r" = "failure" ]; then
-              echo "::error::Ada job yang gagal — pipeline dihentikan."
-              exit 1
+          set -euo pipefail
+          echo "changes       : $R_CHANGES (ada kode berubah: ${CODE_CHANGED:-tidak diketahui})"
+          echo "verify        : $R_VERIFY"
+          echo "test-backend  : $R_TEST_BACKEND"
+          echo "test-mobile   : $R_TEST_MOBILE"
+          echo "test-web      : $R_TEST_WEB"
+          echo "build-image   : $R_BUILD_IMAGE"
+
+          gagal=0
+
+          for r in "$R_VERIFY" "$R_TEST_BACKEND" "$R_TEST_MOBILE" "$R_TEST_WEB" "$R_BUILD_IMAGE"; do
+            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
+              gagal=1
             fi
           done
+
+          # Job `changes` gagal → semua job hilir ter-skip, jadi hasilnya tidak
+          # bisa dinilai. Jangan pernah melaporkan hijau dalam keadaan ini.
+          if [ "$R_CHANGES" != "success" ]; then
+            echo "::error::Job changes berakhir '$R_CHANGES' — pipeline tidak bisa dinilai."
+            gagal=1
+          fi
+
+          # Penjaga hijau palsu: ada kode yang berubah, tetapi tidak satu pun
+          # job gerbang benar-benar dijalankan.
+          if [ "$CODE_CHANGED" = "true" ] &&
+             [ "$R_VERIFY" = "skipped" ] && [ "$R_TEST_BACKEND" = "skipped" ] &&
+             [ "$R_TEST_MOBILE" = "skipped" ] && [ "$R_TEST_WEB" = "skipped" ] &&
+             [ "$R_BUILD_IMAGE" = "skipped" ]; then
+            echo "::error::Kode berubah tetapi SELURUH job gerbang ter-skip. Deteksi area kemungkinan salah — pipeline tidak boleh dilaporkan hijau."
+            gagal=1
+          fi
+
+          if [ "$gagal" = "1" ]; then
+            echo "::error::Pipeline tidak lolos."
+            exit 1
+          fi
+
           echo "✅ Semua job relevan lolos."
