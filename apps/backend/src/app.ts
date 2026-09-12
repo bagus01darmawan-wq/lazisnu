@@ -42,6 +42,12 @@ export async function buildApp() {
   await server.register(cors, {
     origin: isProduction ? corsOrigins : true,
     credentials: true,
+    // EKSPLISIT: @fastify/cors 11 (bump PR #67) mengganti default methods
+    // dari "GET,HEAD,PUT,PATCH,POST,DELETE" menjadi "GET,HEAD,POST" — tanpa
+    // baris ini semua PUT/PATCH/DELETE dari web dashboard gagal preflight
+    // CORS dan axios melaporkan "Network Error" (staging kena 6 Sep 2026,
+    // produksi lolos hanya karena image rilisnya masih cors 9).
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
   });
 
   await server.register(jwt, {

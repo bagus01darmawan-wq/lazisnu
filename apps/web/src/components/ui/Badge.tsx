@@ -2,18 +2,31 @@ import React from 'react';
 import { cn } from '@/lib/utils';
 
 interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
-  variant?: 'sent' | 'pending' | 'failed' | 'resubmit' | 'default' | 'success' | 'secondary';
+  variant?:
+    | 'sent'
+    | 'pending'
+    | 'failed'
+    | 'resubmit'
+    | 'default'
+    | 'success'
+    | 'secondary'
+    | 'brand'
+    | 'jelly';
 }
 
 const Badge = ({ className, variant = 'default', children, ...props }: BadgeProps) => {
   const variants = {
-    sent: 'bg-green-100 text-green-800 border-green-200',
-    pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-    failed: 'bg-red-100 text-red-800 border-red-200',
-    resubmit: 'bg-yellow-50 text-yellow-700 border-yellow-100 opacity-75',
-    default: 'bg-gray-100 text-gray-800 border-gray-200',
-    success: 'bg-green-100 text-green-800 border-green-200',
-    secondary: 'bg-slate-100 text-slate-800 border-slate-200',
+    // Brand-aligned — memakai token tema.
+    brand: 'bg-[var(--primary)]/15 text-[var(--primary)] border-[var(--primary)]/30',
+    jelly: 'bg-[var(--danger)]/10 text-[var(--danger)] border-[var(--danger)]/30',
+    // Status (standar §8 — dipakai semua tabel status, JANGAN dihapus).
+    sent: 'bg-[var(--primary)]/15 text-[var(--surface-ink)] border-[var(--primary)]/30',
+    pending: 'bg-[var(--accent)]/15 text-[var(--surface-ink)] border-[var(--accent)]/30',
+    failed: 'bg-[var(--danger)]/15 text-[var(--surface-ink)] border-[var(--danger)]/30',
+    resubmit: 'bg-[var(--accent)]/10 text-[var(--surface-ink)] border-[var(--accent)]/20 opacity-80',
+    default: 'bg-[var(--surface)] text-[var(--surface-ink)] border-[var(--border)]',
+    success: 'bg-[var(--primary)]/15 text-[var(--surface-ink)] border-[var(--primary)]/30',
+    secondary: 'bg-[var(--surface)] text-[var(--surface-ink)] border-[var(--border)]',
   };
 
   return (

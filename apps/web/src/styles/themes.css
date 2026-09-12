@@ -1,0 +1,270 @@
+/*
+ * LAZISNU Theme Tokens — 15 tema + dual-mode (light surface & dark glass)
+ * Dipakai oleh ThemeProvider (set data-theme di <html>).
+ * Warna brand lama (hardcode) dipetakan ke token agar ganti tema = ganti total.
+ *
+ * Token:
+ *  --canvas      : latar utama (sidebar/header) — kontras tinggi dgn --text
+ *  --surface     : kartu/sheet mode TERANG (teks gelap --ink)
+ *  --surface-ink : warna teks di atas --surface
+ *  --glass        : latar glass mode GELAP (transparan di atas canvas)
+ *  --glass-ink    : warna teks di atas --glass
+ *  --primary      : aksen utama / CTA
+ *  --primary-ink  : teks di atas --primary
+ *  --text         : teks di atas --canvas (header/sidebar)
+ *  --muted        : teks sekunder di atas --canvas
+ *  --border       : border halus di atas canvas/glass
+ *  --danger       : warna bahaya (delete/error)
+ *  --accent       : warna aksen sekunder (badge/ring)
+ *  --hover        : overlay hover transparan di atas surface/glass
+ */
+
+:root,
+[data-theme='sawah-fajar'] {
+  --canvas: #2C473E;
+  --surface: #F4F1EA;
+  --surface-ink: #1c1c1c;
+  /* Token adaptif: resolved terhadap --surface-ink tema aktif (jalan utk semua tema). */
+  --surface-border: color-mix(in srgb, var(--surface-ink) 12%, transparent);
+  --surface-hover: color-mix(in srgb, var(--surface-ink) 7%, transparent);
+  --glass: rgba(244, 241, 234, 0.06);
+  --glass-ink: #F4F1EA;
+  --primary: #EAD19B;
+  --primary-ink: #2C473E;
+  --text: #F4F1EA;
+  --muted: rgba(244, 241, 234, 0.7);
+  --border: rgba(244, 241, 234, 0.12);
+  --danger: #DE6F4A;
+  --accent: #DE6F4A;
+  --hover: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='lautan-tenang'] {
+  --canvas: #0F5E63;
+  --surface: #F7F3EC;
+  --surface-ink: #143A3D;
+  --glass: rgba(247, 243, 236, 0.06);
+  --glass-ink: #F7F3EC;
+  --primary: #E8A87C;
+  --primary-ink: #0F5E63;
+  --text: #F7F3EC;
+  --muted: rgba(247, 243, 236, 0.7);
+  --border: rgba(247, 243, 236, 0.12);
+  --danger: #D9694A;
+  --accent: #F2C57C;
+  --hover: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='senja-nu'] {
+  --canvas: #3B2A4A;
+  --surface: #F5EBDD;
+  --surface-ink: #2E2138;
+  --glass: rgba(245, 235, 221, 0.06);
+  --glass-ink: #F5EBDD;
+  --primary: #E0A458;
+  --primary-ink: #3B2A4A;
+  --text: #F5EBDD;
+  --muted: rgba(245, 235, 221, 0.7);
+  --border: rgba(245, 235, 221, 0.12);
+  --danger: #C0533B;
+  --accent: #C98BB9;
+  --hover: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='batik-malam'] {
+  --canvas: #1A1B3A;
+  --surface: #F4F1EA;
+  --surface-ink: #1A1B3A;
+  --glass: rgba(244, 241, 234, 0.06);
+  --glass-ink: #F4F1EA;
+  --primary: #D4AF37;
+  --primary-ink: #1A1B3A;
+  --text: #F4F1EA;
+  --muted: rgba(244, 241, 234, 0.7);
+  --border: rgba(244, 241, 234, 0.12);
+  --danger: #B5524B;
+  --accent: #8C7AE6;
+  --hover: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='hutan-hujan'] {
+  --canvas: #1F3D2B;
+  --surface: #EAF0E4;
+  --surface-ink: #173023;
+  --glass: rgba(234, 240, 228, 0.06);
+  --glass-ink: #EAF0E4;
+  --primary: #A8C686;
+  --primary-ink: #1F3D2B;
+  --text: #EAF0E4;
+  --muted: rgba(234, 240, 228, 0.7);
+  --border: rgba(234, 240, 228, 0.12);
+  --danger: #C0533B;
+  --accent: #6B4423;
+  --hover: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='terracotta-jawa'] {
+  --canvas: #7A3B2E;
+  --surface: #F3E9DC;
+  --surface-ink: #5E2C22;
+  --glass: rgba(243, 233, 220, 0.06);
+  --glass-ink: #F3E9DC;
+  --primary: #E4B363;
+  --primary-ink: #7A3B2E;
+  --text: #F3E9DC;
+  --muted: rgba(243, 233, 220, 0.7);
+  --border: rgba(243, 233, 220, 0.12);
+  --danger: #B23A2E;
+  --accent: #2E2E2E;
+  --hover: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='langit-biru'] {
+  --canvas: #2E5A88;
+  --surface: #F5F8FC;
+  --surface-ink: #1F3D5C;
+  --glass: rgba(245, 248, 252, 0.07);
+  --glass-ink: #F5F8FC;
+  --primary: #F2C94C;
+  --primary-ink: #2E5A88;
+  --text: #F5F8FC;
+  --muted: rgba(245, 248, 252, 0.72);
+  --border: rgba(245, 248, 252, 0.12);
+  --danger: #C0392B;
+  --accent: #1B3A5B;
+  --hover: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='anggrek-ungu'] {
+  --canvas: #5A4A6A;
+  --surface: #F6F2F4;
+  --surface-ink: #463A52;
+  --glass: rgba(246, 242, 244, 0.06);
+  --glass-ink: #F6F2F4;
+  --primary: #C9B8D4;
+  --primary-ink: #5A4A6A;
+  --text: #F6F2F4;
+  --muted: rgba(246, 242, 244, 0.7);
+  --border: rgba(246, 242, 244, 0.12);
+  --danger: #B5524B;
+  --accent: #9CAF88;
+  --hover: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='kopi-tubruk'] {
+  --canvas: #3B2417;
+  --surface: #F0E6D8;
+  --surface-ink: #2E1B10;
+  --glass: rgba(240, 230, 216, 0.06);
+  --glass-ink: #F0E6D8;
+  --primary: #C68B59;
+  --primary-ink: #3B2417;
+  --text: #F0E6D8;
+  --muted: rgba(240, 230, 216, 0.7);
+  --border: rgba(240, 230, 216, 0.12);
+  --danger: #B5524B;
+  --accent: #A9744F;
+  --hover: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='pasir-pantai'] {
+  --canvas: #1F4E54;
+  --surface: #F7F0E1;
+  --surface-ink: #173B40;
+  --glass: rgba(247, 240, 225, 0.06);
+  --glass-ink: #F7F0E1;
+  --primary: #F2A488;
+  --primary-ink: #1F4E54;
+  --text: #F7F0E1;
+  --muted: rgba(247, 240, 225, 0.7);
+  --border: rgba(247, 240, 225, 0.12);
+  --danger: #C0533B;
+  --accent: #E8C07D;
+  --hover: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='merah-putih'] {
+  --canvas: #8B1E2D;
+  --surface: #FBF8F3;
+  --surface-ink: #6E1723;
+  --glass: rgba(251, 248, 243, 0.07);
+  --glass-ink: #FBF8F3;
+  --primary: #E8C547;
+  --primary-ink: #8B1E2D;
+  --text: #FBF8F3;
+  --muted: rgba(251, 248, 243, 0.75);
+  --border: rgba(251, 248, 243, 0.14);
+  --danger: #B23A2E;
+  --accent: #FFFFFF;
+  --hover: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='gelap-elegan'] {
+  --canvas: #14161A;
+  --surface: #1E2228;
+  --surface-ink: #E5E9F0;
+  --glass: rgba(229, 233, 240, 0.05);
+  --glass-ink: #E5E9F0;
+  --primary: #5EEAD4;
+  --primary-ink: #14161A;
+  --text: #E5E9F0;
+  --muted: rgba(229, 233, 240, 0.62);
+  --border: rgba(229, 233, 240, 0.1);
+  --danger: #F87171;
+  --accent: #C0C6D0;
+  --hover: rgba(255, 255, 255, 0.07);
+}
+
+[data-theme='sakura-senja'] {
+  --canvas: #6D4C5B;
+  --surface: #FBEFF1;
+  --surface-ink: #563A47;
+  --glass: rgba(251, 239, 241, 0.06);
+  --glass-ink: #FBEFF1;
+  --primary: #E9B7C0;
+  --primary-ink: #6D4C5B;
+  --text: #FBEFF1;
+  --muted: rgba(251, 239, 241, 0.7);
+  --border: rgba(251, 239, 241, 0.12);
+  --danger: #C0533B;
+  --accent: #C98A9B;
+  --hover: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='zaitun-mediterania'] {
+  --canvas: #4A4E1F;
+  --surface: #F3EFD9;
+  --surface-ink: #3A3D18;
+  --glass: rgba(243, 239, 217, 0.06);
+  --glass-ink: #F3EFD9;
+  --primary: #C97B3C;
+  --primary-ink: #4A4E1F;
+  --text: #F3EFD9;
+  --muted: rgba(243, 239, 217, 0.7);
+  --border: rgba(243, 239, 217, 0.12);
+  --danger: #B23A2E;
+  --accent: #8A8B5C;
+  --hover: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='neon-fajar'] {
+  --canvas: #0B1B3A;
+  --surface: #122244;
+  --surface-ink: #E6F1FF;
+  --glass: rgba(230, 241, 255, 0.06);
+  --glass-ink: #E6F1FF;
+  --primary: #2DD4BF;
+  --primary-ink: #0B1B3A;
+  --text: #E6F1FF;
+  --muted: rgba(230, 241, 255, 0.66);
+  --border: rgba(230, 241, 255, 0.1);
+  --danger: #F87171;
+  --accent: #FBBF24;
+  --hover: rgba(255, 255, 255, 0.08);
+}
+
+/* Utilitas: transisi halus saat ganti tema */
+html[data-theme] body,
+html[data-theme] * {
+  transition: background-color 0.4s ease, border-color 0.4s ease, color 0.4s ease;
+}

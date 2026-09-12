@@ -24,9 +24,9 @@ describe('Badge', () => {
     expect(screen.getByText('Aktif')).toBeTruthy();
   });
 
-  it('menerapkan kelas variant failed', () => {
+  it('menerapkan kelas variant failed (token tema --danger)', () => {
     const {container} = render(<Badge variant="failed">Gagal</Badge>);
     const el = container.firstElementChild as HTMLElement;
-    expect(el.className).toContain('bg-red-100');
+    expect(el.className).toContain('bg-[var(--danger)]/15');
   });
 });

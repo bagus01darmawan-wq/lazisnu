@@ -8,8 +8,11 @@ name: CI
 #    lolos gate dan URL R2 sehat.
 #  - Tag v* SENGAJA tidak menjadi trigger langsung di sini: trigger tag akan
 #    melewati fail-closed R2 dan menggandakan deploy.
-#  - Deploy production hanya jalan via workflow_dispatch pada ref `refs/tags/v*`.
-#  - Deploy staging otomatis pada push ke `main`.
+#  - Deploy production otomatis pada push ke `main` (merge dari staging) DAN
+#    manual via workflow_dispatch pada ref `refs/tags/v*` (jalur rilis lama).
+#  - Deploy staging otomatis pada push ke branch `staging` (dapur/develop).
+#    Model dua jalur: `staging` = dapur (kerja harian, deploy ke env staging),
+#    `main` = produksi (hanya menerima merge PR dari staging yang sudah dicek).
 #  - Secrets yang dipakai: VM_HOST, VM_USER, VM_SSH_KEY (GITHUB_TOKEN bawaan).
 #  - Deploy bergantung pada scripts/deploy-blue-green.sh di dalam repo.
 #
@@ -24,10 +27,10 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, staging]
     paths-ignore: ['docs/**', '*.md']
   pull_request:
-    branches: [main, master]
+    branches: [main, master, staging] # PR ke dapur (staging) juga di-CI
     paths-ignore: ['docs/**', '*.md']
   workflow_dispatch: # Dipakai release.yml dan juga bisa dipicu manual
 
@@ -67,7 +70,7 @@ jobs:
           fetch-depth: 100
 
       - id: filter
-        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/staging'
         uses: dorny/paths-filter@v4
         with:
           filters: |
@@ -456,14 +459,18 @@ jobs:
             type=gha
           cache-to: type=gha,mode=max,scope=${{ matrix.scope }}
 
-  # ─── Deploy PRODUCTION (dispatch release pada ref tag v*) — blue-green ───
+  # ─── Deploy PRODUCTION (push ke main ATAU dispatch release tag v*) ───────
   deploy:
     name: Deploy production
     needs: [changes, verify, test-backend, test-mobile, test-web, build-image]
     if: >-
       always() && !cancelled() &&
       needs.build-image.result == 'success' &&
-      startsWith(github.ref, 'refs/tags/v')
+      (startsWith(github.ref, 'refs/tags/v') ||
+       (github.ref == 'refs/heads/main' &&
+        (needs.changes.outputs.backend == 'true' ||
+         needs.changes.outputs.web    == 'true' ||
+         needs.changes.outputs.infra  == 'true')))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: Production
@@ -589,14 +596,14 @@ jobs:
             docker image prune -af >/dev/null 2>&1 || true
             docker builder prune -f >/dev/null 2>&1 || true
 
-  # ─── Deploy STAGING (otomatis dari push main) ────────────────────────────
+  # ─── Deploy STAGING (dapur) — push ke branch `staging` ───────────────────
   deploy-staging:
     name: Deploy staging
     needs: [changes, verify, test-backend, test-mobile, test-web, build-image]
     if: >-
       always() && !cancelled() &&
       needs.build-image.result == 'success' &&
-      github.ref == 'refs/heads/main' &&
+      github.ref == 'refs/heads/staging' &&
       (needs.changes.outputs.backend == 'true' ||
        needs.changes.outputs.web    == 'true' ||
        needs.changes.outputs.infra  == 'true')
@@ -610,6 +617,7 @@ jobs:
       GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GHCR_USER: ${{ github.actor }}
       GHCR_REPO: ${{ github.repository }}
+      GIT_REF: ${{ github.ref_name }}
       VM_HOST: ${{ secrets.VM_HOST }}
       VM_USER: ${{ secrets.VM_USER }}
       VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
@@ -623,7 +631,7 @@ jobs:
           username: ${{ env.VM_USER }}
           key: ${{ env.VM_SSH_KEY }}
           # Lihat catatan `envs` di job deploy production.
-          envs: GHCR_TOKEN,GHCR_USER,GHCR_REPO
+          envs: GHCR_TOKEN,GHCR_USER,GHCR_REPO,GIT_REF
           script: |
             set -e
             cd /opt/lazisnu
@@ -636,10 +644,11 @@ jobs:
               cp apps/backend/.env /tmp/.env.deploy.bak
             fi
 
-            # Sinkronkan repo — reset --hard tidak sentuh untracked files
+            # Sinkronkan repo ke ref yang di-deploy (branch staging) —
+            # reset --hard tidak sentuh untracked files
             git fetch origin
-            git reset --hard origin/main
-            echo "✓ Repository synchronized"
+            git reset --hard "origin/$GIT_REF"
+            echo "✓ Repository synchronized ke origin/$GIT_REF"
 
             # Restore .env dari backup (safety net)
             if [ -f /tmp/.env.staging.deploy.bak ]; then

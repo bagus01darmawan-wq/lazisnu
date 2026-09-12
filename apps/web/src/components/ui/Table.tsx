@@ -42,14 +42,14 @@ const Table = <TData,>({ columns, data, className, loading, variant = 'default' 
         'overflow-x-auto rounded-xl shadow-sm transition-all duration-500',
         variant === 'glass' 
           ? 'bg-transparent border-none' 
-          : 'bg-white border border-gray-200'
+          : 'bg-[var(--surface)] text-[var(--surface-ink)] border border-[var(--border)]'
       )}>
         <table className="w-full text-left text-sm">
           <thead className={cn(
             'border-b transition-colors',
             variant === 'glass' 
-              ? 'bg-[#F4F1EA]/5 border-white/10' 
-              : 'bg-gray-50 border-gray-200'
+              ? 'bg-[var(--glass)] border-[var(--border)]' 
+              : 'bg-[var(--hover)] border-[var(--border)]'
           )}>
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
@@ -59,15 +59,15 @@ const Table = <TData,>({ columns, data, className, loading, variant = 'default' 
                     className={cn(
                       "px-3 py-3 md:px-6 md:py-4 font-bold uppercase tracking-tight text-[10px] cursor-pointer transition-colors group",
                       variant === 'glass' 
-                        ? "text-[#F4F1EA]/60 hover:bg-white/5" 
-                        : "text-gray-600 hover:bg-gray-100"
+                        ? "text-[var(--glass-ink)]/60 hover:bg-[var(--hover)]" 
+                        : "text-[var(--surface-ink)]/70 hover:bg-[var(--hover)]"
                     )}
                     onClick={header.column.getToggleSortingHandler()}
                   >
                     <div className="flex items-center gap-2">
                       {flexRender(header.column.columnDef.header, header.getContext())}
                       {header.column.getCanSort() && (
-                        <ChevronsUpDown size={14} className={variant === 'glass' ? "text-[#F4F1EA]/30 group-hover:text-[#F4F1EA]/50" : "text-gray-400 group-hover:text-gray-600"} />
+                        <ChevronsUpDown size={14} className={variant === 'glass' ? "text-[var(--glass-ink)]/30 group-hover:text-[var(--glass-ink)]/50" : "text-[var(--surface-ink)]/50 group-hover:text-[var(--surface-ink)]"} />
                       )}
                     </div>
                   </th>
@@ -77,17 +77,17 @@ const Table = <TData,>({ columns, data, className, loading, variant = 'default' 
           </thead>
           <tbody className={cn(
             'divide-y transition-colors',
-            variant === 'glass' ? 'divide-white/5' : 'divide-gray-100'
+            variant === 'glass' ? 'divide-[var(--border)]' : 'divide-[var(--border)]'
           )}>
             {loading ? (
               <tr>
-                <td colSpan={columns.length} className="px-3 md:px-6 py-12 text-center text-gray-400 font-medium">
+                <td colSpan={columns.length} className="px-3 md:px-6 py-12 text-center text-[var(--surface-ink)]/60 font-medium">
                    Memuat data...
                 </td>
               </tr>
             ) : data.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="px-3 md:px-6 py-12 text-center text-gray-400 font-medium">
+                <td colSpan={columns.length} className="px-3 md:px-6 py-12 text-center text-[var(--surface-ink)]/60 font-medium">
                    Data tidak ditemukan.
                 </td>
               </tr>
@@ -95,12 +95,12 @@ const Table = <TData,>({ columns, data, className, loading, variant = 'default' 
               table.getRowModel().rows.map((row) => (
                 <tr key={row.id} className={cn(
                   'transition-colors duration-300',
-                  variant === 'glass' ? 'hover:bg-white/5' : 'hover:bg-gray-50/50'
+                  variant === 'glass' ? 'hover:bg-[var(--hover)]' : 'hover:bg-[var(--hover)]'
                 )}>
                   {row.getVisibleCells().map((cell) => (
                     <td key={cell.id} className={cn(
                       "px-3 py-3 md:px-6 md:py-4 font-medium",
-                      variant === 'glass' ? "text-[#F4F1EA]/95" : "text-gray-700"
+                      variant === 'glass' ? "text-[var(--glass-ink)]" : "text-[var(--surface-ink)]"
                     )}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
