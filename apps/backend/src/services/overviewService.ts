@@ -160,17 +160,37 @@ export async function getCollectionSummary(scope: OverviewScopeInput, period: Ov
 export async function getReturnedCounts(scope: OverviewScopeInput, period: OverviewPeriodInput) {
   const { start, end } = monthBounds(period);
 
-  const [row] = await db
-    .select({
-      total: sql<number>`count(*)::int`,
-      thisMonth: sql<number>`count(*) filter (where ${schema.cans.updatedAt} >= ${start} and ${schema.cans.updatedAt} < ${end})::int`,
-    })
-    .from(schema.cans)
-    .where(and(scopeCondition(scope), eq(schema.cans.condition, 'DIKEMBALIKAN')));
+  // Dua query terpisah, bukan satu `count(*) filter (...)`:
+  //  - total: seluruh kaleng DIKEMBALIKAN (tanpa batas waktu)
+  //  - thisMonth: hanya yang updated_at di bulan periode
+  //
+  // Filter tanggal HARUS memakai operator Drizzle (gte/lt) agar di-bind
+  // sebagai parameter. Interpolasi `${start}` mentah di template sql`...`
+  // menyisipkan objek Date ke driver postgres-js, yang menolaknya dengan
+  // ERR_INVALID_ARG_TYPE (lihat __tests__/overviewReturnedCounts.test.ts).
+  // Karena getOverview memakai Promise.all, satu query gagal = 500 seluruh
+  // endpoint overview.
+  const [totalRows, monthRows] = await Promise.all([
+    db.select({ total: sql<number>`count(*)::int` })
+      .from(schema.cans)
+      .where(and(scopeCondition(scope), eq(schema.cans.condition, 'DIKEMBALIKAN'))),
+
+    db.select({ thisMonth: sql<number>`count(*)::int` })
+      .from(schema.cans)
+      .where(and(
+        scopeCondition(scope),
+        eq(schema.cans.condition, 'DIKEMBALIKAN'),
+        gte(schema.cans.updatedAt, start),
+        lt(schema.cans.updatedAt, end),
+      )),
+  ]);
+
+  const totalRow = totalRows[0];
+  const monthRow = monthRows[0];
 
   return {
-    total: Number(row?.total ?? 0),
-    this_month: Number(row?.thisMonth ?? 0),
+    total: Number(totalRow?.total ?? 0),
+    this_month: Number(monthRow?.thisMonth ?? 0),
   };
 }
 
