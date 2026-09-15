@@ -18,7 +18,7 @@ import {useTasksStore} from '../stores';
 import {Task} from '@lazisnu/shared-types';
 import type {MainTabParamList, RootStackParamList} from '../navigation/types';
 import {pickAndDecodeQRCode} from '../services/qrImageScanner';
-import {AppHeader} from '../components/ui';
+import {AppHeader, SkipReasonSheet} from '../components/ui';
 import {Colors, Typography} from '../theme';
 import {getErrorMessage} from '../utils';
 import {ScanManualModal, ScanOverlay, ScanPermissionView, ScanResultCard} from './scan';
@@ -106,27 +106,30 @@ const ScanScreen: React.FC = () => {
     return unsubscribe;
   });
 
+  const [skipSheetTask, setSkipSheetTask] = useState<Task | null>(null);
+  const [skipping, setSkipping] = useState(false);
+
   const handleSkip = (task: Task) => {
-    Alert.alert(
-      'Tandai Tidak Dijemput',
-      `Tandai kaleng ${task.qr_code} sebagai tidak dijemput untuk periode berjalan?`,
-      [
-        {text: 'Batal', style: 'cancel'},
-        {
-          text: 'Ya, Tandai',
-          onPress: async () => {
-            const result = await useTasksStore.getState().skipAssignment(task.id);
-            if (result.success) {
-              handleReset();
-              navigation.navigate('Tasks');
-            } else {
-              // Pesan jujur: alasan asli (server / jaringan) — bukan tuduhan sinyal.
-              Alert.alert('Gagal Menandai', result.error || 'Gagal menandai kaleng. Coba lagi.');
-            }
-          },
-        },
-      ],
-    );
+    setSkipSheetTask(task);
+  };
+
+  const handleSkipConfirm = async (reasonCode: string, notes: string) => {
+    const task = skipSheetTask;
+    if (!task) return;
+    setSkipping(true);
+    try {
+      const result = await useTasksStore.getState().skipAssignment(task.id, reasonCode, notes);
+      if (result.success) {
+        setSkipSheetTask(null);
+        handleReset();
+        navigation.navigate('Tasks');
+      } else {
+        // Pesan jujur: alasan asli (server / jaringan) — bukan tuduhan sinyal.
+        Alert.alert('Gagal Menandai', result.error || 'Gagal menandai kaleng. Coba lagi.');
+      }
+    } finally {
+      setSkipping(false);
+    }
   };
 
   const processQRCode = async (qrCode: string, source: QRInputSource) => {
@@ -284,6 +287,14 @@ const ScanScreen: React.FC = () => {
           onContinue={task => navigation.navigate('Collection', {task})}
         />
       )}
+
+      <SkipReasonSheet
+        visible={!!skipSheetTask}
+        qrCode={skipSheetTask?.qr_code ?? ''}
+        loading={skipping}
+        onDismiss={() => setSkipSheetTask(null)}
+        onConfirm={handleSkipConfirm}
+      />
     </View>
   );
 };

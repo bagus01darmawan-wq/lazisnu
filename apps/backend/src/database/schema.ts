@@ -6,6 +6,22 @@ export const userRoleEnum = pgEnum('user_role', ['ADMIN_KECAMATAN', 'ADMIN_RANTI
 export const collectionStatusEnum = pgEnum('collection_status', ['PENDING', 'COMPLETED', 'FAILED', 'CANCELLED']);
 export const assignmentStatusEnum = pgEnum('assignment_status', ['ACTIVE', 'COMPLETED', 'POSTPONED', 'REASSIGNED', 'UNCOLLECTED']);
 
+/**
+ * Kondisi kaleng — sumber kebenaran perilaku bisnis (menggantikan makna ganda `is_active`).
+ * - AKTIF        : dijemput, dihitung pada cakupan penempatan
+ * - NON_AKTIF    : tidak dijemput, cukup dikunjungi untuk verifikasi
+ * - RUSAK        : tetap dijemput (donasi bisa langsung ke PPK), perlu ganti unit
+ * - HILANG       : tetap dijemput, punya cakupan sendiri, perlu kaleng baru
+ * - DIKEMBALIKAN : keluar dari sistem (is_active = false)
+ */
+export const canConditionEnum = pgEnum('can_condition', [
+  'AKTIF',
+  'NON_AKTIF',
+  'RUSAK',
+  'HILANG',
+  'DIKEMBALIKAN',
+]);
+
 // Districts
 export const districts = pgTable('districts', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -84,7 +100,14 @@ export const cans = pgTable('cans', {
   latitude: decimal('latitude', { precision: 10, scale: 8 }),
   longitude: decimal('longitude', { precision: 11, scale: 8 }),
   locationNotes: text('location_notes'),
+  /**
+   * is_active dipersempit maknanya menjadi satu pertanyaan saja: "masih dilacak atau tidak".
+   * true  → AKTIF, NON_AKTIF, RUSAK, HILANG
+   * false → DIKEMBALIKAN
+   * Jangan pakai kolom ini untuk perilaku bisnis; pakai `condition`.
+   */
   isActive: boolean('is_active').default(true).notNull(),
+  condition: canConditionEnum('condition').default('AKTIF').notNull(),
   lastCollectedAt: timestamp('last_collected_at'),
   totalCollected: bigint('total_collected', { mode: 'bigint' }).default(sql`0`).notNull(),
   collectionCount: integer('collection_count').default(0).notNull(),
@@ -103,11 +126,14 @@ export const assignments = pgTable('assignments', {
   status: assignmentStatusEnum('status').default('ACTIVE').notNull(),
   assignedAt: timestamp('assigned_at').defaultNow().notNull(),
   completedAt: timestamp('completed_at'),
+  /** Kode alasan baku saat tugas tidak terjemput; `notes` tetap pelengkap bebas. */
+  skipReasonCode: varchar('skip_reason_code', { length: 40 }),
   notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => ({
   unq: uniqueIndex('can_officer_period_unq').on(t.canId, t.officerId, t.periodYear, t.periodMonth),
+  assignmentsStatusPeriodIdx: index('assignments_status_period_idx').on(t.status, t.periodYear, t.periodMonth),
 }));
 
 // Collections
@@ -134,6 +160,52 @@ export const collections = pgTable('collections', {
 }, (t) => ({
   collectionVersionUnq: uniqueIndex('collection_assignment_can_sequence_unq').on(t.assignmentId, t.canId, t.submitSequence),
   collectionsOfficerStatusCollectedIdx: index('collections_officer_status_collected_idx').on(t.officerId, t.syncStatus, t.collectedAt),
+}));
+
+// Can Condition Proposals
+// Usulan perubahan kondisi kaleng. Tabel ini sekaligus menjadi riwayat perubahan
+// kondisi: baris APPROVED adalah catatan siapa mengubah apa, kapan, atas dasar apa.
+export const canConditionProposals = pgTable('can_condition_proposals', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  canId: uuid('can_id').references(() => cans.id, { onDelete: 'cascade' }).notNull(),
+
+  fromCondition: canConditionEnum('from_condition').notNull(),
+  toCondition: canConditionEnum('to_condition').notNull(),
+
+  /** 'EMPTY_THRESHOLD' | 'SKIP_REASON' | 'MANUAL' */
+  triggerSource: varchar('trigger_source', { length: 30 }).notNull(),
+
+  reasonCode: varchar('reason_code', { length: 40 }).notNull(),
+  reasonNote: text('reason_note'),
+
+  /** Bukti pendukung — untuk EMPTY_THRESHOLD: jumlah penjemputan kosong berturut-turut. */
+  evidenceCount: integer('evidence_count'),
+
+  /** 'PENDING' | 'APPROVED' | 'REJECTED' */
+  status: varchar('status', { length: 20 }).default('PENDING').notNull(),
+
+  approvedBy: uuid('approved_by').references(() => users.id),
+  approvedAt: timestamp('approved_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  proposalsCanIdx: index('can_condition_proposals_can_idx').on(t.canId, t.createdAt),
+  proposalsStatusIdx: index('can_condition_proposals_status_idx').on(t.status),
+}));
+
+// Can Visits
+// Kunjungan yang BUKAN penjemputan. Sengaja dipisah dari `collections` agar
+// ambang "enam kali kosong" dan nominal dashboard tidak tercemar kunjungan.
+export const canVisits = pgTable('can_visits', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  canId: uuid('can_id').references(() => cans.id, { onDelete: 'cascade' }).notNull(),
+  officerId: uuid('officer_id').references(() => officers.id).notNull(),
+  /** 'VERIFIKASI' | 'PENGGANTIAN' */
+  purpose: varchar('purpose', { length: 20 }).notNull(),
+  visitedAt: timestamp('visited_at').notNull(),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  visitsCanVisitedIdx: index('can_visits_can_visited_idx').on(t.canId, t.visitedAt),
 }));
 
 // Notifications
@@ -210,6 +282,7 @@ export const officersRelations = relations(officers, ({ one, many }) => ({
   assignments: many(assignments, { relationName: 'PrimaryOfficer' }),
   backupAssignments: many(assignments, { relationName: 'BackupOfficer' }),
   collections: many(collections),
+  visits: many(canVisits),
 }));
 
 export const cansRelations = relations(cans, ({ one, many }) => ({
@@ -217,6 +290,18 @@ export const cansRelations = relations(cans, ({ one, many }) => ({
   dukuhDetails: one(dukuhs, { fields: [cans.dukuhId], references: [dukuhs.id] }),
   assignments: many(assignments),
   collections: many(collections),
+  conditionProposals: many(canConditionProposals),
+  visits: many(canVisits),
+}));
+
+export const canConditionProposalsRelations = relations(canConditionProposals, ({ one }) => ({
+  can: one(cans, { fields: [canConditionProposals.canId], references: [cans.id] }),
+  approver: one(users, { fields: [canConditionProposals.approvedBy], references: [users.id] }),
+}));
+
+export const canVisitsRelations = relations(canVisits, ({ one }) => ({
+  can: one(cans, { fields: [canVisits.canId], references: [cans.id] }),
+  officer: one(officers, { fields: [canVisits.officerId], references: [officers.id] }),
 }));
 
 export const dukuhsRelations = relations(dukuhs, ({ one, many }) => ({

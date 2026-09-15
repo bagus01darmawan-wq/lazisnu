@@ -135,7 +135,7 @@ describe('TaskDetailScreen — detail penjemputan dari kartu tugas', () => {
     expect(mockNavigate).toHaveBeenCalledWith('Collection', {task: mockTask});
   });
 
-  it('menekan Tidak Dijemput → konfirmasi → skipAssignment + kembali + daftar disegarkan', async () => {
+  it('menekan Tidak Dijemput → pilih alasan → skipAssignment + kembali + daftar disegarkan', async () => {
     const tree = await renderScreen();
     const labelNode = tree.root
       .findAllByType(require('react-native').Text)
@@ -146,24 +146,67 @@ describe('TaskDetailScreen — detail penjemputan dari kartu tugas', () => {
       pressable?.props?.onPress?.();
     });
 
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Tandai Tidak Dijemput',
-      expect.any(String),
-      expect.any(Array),
-    );
+    // Sheet alasan terbuka (BUKAN Alert lama).
+    const allText = tree.root
+      .findAllByType(require('react-native').Text)
+      .map(n => collectText(n.props.children))
+      .join(' ');
+    expect(allText).toContain('Kenapa tidak terjemput?');
 
-    // Pilih konfirmasi "Ya, Tandai"
-    const buttons = alertSpy.mock.calls[0][2] as Array<{text: string; onPress?: () => void}>;
-    const confirm = buttons.find(b => b.text === 'Ya, Tandai');
-    expect(confirm).toBeDefined();
+    // Pilih alasan "Kaleng hilang", lalu Simpan.
+    const option = tree.root
+      .findAllByType(require('react-native').TouchableOpacity)
+      .find(t =>
+        t
+          .findAllByType(require('react-native').Text)
+          .some(n => collectText(n.props.children) === 'Kaleng hilang'),
+      );
+    expect(option).toBeDefined();
 
     await act(async () => {
-      await confirm?.onPress?.();
+      option?.props?.onPress?.();
     });
 
-    expect(skipSpy).toHaveBeenCalledWith('task-1');
+    const simpan = tree.root
+      .findAllByType(require('react-native').TouchableOpacity)
+      .find(t =>
+        t
+          .findAllByType(require('react-native').Text)
+          .some(n => collectText(n.props.children) === 'Simpan'),
+      );
+    await act(async () => {
+      simpan?.props?.onPress?.();
+    });
+
+    expect(skipSpy).toHaveBeenCalledWith('task-1', 'CAN_LOST', '');
     expect(fetchSpy).toHaveBeenCalledWith('ACTIVE');
     expect(mockGoBack).toHaveBeenCalled();
+  });
+
+  it('menekan Tidak Dijemput → Batal → tidak mengirim apa-apa', async () => {
+    const tree = await renderScreen();
+    const labelNode = tree.root
+      .findAllByType(require('react-native').Text)
+      .find(n => collectText(n.props.children) === 'Tidak Dijemput');
+    const pressable = findPressable(labelNode);
+
+    await act(async () => {
+      pressable?.props?.onPress?.();
+    });
+
+    const batal = tree.root
+      .findAllByType(require('react-native').TouchableOpacity)
+      .find(t =>
+        t
+          .findAllByType(require('react-native').Text)
+          .some(n => collectText(n.props.children) === 'Batal'),
+      );
+    await act(async () => {
+      batal?.props?.onPress?.();
+    });
+
+    expect(skipSpy).not.toHaveBeenCalled();
+    expect(mockGoBack).not.toHaveBeenCalled();
   });
 
   it('skip gagal → menampilkan alasan asli (bukan tuduhan koneksi internet)', async () => {
@@ -183,12 +226,27 @@ describe('TaskDetailScreen — detail penjemputan dari kartu tugas', () => {
       pressable?.props?.onPress?.();
     });
 
-    const buttons = alertSpy.mock.calls[0][2] as Array<{text: string; onPress?: () => void}>;
-    const confirm = buttons.find(b => b.text === 'Ya, Tandai');
-    expect(confirm).toBeDefined();
-
+    // Pilih alasan, lalu Simpan.
+    const option = tree.root
+      .findAllByType(require('react-native').TouchableOpacity)
+      .find(t =>
+        t
+          .findAllByType(require('react-native').Text)
+          .some(n => collectText(n.props.children) === 'Kaleng rusak'),
+      );
     await act(async () => {
-      await confirm?.onPress?.();
+      option?.props?.onPress?.();
+    });
+
+    const simpan = tree.root
+      .findAllByType(require('react-native').TouchableOpacity)
+      .find(t =>
+        t
+          .findAllByType(require('react-native').Text)
+          .some(n => collectText(n.props.children) === 'Simpan'),
+      );
+    await act(async () => {
+      simpan?.props?.onPress?.();
     });
 
     expect(alertSpy).toHaveBeenLastCalledWith(

@@ -2,12 +2,20 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
 import { eq, and, desc, asc, gte, lte, or, sql } from 'drizzle-orm';
+import { z } from 'zod';
 import { isValidQRCode } from '../../utils/qr';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { getLatestCollectionCondition } from '../../services/collectionSubmission';
-import { skipAssignmentSchema } from './schemas';
+import { skipAssignmentSchema, canVisitSchema } from './schemas';
 import { AppError, isAppError } from '../../utils/AppError';
 import { parseStatsRange, computeMonthsCovered } from '../../utils/statsRange';
+import {
+  conditionAfterReplacementVisit,
+  isTransitionAllowed,
+} from '../../services/conditionRules';
+import type { CanConditionValue } from '../../services/conditionRules';
+import { createProposalFromSkipReason } from '../../services/conditionProposalService';
+import { assertCanAccess } from '../../services/canService';
 
 export async function tasksRoutes(fastify: FastifyInstance) {
   // GET /mobile/dashboard
@@ -404,18 +412,44 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         return sendError(reply, 403, 'ASSIGNMENT_INVALID', 'Assignment tidak valid, bukan milik Anda, atau sudah selesai');
       }
 
+      // APK lama (pra-rilis pemilih alasan) belum mengirim reason_code → OTHER.
+      const reasonCode = body.reason_code ?? 'OTHER';
+      const isLegacySkip = !body.reason_code;
+
       await db.update(schema.assignments)
         .set({
           status: 'UNCOLLECTED',
-          notes: body.notes || null,
+          // Kode alasan baku. APK lama yang belum mengirim kode dipetakan ke OTHER
+          // (masa transisi) dan ditandai di `notes` agar tetap bisa diaudit.
+          skipReasonCode: reasonCode,
+          notes: body.notes || (isLegacySkip ? 'APK lama tanpa reason_code (dipetakan ke OTHER)' : null),
           updatedAt: new Date(),
           completedAt: new Date(),
         })
         .where(eq(schema.assignments.id, id));
 
+      // CAN_LOST / CAN_DAMAGED memicu usulan perubahan kondisi.
+      // Sistem mengusulkan; admin yang memutuskan (kondisi TIDAK berubah di sini).
+      let proposalId: string | undefined;
+      if (assignment.canId) {
+        try {
+          const proposal = await createProposalFromSkipReason(
+            assignment.canId,
+            reasonCode,
+            body.notes ?? null,
+          );
+          proposalId = proposal?.id;
+        } catch (proposalError) {
+          // Usulan yang gagal tidak boleh menggagalkan penutupan tugas petugas.
+          fastify.log.warn({ err: proposalError }, 'gagal membuat usulan kondisi dari skip reason');
+        }
+      }
+
       return sendSuccess(reply, {
         id,
         status: 'UNCOLLECTED',
+        reason_code: reasonCode,
+        proposal_id: proposalId,
         message: 'Kaleng ditandai tidak dijemput',
       });
     } catch (error) {
@@ -477,6 +511,84 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         message: `${activeCount} kaleng ditandai tidak dijemput untuk periode berjalan`,
       });
     } catch (error) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  /**
+   * POST /mobile/cans/:canId/visits
+   *
+   * Kunjungan verifikasi (kaleng NON_AKTIF) atau penggantian unit (RUSAK/HILANG).
+   * Sengaja BUKAN collection: tidak ada nominal, tidak menambah hitungan kosong,
+   * dan tidak muncul sebagai penjemputan di dashboard.
+   *
+   * Kunjungan PENGGANTIAN menutup kasus RUSAK/HILANG → kondisi kembali AKTIF dan
+   * angka cakupan hilang berkurang.
+   */
+  fastify.post('/cans/:canId/visits', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { canId } = request.params as { canId: string };
+      const body = canVisitSchema.parse(request.body || {});
+      const user = request.currentUser!;
+      const officerId = user.officerId;
+
+      if (!officerId) {
+        return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
+      }
+
+      // Pintu wajib: petugas hanya boleh mengunjungi kaleng pada rantingnya sendiri.
+      // Tanpa ini, penggantian unit (PENGGANTIAN) bisa mengubah status kaleng di luar
+      // wilayah petugas. Aturan diambil dari `assertCanAccess` (sumber tunggal,
+      // sama dengan semua rute admin), branchId dari token — bukan dari permintaan.
+      const can = await db.query.cans.findFirst({
+        where: eq(schema.cans.id, canId),
+        with: {
+          branch: { columns: { districtId: true } },
+        },
+        columns: { id: true, condition: true, isActive: true, branchId: true },
+      });
+      if (!can) {
+        return sendError(reply, 404, 'CAN_NOT_FOUND', 'Kaleng tidak ditemukan');
+      }
+
+      await assertCanAccess(user, can, 'Kaleng ini bukan wilayah Anda');
+
+      const visitedAt = body.visited_at ? new Date(body.visited_at) : new Date();
+      const [visit] = await db.insert(schema.canVisits).values({
+        canId,
+        officerId,
+        purpose: body.purpose,
+        visitedAt,
+        notes: body.notes ?? null,
+      }).returning();
+
+      let newCondition: CanConditionValue | null = null;
+      if (body.purpose === 'PENGGANTIAN') {
+        const current = can.condition as CanConditionValue;
+        const target = conditionAfterReplacementVisit(current);
+        if (target && isTransitionAllowed(current, target)) {
+          await db.update(schema.cans)
+            .set({ condition: target, isActive: true, updatedAt: new Date() })
+            .where(eq(schema.cans.id, canId));
+          newCondition = target;
+        }
+      }
+
+      return sendSuccess(reply, {
+        id: visit.id,
+        can_id: canId,
+        purpose: visit.purpose,
+        visited_at: visit.visitedAt,
+        condition: newCondition ?? can.condition,
+        message: 'Kunjungan tercatat sebagai kunjungan, bukan penjemputan',
+      }, 201);
+    } catch (error: unknown) {
+      if (error instanceof z.ZodError) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+      }
+      if (isAppError(error)) {
+        return sendError(reply, error.statusCode, error.code, error.message);
+      }
       return sendInternalError(reply, error, fastify.log);
     }
   });

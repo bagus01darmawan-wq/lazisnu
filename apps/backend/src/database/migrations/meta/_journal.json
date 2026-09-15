@@ -43,6 +43,13 @@
       "when": 1785757361045,
       "tag": "0005_remove_bendahara_role",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789416996689,
+      "tag": "0006_can_condition_status",
+      "breakpoints": true
     }
   ]
 }

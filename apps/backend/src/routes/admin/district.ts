@@ -1,12 +1,12 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { eq, and, gte, lt, desc, sql } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
+import { eq, and } from 'drizzle-orm';
 import { authorize } from '../../middleware/auth';
 import { assertBranchAccess, assertDukuhAccess } from '../../middleware/ownership';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { getPostgresError } from '../../utils/error-guards';
+import { getOverview } from '../../services/overviewService';
 import { z } from 'zod';
 
 const branchSchema = z.object({
@@ -172,6 +172,15 @@ export async function districtRoutes(fastify: FastifyInstance) {
     }
   });
 
+  /**
+   * Overview kecamatan.
+   *
+   * - Scope agregat: seluruh ranting pada `user.districtId`.
+   * - `branch_id` opsional, WAJIB milik kecamatan pengguna (dicek ke tabel branches).
+   * - Seluruh agregasi dikerjakan di SQL oleh overviewService (kontrak sama dengan
+   *   endpoint ranting). Tidak ada lagi `findMany().then(rows => rows.filter(...))`
+   *   dan tidak ada pengelompokan nominal berdasarkan ranting petugas.
+   */
   fastify.get('/district/dashboard', kecamatan, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const user = request.currentUser!;
@@ -180,127 +189,36 @@ export async function districtRoutes(fastify: FastifyInstance) {
         return sendError(reply, 403, 'FORBIDDEN', 'Bukan admin kecamatan');
       }
 
-      const c2 = alias(schema.collections, 'c2');
-      const latestCollectionCondition = eq(
-        schema.collections.submitSequence,
-        db.select({ maxSeq: sql<number>`max(${c2.submitSequence})` })
-          .from(c2)
-          .where(and(
-            eq(c2.assignmentId, schema.collections.assignmentId),
-            eq(c2.canId, schema.collections.canId)
-          ))
-      );
+      const query = request.query as { branch_id?: string };
+      let branchId: string | undefined;
+      let branchName: string | undefined;
+
+      if (query.branch_id) {
+        const branch = await db.query.branches.findFirst({
+          where: eq(schema.branches.id, query.branch_id),
+          columns: { id: true, name: true, districtId: true },
+        });
+        if (!branch || branch.districtId !== districtId) {
+          return sendError(reply, 403, 'FORBIDDEN_SCOPE', 'Ranting bukan bagian dari kecamatan Anda');
+        }
+        branchId = branch.id;
+        branchName = branch.name;
+      }
 
       const now = new Date();
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const period = { year: now.getFullYear(), month: now.getMonth() + 1 };
 
-      const dayOfWeek = now.getDay() || 7;
-      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek + 1);
-      weekStart.setHours(0, 0, 0, 0);
-
-      const [monthCollections, lastMonthCollections, weekCollections, branchesList, totalCans, activeCans, totalOfficers] = await Promise.all([
-        db.query.collections.findMany({
-          where: and(
-            gte(schema.collections.collectedAt, monthStart),
-            eq(schema.collections.syncStatus, 'COMPLETED'),
-            latestCollectionCondition
-          ),
-          with: { can: { with: { branch: true } }, officer: true }
-        }).then(rows => rows.filter(c => c.can.branch?.districtId === districtId)),
-        db.query.collections.findMany({
-          where: and(
-            gte(schema.collections.collectedAt, lastMonthStart),
-            lt(schema.collections.collectedAt, monthStart),
-            eq(schema.collections.syncStatus, 'COMPLETED'),
-            latestCollectionCondition
-          ),
-          with: { can: { with: { branch: true } } }
-        }).then(rows => rows.filter(c => c.can.branch?.districtId === districtId)),
-        db.query.collections.findMany({
-          where: and(
-            gte(schema.collections.collectedAt, weekStart),
-            eq(schema.collections.syncStatus, 'COMPLETED'),
-            latestCollectionCondition
-          ),
-          with: { can: { with: { branch: true } } }
-        }).then(rows => rows.filter(c => c.can.branch?.districtId === districtId)),
-        db.query.branches.findMany({
-          where: eq(schema.branches.districtId, districtId),
-          with: { cans: { columns: { id: true } }, officers: { columns: { id: true } } },
-        }),
-        db.select().from(schema.cans).innerJoin(schema.branches, eq(schema.cans.branchId, schema.branches.id))
-          .where(eq(schema.branches.districtId, districtId)).then(r => r.length),
-        db.select().from(schema.cans).innerJoin(schema.branches, eq(schema.cans.branchId, schema.branches.id))
-          .where(and(eq(schema.branches.districtId, districtId), eq(schema.cans.isActive, true))).then(r => r.length),
-        db.$count(schema.officers, and(eq(schema.officers.districtId, districtId), eq(schema.officers.isActive, true))).then(c => Number(c)),
-      ]);
-
-      const branches = branchesList.map(b => ({ id: b.id, name: b.name, _count: { cans: b.cans.length, officers: b.officers.length } }));
-
-      const byBranch = monthCollections.reduce((acc: Record<string, any>, c) => {
-        const key = c.officer.branchId!;
-        if (!acc[key]) acc[key] = { count: 0, nominal: 0 };
-        acc[key].count++;
-        acc[key].nominal += Number(c.nominal);
-        return acc;
-      }, {});
-
-      // Fetch recent collections for the whole district
-      const recentCollections = await db.query.collections.findMany({
-        where: and(
-          eq(schema.collections.syncStatus, 'COMPLETED'),
-          latestCollectionCondition
-        ),
-        with: {
-          can: {
-            columns: { qrCode: true, ownerName: true, branchId: true },
-            with: { branch: true }
-          },
-          officer: { columns: { fullName: true } },
+      const data = await getOverview(
+        branchId ? { districtId, branchId } : { districtId },
+        period,
+        {
+          scopeType: branchId ? 'branch' : 'district',
+          branchName,
+          includeBranchComparison: !branchId,
         },
-        orderBy: [desc(schema.collections.collectedAt)],
-      }).then(rows => rows.filter(c => c.can.branch?.districtId === districtId).slice(0, 10));
+      );
 
-      const daysStr = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-      const dailyTrends = daysStr.map(day => ({ day, nominal: 0 }));
-
-      weekCollections.forEach(c => {
-        const d = new Date(c.collectedAt);
-        let dayIdx = d.getDay() - 1;
-        if (dayIdx === -1) dayIdx = 6;
-        dailyTrends[dayIdx].nominal += Number(c.nominal);
-      });
-
-      return sendSuccess(reply, {
-        summary: {
-          total_branches: branches.length,
-          total_cans: totalCans,
-          active_cans: activeCans,
-          total_officers: totalOfficers,
-          month_collection: monthCollections.reduce((s, c) => s + Number(c.nominal), 0),
-          last_month_collection: lastMonthCollections.reduce((s, c) => s + Number(c.nominal), 0),
-          month_count: monthCollections.length,
-          last_month_count: lastMonthCollections.length,
-        },
-        daily_trends: dailyTrends,
-        recent_collections: recentCollections.map((c) => ({
-          id: c.id,
-          qr_code: c.can.qrCode,
-          owner_name: c.can.ownerName,
-          nominal: Number(c.nominal),
-          officer_name: c.officer.fullName,
-          collected_at: c.collectedAt,
-        })),
-        by_branch: branches.map((b) => ({
-          branch_id: b.id,
-          branch_name: b.name,
-          cans: b._count.cans,
-          officers: b._count.officers,
-          nominal: byBranch[b.id]?.nominal || 0,
-          count: byBranch[b.id]?.count || 0,
-        })),
-      });
+      return sendSuccess(reply, data);
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
     }

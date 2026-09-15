@@ -168,7 +168,7 @@ interface TasksState {
   markTaskComplete: (taskId: string, nominal?: number) => void;
   adjustCompletedNominal: (delta: number) => void;
   reorderTasks: (ids: string[]) => void;
-  skipAssignment: (taskId: string) => Promise<{
+  skipAssignment: (taskId: string, reasonCode?: string, notes?: string) => Promise<{
     success: boolean;
     code?: string;
     error?: string;
@@ -425,9 +425,9 @@ export const useTasksStore = create<TasksState>((set, get) => ({
     set({completedNominal: nextNominal});
   },
 
-  skipAssignment: async (taskId: string) => {
+  skipAssignment: async (taskId: string, reasonCode?: string, notes?: string) => {
     try {
-      const result = await collectionService.skipAssignment(taskId);
+      const result = await collectionService.skipAssignment(taskId, reasonCode, notes);
       if (result.success) {
         const {tasks, activeCount, completedCount, totalCount} = get();
         set({

@@ -5,6 +5,8 @@ import { AppError } from '../utils/AppError';
 import { Errors } from '../utils/errorCatalog';
 import { getRoleScope } from '../utils/role-scope';
 import { JWTPayload } from '../middleware/auth';
+import { isTransitionAllowed, isTrackedForCondition, ASSIGNABLE_CONDITIONS } from './conditionRules';
+import type { CanConditionValue } from './conditionRules';
 
 export interface CreateCanInput {
   branch_id?: string | null;
@@ -32,6 +34,14 @@ export interface UpdateCanInput {
   latitude?: number | null;
   longitude?: number | null;
   location_notes?: string | null;
+  /**
+   * Transisi kondisi eksplisit. `is_active` diisi mengikuti `isTrackedForCondition`
+   * sehingga tidak mungkin terbentuk `is_active = false` dengan kondisi selain DIKEMBALIKAN.
+   */
+  condition?: CanConditionValue | null;
+  /** Kode alasan baku untuk transisi kondisi (lihat conditionRules). */
+  condition_reason_code?: string | null;
+  /** @deprecated Alias lama. `false` dipetakan ke DIKEMBALIKAN, `true` dipetakan ke AKTIF. */
   is_active?: boolean | null;
 }
 
@@ -43,7 +53,26 @@ async function checkAccess(ctx: AccessContext, can: { branchId: string }, errorM
   } else if (ctx.role === 'ADMIN_KECAMATAN') {
     const branch = await db.query.branches.findFirst({ where: eq(schema.branches.id, can.branchId) });
     if (branch?.districtId !== ctx.districtId) throw Errors.FORBIDDEN(errorMsg);
+  } else if (ctx.role === 'PETUGAS') {
+    // Petugas lapangan hanya boleh mengakses kaleng pada rantingnya sendiri
+    // (officers.branch_id NOT NULL). branchId diambil dari token, sehingga
+    // tidak bisa dipalsukan lewat body/params. Tanpa cabang ini, role PETUGAS
+    // lolos tanpa pemeriksaan — celah pada POST /mobile/cans/:canId/visits.
+    if (!ctx.branchId || can.branchId !== ctx.branchId) throw Errors.FORBIDDEN(errorMsg);
   }
+}
+
+
+/**
+ * Wrapper publik dari checkAccess agar service lain (usulan kondisi, kunjungan)
+ * memakai pemeriksaan kepemilikan yang sama — jangan menulis ulang logika ini.
+ */
+export async function assertCanAccess(
+  ctx: AccessContext,
+  can: { branchId: string },
+  errorMsg = 'Kaleng bukan milik ranting/kecamatan Anda'
+): Promise<void> {
+  return checkAccess(ctx, can, errorMsg);
 }
 
 export async function getCans(
@@ -68,9 +97,22 @@ export async function getCans(
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
 
+  // Filter kondisi bisnis — memakai `condition`, bukan `is_active`.
+  // Alias lama dipertahankan agar UI lama tidak putus:
+  //   NON_ACTIVE/INACTIVE → NON_AKTIF (sebelumnya is_active = false)
   if (params.status === 'NON_ACTIVE' || params.status === 'INACTIVE') {
-    conditions.push(eq(schema.cans.isActive, false));
+    conditions.push(eq(schema.cans.condition, 'NON_AKTIF'));
+    conditions.push(eq(schema.cans.isActive, true));
+  } else if (
+    params.status === 'AKTIF' ||
+    params.status === 'RUSAK' ||
+    params.status === 'HILANG' ||
+    params.status === 'DIKEMBALIKAN'
+  ) {
+    conditions.push(eq(schema.cans.condition, params.status as CanConditionValue));
   } else if (params.status === 'ASSIGNED') {
+    // Masih dilacak + menerima tugas periode berjalan.
+    conditions.push(inArray(schema.cans.condition, ASSIGNABLE_CONDITIONS as CanConditionValue[]));
     conditions.push(eq(schema.cans.isActive, true));
 
     const assignedSubquery = db
@@ -86,6 +128,7 @@ export async function getCans(
 
     conditions.push(inArray(schema.cans.id, assignedSubquery));
   } else if (params.status === 'COMPLETED') {
+    conditions.push(inArray(schema.cans.condition, ASSIGNABLE_CONDITIONS as CanConditionValue[]));
     conditions.push(eq(schema.cans.isActive, true));
 
     const completedSubquery = db
@@ -101,6 +144,7 @@ export async function getCans(
 
     conditions.push(inArray(schema.cans.id, completedSubquery));
   } else if (params.status === 'ACTIVE') {
+    conditions.push(inArray(schema.cans.condition, ASSIGNABLE_CONDITIONS as CanConditionValue[]));
     conditions.push(eq(schema.cans.isActive, true));
 
     const assignedSubquery = db
@@ -132,8 +176,11 @@ export async function getCans(
             eq(schema.assignments.periodYear, currentYear),
             eq(schema.assignments.periodMonth, currentMonth)
           ),
+          // orderBy eksplisit: `limit: 1` tanpa urutan membuat assignment yang
+          // ditampilkan bisa berubah-ubah antar request.
+          orderBy: [desc(schema.assignments.assignedAt), desc(schema.assignments.createdAt)],
           limit: 1,
-          columns: { id: true, status: true }
+          columns: { id: true, status: true, skipReasonCode: true }
         }
       }
     }),
@@ -188,6 +235,9 @@ export async function createCan(body: CreateCanInput, ctx: AccessContext) {
     dukuh: dukuhName || null,
     latitude: (body.latitude !== undefined && body.latitude !== null) ? body.latitude.toString() : null,
     longitude: (body.longitude !== undefined && body.longitude !== null) ? body.longitude.toString() : null,
+    // Kaleng baru selalu mulai sebagai AKTIF (tidak ada input yang boleh mengubahnya).
+    condition: 'AKTIF',
+    isActive: true,
   }).returning();
 
   return inserted[0];
@@ -199,8 +249,20 @@ export async function getCanDetail(canId: string, ctx: AccessContext) {
     with: {
       branch: { columns: { name: true } },
       dukuhDetails: { columns: { name: true } },
+      // Penjemputan (nominal) — tetap terpisah dari kunjungan verifikasi/penggantian.
       collections: {
         orderBy: [desc(schema.collections.collectedAt)],
+        limit: 10,
+        with: { officer: { columns: { fullName: true } } },
+      },
+      // Riwayat usulan perubahan kondisi — sekaligus jejak siapa mengubah apa dan kapan.
+      conditionProposals: {
+        orderBy: [desc(schema.canConditionProposals.createdAt)],
+        limit: 10,
+      },
+      // Kunjungan non-penjemputan: verifikasi non-aktif dan penggantian unit.
+      visits: {
+        orderBy: [desc(schema.canVisits.visitedAt)],
         limit: 10,
         with: { officer: { columns: { fullName: true } } },
       },
@@ -257,6 +319,26 @@ export async function updateCan(canId: string, body: UpdateCanInput, ctx: Access
     newDukuhName = null;
   }
 
+  // --- Transisi kondisi (menggantikan aksi bisnis berbasis is_active) ---
+  // Alias lama dipetakan, bukan dihapus: `is_active = false` → DIKEMBALIKAN,
+  // `is_active = true` → AKTIF. Tidak ada jalur yang bisa menghasilkan
+  // `is_active = false` dengan kondisi selain DIKEMBALIKAN.
+  const legacyCondition: CanConditionValue | null =
+    body.is_active === undefined || body.is_active === null
+      ? null
+      : (body.is_active ? 'AKTIF' : 'DIKEMBALIKAN');
+  const requestedCondition = (body.condition ?? legacyCondition) as CanConditionValue | null;
+
+  let newCondition = existing.condition as CanConditionValue;
+  if (requestedCondition && requestedCondition !== newCondition) {
+    if (!isTransitionAllowed(newCondition, requestedCondition)) {
+      throw Errors.VALIDATION_ERROR(
+        `Transisi kondisi ${newCondition} → ${requestedCondition} tidak diizinkan`
+      );
+    }
+    newCondition = requestedCondition;
+  }
+
   const updated = await db.update(schema.cans).set({
     branchId: newBranchId,
     ownerName: body.owner_name ?? existing.ownerName,
@@ -270,7 +352,8 @@ export async function updateCan(canId: string, body: UpdateCanInput, ctx: Access
     latitude: body.latitude !== undefined ? (body.latitude ? String(body.latitude) : null) : existing.latitude,
     longitude: body.longitude !== undefined ? (body.longitude ? String(body.longitude) : null) : existing.longitude,
     locationNotes: body.location_notes !== undefined ? body.location_notes : existing.locationNotes,
-    isActive: body.is_active ?? existing.isActive,
+    condition: newCondition,
+    isActive: isTrackedForCondition(newCondition),
   }).where(eq(schema.cans.id, canId)).returning();
 
   return { can: updated[0], oldData: existing };
@@ -290,8 +373,16 @@ export async function deleteCan(canId: string, permanent: boolean, ctx: AccessCo
     return { deleted: true, oldData: existing };
   }
 
-  await db.update(schema.cans).set({ isActive: false }).where(eq(schema.cans.id, canId));
-  return { deleted: false, oldData: existing, newData: { ...existing, isActive: false } };
+  // Soft delete = penarikan kaleng. Harus menjadi transisi eksplisit menuju
+  // DIKEMBALIKAN, bukan sekadar `is_active = false` tanpa kondisi.
+  await db.update(schema.cans)
+    .set({ isActive: false, condition: 'DIKEMBALIKAN', updatedAt: new Date() })
+    .where(eq(schema.cans.id, canId));
+  return {
+    deleted: false,
+    oldData: existing,
+    newData: { ...existing, isActive: false, condition: 'DIKEMBALIKAN' as CanConditionValue },
+  };
 }
 
 export async function createBulkCans(branch_id: string, items: any[], ctx: AccessContext) {
@@ -330,6 +421,7 @@ export async function createBulkCans(branch_id: string, items: any[], ctx: Acces
       ownerAddress: '',
       dukuh: item.dukuh_id ? (dukuhMap.get(item.dukuh_id) || null) : null,
       isActive: true,
+      condition: 'AKTIF' as CanConditionValue,
     };
   });
 
@@ -354,7 +446,7 @@ export async function deleteBulkCans(ids: string[], permanent: boolean, ctx: Acc
         .where(and(inArray(schema.cans.id, ids), eq(schema.cans.branchId, ctx.branchId)));
     } else {
       await db.update(schema.cans)
-        .set({ isActive: false })
+        .set({ isActive: false, condition: 'DIKEMBALIKAN', updatedAt: new Date() })
         .where(and(inArray(schema.cans.id, ids), eq(schema.cans.branchId, ctx.branchId)));
     }
   } else if (ctx.role === 'ADMIN_KECAMATAN' && ctx.districtId) {
@@ -369,7 +461,7 @@ export async function deleteBulkCans(ids: string[], permanent: boolean, ctx: Acc
           .where(and(inArray(schema.cans.id, ids), inArray(schema.cans.branchId, branchIds)));
       } else {
         await db.update(schema.cans)
-          .set({ isActive: false })
+          .set({ isActive: false, condition: 'DIKEMBALIKAN', updatedAt: new Date() })
           .where(and(inArray(schema.cans.id, ids), inArray(schema.cans.branchId, branchIds)));
       }
     }
@@ -380,7 +472,7 @@ export async function deleteBulkCans(ids: string[], permanent: boolean, ctx: Acc
       await db.delete(schema.cans).where(inArray(schema.cans.id, ids));
     } else {
       await db.update(schema.cans)
-        .set({ isActive: false })
+        .set({ isActive: false, condition: 'DIKEMBALIKAN', updatedAt: new Date() })
         .where(inArray(schema.cans.id, ids));
     }
   }

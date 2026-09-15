@@ -1,9 +1,10 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {Alert, StyleSheet, Text, View} from 'react-native';
 import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import {AppButton, AppHeader} from '../components/ui';
+import {AppButton, AppHeader, SkipReasonSheet} from '../components/ui';
+import type {SkipReasonCode} from '../components/ui';
 import {useTasksStore} from '../stores';
 import {KalengInfoCard} from './scan';
 import {Colors, Radius, Spacing, Typography} from '../theme';
@@ -20,31 +21,34 @@ const TaskDetailScreen: React.FC = () => {
   const route = useRoute<RouteProp<RootStackParamList, 'TaskDetail'>>();
   const {task} = route.params;
 
+  const [skipSheetVisible, setSkipSheetVisible] = useState(false);
+  const [skipping, setSkipping] = useState(false);
+
   const handleSkip = () => {
-    Alert.alert(
-      'Tandai Tidak Dijemput',
-      `Tandai kaleng ${task.qr_code} sebagai tidak dijemput untuk periode berjalan?`,
-      [
-        {text: 'Batal', style: 'cancel'},
-        {
-          text: 'Ya, Tandai',
-          onPress: async () => {
-            const result = await useTasksStore.getState().skipAssignment(task.id);
-            if (result.success) {
-              // Segarkan daftar di belakang lalu kembali.
-              useTasksStore
-                .getState()
-                .fetchTasks('ACTIVE')
-                .catch(() => {});
-              navigation.goBack();
-            } else {
-              // Pesan jujur: alasan asli (server / jaringan) — bukan tuduhan sinyal.
-              Alert.alert('Gagal Menandai', result.error || 'Gagal menandai kaleng. Coba lagi.');
-            }
-          },
-        },
-      ],
-    );
+    setSkipSheetVisible(true);
+  };
+
+  const handleSkipConfirm = async (reasonCode: SkipReasonCode, notes: string) => {
+    setSkipping(true);
+    try {
+      const result = await useTasksStore
+        .getState()
+        .skipAssignment(task.id, reasonCode, notes);
+      if (result.success) {
+        setSkipSheetVisible(false);
+        // Segarkan daftar di belakang lalu kembali.
+        useTasksStore
+          .getState()
+          .fetchTasks('ACTIVE')
+          .catch(() => {});
+        navigation.goBack();
+      } else {
+        // Pesan jujur: alasan asli (server / jaringan) — bukan tuduhan sinyal.
+        Alert.alert('Gagal Menandai', result.error || 'Gagal menandai kaleng. Coba lagi.');
+      }
+    } finally {
+      setSkipping(false);
+    }
   };
 
   return (
@@ -71,6 +75,14 @@ const TaskDetailScreen: React.FC = () => {
           />
         </View>
       </View>
+
+      <SkipReasonSheet
+        visible={skipSheetVisible}
+        qrCode={task.qr_code}
+        loading={skipping}
+        onDismiss={() => setSkipSheetVisible(false)}
+        onConfirm={handleSkipConfirm}
+      />
     </View>
   );
 };

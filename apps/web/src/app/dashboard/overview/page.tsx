@@ -1,109 +1,43 @@
 'use client';
 
 import React from 'react';
-import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  AreaChart,
-  Area
-} from 'recharts';
-import {
-  TrendingUp,
-  Users,
-  Box,
-  Wallet,
-  ArrowUpRight,
-  ArrowDownRight,
-  Loader2,
-  BarChart3,
-  BarChart2,
-  AlertTriangle,
-  LogIn,
-  Building2,
-  Database,
-  Power,
-} from 'lucide-react';
+import { AlertTriangle, Loader2, Power } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
-import { ApiResponse } from '@lazisnu/shared-types';
-
-interface DashboardStatsData {
-  summary: {
-    month_collection: number;
-    last_month_collection: number;
-    active_cans: number;
-    total_cans: number;
-    total_officers: number;
-    total_branches: number;
-    month_count: number;
-    last_month_count: number;
-  };
-  recent_collections?: Array<{
-    id: string;
-    collected_at: string;
-    nominal: number;
-    owner_name: string;
-    qr_code: string;
-  }>;
-  by_branch?: Array<{
-    branch_name: string;
-    nominal: number;
-  }>;
-  by_officer?: Array<{
-    officer_name: string;
-    nominal: number;
-  }>;
-  daily_trends?: Array<{
-    day: string;
-    nominal: number;
-  }>;
-  district?: {
-    summary: {
-      total_branches: number;
-      month_collection: number;
-      month_count: number;
-      last_month_count: number;
-      active_cans: number;
-      total_cans: number;
-      total_officers: number;
-    };
-    by_branch?: Array<{
-      branch_name: string;
-      nominal: number;
-    }>;
-    daily_trends?: Array<{
-      day: string;
-      nominal: number;
-    }>;
-  };
-}
+import { ApiResponse, Branch, OverviewResponse } from '@lazisnu/shared-types';
+import { Card } from '@/components/ui/Card';
+import OverviewHeader from '@/components/overview/OverviewHeader';
+import OperationalSummary from '@/components/overview/OperationalSummary';
+import ActionRequiredList from '@/components/overview/ActionRequiredList';
+import CollectionTrendChart from '@/components/overview/CollectionTrendChart';
+import ConditionBreakdown from '@/components/overview/ConditionBreakdown';
+import BranchComparisonList from '@/components/overview/BranchComparisonList';
 
 interface ApiError {
   message?: string;
-  response?: {
-    data?: {
-      message?: string;
-    };
-  };
+  response?: { data?: { message?: string } };
 }
 
-
-
-
+/**
+ * Overview kaleng — pusat monitoring operasional untuk dua role.
+ *
+ * Semua angka berasal dari server (OverviewResponse); tidak ada perhitungan definisi
+ * metrik di browser. Scope ditentukan server dari token:
+ * - ADMIN_RANTING   : /admin/branch/dashboard (tanpa pemilih ranting)
+ * - ADMIN_KECAMATAN : /admin/district/dashboard (opsional branch_id, divalidasi server)
+ */
 export default function OverviewPage() {
-  const { user } = useAuthStore();
-  const [data, setData] = React.useState<DashboardStatsData | null>(null);
+  const user = useAuthStore((state) => state.user);
+  const isDistrictAdmin = user?.role === 'ADMIN_KECAMATAN';
+
+  const [data, setData] = React.useState<OverviewResponse | null>(null);
+  const [branches, setBranches] = React.useState<Branch[]>([]);
+  const [branchId, setBranchId] = React.useState('');
   const [loading, setLoading] = React.useState(true);
+  const [refreshing, setRefreshing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // Backup flag state
+  // Fitur backup yang sudah ada — dipertahankan untuk admin kecamatan.
   const [backupActive, setBackupActive] = React.useState(false);
   const [backupLoading, setBackupLoading] = React.useState(false);
   const [backupMessage, setBackupMessage] = React.useState<string | null>(null);
@@ -123,62 +57,78 @@ export default function OverviewPage() {
       setBackupMessage('Gagal mengubah status backup. Coba lagi.');
     } finally {
       setBackupLoading(false);
-      // Auto-clear message after 4 seconds
       setTimeout(() => setBackupMessage(null), 4000);
     }
   };
 
+  const fetchOverview = React.useCallback(async (nextBranchId: string, mode: 'first' | 'refresh') => {
+    if (mode === 'first') setLoading(true);
+    else setRefreshing(true);
+    setError(null);
 
-
-  const fetchStats = async () => {
     try {
-      setLoading(true);
-      setError(null);
-      const endpoint = user?.role === 'ADMIN_KECAMATAN' ? '/admin/district/dashboard' : '/admin/branch/dashboard';
-      const response = await api.get(endpoint) as unknown as ApiResponse<DashboardStatsData>;
+      // Admin ranting tidak mengirim scope pengganti; admin kecamatan boleh memilih
+      // branch_id dan server memvalidasi kepemilikannya.
+      const endpoint = isDistrictAdmin
+        ? `/admin/district/dashboard${nextBranchId ? `?branch_id=${nextBranchId}` : ''}`
+        : '/admin/branch/dashboard';
+
+      const response = await api.get(endpoint) as unknown as ApiResponse<OverviewResponse>;
       if (response.success && response.data) {
         setData(response.data);
       } else {
-        setError(response.error?.message || 'Gagal memuat data statistik');
+        setError(response.error?.message || 'Gagal memuat data overview');
       }
     } catch (err) {
-      console.error('Fetch stats error:', err);
       const errorResponse = err as ApiError;
-      setError(errorResponse.response?.data?.message || errorResponse.message || 'Terjadi kesalahan koneksi ke server');
+      setError(
+        errorResponse?.response?.data?.message
+        || errorResponse?.message
+        || 'Terjadi kesalahan koneksi ke server',
+      );
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, [isDistrictAdmin]);
 
+  // Muat pertama kali / pergantian akun. Tanpa sesi: data scope lama dibuang.
   React.useEffect(() => {
     if (!user) {
-      const timer = setTimeout(() => setLoading(false), 0);
-      return () => clearTimeout(timer);
+      setData(null);
+      setLoading(false);
+      return;
     }
+    void fetchOverview('', 'first');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, isDistrictAdmin]);
 
-    const loadStats = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const endpoint = user?.role === 'ADMIN_KECAMATAN' ? '/admin/district/dashboard' : '/admin/branch/dashboard';
-        const response = await api.get(endpoint) as unknown as ApiResponse<DashboardStatsData>;
-        if (response.success && response.data) {
-          setData(response.data);
-        } else {
-          setError(response.error?.message || 'Gagal memuat data statistik');
-        }
-      } catch (err) {
-        console.error('Fetch stats error:', err);
-        const errorResponse = err as ApiError;
-        setError(errorResponse.response?.data?.message || errorResponse.message || 'Terjadi kesalahan koneksi ke server');
-      } finally {
-        setLoading(false);
-      }
-    };
-    void loadStats();
-  }, [user]);
+  // Daftar ranting hanya untuk admin kecamatan.
+  React.useEffect(() => {
+    if (!isDistrictAdmin) {
+      setBranches([]);
+      setBranchId('');
+      return;
+    }
+    api.get('/admin/branches')
+      .then((res: unknown) => {
+        const r = res as ApiResponse<Branch[]>;
+        if (r.success && r.data) setBranches(r.data);
+      })
+      .catch(() => { /* opsional: filter juga tersedia dari daftar perbandingan */ });
+  }, [isDistrictAdmin]);
 
-  // Fetch backup status on mount
+  // Ganti filter ranting: data lama dipertahankan dengan indikator kecil.
+  const handleBranchChange = React.useCallback((nextBranchId: string) => {
+    setBranchId(nextBranchId);
+    void fetchOverview(nextBranchId, 'refresh');
+  }, [fetchOverview]);
+
+  const handleRefresh = React.useCallback(() => {
+    void fetchOverview(branchId, 'refresh');
+  }, [branchId, fetchOverview]);
+
+  // Status backup (infra opsional, gagal senyap).
   React.useEffect(() => {
     api.get('/admin/backup/status')
       .then((res: unknown) => {
@@ -187,540 +137,132 @@ export default function OverviewPage() {
       })
       .catch(() => { /* optional infra, silent fail */ });
   }, []);
-
-  if (loading) {
+  if (loading && !data) {
+    // Skeleton mengikuti struktur akhir agar layout tidak meloncat saat data datang.
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <Loader2 className="animate-spin text-[#1F8243]" size={40} />
-        <p className="text-[#2C473E]/60 font-medium tracking-tight">Menyiapkan statistik Anda...</p>
+      <div className="flex flex-col gap-6" role="status" aria-live="polite" aria-busy="true">
+        <span className="sr-only">Memuat overview kaleng</span>
+        <div className="h-24 animate-pulse rounded-2xl bg-[#F4F1EA]/5" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-40 animate-pulse rounded-2xl bg-[#F4F1EA]/5" />
+          ))}
+        </div>
+        <div className="h-64 animate-pulse rounded-2xl bg-[#F4F1EA]/5" />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="h-72 animate-pulse rounded-2xl bg-[#F4F1EA]/5" />
+          <div className="h-72 animate-pulse rounded-2xl bg-[#F4F1EA]/5" />
+        </div>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center">
-        <div className="w-16 h-16 bg-[#2C473E]/5 text-[#2C473E]/40 rounded-full flex items-center justify-center mb-2">
-          <LogIn size={32} />
-        </div>
-        <h3 className="text-lg font-bold text-[#2C473E]">Sesi Berakhir</h3>
-        <p className="text-[#2C473E]/60 text-sm">Silakan login kembali untuk melihat statistik.</p>
+      <div className="rounded-2xl border border-white/10 bg-[#F4F1EA]/5 p-8 text-center">
+        <p className="text-sm font-bold text-[#F4F1EA]">Sesi tidak ditemukan</p>
+        <p className="mt-1 text-xs text-[#F4F1EA]/60">
+          Muat ulang halaman untuk masuk kembali. Data scope sebelumnya tidak ditampilkan.
+        </p>
       </div>
     );
   }
 
-  if (error || !data) {
+  if (error && !data) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center px-4">
-        <div className="w-16 h-16 bg-[#D97A76]/10 text-[#D97A76] rounded-full flex items-center justify-center mb-2">
-          <AlertTriangle size={32} />
-        </div>
-        <h3 className="text-lg font-bold text-[#2C473E]">Gagal Memuat Statistik</h3>
-        <p className="text-[#2C473E]/60 text-sm max-w-xs">{error || 'Data tidak tersedia saat ini.'}</p>
+      <div className="rounded-2xl border border-white/10 bg-[#F4F1EA]/5 p-8 text-center" role="alert">
+        <AlertTriangle size={22} className="mx-auto text-[#D97A76]" aria-hidden="true" />
+        <p className="mt-2 text-sm font-bold text-[#F4F1EA]">Gagal memuat overview</p>
+        <p className="mt-1 text-xs text-[#F4F1EA]/60">{error}</p>
         <button
-          onClick={fetchStats}
-          className="mt-4 px-6 py-2 bg-[#1F8243] text-white rounded-xl font-bold hover:bg-[#1F8243]/90 transition-all active:scale-95 shadow-lg shadow-[#1F8243]/20"
+          type="button"
+          onClick={handleRefresh}
+          className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1F8243] px-4 text-sm font-bold text-white transition-[transform,opacity] duration-200 active:scale-[.96] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#EAD19B]"
         >
-          Coba Lagi
+          <Loader2 size={14} aria-hidden="true" /> Coba lagi
         </button>
       </div>
     );
   }
 
-  const summary = data.summary || {};
+  if (!data) return null;
 
-  // 1. Kalkulasi Tren Infaq (Bulan ini vs Bulan lalu)
-  const lastMonthColl = Number(summary.last_month_collection || 0);
-  const currentMonthColl = Number(summary.month_collection || 0);
-  let collTrend = 0;
-  if (lastMonthColl > 0) {
-    collTrend = ((currentMonthColl - lastMonthColl) / lastMonthColl) * 100;
-  } else if (currentMonthColl > 0) {
-    collTrend = 100;
-  }
-
-  // 2. Kalkulasi Tingkat Penjemputan & Tren
-  const activeCans = Number(summary.active_cans || summary.total_cans || 0);
-  const inactiveCans = Math.max(0, Number(summary.total_cans || 0) - Number(summary.active_cans || 0));
-  const currentCount = Number(summary.month_count || 0);
-  const lastCount = Number(summary.last_month_count || 0);
-
-  const currentRate = activeCans > 0 ? (currentCount / activeCans) * 100 : 0;
-  const lastRate = activeCans > 0 ? (lastCount / activeCans) * 100 : 0;
-  const rateTrend = currentRate - lastRate;
-
-  const dSummary = data?.district?.summary;
-  const dActiveCans = Number(dSummary?.active_cans || dSummary?.total_cans || 0);
-  const dCurrentCount = Number(dSummary?.month_count || 0);
-  const dLastCount = Number(dSummary?.last_month_count || 0);
-  const dCurrentRate = dActiveCans > 0 ? (dCurrentCount / dActiveCans) * 100 : 0;
-  const dLastRate = dActiveCans > 0 ? (dLastCount / dActiveCans) * 100 : 0;
-  const dRateTrend = dCurrentRate - dLastRate;
+  const periodEmpty = data.summary.successful_collections === 0 && data.summary.task_total === 0;
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <BarChart3 className="text-[#EAD19B]" size={28} />
-          <div>
-            <h1 className="text-2xl font-bold text-[#F4F1EA] tracking-tight">Selamat Datang 👋</h1>
-            <p className="text-[#F4F1EA]/60 text-sm font-medium">Berikut adalah ringkasan pengumpulan infaq Lazisnu periode {new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}.</p>
-          </div>
-        </div>
+    <div className="flex flex-col gap-6">
+      <OverviewHeader
+        data={data}
+        branches={isDistrictAdmin ? branches : undefined}
+        selectedBranchId={branchId}
+        onBranchChange={isDistrictAdmin ? handleBranchChange : undefined}
+        onRefresh={handleRefresh}
+        refreshing={refreshing}
+      />
 
-      </div>
+      {refreshing && (
+        <p className="flex items-center gap-2 text-xs font-semibold text-[#EAD19B]" role="status">
+          <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+          Memperbarui data untuk scope yang dipilih…
+        </p>
+      )}
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card variant="glass" className="relative overflow-hidden group border-white/5">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Total Infaq</p>
-              <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">
-                Rp {Number(summary.month_collection).toLocaleString('id-ID')}
-              </h3>
-            </div>
-            <div className="p-3 bg-[#1F8243]/10 text-[#1F8243] rounded-xl group-hover:bg-[#1F8243] group-hover:text-[#2C473E] transition-all duration-300">
-              <Wallet size={20} />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center gap-2">
-            <span className={`flex items-center text-xs font-bold px-2 py-1 rounded-lg ${collTrend >= 0 ? 'text-[#1F8243] bg-[#1F8243]/10' : 'text-[#D97A76] bg-[#D97A76]/10'}`}>
-              {collTrend >= 0 ? <ArrowUpRight size={12} className="mr-1" /> : <ArrowDownRight size={12} className="mr-1" />}
-              {Math.abs(collTrend).toFixed(1)}%
-            </span>
-            <span className="text-xs text-[#F4F1EA]/40 font-medium">dari bulan lalu</span>
-          </div>
-        </Card>
+      <OperationalSummary summary={data.summary} branchId={branchId || undefined} />
 
-        <Card variant="glass" className="relative overflow-hidden group border-white/5">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Kaleng Aktif</p>
-              <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">{summary.active_cans}</h3>
-            </div>
-            <div className="p-3 bg-[#C959A0]/10 text-[#C959A0] rounded-xl group-hover:bg-[#C959A0] group-hover:text-[#2C473E] transition-all duration-300">
-              <Box size={20} />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center gap-2">
-            <span className="flex items-center text-xs font-bold text-[#C959A0] bg-[#C959A0]/10 px-2 py-1 rounded-lg">{inactiveCans} Nonaktif
-            </span>
-            <span className="text-xs text-[#F4F1EA]/60 font-bold"> Total {summary.total_cans} </span>
-          </div>
-        </Card>
+      {periodEmpty && (
+        <p className="rounded-2xl border border-white/10 bg-[#F4F1EA]/5 p-4 text-xs text-[#F4F1EA]/70">
+          Belum ada penjemputan dan tugas pada periode ini. Angka di atas menampilkan nol sampai data periode berjalan masuk.
+        </p>
+      )}
 
-        <Card variant="glass" className="relative overflow-hidden group border-white/5">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Petugas Lapangan</p>
-              <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">{summary.total_officers}</h3>
-            </div>
-            <div className="p-3 bg-[#6B9E9F]/10 text-[#6B9E9F] rounded-xl group-hover:bg-[#6B9E9F] group-hover:text-[#2C473E] transition-all duration-300">
-              <Users size={20} />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center gap-2">
-            <Badge variant="sent" className="bg-[#6B9E9F]/10 text-[#6B9E9F] border-none">
-              {user?.role === 'ADMIN_KECAMATAN' ? `${summary.total_branches} Ranting` : 'Aktif'}
-            </Badge>
-          </div>
-        </Card>
+      <ActionRequiredList items={data.action_items} branchId={branchId || undefined} loading={refreshing} />
 
-        <Card variant="glass" className="relative overflow-hidden group border-white/5">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Penjemputan</p>
-              <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">{currentRate.toFixed(1)}%</h3>
-            </div>
-            <div className="p-3 bg-[#DE6F4A]/10 text-[#DE6F4A] rounded-xl group-hover:bg-[#DE6F4A] group-hover:text-[#2C473E] transition-all duration-300">
-              <TrendingUp size={20} />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center gap-2">
-            <span className={`flex items-center text-xs font-bold px-2 py-1 rounded-lg ${rateTrend >= 0 ? 'text-[#1F8243] bg-[#1F8243]/10' : 'text-red-600 bg-red-50'}`}>
-              {rateTrend >= 0 ? <ArrowUpRight size={12} className="mr-1" /> : <ArrowDownRight size={12} className="mr-1" />}
-              {Math.abs(rateTrend).toFixed(1)}%
-            </span>
-            <span className="text-xs text-[#F4F1EA]/40 font-medium">dari bulan lalu</span>
-          </div>
-        </Card>
-      </div>
-
-      {/* Backup Control — only for ADMIN_KECAMATAN */}
-      {user?.role === 'ADMIN_KECAMATAN' && (
-        <Card variant="glass" className="border-white/5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {isDistrictAdmin && (
+        <Card className="border-white/5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
-              <div className={`p-3 rounded-xl transition-all duration-300 ${backupActive ? 'bg-[#1F8243]/10 text-[#1F8243]' : 'bg-[#F4F1EA]/5 text-[#F4F1EA]/40'}`}>
-                <Database size={20} />
+              <div className={`p-3 rounded-xl ${backupActive ? 'bg-[#1F8243]/10 text-[#1F8243]' : 'bg-[#F4F1EA]/5 text-[#F4F1EA]/40'}`}>
+                <Power size={20} aria-hidden="true" />
               </div>
               <div>
                 <p className="text-sm font-bold text-[#F4F1EA]">Backup Database</p>
                 <p className="text-xs text-[#F4F1EA]/50 mt-0.5">
-                  {backupActive
-                    ? 'Backup otomatis berjalan tiap hari jam 02:00'
-                    : 'Backup otomatis sedang dinonaktifkan'}
+                  {backupActive ? 'Backup otomatis berjalan tiap hari jam 02:00' : 'Backup otomatis sedang dinonaktifkan'}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3 flex-wrap justify-start sm:justify-end">
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${backupActive ? 'text-[#1F8243] bg-[#1F8243]/10 border-[#1F8243]/20' : 'text-[#F4F1EA]/40 bg-[#F4F1EA]/5 border-[#F4F1EA]/10'}`}>
-                <span className={`w-2 h-2 rounded-full ${backupActive ? 'bg-[#1F8243] animate-pulse' : 'bg-[#F4F1EA]/30'}`} />
-                {backupActive ? 'Aktif' : 'Nonaktif'}
-              </span>
-              <button
-                onClick={handleToggleBackup}
-                disabled={backupLoading}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all active:scale-95 ${backupActive ? 'bg-[#D97A76]/10 text-[#D97A76] hover:bg-[#D97A76]/20 border border-[#D97A76]/20' : 'bg-[#1F8243] text-white hover:bg-[#1F8243]/90 shadow-lg shadow-[#1F8243]/20'}`}
-              >
-                {backupLoading ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <Power size={16} />
-                )}
-                {backupActive ? 'Nonaktifkan' : 'Aktifkan'}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleToggleBackup}
+              disabled={backupLoading}
+              className={`inline-flex min-h-11 items-center gap-2 rounded-xl px-4 text-sm font-bold transition-[opacity,transform] duration-200 active:scale-[.96] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#EAD19B] disabled:opacity-60 ${
+                backupActive
+                  ? 'border border-[#D97A76]/30 bg-[#D97A76]/10 text-[#D97A76]'
+                  : 'bg-[#1F8243] text-white'
+              }`}
+            >
+              {backupLoading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Power size={16} aria-hidden="true" />}
+              {backupActive ? 'Nonaktifkan' : 'Aktifkan'}
+            </button>
           </div>
           {backupMessage && (
-            <p className={`text-xs mt-2 px-1 transition-opacity ${backupMessage.includes('Gagal') ? 'text-[#D97A76]' : 'text-[#1F8243]'}`}>
+            <p className={`mt-2 px-1 text-xs ${backupMessage.includes('Gagal') ? 'text-[#D97A76]' : 'text-[#1F8243]'}`}>
               {backupMessage}
             </p>
           )}
         </Card>
       )}
 
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <Card variant="glass" className="h-[320px] md:h-[450px] flex flex-col border-white/5" contentClassName="p-0 flex flex-1 min-h-0 flex-col">
-          <div className="px-6 py-4 border-b border-white/5">
-            <h3 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
-              <BarChart2 size={16} className="text-[#EAD19B]" />
-              {user?.role === 'ADMIN_KECAMATAN' ? "Perolehan per Ranting" : "Perolehan per Petugas"}
-            </h3>
-          </div>
-<div className="flex-1 w-full min-h-0 mt-4 px-2">
-            {(() => {
-              const chartData = user?.role === 'ADMIN_KECAMATAN' ? data.by_branch : data.by_officer;
-              const dataKey = user?.role === 'ADMIN_KECAMATAN' ? 'branch_name' : 'officer_name';
-              if (!chartData || chartData.length === 0) {
-                return (
-                  <div className="flex-1 flex items-center justify-center text-[#F4F1EA]/40">
-                    <p className="text-sm">Data per {user?.role === 'ADMIN_KECAMATAN' ? 'ranting' : 'petugas'} tidak tersedia</p>
-                  </div>
-                );
-              }
-              return (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={chartData as Array<Record<string, unknown>>}
-                    margin={{ top: 20, right: 20, left: 0, bottom: 0 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(244, 241, 234, 0.08)" />
-                    <XAxis
-                      dataKey={dataKey}
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 10, fill: '#F4F1EA', fontWeight: 600 }}
-                      dy={10}
-                      tickFormatter={(value) => (value.length > 12 ? value.substring(0, 12) + '…' : value)}
-                    />
-                    <YAxis
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 10, fill: '#F4F1EA' }}
-                      tickFormatter={(value) => value >= 1e6 ? (value / 1e6).toFixed(1) + 'M' : value >= 1e3 ? (value / 1e3).toFixed(0) + 'K' : value}
-                    />
-                    <Tooltip
-                      cursor={{ fill: 'rgba(244, 241, 234, 0.05)' }}
-                      contentStyle={{
-                        borderRadius: '12px',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        backgroundColor: '#2C473E',
-                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
-                        fontSize: '12px',
-                        color: '#F4F1EA'
-                      }}
-                      formatter={(value) => [`Rp ${Number(value || 0).toLocaleString('id-ID')}`, 'Nominal']}
-                    />
-                    <Bar
-                      dataKey="nominal"
-                      fill="#1F8243"
-                      radius={[6, 6, 0, 0]}
-                      barSize={user?.role === 'ADMIN_KECAMATAN' ? 48 : 24}
-                      minPointSize={2}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              );
-            })()}
-          </div>
-        </Card>
-
-        <Card variant="glass" className="h-[320px] md:h-[450px] flex flex-col border-white/5" contentClassName="p-0 flex flex-1 min-h-0 flex-col">
-          <div className="px-6 py-4 border-b border-white/5">
-            <h3 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
-              <TrendingUp size={16} className="text-[#EAD19B]" />
-              Tren Infaq Harian (Minggu Ini)
-            </h3>
-          </div>
-          <div className="flex-1 w-full min-h-0 mt-4 px-2">
-            {data.daily_trends && data.daily_trends.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart
-                  data={data.daily_trends}
-                  margin={{ top: 20, right: 20, left: 0, bottom: 0 }}
-                >
-                  <defs>
-                    <linearGradient id="colorNominal" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#DE6F4A" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#DE6F4A" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(244, 241, 234, 0.08)" />
-                  <XAxis
-                    dataKey="day"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 11, fill: '#F4F1EA', fontWeight: 600 }}
-                    dy={10}
-                  />
-                  <YAxis
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 11, fill: '#F4F1EA' }}
-                    tickFormatter={(value) => value >= 1e6 ? (value / 1e6).toFixed(1) + 'M' : value >= 1e3 ? (value / 1e3).toFixed(0) + 'K' : value}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: '12px',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      backgroundColor: '#2C473E',
-                      boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
-                      fontSize: '12px',
-                      color: '#F4F1EA'
-                    }}
-                    formatter={(value) => [`Rp ${Number(value || 0).toLocaleString('id-ID')}`, 'Nominal']}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="nominal"
-                    stroke="#DE6F4A"
-                    strokeWidth={4}
-                    fillOpacity={1}
-                    fill="url(#colorNominal)"
-                    isAnimationActive={false}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex-1 flex items-center justify-center text-[#F4F1EA]/40">
-                <p className="text-sm">Data tren minggu ini tidak tersedia</p>
-              </div>
-            )}
-          </div>
-        </Card>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <CollectionTrendChart trend={data.monthly_trend} />
+        <ConditionBreakdown breakdown={data.condition_breakdown} />
       </div>
 
-      {/* District Section — only for ADMIN_RANTING */}
-      {user?.role === 'ADMIN_RANTING' && data.district && (
-        <>
-          {/* District Divider */}
-          <div className="flex items-center gap-4 pt-4">
-            <div className="flex-1 h-px bg-linear-to-r from-transparent via-[#EAD19B]/30 to-transparent" />
-            <div className="flex items-center gap-2 px-4 py-1.5 bg-[#EAD19B]/10 rounded-full border border-[#EAD19B]/20">
-              <Building2 size={14} className="text-[#EAD19B]" />
-              <span className="text-xs font-bold text-[#EAD19B] uppercase tracking-wider">
-                {data.district.summary.total_branches} Ranting
-              </span>
-            </div>
-            <div className="flex-1 h-px bg-linear-to-r from-transparent via-[#EAD19B]/30 to-transparent" />
-          </div>
-
-          {/* District Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <Card variant="glass" className="relative overflow-hidden group border-white/5">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Total Infaq Kecamatan</p>
-                  <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">
-                    Rp {Number(data.district.summary.month_collection).toLocaleString('id-ID')}
-                  </h3>
-                </div>
-                <div className="p-3 bg-[#1F8243]/10 text-[#1F8243] rounded-xl group-hover:bg-[#1F8243] group-hover:text-[#2C473E] transition-all duration-300">
-                  <Wallet size={20} />
-                </div>
-              </div>
-              <div className="mt-4 flex items-center gap-2">
-                <span className="text-xs text-[#EAD19B] font-bold">{data.district.summary.month_count} Penarikan</span>
-              </div>
-            </Card>
-
-            <Card variant="glass" className="relative overflow-hidden group border-white/5">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Kaleng Aktif</p>
-                  <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">{data.district.summary.active_cans}</h3>
-                </div>
-                <div className="p-3 bg-[#C959A0]/10 text-[#C959A0] rounded-xl group-hover:bg-[#C959A0] group-hover:text-[#2C473E] transition-all duration-300">
-                  <Box size={20} />
-                </div>
-              </div>
-              <div className="mt-4 flex items-center gap-2">
-                <span className="flex items-center text-xs font-bold text-[#C959A0] bg-[#C959A0]/10 px-2 py-1 rounded-lg">
-                  {Number(data.district.summary.total_cans || 0) - Number(data.district.summary.active_cans || 0)} Nonaktif
-                </span>
-                <span className="text-xs text-[#F4F1EA]/60 font-bold"> Total {data.district.summary.total_cans} </span>
-              </div>
-            </Card>
-
-            <Card variant="glass" className="relative overflow-hidden group border-white/5">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Petugas Lapangan</p>
-                  <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">{data.district.summary.total_officers}</h3>
-                </div>
-                <div className="p-3 bg-[#6B9E9F]/10 text-[#6B9E9F] rounded-xl group-hover:bg-[#6B9E9F] group-hover:text-[#2C473E] transition-all duration-300">
-                  <Users size={20} />
-                </div>
-              </div>
-              <div className="mt-4 flex items-center gap-2">
-                <Badge variant="sent" className="bg-[#6B9E9F]/10 text-[#6B9E9F] border-none">
-                  {data.district.summary.total_branches} Ranting
-                </Badge>
-              </div>
-            </Card>
-
-            <Card variant="glass" className="relative overflow-hidden group border-white/5">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-wider">Penjemputan</p>
-                  <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-1 break-words">{dCurrentRate.toFixed(1)}%</h3>
-                </div>
-                <div className="p-3 bg-[#DE6F4A]/10 text-[#DE6F4A] rounded-xl group-hover:bg-[#DE6F4A] group-hover:text-[#2C473E] transition-all duration-300">
-                  <TrendingUp size={20} />
-                </div>
-              </div>
-              <div className="mt-4 flex items-center gap-2">
-                <span className={`flex items-center text-xs font-bold px-2 py-1 rounded-lg ${dRateTrend >= 0 ? 'text-[#1F8243] bg-[#1F8243]/10' : 'text-red-600 bg-red-50'}`}>
-                  {dRateTrend >= 0 ? <ArrowUpRight size={12} className="mr-1" /> : <ArrowDownRight size={12} className="mr-1" />}
-                  {Math.abs(dRateTrend).toFixed(1)}%
-                </span>
-                <span className="text-xs text-[#F4F1EA]/40 font-medium">dari bulan lalu</span>
-              </div>
-            </Card>
-          </div>
-
-          {/* District Charts Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <Card variant="glass" className="h-[320px] md:h-[450px] flex flex-col border-white/5" contentClassName="p-0 flex flex-1 min-h-0 flex-col">
-              <div className="px-6 py-4 border-b border-white/5">
-                <h3 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
-                  <BarChart2 size={16} className="text-[#EAD19B]" />
-                  Perolehan per Ranting (Kecamatan)
-                </h3>
-              </div>
-              <div className="flex-1 w-full min-h-0 mt-4 px-2">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.district.by_branch || []} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(244, 241, 234, 0.08)" />
-                    <XAxis
-                      dataKey="branch_name"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 10, fill: '#F4F1EA', fontWeight: 600 }}
-                      dy={10}
-                    />
-                    <YAxis
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 10, fill: '#F4F1EA' }}
-                      tickFormatter={(value) => value >= 1e6 ? (value / 1e6).toFixed(1) + 'M' : value >= 1e3 ? (value / 1e3).toFixed(0) + 'K' : value}
-                    />
-                    <Tooltip
-                      cursor={{ fill: 'rgba(244, 241, 234, 0.05)' }}
-                      contentStyle={{
-                        borderRadius: '12px',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        backgroundColor: '#2C473E',
-                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
-                        fontSize: '12px',
-                        color: '#F4F1EA'
-                      }}
-                      formatter={(value) => [`Rp ${Number(value || 0).toLocaleString('id-ID')}`, 'Nominal']}
-                    />
-                    <Bar
-                      dataKey="nominal"
-                      fill="#EAD19B"
-                      radius={[6, 6, 0, 0]}
-                      barSize={48}
-                      minPointSize={2}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </Card>
-
-            <Card variant="glass" className="h-[320px] md:h-[450px] flex flex-col border-white/5" contentClassName="p-0 flex flex-1 min-h-0 flex-col">
-              <div className="px-6 py-4 border-b border-white/5">
-                <h3 className="text-sm font-bold text-[#F4F1EA] flex items-center gap-2">
-                  <TrendingUp size={16} className="text-[#EAD19B]" />
-                  Tren Infaq Harian (Kecamatan)
-                </h3>
-              </div>
-              <div className="flex-1 w-full min-h-0 mt-4 px-2">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={data.district.daily_trends || []}
-                    margin={{ top: 20, right: 20, left: 0, bottom: 0 }}
-                  >
-                    <defs>
-                      <linearGradient id="colorDistrict" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#EAD19B" stopOpacity={0.2} />
-                        <stop offset="95%" stopColor="#EAD19B" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(244, 241, 234, 0.08)" />
-                    <XAxis
-                      dataKey="day"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 11, fill: '#F4F1EA', fontWeight: 600 }}
-                      dy={10}
-                    />
-                    <YAxis
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 11, fill: '#F4F1EA' }}
-                      tickFormatter={(value) => value >= 1e6 ? (value / 1e6).toFixed(1) + 'M' : value >= 1e3 ? (value / 1e3).toFixed(0) + 'K' : value}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        borderRadius: '12px',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        backgroundColor: '#2C473E',
-                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
-                        fontSize: '12px',
-                        color: '#F4F1EA'
-                      }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="nominal"
-                      stroke="#EAD19B"
-                      strokeWidth={4}
-                      fillOpacity={1}
-                      fill="url(#colorDistrict)"
-                      isAnimationActive={false}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </Card>
-          </div>
-        </>
-      )}
+      <BranchComparisonList
+        comparison={data.branch_comparison ?? []}
+        hidden={!isDistrictAdmin || Boolean(branchId)}
+        onPickBranch={handleBranchChange}
+      />
     </div>
   );
 }

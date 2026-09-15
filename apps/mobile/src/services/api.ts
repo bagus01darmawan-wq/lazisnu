@@ -640,13 +640,44 @@ export const collectionService = {
     });
   },
 
+  /**
+   * Tandai tugas tidak terjemput.
+   *
+   * `reasonCode` wajib pada APK baru (pemilih alasan berlabel). Backend masih
+   * memetakan kiriman tanpa kode ke `OTHER` selama masa transisi, jadi APK lama
+   * tetap berfungsi. Urutan argumen lama tetap didukung: `skipAssignment(id, notes)`.
+   */
   skipAssignment: async (
     id: string,
-    notes?: string,
-  ): Promise<ApiResponse<{id: string; status: string; message: string}>> => {
+    notesOrReason?: string,
+    legacyNotes?: string,
+  ): Promise<ApiResponse<{id: string; status: string; message: string; reason_code?: string}>> => {
+    const isReasonCode = !!notesOrReason && /^[A-Z_]{4,}$/.test(notesOrReason);
+    const reasonCode = isReasonCode ? notesOrReason : undefined;
+    const notes = isReasonCode ? legacyNotes : notesOrReason;
+
+    const body: Record<string, string> = {};
+    if (reasonCode) body.reason_code = reasonCode;
+    if (notes) body.notes = notes;
+
     return apiRequest(`/mobile/assignments/${id}/skip`, {
       method: 'POST',
-      body: JSON.stringify(notes ? {notes} : {}),
+      body: JSON.stringify(body),
+    });
+  },
+
+  /**
+   * Catat kunjungan non-penjemputan (verifikasi kaleng non-aktif / penggantian unit).
+   * Bukan collection: tidak ada nominal dan tidak menambah hitungan kosong.
+   */
+  recordCanVisit: async (
+    canId: string,
+    purpose: 'VERIFIKASI' | 'PENGGANTIAN',
+    notes?: string,
+  ): Promise<ApiResponse<{id: string; can_id: string; purpose: string; condition: string; message: string}>> => {
+    return apiRequest(`/mobile/cans/${canId}/visits`, {
+      method: 'POST',
+      body: JSON.stringify(notes ? {purpose, notes} : {purpose}),
     });
   },
 
