@@ -674,7 +674,9 @@ export const collectionService = {
     canId: string,
     purpose: 'VERIFIKASI' | 'PENGGANTIAN',
     notes?: string,
-  ): Promise<ApiResponse<{id: string; can_id: string; purpose: string; condition: string; message: string}>> => {
+  ): Promise<
+    ApiResponse<{id: string; can_id: string; purpose: string; condition: string; message: string}>
+  > => {
     return apiRequest(`/mobile/cans/${canId}/visits`, {
       method: 'POST',
       body: JSON.stringify(notes ? {purpose, notes} : {purpose}),

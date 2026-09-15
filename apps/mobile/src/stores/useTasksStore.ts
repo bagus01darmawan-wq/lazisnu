@@ -168,7 +168,11 @@ interface TasksState {
   markTaskComplete: (taskId: string, nominal?: number) => void;
   adjustCompletedNominal: (delta: number) => void;
   reorderTasks: (ids: string[]) => void;
-  skipAssignment: (taskId: string, reasonCode?: string, notes?: string) => Promise<{
+  skipAssignment: (
+    taskId: string,
+    reasonCode?: string,
+    notes?: string,
+  ) => Promise<{
     success: boolean;
     code?: string;
     error?: string;

@@ -31,9 +31,7 @@ const TaskDetailScreen: React.FC = () => {
   const handleSkipConfirm = async (reasonCode: SkipReasonCode, notes: string) => {
     setSkipping(true);
     try {
-      const result = await useTasksStore
-        .getState()
-        .skipAssignment(task.id, reasonCode, notes);
+      const result = await useTasksStore.getState().skipAssignment(task.id, reasonCode, notes);
       if (result.success) {
         setSkipSheetVisible(false);
         // Segarkan daftar di belakang lalu kembali.

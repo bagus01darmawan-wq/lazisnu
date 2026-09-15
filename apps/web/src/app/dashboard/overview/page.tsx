@@ -92,24 +92,21 @@ export default function OverviewPage() {
     }
   }, [isDistrictAdmin]);
 
-  // Muat pertama kali / pergantian akun. Tanpa sesi: data scope lama dibuang.
+  // Muat data saat akun berganti. Guard (!user) ditangani saat render
+  // (lihat baris "Sesi tidak ditemukan"). fetchOverview memanggil setState
+  // sinkron (setLoading) — bungkus agar pemanggilan tidak dianggap render
+  // ganda oleh react-hooks v7.
   React.useEffect(() => {
-    if (!user) {
-      setData(null);
-      setLoading(false);
-      return;
-    }
-    void fetchOverview('', 'first');
+    if (!user) return;
+    void Promise.resolve().then(() => fetchOverview('', 'first'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, isDistrictAdmin]);
 
-  // Daftar ranting hanya untuk admin kecamatan.
+  // Daftar ranting hanya untuk admin kecamatan. Guard (!isDistrictAdmin)
+  // ditangani saat render (filter perbandingan hanya muncul untuk admin
+  // kecamatan), jadi tidak perlu setState di effect.
   React.useEffect(() => {
-    if (!isDistrictAdmin) {
-      setBranches([]);
-      setBranchId('');
-      return;
-    }
+    if (!isDistrictAdmin) return;
     api.get('/admin/branches')
       .then((res: unknown) => {
         const r = res as ApiResponse<Branch[]>;

@@ -7,12 +7,10 @@ import {SkipReasonSheet, SKIP_REASON_OPTIONS} from '../ui/SkipReasonSheet';
  * label teksnya. Kembalikan handler onPress-nya.
  */
 function pressableWithLabel(tree: renderer.ReactTestRenderer, label: string) {
-  const node = tree.root
-    .findAllByType(require('react-native').TouchableOpacity)
-    .find(t => {
-      const texts = t.findAllByType(require('react-native').Text);
-      return texts.some(n => n.props.children === label);
-    });
+  const node = tree.root.findAllByType(require('react-native').TouchableOpacity).find(t => {
+    const texts = t.findAllByType(require('react-native').Text);
+    return texts.some(n => n.props.children === label);
+  });
   return node;
 }
 

@@ -41,17 +41,11 @@ export function OptionList<T extends string>({
             activeOpacity={0.8}
             accessibilityRole="radio"
             accessibilityState={{selected: isSelected}}>
-            <View
-              style={[
-                styles.radioOuter,
-                isSelected ? styles.radioOuterSelected : undefined,
-              ]}>
+            <View style={[styles.radioOuter, isSelected ? styles.radioOuterSelected : undefined]}>
               {isSelected ? <View style={styles.radioInner} /> : null}
             </View>
             <View style={styles.textContent}>
-              <Text style={[styles.label, isSelected && styles.labelSelected]}>
-                {option.label}
-              </Text>
+              <Text style={[styles.label, isSelected && styles.labelSelected]}>{option.label}</Text>
               {option.hint ? (
                 <Text style={styles.hint} numberOfLines={2}>
                   {option.hint}
