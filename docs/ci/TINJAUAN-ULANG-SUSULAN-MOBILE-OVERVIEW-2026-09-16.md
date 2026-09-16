@@ -319,9 +319,17 @@ berjarak** supaya keduanya tidak berdesakan mengunci koneksi yang sama.
    riil (212 baris), POSTPONED sebagai status tak terhitung, count
    bigint/string dari driver, input kosong, dan `count: null`.
    **315 backend test hijau**, `tsc --noEmit` hijau.
-3. **Tambah webhook Discord ke `.env.backup-prod`** (§E) — tanpa ini, backup
-   produksi gagal hanya terlihat di log. **Masih terbuka** (staging sudah
-   punya webhook di channel yang sama; tinggal salin env).
+3. **~~Tambah webhook Discord ke `.env.backup-prod`~~ (§E)** ✅ **Selesai.**
+   Tanpa ini, backup produksi gagal hanya terlihat di log. Variabel yang
+   dipakai script adalah `BACKUP_ALERT_WEBHOOK_URL` (staging sudah punya di
+   `secrets/env.backup-staging`); kini disalin ke `.env.backup-prod` (600,
+   root-only).
+
+   **Verifikasi end-to-end (bukan asumsi):** healthcheck sengaja dipaksa
+   gagal dengan R2 bucket tidak-ada → `ALERT_SENT reason=status_marker_unavailable`
+   benar-benar dikirim ke Discord. Lalu env dipulihkan & alert state dibersihkan
+   → `SUCCESS key=backups-prod/…sql.gz`. Mekanisme dedup (`.backup-health-alert`)
+   terbukti mencegah spam, dan recovery juga akan terkirim.
 4. **Luruskan laporan:** ganti "22 baseline" → 18 (atau bukti ulang), hapus
    rujukan ke `tmp/mobile-tsc.log`, perbarui "12 suite/87 tes" → 20/191.
    **Masih terbuka.**
