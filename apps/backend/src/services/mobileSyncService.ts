@@ -9,6 +9,7 @@ import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { eq } from 'drizzle-orm';
 import { validateAssignmentForSubmit, submitCollection } from './collectionSubmission';
+import { evaluateEmptyStreakForCan } from './conditionProposalService';
 import { getErrorMessage } from '../utils/error-guards';
 import { isAppError } from '../utils/AppError';
 import { sendWhatsAppNotification } from './whatsapp';
@@ -110,6 +111,18 @@ async function processSyncItem(
     }),
     db.query.officers.findFirst({ where: eq(schema.officers.id, officerId) }),
   ]);
+
+  // Evaluasi kondisi kaleng SETELAH transaksi commit (di luar transaksi submit):
+  // - kaleng NON_AKTIF yang kembali berisi nominal positif → otomatis kembali AKTIF;
+  // - penjemputan kosong mencapai ambang → sistem mengusulkan NON_AKTIF
+  //   (kondisi TIDAK berubah sebelum admin menyetujui).
+  // Kegagalan evaluasi tidak boleh menggagalkan penjemputan yang sudah tercatat.
+  try {
+    await evaluateEmptyStreakForCan(item.can_id);
+  } catch (conditionError) {
+    console.warn('[mobileSync] evaluasi kondisi kaleng gagal:', getErrorMessage(conditionError));
+  }
+
   if (can?.ownerWhatsapp) {
     try {
       await sendWhatsAppNotification(can.ownerWhatsapp, can.ownerName, item.nominal, officer?.fullName || 'Petugas Lazisnu', {

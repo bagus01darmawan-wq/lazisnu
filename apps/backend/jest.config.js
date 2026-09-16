@@ -5,6 +5,9 @@ module.exports = {
   rootDir: '.',
   moduleNameMapper: {
     '^@lazisnu/shared-types$': '<rootDir>/../../packages/shared-types/src/index.ts',
+    // Impor relatif berakhiran .js (wajib di moduleResolution NodeNext,
+    // karena "compile"-nya tetap .ts) harus ditemukan kembali ke sumbernya.
+    '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   transform: {
     '^.+\\.ts$': ['ts-jest', {

@@ -14,7 +14,6 @@ export enum UserRole {
 export enum AssignmentStatus {
   ACTIVE = "ACTIVE",
   COMPLETED = "COMPLETED",
-  POSTPONED = "POSTPONED",
   REASSIGNED = "REASSIGNED",
   UNCOLLECTED = "UNCOLLECTED",
 }
@@ -25,6 +24,65 @@ export enum SyncStatus {
   FAILED = "FAILED",
   CANCELLED = "CANCELLED",
 }
+
+/**
+ * Kondisi kaleng — sumber kebenaran perilaku bisnis.
+ * Menggantikan makna ganda `is_active` (lihat docs/audit/rancangan-skema-status-kaleng-2026-09-12.md).
+ */
+export enum CanCondition {
+  AKTIF = "AKTIF",
+  NON_AKTIF = "NON_AKTIF",
+  RUSAK = "RUSAK",
+  HILANG = "HILANG",
+  DIKEMBALIKAN = "DIKEMBALIKAN",
+}
+
+/** Kondisi yang masuk cakupan penempatan (HILANG punya cakupan sendiri). */
+export const PLACEMENT_CONDITIONS: CanCondition[] = [
+  CanCondition.AKTIF,
+  CanCondition.NON_AKTIF,
+  CanCondition.RUSAK,
+];
+
+/** Kondisi yang boleh menerima tugas penjemputan bulanan. */
+export const ASSIGNABLE_CONDITIONS: CanCondition[] = [
+  CanCondition.AKTIF,
+  CanCondition.RUSAK,
+  CanCondition.HILANG,
+];
+
+/** Kondisi yang menunggu keputusan admin ("perlu tindakan"). */
+export const ACTION_REQUIRED_CONDITIONS: CanCondition[] = [
+  CanCondition.NON_AKTIF,
+  CanCondition.RUSAK,
+  CanCondition.HILANG,
+];
+
+// ─── Kode alasan baku ─────────────────────────────────────────────────────────
+// Disimpan sebagai kode (bukan teks bebas) agar dapat dihitung antar bulan.
+export type SkipReasonCode =
+  | "OWNER_ABSENT"
+  | "OWNER_REFUSED"
+  | "CAN_LOST"
+  | "CAN_DAMAGED"
+  | "ACCESS_DIFFICULT"
+  | "OTHER";
+
+export type InactiveReasonCode =
+  | "MOVED_HOUSE"
+  | "OWNER_UNABLE"
+  | "OWNER_REFUSED_CONTINUE"
+  | "OTHER";
+
+export type ReturnedReasonCode = "OWNER_REQUEST" | "CAN_INACTIVE" | "CAN_DAMAGED";
+
+/** Pemicu usulan perubahan kondisi. */
+export type CanProposalTriggerSource = "EMPTY_THRESHOLD" | "SKIP_REASON" | "MANUAL";
+
+export type CanProposalStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+/** Jenis kunjungan non-penjemputan. */
+export type CanVisitPurpose = "VERIFIKASI" | "PENGGANTIAN";
 
 // ─── District ─────────────────────────────────────────────────────────────────
 export interface District {
@@ -102,7 +160,10 @@ export interface Can {
   latitude?: number;
   longitude?: number;
   location_notes?: string;
+  /** Masih dilacak sistem atau tidak (true: AKTIF/NON_AKTIF/RUSAK/HILANG, false: DIKEMBALIKAN). */
   is_active: boolean;
+  /** Kondisi bisnis kaleng — pakai kolom ini untuk perilaku, bukan `is_active`. */
+  condition: CanCondition;
   last_collected_at?: string;
   total_collected: number;
   collection_count: number;
@@ -121,9 +182,38 @@ export interface Assignment {
   status: AssignmentStatus;
   assigned_at: string;
   completed_at?: string;
+  /** Kode alasan baku saat tugas tidak terjemput (UNCOLLECTED). */
+  skip_reason_code?: string | null;
   notes?: string;
   created_at?: string;
   updated_at?: string;
+}
+
+// ─── Can Condition Proposal (usulan + riwayat perubahan kondisi) ─────────────
+export interface CanConditionProposal {
+  id: string;
+  can_id: string;
+  from_condition: CanCondition;
+  to_condition: CanCondition;
+  trigger_source: CanProposalTriggerSource;
+  reason_code: string;
+  reason_note?: string | null;
+  evidence_count?: number | null;
+  status: CanProposalStatus;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  created_at: string;
+}
+
+// ─── Can Visit (kunjungan non-penjemputan) ───────────────────────────────────
+export interface CanVisit {
+  id: string;
+  can_id: string;
+  officer_id: string;
+  purpose: CanVisitPurpose;
+  visited_at: string;
+  notes?: string | null;
+  created_at: string;
 }
 
 // ─── Collection (Setoran) ────────────────────────────────────────────────────
@@ -225,10 +315,18 @@ export interface WeekStats {
 export interface MonthStats {
   collected: number;
   total_nominal: number;
-  /** Total tugas pada periode berjalan. */
+  /** Total tugas pada periode berjalan (seluruh assignment scope + periode). */
   task_total: number;
-  /** Tugas selesai pada periode berjalan. */
+  /**
+   * COMPLETED saja (kontrak lama, dipertahankan untuk APK lama).
+   * UI baru memakai `task_closed` bila ada.
+   */
   task_completed: number;
+  /** ACTIVE — tugas yang masih perlu dikerjakan. */
+  task_active?: number;
+  /** COMPLETED + UNCOLLECTED — tugas yang sudah ditutup operasional. */
+  task_closed?: number;
+  task_uncollected?: number;
 }
 
 // ─── API Response Types ──────────────────────────────────────────────────────
@@ -340,8 +438,28 @@ export interface RangeStatsResponse {
   task_active: number;
   task_completed: number;
   task_total: number;
+  /** COMPLETED + UNCOLLECTED (opsional untuk kompatibilitas server lama). */
+  task_closed?: number;
+  task_uncollected?: number;
   /** Periode yang tersentuh rentang, format "YYYY-MM". */
   months_covered: string[];
+}
+
+// Response GET /mobile/assignments/:id/proposal-status — proyeksi status
+// usulan kondisi untuk petugas (bukan detail penuh admin).
+export interface ProposalStatusResponse {
+  assignment_id: string;
+  can_id: string;
+  proposal: {
+    id: string;
+    from_condition: string;
+    to_condition: string;
+    status: 'PENDING' | 'APPROVED' | 'REJECTED';
+    reason_code?: string;
+    action_label?: string;
+    created_at: string;
+    decided_at?: string | null;
+  } | null;
 }
 
 export interface DashboardTaskItem {
@@ -404,6 +522,18 @@ export interface ResubmitTrackerItem {
   branch_name: string;
   district_name: string;
 }
+// GET /mobile/visits — riwayat kunjungan non-penjemputan milik petugas.
+// Kunjungan bukan collection: tanpa nominal, tidak memengaruhi angka infak.
+export interface CanVisitHistoryItem {
+  id: string;
+  can_id: string;
+  qr_code: string;
+  owner_name: string;
+  purpose: 'VERIFIKASI' | 'PENGGANTIAN';
+  visited_at: string;
+  notes?: string | null;
+}
+
 // GET /mobile/collections (history) — paginated
 export interface HistoryItem {
   id: string;
@@ -474,4 +604,99 @@ export interface MobileVersionInfo {
   apk_urls: Record<string, string>;
   changelog: string;
   minimum_version_code: number;
+}
+
+// =============================================================================
+// Overview operasional kaleng (GET /admin/branch/dashboard & /admin/district/dashboard)
+//
+// Definisi metrik tunggal — jangan dihitung ulang di browser:
+// - placement_coverage  : AKTIF + NON_AKTIF + RUSAK (is_active = true)
+// - lost_cans           : HILANG (cakupan terpisah, bukan bagian penempatan)
+// - action_required     : NON_AKTIF + RUSAK + HILANG yang masih dilacak
+// - task_closed         : assignment COMPLETED + UNCOLLECTED pada periode
+// - task_total          : seluruh assignment pada scope + periode
+// - successful_collections / collection_nominal : collection sync COMPLETED pada
+//   periode, hanya versi submit terbaru (getLatestCollectionCondition)
+// =============================================================================
+
+export interface OverviewScope {
+  type: "branch" | "district";
+  district_id: string;
+  branch_id?: string;
+  branch_name?: string;
+}
+
+export interface OverviewPeriod {
+  year: number;
+  month: number;
+  timezone: string;
+  generated_at: string;
+}
+
+export interface OverviewSummary {
+  placement_coverage: number;
+  active_cans: number;
+  inactive_cans: number;
+  damaged_cans: number;
+  lost_cans: number;
+  returned_this_month: number;
+  returned_total: number;
+  action_required: number;
+  total_officers: number;
+  collection_nominal: number;
+  successful_collections: number;
+  task_active: number;
+  task_closed: number;
+  task_completed: number;
+  task_uncollected: number;
+  task_total: number;
+}
+
+export interface OverviewConditionBreakdownItem {
+  condition: CanCondition;
+  count: number;
+}
+
+export interface OverviewActionItem {
+  can_id: string;
+  owner_name: string;
+  branch_id: string;
+  branch_name: string;
+  condition: CanCondition;
+  proposal_id?: string;
+  reason_code?: string;
+  since: string;
+  action_label: string;
+}
+
+export interface OverviewMonthlyTrendItem {
+  /** Format "YYYY-MM". */
+  month: string;
+  collected: number;
+  empty: number;
+  uncollected: number;
+  task_closed: number;
+  task_total: number;
+  nominal: number;
+}
+
+export interface OverviewBranchComparisonItem {
+  branch_id: string;
+  branch_name: string;
+  placement_coverage: number;
+  lost_cans: number;
+  action_required: number;
+  task_closed: number;
+  task_total: number;
+  collection_nominal: number;
+}
+
+export interface OverviewResponse {
+  scope: OverviewScope;
+  period: OverviewPeriod;
+  summary: OverviewSummary;
+  condition_breakdown: OverviewConditionBreakdownItem[];
+  action_items: OverviewActionItem[];
+  monthly_trend: OverviewMonthlyTrendItem[];
+  branch_comparison?: OverviewBranchComparisonItem[];
 }

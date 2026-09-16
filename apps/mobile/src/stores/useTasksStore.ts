@@ -168,10 +168,17 @@ interface TasksState {
   markTaskComplete: (taskId: string, nominal?: number) => void;
   adjustCompletedNominal: (delta: number) => void;
   reorderTasks: (ids: string[]) => void;
-  skipAssignment: (taskId: string) => Promise<{
+  skipAssignment: (
+    taskId: string,
+    reasonCode?: string,
+    notes?: string,
+  ) => Promise<{
     success: boolean;
     code?: string;
     error?: string;
+    /** Diisi bila server membentuk usulan kondisi (CAN_LOST/CAN_DAMAGED). */
+    proposalId?: string;
+    reasonCode?: string;
   }>;
   completePeriod: () => Promise<{skipped: number; error?: string}>;
   resolveTaskByQRCode: (qrCode: string) => Promise<{
@@ -233,9 +240,10 @@ export const useTasksStore = create<TasksState>((set, get) => ({
     }
 
     try {
-      const [activeRes, completedRes] = await Promise.all([
+      const [activeRes, completedRes, uncollectedRes] = await Promise.all([
         tasksService.getTasks({status: 'ACTIVE', page: 1, limit: 1}),
         tasksService.getTasks({status: 'COMPLETED', page: 1, limit: 1}),
+        tasksService.getTasks({status: 'UNCOLLECTED', page: 1, limit: 1}),
       ]);
       if (!isLatestRequest()) {
         return;
@@ -244,7 +252,13 @@ export const useTasksStore = create<TasksState>((set, get) => ({
       if (activeRes.success && completedRes.success) {
         const activeTotal = activeRes.data?.pagination?.total || 0;
         const completedTotal = completedRes.data?.pagination?.total || 0;
-        const allTotal = activeTotal + completedTotal;
+        // UNCOLLECTED = ditutup dengan alasan (kontrak metrik final) —
+        // dihitung selesai, bukan hilang. Gagal dimuat = 0 (kompatibel server lama).
+        const uncollectedTotal = uncollectedRes.success
+          ? uncollectedRes.data?.pagination?.total || 0
+          : 0;
+        const closedTotal = completedTotal + uncollectedTotal;
+        const allTotal = activeTotal + closedTotal;
         const completedNom = completedRes.data?.total_nominal || 0;
 
         // Active queue dan quarantine sama-sama merepresentasikan tugas yang
@@ -261,7 +275,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
 
         // Rekonsiliasi data server dengan antrean lokal
         const reconciledActive = Math.max(0, activeTotal - pendingCount);
-        const reconciledCompleted = completedTotal + pendingCount;
+        const reconciledCompleted = closedTotal + pendingCount;
         const reconciledCompletedNominal = completedNom + pendingNominal;
 
         get().setStats({
@@ -425,9 +439,9 @@ export const useTasksStore = create<TasksState>((set, get) => ({
     set({completedNominal: nextNominal});
   },
 
-  skipAssignment: async (taskId: string) => {
+  skipAssignment: async (taskId: string, reasonCode?: string, notes?: string) => {
     try {
-      const result = await collectionService.skipAssignment(taskId);
+      const result = await collectionService.skipAssignment(taskId, reasonCode, notes);
       if (result.success) {
         const {tasks, activeCount, completedCount, totalCount} = get();
         set({
@@ -444,7 +458,13 @@ export const useTasksStore = create<TasksState>((set, get) => ({
           activeCount: Math.max(0, activeCount - 1),
           completedCount: completedCount + 1,
         });
-        return {success: true};
+        // Teruskan proposal_id server (bila ada) agar UI bisa memberi tahu
+        // petugas bahwa usulannya menunggu persetujuan admin (Fase 0).
+        return {
+          success: true,
+          proposalId: result.data?.proposal_id,
+          reasonCode: result.data?.reason_code,
+        };
       }
       // G3: teruskan alasan asli dari server (mis. kaleng sudah dijemput /
       // ditolak bisnis) — UI bukan menuduh "koneksi internet" lagi.

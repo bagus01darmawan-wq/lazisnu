@@ -5,7 +5,7 @@
  */
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { eq, desc, sql, and, inArray } from 'drizzle-orm';
+import { eq, desc, sql, and, inArray, gte, lte } from 'drizzle-orm';
 
 export async function getCollectionDetail(id: string) {
   const [collection, notification] = await Promise.all([
@@ -132,9 +132,13 @@ export async function getReportStats(params: {
     ? and(assignmentPeriodCondition, branchScopeCondition)
     : assignmentPeriodCondition;
 
+  // Batas tanggal via operator Drizzle (ter-bind parameter) — jangan
+  // menulis perbandingan mentah di sql`...` (lihat noRawDateInterpolation.test.ts).
+  // Literal string dibungkus sql`...` agar tetap string di driver (semantik
+  // identik dengan sebelumnya); operator gte/lte menolak string polos.
   const collectionPeriod = and(
-    sql`${schema.collections.collectedAt} >= ${startDate}`,
-    sql`${schema.collections.collectedAt} <= ${endDate}`,
+    gte(schema.collections.collectedAt, sql`${startDate}`),
+    lte(schema.collections.collectedAt, sql`${endDate}`),
     eq(schema.collections.syncStatus, 'COMPLETED'),
   );
 

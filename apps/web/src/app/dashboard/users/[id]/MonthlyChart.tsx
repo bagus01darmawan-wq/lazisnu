@@ -100,7 +100,7 @@ export function MonthlyChart({ data }: MonthlyChartProps) {
                 verticalAlign="top"
                 height={36}
                 iconType="circle"
-                formatter={(value) => (
+                formatter={(value: string) => (
                   <span className="text-[10px] font-bold text-[#F4F1EA]/60 uppercase tracking-wider">
                     {value}
                   </span>

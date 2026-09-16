@@ -15,6 +15,8 @@ import {
   BatchSyncResponse,
   BatchCollectionRequestItem,
   RangeStatsResponse,
+  ProposalStatusResponse,
+  CanVisitHistoryItem,
 } from '@lazisnu/shared-types';
 import {captureAuthEvent} from '../config/crashlytics';
 import {saveRefreshTokenSilent} from './biometric';
@@ -566,6 +568,17 @@ export const tasksService = {
     const query = new URLSearchParams({start, end}).toString();
     return apiRequest<RangeStatsResponse>(`/mobile/tasks/stats-range?${query}`);
   },
+
+  /**
+   * Status usulan kondisi terbaru untuk satu assignment milik petugas.
+   * Proyeksi status saja (bukan detail admin). `proposal` null bila belum
+   * pernah ada usulan untuk kaleng pada tugas ini.
+   */
+  getProposalStatus: async (assignmentId: string): Promise<ApiResponse<ProposalStatusResponse>> => {
+    return apiRequest<ProposalStatusResponse>(
+      `/mobile/assignments/${encodeURIComponent(assignmentId)}/proposal-status`,
+    );
+  },
 };
 
 // ── Collection Services ───────────────────────────────────────────────────────
@@ -640,13 +653,55 @@ export const collectionService = {
     });
   },
 
+  /**
+   * Tandai tugas tidak terjemput.
+   *
+   * `reasonCode` wajib pada APK baru (pemilih alasan berlabel). Backend masih
+   * memetakan kiriman tanpa kode ke `OTHER` selama masa transisi, jadi APK lama
+   * tetap berfungsi. Urutan argumen lama tetap didukung: `skipAssignment(id, notes)`.
+   */
   skipAssignment: async (
     id: string,
-    notes?: string,
-  ): Promise<ApiResponse<{id: string; status: string; message: string}>> => {
+    notesOrReason?: string,
+    legacyNotes?: string,
+  ): Promise<
+    ApiResponse<{
+      id: string;
+      status: string;
+      message: string;
+      reason_code?: string;
+      /** Diisi server bila alasan memicu usulan kondisi (CAN_LOST/CAN_DAMAGED). */
+      proposal_id?: string;
+    }>
+  > => {
+    const isReasonCode = !!notesOrReason && /^[A-Z_]{4,}$/.test(notesOrReason);
+    const reasonCode = isReasonCode ? notesOrReason : undefined;
+    const notes = isReasonCode ? legacyNotes : notesOrReason;
+
+    const body: Record<string, string> = {};
+    if (reasonCode) body.reason_code = reasonCode;
+    if (notes) body.notes = notes;
+
     return apiRequest(`/mobile/assignments/${id}/skip`, {
       method: 'POST',
-      body: JSON.stringify(notes ? {notes} : {}),
+      body: JSON.stringify(body),
+    });
+  },
+
+  /**
+   * Catat kunjungan non-penjemputan (verifikasi kaleng non-aktif / penggantian unit).
+   * Bukan collection: tidak ada nominal dan tidak menambah hitungan kosong.
+   */
+  recordCanVisit: async (
+    canId: string,
+    purpose: 'VERIFIKASI' | 'PENGGANTIAN',
+    notes?: string,
+  ): Promise<
+    ApiResponse<{id: string; can_id: string; purpose: string; condition: string; message: string}>
+  > => {
+    return apiRequest(`/mobile/cans/${canId}/visits`, {
+      method: 'POST',
+      body: JSON.stringify(notes ? {purpose, notes} : {purpose}),
     });
   },
 
@@ -656,6 +711,14 @@ export const collectionService = {
     return apiRequest('/mobile/periods/complete', {
       method: 'POST',
     });
+  },
+
+  /**
+   * Riwayat kunjungan non-penjemputan milik petugas (terbaru dulu).
+   * Proyeksi ringan untuk layar Riwayat — bukan angka penjemputan.
+   */
+  getVisits: async (limit = 10): Promise<ApiResponse<{items: CanVisitHistoryItem[]}>> => {
+    return apiRequest<{items: CanVisitHistoryItem[]}>(`/mobile/visits?limit=${limit}`);
   },
 };
 

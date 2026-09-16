@@ -1,9 +1,16 @@
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { eq, and, asc, notInArray } from 'drizzle-orm';
+import { eq, and, asc, inArray, notInArray } from 'drizzle-orm';
+import { ASSIGNABLE_CONDITIONS } from './conditionRules';
 
 /**
- * Cari kaleng aktif yang belum punya assignment untuk periode tertentu
+ * Cari kaleng yang belum punya assignment untuk periode tertentu.
+ *
+ * Saringan kondisi (keputusan 23 & 26):
+ * - AKTIF   : normal;
+ * - RUSAK   : tetap dijemput — pemilik masih bisa menyerahkan donasi langsung ke PPK;
+ * - HILANG  : tetap dijemput, tetapi diberi kaleng baru;
+ * - NON_AKTIF dan DIKEMBALIKAN TIDAK boleh menerima tugas penjemputan.
  */
 export async function findCansWithoutAssignment(year: number, month: number) {
   const existingAssignments = await db.query.assignments.findMany({
@@ -18,6 +25,7 @@ export async function findCansWithoutAssignment(year: number, month: number) {
   const cansToAssign = await db.query.cans.findMany({
     where: and(
       eq(schema.cans.isActive, true),
+      inArray(schema.cans.condition, ASSIGNABLE_CONDITIONS),
       assignedCanIds.length > 0 ? notInArray(schema.cans.id, assignedCanIds) : undefined
     ),
     with: {

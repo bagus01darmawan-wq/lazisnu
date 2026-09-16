@@ -18,7 +18,7 @@ import {useTasksStore} from '../stores';
 import {Task} from '@lazisnu/shared-types';
 import type {MainTabParamList, RootStackParamList} from '../navigation/types';
 import {pickAndDecodeQRCode} from '../services/qrImageScanner';
-import {AppHeader} from '../components/ui';
+import {AppHeader, SkipReasonSheet} from '../components/ui';
 import {Colors, Typography} from '../theme';
 import {getErrorMessage} from '../utils';
 import {ScanManualModal, ScanOverlay, ScanPermissionView, ScanResultCard} from './scan';
@@ -33,6 +33,7 @@ type QRInputSource = 'CAMERA' | 'MANUAL' | 'IMAGE';
 const QR_ERROR_MESSAGES: Record<string, string> = {
   QR_INVALID: 'Format kode QR tidak valid.',
   CAN_NOT_FOUND: 'Kaleng tidak ditemukan.',
+  CAN_RETURNED: 'Kaleng ini sudah dikembalikan dan ditarik admin, bukan tugas aktif.',
   QR_NOT_ASSIGNED: 'Kaleng ini bukan tugas Anda pada periode berjalan.',
   QR_ALREADY_SUBMITTED: 'Kaleng ini sudah disetor pada periode berjalan.',
   NETWORK_ERROR: 'Tidak ada koneksi internet. Coba lagi setelah jaringan tersedia.',
@@ -106,27 +107,38 @@ const ScanScreen: React.FC = () => {
     return unsubscribe;
   });
 
+  const [skipSheetTask, setSkipSheetTask] = useState<Task | null>(null);
+  const [skipping, setSkipping] = useState(false);
+
   const handleSkip = (task: Task) => {
-    Alert.alert(
-      'Tandai Tidak Dijemput',
-      `Tandai kaleng ${task.qr_code} sebagai tidak dijemput untuk periode berjalan?`,
-      [
-        {text: 'Batal', style: 'cancel'},
-        {
-          text: 'Ya, Tandai',
-          onPress: async () => {
-            const result = await useTasksStore.getState().skipAssignment(task.id);
-            if (result.success) {
-              handleReset();
-              navigation.navigate('Tasks');
-            } else {
-              // Pesan jujur: alasan asli (server / jaringan) — bukan tuduhan sinyal.
-              Alert.alert('Gagal Menandai', result.error || 'Gagal menandai kaleng. Coba lagi.');
-            }
-          },
-        },
-      ],
-    );
+    setSkipSheetTask(task);
+  };
+
+  const handleSkipConfirm = async (reasonCode: string, notes: string) => {
+    const task = skipSheetTask;
+    if (!task) return;
+    setSkipping(true);
+    try {
+      const result = await useTasksStore.getState().skipAssignment(task.id, reasonCode, notes);
+      if (result.success) {
+        setSkipSheetTask(null);
+        handleReset();
+        if (result.proposalId) {
+          Alert.alert(
+            'Usulan Terkirim',
+            'Usulan perubahan status kaleng terkirim dan menunggu persetujuan admin.',
+            [{text: 'OK', onPress: () => navigation.navigate('Tasks')}],
+          );
+        } else {
+          navigation.navigate('Tasks');
+        }
+      } else {
+        // Pesan jujur: alasan asli (server / jaringan) — bukan tuduhan sinyal.
+        Alert.alert('Gagal Menandai', result.error || 'Gagal menandai kaleng. Coba lagi.');
+      }
+    } finally {
+      setSkipping(false);
+    }
   };
 
   const processQRCode = async (qrCode: string, source: QRInputSource) => {
@@ -284,6 +296,14 @@ const ScanScreen: React.FC = () => {
           onContinue={task => navigation.navigate('Collection', {task})}
         />
       )}
+
+      <SkipReasonSheet
+        visible={!!skipSheetTask}
+        qrCode={skipSheetTask?.qr_code ?? ''}
+        loading={skipping}
+        onDismiss={() => setSkipSheetTask(null)}
+        onConfirm={handleSkipConfirm}
+      />
     </View>
   );
 };
