@@ -13,6 +13,8 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import type {Collection} from '@lazisnu/shared-types';
+import type {CanVisitHistoryItem} from '@lazisnu/shared-types';
+import {collectionService} from '../services/api';
 import {correctionQueue, QueuedCorrection} from '../services/offline/corrections';
 import {useCollectionsStore, useSyncStore, useTasksStore} from '../stores';
 import {Colors, ComponentSizes, Layout, Radius, Spacing, Typography} from '../theme';
@@ -40,6 +42,7 @@ const HistoryScreen: React.FC = () => {
     });
   }, [collections]);
   const {checkStatus, failedCorrectionsCount} = useSyncStore();
+  const [visits, setVisits] = useState<CanVisitHistoryItem[]>([]);
   const [correction, setCorrection] = useState<HistoryCorrectionData | null>(null);
   const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -64,6 +67,15 @@ const HistoryScreen: React.FC = () => {
   useEffect(() => {
     fetchCollections();
     checkStatus();
+    // Kunjungan non-penjemputan (gagal senyap — pelengkap, bukan penghalang).
+    collectionService
+      .getVisits(5)
+      .then(res => {
+        if (res.success && res.data) {
+          setVisits(res.data.items || []);
+        }
+      })
+      .catch(() => {});
   }, [checkStatus, fetchCollections]);
 
   const openCorrection = useCallback((item: Collection) => {
@@ -216,9 +228,39 @@ const HistoryScreen: React.FC = () => {
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
-          collections.length ? (
-            <Text style={[styles.sectionTitle, styles.sectionTitleFirst]}>Terbaru</Text>
-          ) : null
+          <>
+            {visits.length ? (
+              <View style={styles.visitCard}>
+                <Text style={styles.visitTitle}>Kunjungan non-penjemputan</Text>
+                {visits.map(v => (
+                  <View key={v.id} style={styles.visitRow}>
+                    <Icon
+                      name={v.purpose === 'PENGGANTIAN' ? 'swap-horizontal' : 'eye-check-outline'}
+                      size={18}
+                      color={Colors.brand.deepGreen}
+                    />
+                    <View style={styles.visitTextWrap}>
+                      <Text style={styles.visitText}>
+                        {v.purpose === 'PENGGANTIAN' ? 'Penggantian unit' : 'Verifikasi'} ·{' '}
+                        {v.owner_name || v.qr_code}
+                      </Text>
+                      <Text style={styles.visitSub}>
+                        {new Date(v.visited_at).toLocaleDateString('id-ID', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })}{' '}
+                        · tanpa nominal
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            {collections.length ? (
+              <Text style={[styles.sectionTitle, styles.sectionTitleFirst]}>Terbaru</Text>
+            ) : null}
+          </>
         }
         ListEmptyComponent={
           !isLoading ? (
@@ -352,6 +394,20 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   sectionTitleFirst: {marginTop: Spacing.md},
+  visitCard: {
+    backgroundColor: Colors.surface.card,
+    borderWidth: 1,
+    borderColor: Colors.border.warm,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    marginTop: Spacing.md,
+    gap: Spacing.sm,
+  },
+  visitTitle: {...Typography.label, color: Colors.brand.deepGreen},
+  visitRow: {flexDirection: 'row', alignItems: 'center', gap: Spacing.sm},
+  visitTextWrap: {flex: 1},
+  visitText: {...Typography.bodySmall, color: Colors.text.primary},
+  visitSub: {...Typography.caption, color: Colors.text.secondary, marginTop: 1},
   emptyContainer: {flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 70},
   emptyIcon: {
     width: 84,

@@ -123,8 +123,11 @@ const DashboardScreen: React.FC = () => {
   const chipUp = chipPct >= 0;
 
   const monthTaskTotal = monthStats?.task_total || 0;
-  const monthTaskCompleted = monthStats?.task_completed || 0;
-  const monthTaskProgress = monthTaskTotal ? monthTaskCompleted / monthTaskTotal : 0;
+  // Kontrak metrik final: selesai = COMPLETED + UNCOLLECTED.
+  // Fallback ke task_completed untuk respons server lama.
+  const monthTaskClosed = monthStats?.task_closed ?? monthStats?.task_completed ?? 0;
+  const monthTaskActive = monthStats?.task_active ?? Math.max(0, monthTaskTotal - monthTaskClosed);
+  const monthTaskProgress = monthTaskTotal ? monthTaskClosed / monthTaskTotal : 0;
   const firstName = user?.full_name?.trim().split(/\s+/)[0] || 'Petugas';
   const date = new Intl.DateTimeFormat('id-ID', {
     weekday: 'long',
@@ -284,8 +287,8 @@ const DashboardScreen: React.FC = () => {
                 {formatCurrency(monthStats?.total_nominal || 0)}
               </Text>
               <Text style={styles.monthSub}>
-                {monthStats?.collected || 0} kaleng · {monthTaskCompleted} dari {monthTaskTotal}{' '}
-                tugas
+                {monthStats?.collected || 0} penjemputan · {monthTaskActive} belum ·{' '}
+                {monthTaskClosed} dari {monthTaskTotal} selesai
               </Text>
             </View>
             <RingProgress progress={monthTaskProgress} />

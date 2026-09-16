@@ -10,11 +10,12 @@ import { skipAssignmentSchema, canVisitSchema } from './schemas';
 import { AppError, isAppError } from '../../utils/AppError';
 import { parseStatsRange, computeMonthsCovered } from '../../utils/statsRange';
 import {
+  actionLabel,
   conditionAfterReplacementVisit,
   isTransitionAllowed,
 } from '../../services/conditionRules';
 import type { CanConditionValue } from '../../services/conditionRules';
-import { createProposalFromSkipReason } from '../../services/conditionProposalService';
+import { createProposalFromSkipReason, getLatestProposalForCan } from '../../services/conditionProposalService';
 import { assertCanAccess } from '../../services/canService';
 
 export async function tasksRoutes(fastify: FastifyInstance) {
@@ -82,13 +83,25 @@ export async function tasksRoutes(fastify: FastifyInstance) {
             ))
             .groupBy(schema.assignments.status),
         ]).then(([colRes, taskRows]) => {
-          const completed = taskRows.find((r) => r.status === 'COMPLETED')?.count ?? 0;
-          const active = taskRows.find((r) => r.status === 'ACTIVE')?.count ?? 0;
+          // Kontrak metrik final
+          // (docs/audit/dasar-perbaikan-metrik-tugas-mobile-2026-09-13.md §7):
+          // tugas_belum = ACTIVE, tugas_selesai = COMPLETED + UNCOLLECTED,
+          // tugas_total = seluruh assignment pada scope + periode.
+          // Field lama (task_total/task_completed) dipertahankan untuk APK lama.
+          const countOf = (status: string) =>
+            Number(taskRows.find((r) => r.status === status)?.count ?? 0);
+          const taskActive = countOf('ACTIVE');
+          const taskCompleted = countOf('COMPLETED');
+          const taskUncollected = countOf('UNCOLLECTED');
+          const taskTotal = taskRows.reduce((sum, r) => sum + Number(r.count ?? 0), 0);
           return {
             collected: colRes.collected,
             total_nominal: colRes.total_nominal,
-            task_total: completed + active,
-            task_completed: completed,
+            task_total: taskTotal,
+            task_completed: taskCompleted,
+            task_active: taskActive,
+            task_closed: taskCompleted + taskUncollected,
+            task_uncollected: taskUncollected,
           };
         }),
         db.query.assignments.findMany({
@@ -302,15 +315,23 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           .groupBy(schema.assignments.status),
       ]);
 
-      const completedCount = taskRows.find((r) => r.status === 'COMPLETED')?.count ?? 0;
-      const activeCount = taskRows.find((r) => r.status === 'ACTIVE')?.count ?? 0;
+      const countOf = (status: string) =>
+        Number(taskRows.find((r) => r.status === status)?.count ?? 0);
+      const completedCount = countOf('COMPLETED');
+      const activeCount = countOf('ACTIVE');
+      const uncollectedCount = countOf('UNCOLLECTED');
+      // Seluruh assignment pada scope + periode (kontrak metrik final,
+      // docs/audit/dasar-perbaikan-metrik-tugas-mobile-2026-09-13.md §7).
+      const totalCount = taskRows.reduce((sum, r) => sum + Number(r.count ?? 0), 0);
 
       return sendSuccess(reply, {
         collected: colRes.collected,
         total_nominal: Number(colRes.total_nominal),
         task_active: activeCount,
         task_completed: completedCount,
-        task_total: activeCount + completedCount,
+        task_closed: completedCount + uncollectedCount,
+        task_uncollected: uncollectedCount,
+        task_total: totalCount,
         months_covered: monthsCovered,
       });
     } catch (error) {
@@ -357,6 +378,11 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       }
 
       if (!can.isActive) {
+        // Kaleng yang sudah ditarik admin (DIKEMBALIKAN) diberi kode khusus
+        // agar petugas paham — bukan sekadar "QR tidak valid" (Fase 4).
+        if (can.condition === 'DIKEMBALIKAN') {
+          return sendError(reply, 400, 'CAN_RETURNED', 'Kaleng ini sudah dikembalikan dan ditarik admin, bukan tugas aktif');
+        }
         return sendError(reply, 400, 'QR_INVALID', 'Kaleng tidak aktif');
       }
 
@@ -460,6 +486,56 @@ export async function tasksRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // GET /mobile/assignments/:id/proposal-status
+  //
+  // Status usulan kondisi terbaru untuk kaleng pada satu assignment milik
+  // petugas (Fase 1 rencana susulan mobile–overview). Kepemilikan diperiksa
+  // lewat assignment (officerId dari token) — petugas hanya bisa membaca
+  // usulan untuk tugasnya sendiri. Proyeksi status saja, bukan detail penuh
+  // admin (lihat getCanDetail di canService).
+  fastify.get('/assignments/:id/proposal-status', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const user = request.currentUser!;
+      const officerId = user.officerId;
+
+      if (!officerId) {
+        return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
+      }
+
+      const assignment = await db.query.assignments.findFirst({
+        where: and(
+          eq(schema.assignments.id, id),
+          eq(schema.assignments.officerId, officerId),
+        ),
+        columns: { id: true, canId: true },
+      });
+
+      if (!assignment) {
+        return sendError(reply, 403, 'ASSIGNMENT_INVALID', 'Assignment tidak valid atau bukan milik Anda');
+      }
+
+      const proposal = assignment.canId ? await getLatestProposalForCan(assignment.canId) : null;
+
+      return sendSuccess(reply, {
+        assignment_id: id,
+        can_id: assignment.canId,
+        proposal: proposal ? {
+          id: proposal.id,
+          from_condition: proposal.fromCondition,
+          to_condition: proposal.toCondition,
+          status: proposal.status,
+          reason_code: proposal.reasonCode,
+          action_label: actionLabel(proposal.toCondition as CanConditionValue),
+          created_at: proposal.createdAt,
+          decided_at: proposal.approvedAt,
+        } : null,
+      });
+    } catch (error) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
   // POST /mobile/periods/complete
   fastify.post('/periods/complete', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
@@ -509,6 +585,48 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         period: `${periodYear}-${String(periodMonth).padStart(2, '0')}`,
         skipped_count: activeCount,
         message: `${activeCount} kaleng ditandai tidak dijemput untuk periode berjalan`,
+      });
+    } catch (error) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  /**
+   * GET /mobile/visits
+   *
+   * Riwayat kunjungan non-penjemputan milik petugas (Fase 3 rencana susulan
+   * mobile–overview). Proyeksi ringan untuk layar Riwayat; kunjungan bukan
+   * collection sehingga tidak memengaruhi angka penjemputan/nominal.
+   */
+  fastify.get('/visits', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = request.currentUser!;
+      const officerId = user.officerId;
+
+      if (!officerId) {
+        return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
+      }
+
+      const query = request.query as { limit?: string };
+      const limit = Math.min(Math.max(parseInt(query.limit || '10', 10) || 10, 1), 50);
+
+      const rows = await db.query.canVisits.findMany({
+        where: eq(schema.canVisits.officerId, officerId),
+        with: { can: { columns: { qrCode: true, ownerName: true } } },
+        orderBy: [desc(schema.canVisits.visitedAt)],
+        limit,
+      });
+
+      return sendSuccess(reply, {
+        items: rows.map((v) => ({
+          id: v.id,
+          can_id: v.canId,
+          qr_code: v.can?.qrCode ?? '',
+          owner_name: v.can?.ownerName ?? '',
+          purpose: v.purpose,
+          visited_at: v.visitedAt,
+          notes: v.notes,
+        })),
       });
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);

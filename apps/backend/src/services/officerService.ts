@@ -1,6 +1,6 @@
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { eq, and, inArray, sql, desc, asc } from 'drizzle-orm';
+import { eq, and, inArray, sql, desc, asc, gte, lte } from 'drizzle-orm';
 
 export async function getOfficerDetailWithStats(
   officerId: string,
@@ -32,6 +32,9 @@ export async function getOfficerDetailWithStats(
 
   if (!officer) return null;
 
+  // Batas tanggal via operator Drizzle + literal sql`...` (bukan perbandingan
+  // mentah di template) — lihat noRawDateInterpolation.test.ts. Literal tetap
+  // string di driver agar semantik identik; gte/lte menolak string polos.
   const [
     collectionStats,
     assignmentStats,
@@ -47,8 +50,8 @@ export async function getOfficerDetailWithStats(
       .where(and(
         eq(schema.collections.officerId, officerId),
         eq(schema.collections.syncStatus, 'COMPLETED'),
-        sql`${schema.collections.collectedAt} >= ${startDate}`,
-        sql`${schema.collections.collectedAt} <= ${endDate}`,
+        gte(schema.collections.collectedAt, sql`${startDate}`),
+        lte(schema.collections.collectedAt, sql`${endDate}`),
       )),
 
     // Assignment counts by status
@@ -85,8 +88,8 @@ export async function getOfficerDetailWithStats(
       .where(and(
         eq(schema.collections.officerId, officerId),
         eq(schema.collections.syncStatus, 'COMPLETED'),
-        sql`${schema.collections.collectedAt} >= ${startDate}`,
-        sql`${schema.collections.collectedAt} <= ${endDate}`,
+        gte(schema.collections.collectedAt, sql`${startDate}`),
+        lte(schema.collections.collectedAt, sql`${endDate}`),
       ))
       .groupBy(schema.cans.ownerName)
       .orderBy(desc(sql`coalesce(sum(${schema.collections.nominal}), 0)`))
@@ -101,8 +104,8 @@ export async function getOfficerDetailWithStats(
       .where(and(
         eq(schema.collections.officerId, officerId),
         eq(schema.collections.syncStatus, 'COMPLETED'),
-        sql`${schema.collections.collectedAt} >= ${startDate}`,
-        sql`${schema.collections.collectedAt} <= ${endDate}`,
+        gte(schema.collections.collectedAt, sql`${startDate}`),
+        lte(schema.collections.collectedAt, sql`${endDate}`),
       ))
       .groupBy(schema.cans.ownerName)
       .orderBy(asc(sql`coalesce(sum(${schema.collections.nominal}), 0)`))
