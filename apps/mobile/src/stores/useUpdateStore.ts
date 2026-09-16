@@ -8,7 +8,6 @@ import {
 } from '../services/updates/versionCheck';
 import {downloadApk, installApk} from '../services/updates/apkDownload';
 import {getDeviceAbiKey, abiKeyToLabel} from '../services/updates/abi';
-import {getUpdateStorage, DISMISSED_VERSION_CODE_KEY} from '../services/updates/storage';
 import {getErrorMessage} from '../utils/error';
 
 export type DownloadState = 'idle' | 'downloading' | 'ready' | 'error';
@@ -28,6 +27,11 @@ interface UpdateState {
   downloadUrl: string | null;
   /** Label ABI untuk tampilan modal: 'arm64' | 'armv7' | 'universal'. */
   abiLabel: string | null;
+  /**
+   * true setelah tombol "Nanti" ditekan. Hanya in-memory — hilang saat
+   * aplikasi ditutup. Modal pembaruan muncul lagi pada sesi berikutnya.
+   */
+  dismissedThisSession: boolean;
 
   /** Cek senyap saat aplikasi dibuka — gagal/offline = diam total. */
   checkOnLaunch: () => Promise<void>;
@@ -42,18 +46,22 @@ interface UpdateState {
 }
 
 export const useUpdateStore = create<UpdateState>((set, get) => {
-  const applyRelease = async (release: MobileVersionInfo): Promise<'up-to-date' | 'available'> => {
+  const applyRelease = async (
+    release: MobileVersionInfo,
+    ignoreDismissed = false,
+  ): Promise<'up-to-date' | 'available'> => {
     // getBuildNumber() = versionCode pada Android — nilai asli dari APK yang
     // disuntikkan EAS (appVersionSource: remote), sumber kebenaran pembanding.
     const installedCode = Number(DeviceInfo.getBuildNumber());
-    const dismissed = Number(getUpdateStorage().getNumber(DISMISSED_VERSION_CODE_KEY) ?? 0);
+    // v1.2.0: penundaan hanya berlaku untuk sesi ini (lihat dismissedThisSession).
+    const dismissed = get().dismissedThisSession;
 
-    if (!shouldShowUpdate(installedCode, release, dismissed)) {
+    if (!shouldShowUpdate(installedCode, release, dismissed, ignoreDismissed)) {
       return 'up-to-date';
     }
 
     // Pilih APK sesuai ABI perangkat; kegagalan deteksi tetap jatuh ke
-    // universal (tidak pernah memblokir pembaruan).
+    // apk_url (fallback terakhir — tidak pernah memblokir pembaruan).
     const abiKey = await getDeviceAbiKey();
     const downloadUrl = release.apk_urls?.[abiKey] ?? release.apk_url;
 
@@ -83,6 +91,11 @@ export const useUpdateStore = create<UpdateState>((set, get) => {
     installAttempted: false,
     downloadUrl: null,
     abiLabel: null,
+    /**
+     * true setelah tombol "Nanti" ditekan. Hanya in-memory — hilang saat
+     * aplikasi ditutup. Modal pembaruan muncul lagi pada sesi berikutnya.
+     */
+    dismissedThisSession: false,
 
     checkOnLaunch: async () => {
       try {
@@ -96,15 +109,18 @@ export const useUpdateStore = create<UpdateState>((set, get) => {
 
     checkManually: async () => {
       const release = await fetchMobileVersion();
-      return applyRelease(release);
+      // Permintaan eksplisit dari tombol "Periksa Pembaruan": abaikan flag
+      // tunda — pengguna ingin melihat pembaruan walau sebelumnya menunda.
+      // Hanya "sama atau lebih baru dari versi terpasang" yang membatalkan.
+      return applyRelease(release, true);
     },
 
     dismiss: () => {
-      const {releaseInfo} = get();
-      if (releaseInfo) {
-        getUpdateStorage().set(DISMISSED_VERSION_CODE_KEY, releaseInfo.version_code);
-      }
-      set({modalVisible: false});
+      // v1.2.0: "Nanti" hanya menunda untuk SESI INI. Sebelumnya dismiss
+      // menulis version_code ke MMKV sehingga modal tidak pernah muncul lagi
+      // untuk versi itu walau aplikasi dibuka ulang. Sekarang modal muncul
+      // kembali setiap kali aplikasi dibuka, sampai pengguna memperbarui.
+      set({modalVisible: false, dismissedThisSession: true});
     },
 
     startDownload: async () => {

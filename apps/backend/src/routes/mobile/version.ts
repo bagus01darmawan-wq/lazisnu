@@ -16,27 +16,29 @@ import { sendSuccess } from '../../utils/response';
  * "Nanti". Nilai 0 = tidak ada paksaan.
  */
 
-const mobileReleaseSchema = z.object({
-  version: z.string().min(1),
-  versionCode: z.number().int().positive(),
-  apkUrl: z.string().url(),
-  // APK per-arsitektur (kontrak app ≥ v1.1.6). Kunci tetap: arm64_v8a,
-  // armeabi_v7a, universal. Semua di-commit bersama tiap rilis oleh
-  // scripts/release-bump.mjs — mismatch = server menolak start (fail-fast).
-  apkUrls: z.object({
-    arm64_v8a: z.string().url(),
-    armeabi_v7a: z.string().url(),
-    universal: z.string().url(),
-  }),
-  changelog: z.string(),
-  minimumVersionCode: z.number().int().nonnegative(),
-});
-
 // Fail-fast saat boot: JSON rusak = server menolak start (lebih baik
 // daripada petugas diam-diam membaca data versi yang salah).
 // Catatan: objek internal bercamelCase; bentuk kawat (snake_case) dihasilkan
 // sendSuccess → serializeOutput, dan dijaga oleh tes integrasi
 // src/routes/__tests__/mobile-version.integration.test.ts.
+export const mobileReleaseSchema = z.object({
+  version: z.string().min(1),
+  versionCode: z.number().int().positive(),
+  apkUrl: z.string().url(),
+  // APK per-arsitektur (kontrak app ≥ v1.1.6). Kunci tetap: arm64_v8a,
+  // armeabi_v7a, universal. `universal` OPSIONAL sejak v1.2.0 (hanya 2 APK
+  // per-ABI): app lama (< v1.1.6) hanya tahu apkUrl & tidak tahu ABI, tapi
+  // apkUrl tetap wajib (lihat atas), jadi app lama tetap bisa memperbarui.
+  // Fail-fast tetap berlaku untuk arm64/armeabi.
+  apkUrls: z.object({
+    arm64_v8a: z.string().url(),
+    armeabi_v7a: z.string().url(),
+    universal: z.string().url().optional(),
+  }),
+  changelog: z.string(),
+  minimumVersionCode: z.number().int().nonnegative(),
+});
+
 export const mobileRelease = mobileReleaseSchema.parse(rawRelease);
 
 export async function versionRoutes(fastify: FastifyInstance) {

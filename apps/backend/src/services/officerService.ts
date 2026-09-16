@@ -1,6 +1,7 @@
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { eq, and, inArray, sql, desc, asc } from 'drizzle-orm';
+import { eq, and, inArray, sql, desc, asc, gte, lte } from 'drizzle-orm';
+import { computeTaskMetrics } from './taskMetrics';
 
 export async function getOfficerDetailWithStats(
   officerId: string,
@@ -32,6 +33,9 @@ export async function getOfficerDetailWithStats(
 
   if (!officer) return null;
 
+  // Batas tanggal via operator Drizzle + literal sql`...` (bukan perbandingan
+  // mentah di template) — lihat noRawDateInterpolation.test.ts. Literal tetap
+  // string di driver agar semantik identik; gte/lte menolak string polos.
   const [
     collectionStats,
     assignmentStats,
@@ -47,8 +51,8 @@ export async function getOfficerDetailWithStats(
       .where(and(
         eq(schema.collections.officerId, officerId),
         eq(schema.collections.syncStatus, 'COMPLETED'),
-        sql`${schema.collections.collectedAt} >= ${startDate}`,
-        sql`${schema.collections.collectedAt} <= ${endDate}`,
+        gte(schema.collections.collectedAt, sql`${startDate}`),
+        lte(schema.collections.collectedAt, sql`${endDate}`),
       )),
 
     // Assignment counts by status
@@ -85,8 +89,8 @@ export async function getOfficerDetailWithStats(
       .where(and(
         eq(schema.collections.officerId, officerId),
         eq(schema.collections.syncStatus, 'COMPLETED'),
-        sql`${schema.collections.collectedAt} >= ${startDate}`,
-        sql`${schema.collections.collectedAt} <= ${endDate}`,
+        gte(schema.collections.collectedAt, sql`${startDate}`),
+        lte(schema.collections.collectedAt, sql`${endDate}`),
       ))
       .groupBy(schema.cans.ownerName)
       .orderBy(desc(sql`coalesce(sum(${schema.collections.nominal}), 0)`))
@@ -101,8 +105,8 @@ export async function getOfficerDetailWithStats(
       .where(and(
         eq(schema.collections.officerId, officerId),
         eq(schema.collections.syncStatus, 'COMPLETED'),
-        sql`${schema.collections.collectedAt} >= ${startDate}`,
-        sql`${schema.collections.collectedAt} <= ${endDate}`,
+        gte(schema.collections.collectedAt, sql`${startDate}`),
+        lte(schema.collections.collectedAt, sql`${endDate}`),
       ))
       .groupBy(schema.cans.ownerName)
       .orderBy(asc(sql`coalesce(sum(${schema.collections.nominal}), 0)`))
@@ -112,16 +116,18 @@ export async function getOfficerDetailWithStats(
   const totalCollections = Number(collectionStats[0]?.count || 0);
   const totalAmount = Number(collectionStats[0]?.total || 0);
 
-  const countsByStatus = Object.fromEntries(
-    assignmentStats.map((row) => [row.status, Number(row.count)])
-  ) as Record<string, number>;
-
-  const totalAssignments = Object.values(countsByStatus).reduce((a, b) => a + b, 0);
-  const completedAssignments = countsByStatus['COMPLETED'] || 0;
-  const activeAssignments = countsByStatus['ACTIVE'] || 0;
-  const uncollectedAssignments = countsByStatus['UNCOLLECTED'] || 0;
-  const postponedAssignments = countsByStatus['POSTPONED'] || 0;
-  const reassignedAssignments = countsByStatus['REASSIGNED'] || 0;
+  // POSTPONED dihapus 2026-09-16 (dead enum). Jangan tambahkan
+  // fallback 'POSTPONED' kemari: tidak ada lagi status demikian.
+  // Rumus dipusatkan di taskMetrics (kontrak metrik final,
+  // docs/audit/dasar-perbaikan-metrik-tugas-mobile-2026-09-13.md §7).
+  const metrics = computeTaskMetrics(
+    assignmentStats.map((row) => ({ status: row.status, count: row.count })),
+  );
+  const completedAssignments = metrics.task_completed;
+  const activeAssignments = metrics.task_active;
+  const uncollectedAssignments = metrics.task_uncollected;
+  const reassignedAssignments = metrics.task_reassigned;
+  const totalAssignments = metrics.task_total;
 
   const completionRate = totalAssignments > 0
     ? Math.round((completedAssignments / totalAssignments) * 100)
@@ -161,7 +167,6 @@ export async function getOfficerDetailWithStats(
       completed_assignments: completedAssignments,
       active_assignments: activeAssignments,
       uncollected_assignments: uncollectedAssignments,
-      postponed_assignments: postponedAssignments,
       reassigned_assignments: reassignedAssignments,
       completion_rate: completionRate,
       average_per_collection: averagePerCollection,

@@ -1,13 +1,12 @@
-name: "Release APK (per-ABI + universal fallback)"
+name: "Release APK (per-ABI, 2 varian)"
 
 # Rilis APK satu-tombol. Dipicu oleh tag v* — dibuat oleh scripts/release-bump.mjs --publish.
-# Alur: [1] build 3 APK bertanda tangan produksi via Gradle di runner GitHub:
+# Alur: [1] build 2 APK bertanda tangan produksi via Gradle di runner GitHub:
 #             - arm64-v8a (khusus HP ARM 64-bit)
 #             - armeabi-v7a (khusus HP ARM 32-bit)
-#             - universal-ARM (fallback untuk aplikasi lama yang hanya tahu apk_url)
 #       → [2] gate per artefak: tepat 1 APK, ABI eksak, ukuran terkalibrasi
-#       → [3] gate agregat: ketiga APK wajib tersedia
-#       → [4] unggah ketiganya ke R2 dan verifikasi URL publik
+#       → [3] gate agregat: kedua APK wajib tersedia
+#       → [4] unggah keduanya ke R2 dan verifikasi URL publik
 #       → [5] dispatch ci.yml tepat sekali pada ref tag.
 # Fail-closed: satu build/gate/upload gagal → tidak ada dispatch → produksi tetap versi lama.
 
@@ -101,13 +100,6 @@ jobs:
             file_suffix: "-armeabi-v7a"
             min_mib: 18
             max_mib: 28
-          - target: universal-arm
-            abi_filter: "armeabi-v7a,arm64-v8a"
-            rn_architectures: "armeabi-v7a,arm64-v8a"
-            expected_abis: "arm64-v8a,armeabi-v7a"
-            file_suffix: ""
-            min_mib: 34
-            max_mib: 46
 
     steps:
       - name: Checkout pada ref pemicu
@@ -238,29 +230,28 @@ jobs:
       contents: read
       actions: write
     steps:
-      - name: Unduh ketiga artefak matrix
+      - name: Unduh kedua artefak matrix
         uses: actions/download-artifact@v4
         with:
           pattern: release-apk-${{ needs.prepare.outputs.version }}-*
           path: release-apks
           merge-multiple: true
 
-      - name: Gate agregat — dua APK khusus ABI + universal wajib lengkap
+      - name: Gate agregat — kedua APK khusus ABI wajib lengkap
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           set -euo pipefail
           shopt -s nullglob
           APKS=(release-apks/*.apk)
-          if [ "${#APKS[@]}" -ne 3 ]; then
-            echo "::error::Harus tersedia tepat 3 APK hasil matrix; ditemukan ${#APKS[@]}"
+          if [ "${#APKS[@]}" -ne 2 ]; then
+            echo "::error::Harus tersedia tepat 2 APK hasil matrix; ditemukan ${#APKS[@]}"
             exit 1
           fi
 
           EXPECTED=(
             "release-apks/lazisnu-${VERSION}-arm64-v8a.apk"
             "release-apks/lazisnu-${VERSION}-armeabi-v7a.apk"
-            "release-apks/lazisnu-${VERSION}.apk"
           )
           for FILE in "${EXPECTED[@]}"; do
             if [ ! -s "$FILE" ]; then
@@ -272,9 +263,9 @@ jobs:
 
       - name: Dry-run berhenti setelah seluruh gate hijau
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true'
-        run: echo "DRY RUN — 2 APK per-ABI + 1 universal lolos; R2 dan deploy dilewati."
+        run: echo "DRY RUN — 2 APK per-ABI lolos; R2 dan deploy dilewati."
 
-      - name: Unggah ketiga APK ke R2
+      - name: Unggah kedua APK ke R2
         if: github.event_name == 'push' || github.event.inputs.dry_run != 'true'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -291,7 +282,7 @@ jobs:
               --cache-control 'public, max-age=31536000, immutable'
           done
 
-      - name: Verifikasi ketiga URL publik
+      - name: Verifikasi kedua URL publik
         if: github.event_name == 'push' || github.event.inputs.dry_run != 'true'
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
@@ -300,7 +291,6 @@ jobs:
           PAIRS=(
             "lazisnu-${VERSION}-arm64-v8a.apk"
             "lazisnu-${VERSION}-armeabi-v7a.apk"
-            "lazisnu-${VERSION}.apk"
           )
           for FILE in "${PAIRS[@]}"; do
             LOCAL="release-apks/$FILE"
@@ -340,7 +330,6 @@ jobs:
             echo ""
             echo "- \`lazisnu-${VERSION}-arm64-v8a.apk\` — khusus ARM 64-bit"
             echo "- \`lazisnu-${VERSION}-armeabi-v7a.apk\` — khusus ARM 32-bit"
-            echo "- \`lazisnu-${VERSION}.apk\` — universal-ARM, fallback aplikasi lama"
             if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$DRY_RUN" = "true" ]; then
               echo "- Mode: dry-run; tidak ada unggahan R2 atau deploy"
             else

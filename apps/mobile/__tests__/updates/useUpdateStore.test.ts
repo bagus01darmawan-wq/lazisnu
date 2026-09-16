@@ -1,5 +1,4 @@
 import {useUpdateStore} from '../../src/stores/useUpdateStore';
-import {getUpdateStorage} from '../../src/services/updates/storage';
 import DeviceInfo from 'react-native-device-info';
 import BlobUtil from 'react-native-blob-util';
 import {Platform} from 'react-native';
@@ -39,6 +38,7 @@ const initial = {
   downloadError: null,
   apkPath: null,
   installAttempted: false,
+  dismissedThisSession: false,
 };
 
 const mockFetchOk = (data: unknown) => {
@@ -93,7 +93,7 @@ describe('useUpdateStore — fitur update-in-app', () => {
     expect(useUpdateStore.getState().modalVisible).toBe(false);
   });
 
-  it('dismiss: menyimpan version_code di MMKV dan menutup modal', async () => {
+  it('dismiss: hanya menutup modal untuk sesi ini (tidak menulis MMKV)', async () => {
     (DeviceInfo.getBuildNumber as jest.Mock).mockReturnValue('17');
     mockFetchOk(baseRelease);
     await useUpdateStore.getState().checkOnLaunch();
@@ -102,17 +102,21 @@ describe('useUpdateStore — fitur update-in-app', () => {
     useUpdateStore.getState().dismiss();
 
     expect(useUpdateStore.getState().modalVisible).toBe(false);
-    expect(getUpdateStorage().getNumber('dismissed_version_code')).toBe(18);
+    expect(useUpdateStore.getState().dismissedThisSession).toBe(true);
   });
 
-  it('versi yang sudah di-Nanti tidak memunculkan modal lagi', async () => {
+  it('setelah dismiss, aplikasi dibuka kembali tetap memunculkan modal', async () => {
+    // v1.2.0: "Nanti" hanya menunda sesi ini. Simulasikan restart aplikasi:
+    // state in-memory ter-reset, MMKV lawas (dari app ≤ v1.1.9) diabaikan.
     (DeviceInfo.getBuildNumber as jest.Mock).mockReturnValue('17');
-    getUpdateStorage().set('dismissed_version_code', 18);
     mockFetchOk(baseRelease);
+    useUpdateStore.setState({dismissedThisSession: true, modalVisible: false});
 
+    // "Aplikasi dibuka lagi" — reset flag sesi seperti saat fresh start.
+    useUpdateStore.setState({dismissedThisSession: false});
     await useUpdateStore.getState().checkOnLaunch();
 
-    expect(useUpdateStore.getState().modalVisible).toBe(false);
+    expect(useUpdateStore.getState().modalVisible).toBe(true);
   });
 
   it('checkManually: up-to-date vs available', async () => {
@@ -120,6 +124,17 @@ describe('useUpdateStore — fitur update-in-app', () => {
     await expect(useUpdateStore.getState().checkManually()).resolves.toBe('up-to-date');
 
     (DeviceInfo.getBuildNumber as jest.Mock).mockReturnValue('17');
+    await expect(useUpdateStore.getState().checkManually()).resolves.toBe('available');
+    expect(useUpdateStore.getState().modalVisible).toBe(true);
+  });
+
+  it('checkManually: versi yang pernah di-Nanti tetap tampil (tidak berbohong)', async () => {
+    // Regresi: tombol "Periksa Pembaruan" dulu bilang "sudah terbaru" hanya
+    // karena pengguna pernah menekan "Nanti" — padahal versi lebih baru ada.
+    (DeviceInfo.getBuildNumber as jest.Mock).mockReturnValue('17');
+    useUpdateStore.setState({dismissedThisSession: true});
+    mockFetchOk(baseRelease);
+
     await expect(useUpdateStore.getState().checkManually()).resolves.toBe('available');
     expect(useUpdateStore.getState().modalVisible).toBe(true);
   });

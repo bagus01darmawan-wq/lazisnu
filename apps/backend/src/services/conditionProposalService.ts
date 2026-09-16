@@ -55,6 +55,19 @@ export async function findPendingProposal(canId: string, toCondition: CanConditi
 }
 
 /**
+ * Usulan terbaru satu kaleng (status apa pun) — untuk dibaca petugas via
+ * `GET /mobile/assignments/:id/proposal-status`. Kepemilikan diperiksa di
+ * route (assignment harus milik petugas), jadi fungsi ini tidak memeriksa
+ * akses sendiri.
+ */
+export async function getLatestProposalForCan(canId: string) {
+  return db.query.canConditionProposals.findFirst({
+    where: eq(schema.canConditionProposals.canId, canId),
+    orderBy: [desc(schema.canConditionProposals.createdAt)],
+  });
+}
+
+/**
  * Buat usulan bila belum ada usulan pending untuk transisi yang sama.
  * Mengembalikan usulan yang dibuat, usulan pending yang sudah ada, atau `null`
  * bila kondisi kaleng sudah sama dengan tujuan.

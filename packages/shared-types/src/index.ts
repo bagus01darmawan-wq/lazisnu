@@ -14,7 +14,6 @@ export enum UserRole {
 export enum AssignmentStatus {
   ACTIVE = "ACTIVE",
   COMPLETED = "COMPLETED",
-  POSTPONED = "POSTPONED",
   REASSIGNED = "REASSIGNED",
   UNCOLLECTED = "UNCOLLECTED",
 }
@@ -316,10 +315,18 @@ export interface WeekStats {
 export interface MonthStats {
   collected: number;
   total_nominal: number;
-  /** Total tugas pada periode berjalan. */
+  /** Total tugas pada periode berjalan (seluruh assignment scope + periode). */
   task_total: number;
-  /** Tugas selesai pada periode berjalan. */
+  /**
+   * COMPLETED saja (kontrak lama, dipertahankan untuk APK lama).
+   * UI baru memakai `task_closed` bila ada.
+   */
   task_completed: number;
+  /** ACTIVE — tugas yang masih perlu dikerjakan. */
+  task_active?: number;
+  /** COMPLETED + UNCOLLECTED — tugas yang sudah ditutup operasional. */
+  task_closed?: number;
+  task_uncollected?: number;
 }
 
 // ─── API Response Types ──────────────────────────────────────────────────────
@@ -431,8 +438,28 @@ export interface RangeStatsResponse {
   task_active: number;
   task_completed: number;
   task_total: number;
+  /** COMPLETED + UNCOLLECTED (opsional untuk kompatibilitas server lama). */
+  task_closed?: number;
+  task_uncollected?: number;
   /** Periode yang tersentuh rentang, format "YYYY-MM". */
   months_covered: string[];
+}
+
+// Response GET /mobile/assignments/:id/proposal-status — proyeksi status
+// usulan kondisi untuk petugas (bukan detail penuh admin).
+export interface ProposalStatusResponse {
+  assignment_id: string;
+  can_id: string;
+  proposal: {
+    id: string;
+    from_condition: string;
+    to_condition: string;
+    status: 'PENDING' | 'APPROVED' | 'REJECTED';
+    reason_code?: string;
+    action_label?: string;
+    created_at: string;
+    decided_at?: string | null;
+  } | null;
 }
 
 export interface DashboardTaskItem {
@@ -495,6 +522,18 @@ export interface ResubmitTrackerItem {
   branch_name: string;
   district_name: string;
 }
+// GET /mobile/visits — riwayat kunjungan non-penjemputan milik petugas.
+// Kunjungan bukan collection: tanpa nominal, tidak memengaruhi angka infak.
+export interface CanVisitHistoryItem {
+  id: string;
+  can_id: string;
+  qr_code: string;
+  owner_name: string;
+  purpose: 'VERIFIKASI' | 'PENGGANTIAN';
+  visited_at: string;
+  notes?: string | null;
+}
+
 // GET /mobile/collections (history) — paginated
 export interface HistoryItem {
   id: string;

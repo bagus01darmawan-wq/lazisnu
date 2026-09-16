@@ -33,6 +33,7 @@ type QRInputSource = 'CAMERA' | 'MANUAL' | 'IMAGE';
 const QR_ERROR_MESSAGES: Record<string, string> = {
   QR_INVALID: 'Format kode QR tidak valid.',
   CAN_NOT_FOUND: 'Kaleng tidak ditemukan.',
+  CAN_RETURNED: 'Kaleng ini sudah dikembalikan dan ditarik admin, bukan tugas aktif.',
   QR_NOT_ASSIGNED: 'Kaleng ini bukan tugas Anda pada periode berjalan.',
   QR_ALREADY_SUBMITTED: 'Kaleng ini sudah disetor pada periode berjalan.',
   NETWORK_ERROR: 'Tidak ada koneksi internet. Coba lagi setelah jaringan tersedia.',
@@ -122,7 +123,15 @@ const ScanScreen: React.FC = () => {
       if (result.success) {
         setSkipSheetTask(null);
         handleReset();
-        navigation.navigate('Tasks');
+        if (result.proposalId) {
+          Alert.alert(
+            'Usulan Terkirim',
+            'Usulan perubahan status kaleng terkirim dan menunggu persetujuan admin.',
+            [{text: 'OK', onPress: () => navigation.navigate('Tasks')}],
+          );
+        } else {
+          navigation.navigate('Tasks');
+        }
       } else {
         // Pesan jujur: alasan asli (server / jaringan) — bukan tuduhan sinyal.
         Alert.alert('Gagal Menandai', result.error || 'Gagal menandai kaleng. Coba lagi.');

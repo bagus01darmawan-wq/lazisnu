@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import request from 'supertest';
 import {FastifyInstance} from 'fastify';
-import {versionRoutes} from '../mobile/version';
+import {versionRoutes, mobileReleaseSchema} from '../mobile/version';
 import rawRelease from '../mobile/mobileRelease.json';
 
 /**
@@ -48,5 +48,27 @@ describe('Mobile Version Endpoint (fitur update-in-app Tingkat 1)', () => {
     expect(data.apk_url).toMatch(/^https:\/\/.+\/(.+\.apk)$/);
     expect(data.minimum_version_code).toBeGreaterThanOrEqual(0);
     expect(data.version_code).toBeGreaterThan(0);
+  });
+
+  it('kontrak rilis ≥ v1.2.0: universal BOLEH hilang (hanya 2 APK per-ABI)', () => {
+    // Sebelum perubahan ini, schema zod mewajibkan tiga kunci apkUrls —
+    // rilis tanpa universal membuat server menolak start (fail-fast).
+    // Sekarang universal opsional: arm64 + armeabi wajib, universal tidak.
+    const twoApkRelease = {
+      ...rawRelease,
+      apkUrls: {
+        arm64_v8a: 'https://apk.lazisnu.site/lazisnu-9.9.9-arm64-v8a.apk',
+        armeabi_v7a: 'https://apk.lazisnu.site/lazisnu-9.9.9-armeabi-v7a.apk',
+      },
+    };
+    expect(twoApkRelease.apkUrls).not.toHaveProperty('universal');
+    expect(() => mobileReleaseSchema.parse(twoApkRelease)).not.toThrow();
+  });
+
+  it('arm64 + armeabi tetap wajib (fail-fast jika salah satu hilang)', () => {
+    const {arm64_v8a, ...rest} = rawRelease.apkUrls;
+    expect(() =>
+      mobileReleaseSchema.parse({...rawRelease, apkUrls: rest}),
+    ).toThrow();
   });
 });

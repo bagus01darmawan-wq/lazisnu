@@ -82,9 +82,13 @@ function mergeDashboardData(
 
   // 3. Merge month stats — penjemputan lokal bulan berjalan belum tercatat
   //    server; tugasnya dianggap selesai lokal (server masih ACTIVE).
+  //    Kontrak metrik final: selesai = COMPLETED + UNCOLLECTED.
   let collectedMonth = month_stats?.collected ?? 0;
   let nominalMonth = month_stats?.total_nominal ?? 0;
   let taskCompletedMonth = month_stats?.task_completed ?? 0;
+  let taskClosedMonth = month_stats?.task_closed ?? taskCompletedMonth;
+  const taskUncollectedMonth = month_stats?.task_uncollected ?? 0;
+  const taskActiveMonth = month_stats?.task_active;
   const taskTotalMonth = month_stats?.task_total ?? 0;
 
   const tasks = taskCache.getTasks();
@@ -116,6 +120,7 @@ function mergeDashboardData(
           task?.period === currentPeriod || (!task?.period && isCurrentMonth(item.collected_at));
         if (inCurrentPeriod) {
           taskCompletedMonth += 1;
+          taskClosedMonth += 1;
         }
       }
     }
@@ -170,6 +175,9 @@ function mergeDashboardData(
           total_nominal: nominalMonth,
           task_total: taskTotalMonth,
           task_completed: taskCompletedMonth,
+          task_closed: taskClosedMonth,
+          task_uncollected: taskUncollectedMonth,
+          ...(taskActiveMonth !== undefined ? {task_active: taskActiveMonth} : {}),
         }
       : null,
     pendingTasks: filteredTasks,

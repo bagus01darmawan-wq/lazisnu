@@ -13,6 +13,7 @@ import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { and, eq, gte, lt, inArray, sql, desc } from 'drizzle-orm';
 import { getLatestCollectionCondition } from './collectionSubmission';
+import { computeTaskMetrics } from './taskMetrics';
 import {
   ACTION_REQUIRED_CONDITIONS,
   ASSIGNABLE_CONDITIONS,
@@ -228,21 +229,14 @@ export async function getTaskSummary(
     .groupBy(schema.assignments.status);
 
   const get = (status: string) => Number(rows.find((r) => r.status === status)?.count ?? 0);
-
-  const task_active = get('ACTIVE');
-  const task_completed = get('COMPLETED');
-  const task_uncollected = get('UNCOLLECTED');
-  const task_reassigned = get('REASSIGNED');
-  const task_postponed = get('POSTPONED');
+  const metrics = computeTaskMetrics(rows);
 
   return {
-    task_active,
-    task_completed,
-    task_uncollected,
-    task_reassigned,
-    task_closed: task_completed + task_uncollected,
-    // POSTPONED tetap dihitung pada total sampai datanya dipetakan (fase 4).
-    task_total: task_active + task_completed + task_uncollected + task_reassigned + task_postponed,
+    ...metrics,
+    // TaskSummary tidak memakai field alarm; pertahankan bentuk lama.
+    task_total: metrics.task_total,
+    task_closed: metrics.task_closed,
+    task_reassigned: get('REASSIGNED'),
   };
 }
 
