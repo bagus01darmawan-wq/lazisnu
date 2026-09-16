@@ -51,64 +51,63 @@ pun definisi tidak berubah karena memang tidak ada barisnya.
 selesai maupun belum — ring progres tidak bisa "macet di bawah 100%" karena
 denominator menelan status yang tidak dikenal.
 
-## Yang BELUM dikerjakan (DB) — kenapa ditunda
+## Migrasi DB — `0007_remove_postponed_enum.sql` (sudah di-generate)
 
-> **PostgreSQL tidak punya `ALTER TYPE ... DROP VALUE`.** Sekali nilai enum
-> dibuat, ia tidak dapat dihapus kecuali dengan drop & recreate seluruh tipe.
-> `drizzle-kit generate` **tidak akan menghasilkan SQL ini** — harus ditulis
-> manual.
+> **Koreksi dari versi awal dokumen ini:** `drizzle-kit generate` **ternyata
+> bisa** menghasilkan SQL ini — tidak perlu ditulis manual. Dan lebih bersih
+> dari rencana manual sebelumnya: **tidak perlu drop/pulihkan index**, karena
+> mengubah kolom ke `text` sudah melepaskan dependensi tipe sehingga
+> `DROP TYPE` langsung berhasil (index dimodifikasi in-place, bukan di-drop).
 
-Tipe `assignment_status` dipakai oleh kolom `assignments.status` (default
-`'ACTIVE'`, `notNull`) + 3 index. Maka `DROP TYPE` langsung menabrak
-`cannot drop type assignment_status because other objects depend on it`.
-
-### Prosedur SQL manual (jalankan saat maintenance)
-
-> **WAJIB:** backup DB penuh sebelum langkah 1. `ALTER TABLE ... TYPE`
-> menulis ulang seluruh tabel dan membutuhkan `ACCESS EXCLUSIVE` lock;
-> jalankan saat tidak ada traffic petugas (mis. dini hari WIB).
+Isi `src/database/migrations/0007_remove_postponed_enum.sql` (di-generate,
+belum pernah dijalankan):
 
 ```sql
-BEGIN;
-
--- 1. Hapus index yang bergantung pada kolom (dibuat ulang di langkah 5).
-DROP INDEX IF EXISTS "assignments_status_period_idx";
-DROP INDEX IF EXISTS "can_officer_period_unq";
-
--- 2. Lepaskan ketergantungan kolom dari tipe enum (cast ke text aman).
-ALTER TABLE "assignments"
-  ALTER COLUMN "status" SET DATA TYPE text
-  USING "status"::text;
-
--- 3. Hapus tipe enum lama (tidak ada lagi yang bergantung padanya).
-DROP TYPE "assignment_status";
-
--- 4. Buat ulang tanpa POSTPONED.
-CREATE TYPE "assignment_status"
-  AS ENUM ('ACTIVE', 'COMPLETED', 'REASSIGNED', 'UNCOLLECTED');
-
--- 5. Kembalikan kolom ke enum baru. Nilai POSTPONED (nol baris) tidak
---    perlu dipetakan — diverifikasi kosong sebelum langkah 1.
-ALTER TABLE "assignments"
-  ALTER COLUMN "status" SET DATA TYPE "assignment_status"
-  USING ("status"::text)::"assignment_status";
-
--- 6. Pulihkan index.
-CREATE INDEX "assignments_status_period_idx"
-  ON "assignments" ("status", "period_year", "period_month");
-CREATE UNIQUE INDEX "can_officer_period_unq"
-  ON "assignments" ("can_id", "officer_id", "period_year", "period_month");
-
-COMMIT;
+ALTER TABLE "assignments" ALTER COLUMN "status" SET DATA TYPE text;
+ALTER TABLE "assignments" ALTER COLUMN "status" SET DEFAULT 'ACTIVE'::text;
+DROP TYPE "public"."assignment_status";
+CREATE TYPE "public"."assignment_status" AS ENUM('ACTIVE', 'COMPLETED', 'REASSIGNED', 'UNCOLLECTED');
+ALTER TABLE "assignments" ALTER COLUMN "status" SET DEFAULT 'ACTIVE'::"public"."assignment_status";
+ALTER TABLE "assignments" ALTER COLUMN "status" SET DATA TYPE "public"."assignment_status" USING "status"::"public"."assignment_status";
 ```
 
-### Prasyarat sebelum menjalankan
+Semua 6 statement berjalan dalam **satu transaksi**. Karena `POSTPONED` = 0
+baris (diverifikasi di produksi), `USING "status"::"public"."assignment_status"`
+tidak akan menemui nilai yang tak bisa dicast.
 
-- [ ] Backup penuh DB produksi (R2 + Supabase)
-- [ ] Verifikasi ulang: `SELECT count(*) FROM assignments WHERE status = 'POSTPONED'` = 0
-- [ ] Drizzle snapshot (`meta/`) dan migrasi `0007_*` di-generate setelah ini,
-      agar state DB dan `drizzle-kit` kembali sinkron
-- [ ] Jendela maintenance terjadwal (backend di-restart setelahnya)
+## ⚠️ Jebakan deploy — mengapa 0007 TIDAK boleh ter-deploy sembarangan
+
+`migrate-cli.ts` menjalankan migrasi **otomatis saat container start**, dan
+keluar dengan **kode 1 bila gagal — yang menghentikan pipeline deploy**
+(lihat baris 12–18 dan 55–58 berkas itu).
+
+Konsekuensinya: begitu `0007` ter-commit dan image backend ter-deploy,
+migrasi ini **jalan sendiri di produksi**, bukan di jendela maintenance yang
+dipilih. Karena `ALTER TABLE ... SET DATA TYPE` membutuhkan
+`ACCESS EXCLUSIVE` lock pada tabel `assignments`, deploy saat traffic hidup
+dapat **mengunci tabel** (petugas menunggu, bisa timeout).
+
+**Keputusan:** `0007` di-commit ke branch `fix/postponed-dead-enum-2026-09-16`
+**tetapi tidak di-deploy**. Jalankan hanya saat:
+
+1. Backup DB penuh sudah dibuat (R2 + Supabase)
+2. Verifikasi ulang: `SELECT count(*) FROM assignments WHERE status = 'POSTPONED'` = 0
+3. Traffic petugas sudah berhenti (jendela maintenance terjadwal, mis. dini
+   hari WIB)
+4. Seseorang siap memantau + bisa rollback bila tabel terkunci terlalu lama
+
+## Status verifikasi (jujur)
+
+- ✅ `drizzle-kit generate` berhasil menghasilkan 0007 (gen exit 0)
+- ✅ `drizzle-kit` menulis snapshot `meta/0007_snapshot.json`
+- ❌ **Dry-run SQL tidak pernah dijalankan.** Postgres lokal di mesin ini
+  menolak password (`28P01`) dan server sandbox Postgres 16 yang disiapkan
+  crash berulang saat menerima koneksi (`0xC0000142` — DLL init failure di
+  Windows). Tiga jalan dicoba (kombinasi kredensial, psql, server trust-auth
+  terpisah) — semua gagal.
+- Maka keamanan migrasi ini **hanya berdasar logika SQL + output drizzle**,
+  bukan bukti eksekusi empiris. Sebelum menjalankan di produksi,
+  **wajib** dry-run di DB uji yang sehat (VM staging atau mesin lain).
 
 ## Risiko terbuka
 

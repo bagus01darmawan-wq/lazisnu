@@ -57,4 +57,12 @@ describe('POSTPONED adalah dead enum dan tidak boleh muncul sebagai kode', () =>
 
     expect(hits).toEqual([]);
   });
+
+  it('AssignmentStatus di shared-types tidak punya anggota POSTPONED', () => {
+    // packages/shared-types dipublikasikan ke mobile & web; anggota enum
+    // di sini menjadi sumber kebenaran lintas-aplikasi.
+    const root = path.join(__dirname, '..', '..', '..', '..', 'packages', 'shared-types', 'src', 'index.ts');
+    const src = fs.existsSync(root) ? fs.readFileSync(root, 'utf8') : '';
+    expect(src).not.toMatch(/POSTPONED/);
+  });
 });

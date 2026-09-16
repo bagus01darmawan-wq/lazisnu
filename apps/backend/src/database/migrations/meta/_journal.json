@@ -50,6 +50,13 @@
       "when": 1789416996689,
       "tag": "0006_can_condition_status",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789566673829,
+      "tag": "0007_remove_postponed_enum",
+      "breakpoints": true
     }
   ]
 }
