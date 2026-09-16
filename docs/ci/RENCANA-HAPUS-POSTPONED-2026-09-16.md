@@ -96,18 +96,23 @@ dapat **mengunci tabel** (petugas menunggu, bisa timeout).
    hari WIB)
 4. Seseorang siap memantau + bisa rollback bila tabel terkunci terlalu lama
 
-## Status verifikasi (jujur)
+## Status verifikasi (dry-run berhasil)
 
 - ✅ `drizzle-kit generate` berhasil menghasilkan 0007 (gen exit 0)
-- ✅ `drizzle-kit` menulis snapshot `meta/0007_snapshot.json`
-- ❌ **Dry-run SQL tidak pernah dijalankan.** Postgres lokal di mesin ini
-  menolak password (`28P01`) dan server sandbox Postgres 16 yang disiapkan
-  crash berulang saat menerima koneksi (`0xC0000142` — DLL init failure di
-  Windows). Tiga jalan dicoba (kombinasi kredensial, psql, server trust-auth
-  terpisah) — semua gagal.
-- Maka keamanan migrasi ini **hanya berdasar logika SQL + output drizzle**,
-  bukan bukti eksekusi empiris. Sebelum menjalankan di produksi,
-  **wajib** dry-run di DB uji yang sehat (VM staging atau mesin lain).
+- ✅ Drizzle menulis snapshot `meta/0007_snapshot.json`
+- ✅ **Dry-run dijalankan di postgres:16** dengan 213 baris data realistis
+  (mirip produksi + 1 POSTPONED untuk uji kasus terburuk):
+  - Kondisi 0 POSTPONED: **sukses**, data utuh (212→212), 3 index utuh,
+    tipe kolom = enum baru, index berfungsi (Bitmap Heap Scan terverifikasi)
+  - Kondisi ada 1 POSTPONED: **gagal dengan aman** — seluruh 6 statement
+    di-rollback, tidak ada perubahan parsial, data utuh
+- ❌ **Tidak diuji:** tabel produksi sebenarnya (ratusan ribu baris).
+  Durasi 0.17s di atas hanya untuk 212 baris. Untuk tabel besar,
+  `ALTER TABLE ... SET DATA TYPE` menulis ulang seluruh tabel — durasi
+  **wajib diukur di staging seukuran produksi** sebelum menjadwalkan.
+
+**Prosedur lengkap jendela maintenance** (backup, verifikasi, lock check,
+rollback, checklist): `docs/ci/PROSEDUR-MAINTENANCE-HAPUS-POSTPONED-2026-09-16.md`
 
 ## Risiko terbuka
 
