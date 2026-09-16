@@ -88,7 +88,14 @@ TOTAL SESUDAH:   212                                          ← nol data hilan
 
 ## C. Prosedur (jalankan saat maintenance)
 
-### C.1 — Hitung dulu, jadi tebak (opsional tapi disarankan)
+### C.1 — Hitung dulu, jadi tebak (hanya jika tabel sudah besar)
+
+> **Kapan perlu:** hanya jika `assignments` sudah berisi puluhan ribu
+> baris. Untuk skala ratusan baris, dry-run 0.17s di §B **sudah
+> representatif** — langkah ini boleh dilewati. Bagian yang benar-benar
+> berisiko di tabel kecil **bukan** lamanya rewrite, melainkan
+> **lamanya menunggu giliran dapat lock** (§C.4) — itu diatasi dengan
+> menghentikan traffic, bukan dengan menghitung durasi.
 
 Perkirakan berapa lama migrasi akan berjalan di DB seukuran produksi,
 **sebelum** jendela maintenance, di DB staging:
