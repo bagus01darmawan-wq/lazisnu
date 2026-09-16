@@ -8,8 +8,8 @@
  *
  * Tanpa --publish: hanya mengedit 3 file (dry-run, belum di-commit).
  * Dengan --publish: git add+commit → push main → buat tag vX.Y.Z (baru,
- * TANPA force-push; tag sudah ada = ABORAT) → push tag. Push tag memicu
- * release.yml (2 APK per-ABI + 1 universal via Gradle CI → R2 → deploy).
+ * TANPA force-push; tag sudah ada = ABORT) → push tag. Push tag memicu
+ * release.yml (2 APK per-ABI via Gradle CI → R2 → deploy).
  *
  * File yang dijaga agar sinkron:
  *   1. apps/mobile/android/app/build.gradle  (versionName + versionCode literal)
@@ -105,12 +105,13 @@ const release = JSON.parse(readFileSync(F.release, 'utf8'));
 release.version = version;
 release.versionCode = Number(versionCode);
 release.apkUrl = `https://apk.lazisnu.site/lazisnu-${version}.apk`;
-// Kontrak app ≥ v1.1.6: APK per-arsitektur (kunci tetap; zod di version.ts
-// menolak server start bila salah satu hilang — fail-fast).
+// Kontrak app ≥ v1.1.6: APK per-arsitektur. Sejak v1.2.0 hanya 2 APK
+// per-ABI (tidak ada universal) — zod di version.ts mewajibkan keduanya;
+// universal opsional. App < v1.1.6 tidak tahu ABI, tapi tetap dapat update
+// lewat apkUrl (di atas), yang sengaja menunjuk arm64 (mayoritas perangkat).
 release.apkUrls = {
   arm64_v8a: `https://apk.lazisnu.site/lazisnu-${version}-arm64-v8a.apk`,
   armeabi_v7a: `https://apk.lazisnu.site/lazisnu-${version}-armeabi-v7a.apk`,
-  universal: `https://apk.lazisnu.site/lazisnu-${version}.apk`,
 };
 if (changelog) release.changelog = changelog;
 writeFileSync(F.release, JSON.stringify(release, null, 2) + '\n', 'utf8');
@@ -128,7 +129,7 @@ if (publish) {
   git(['push', 'origin', 'HEAD'], {stdio: 'inherit'});
   git(['tag', tag]);
   git(['push', 'origin', tag], {stdio: 'inherit'});
-  console.log(`✔ Tag ${tag} dibuat & di-push — release.yml membangun 2 APK per-ABI + 1 universal → R2 → deploy.`);
+  console.log(`✔ Tag ${tag} dibuat & di-push — release.yml membangun 2 APK per-ABI → R2 → deploy.`);
 } else {
   console.log('(dry-run: file sudah diedit, belum di-commit. Ulangi dengan --publish untuk rilis.)');
 }

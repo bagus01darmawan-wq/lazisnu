@@ -35,17 +35,33 @@ export async function fetchMobileVersion(
 /**
  * Apakah modal pembaruan perlu tampil?
  * - versi server harus lebih baru dari yang terpasang, DAN
- * - versi itu belum pernah dipilih "Nanti" (dismissed).
+ * - versi itu belum pernah dipilih "Nanti" (dismissed) — KECUALI dicek
+ *   secara manual dari Profil (ignoreDismissed), karena "Periksa Pembaruan"
+ *   adalah permintaan eksplisit: pengguna ingin tahu, walau sebelumnya
+ *   menunda.
+ *
+ * Catatan: sejak v1.2.0 "Nanti" hanya menunda untuk SESI ini (flag
+ * in-memory), bukan permanen. Modal akan muncul lagi saat aplikasi dibuka
+ * kembali, sampai pengguna benar-benar memperbarui.
  */
 export function shouldShowUpdate(
   installedVersionCode: number,
   release: MobileVersionInfo,
-  dismissedVersionCode: number,
+  /** Flag sesi v1.2.0 (boolean) atau version_code MMKV lawas (number). */
+  dismissed?: number | boolean | null,
+  ignoreDismissed = false,
 ): boolean {
   if (release.version_code <= installedVersionCode) {
     return false;
   }
-  if (dismissedVersionCode >= release.version_code) {
+  if (ignoreDismissed) {
+    // Permintaan eksplisit "Periksa Pembaruan": tunda diabaikan sepenuhnya.
+    return true;
+  }
+  if (typeof dismissed === 'boolean') {
+    return !dismissed;
+  }
+  if ((dismissed ?? 0) >= release.version_code) {
     return false;
   }
   return true;
