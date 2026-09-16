@@ -508,7 +508,6 @@ export default function AssignmentsPage() {
         const statuses = {
           ACTIVE: { label: 'ASSIGNED', color: 'text-[#DE6F4A]' },
           COMPLETED: { label: 'SELESAI', color: 'text-[#1F8243]' },
-          POSTPONED: { label: 'TERTUNDA', color: 'text-[#EAD19B]' },
           REASSIGNED: { label: 'RE-ASSIGN', color: 'text-[#EAD19B]' },
           UNCOLLECTED: { label: 'TERLEWAT', color: 'text-[#F59E0B]' },
         };

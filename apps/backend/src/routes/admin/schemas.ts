@@ -18,7 +18,11 @@ export const createCanSchema = z.object({
 });
 
 export const updateCanSchema = createCanSchema.partial().extend({
+  /** @deprecated Alias lama; dipetakan ke condition (false → DIKEMBALIKAN, true → AKTIF). */
   is_active: z.boolean().optional(),
+  /** Transisi kondisi eksplisit (lihat services/conditionRules.ts). */
+  condition: z.enum(['AKTIF', 'NON_AKTIF', 'RUSAK', 'HILANG', 'DIKEMBALIKAN']).optional(),
+  condition_reason_code: z.string().max(40).optional().nullable(),
 });
 
 export const createOfficerSchema = z.object({

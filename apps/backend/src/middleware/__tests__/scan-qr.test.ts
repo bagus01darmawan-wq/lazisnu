@@ -214,7 +214,7 @@ describe('QR Scan — various officer scenarios', () => {
   });
 
   it('assignment non-ACTIVE dianggap tidak aktif', () => {
-    // Assignment COMPLETED/POSTPONED/REASSIGNED → bukan active
+    // Assignment COMPLETED/REASSIGNED → bukan active
     // Route hanya query assignment dengan status = 'ACTIVE'
     // Kalau tidak ketemu → QR_NOT_ASSIGNED
     const result = buildScanResponse(mockCan, null, null);

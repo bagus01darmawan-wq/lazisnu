@@ -17,7 +17,12 @@ overrides:
   '@babel/plugin-transform-modules-systemjs': 7.29.7
   '@grpc/grpc-js@>=1.14.0 <1.14.4': 1.14.4 # GHSA-xxxx — 1.9.16 di tree tetap
   '@tootallnate/once@<2.0.1': 2.0.1 # <2.0.1 (GHSA-vpq2-c234-7xj6) — via dev tooling
-  '@types/react': 18.2.79
+  # '@types/react': 18.2.79 — dilepas: override global ini memaksa apps/web
+  # (React 19) memakai tipe React 18.2.79, penyebab 3 error typecheck web.
+  # web kini scoped sendiri di bawah (@types/react ^19.3.0); apps/mobile
+  # tetap di 18.2.79 via devDependency ^18.2.79.
+  web>'@types/react': ^19.3.0
+  web>'@types/react-dom': ^19.3.0
   '@typescript-eslint/typescript-estree>minimatch': 9.0.7
   '@xmldom/xmldom@<0.9.0': 0.8.15 # GHSA-6gmq-8vp8-gcm6 — jalur @expo/plist 0.x
   '@xmldom/xmldom@>=0.9.0 <0.9.12': 0.9.12 # GHSA-6gmq-8vp8-gcm6 — jalur plist 0.9.x

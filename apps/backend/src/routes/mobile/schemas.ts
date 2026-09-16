@@ -43,5 +43,25 @@ export const resubmitSchema = z.object({
 }).strict();
 
 export const skipAssignmentSchema = z.object({
+  /**
+   * Kode alasan baku. Wajib untuk APK baru; selama masa transisi APK lama yang belum
+   * mengirim kode dipetakan ke `OTHER` di route (dan tetap dicatat `notes`-nya).
+   */
+  reason_code: z.enum([
+    'OWNER_ABSENT',
+    'OWNER_REFUSED',
+    'CAN_LOST',
+    'CAN_DAMAGED',
+    'ACCESS_DIFFICULT',
+    'OTHER',
+  ]).optional(),
+  notes: z.string().max(255).optional(),
+}).strict();
+
+/** POST /mobile/cans/:canId/visits — kunjungan verifikasi / penggantian (BUKAN penjemputan). */
+export const canVisitSchema = z.object({
+  purpose: z.enum(['VERIFIKASI', 'PENGGANTIAN']),
+  visited_at: z.string().datetime().optional(),
+  assignment_id: z.string().uuid().optional(),
   notes: z.string().max(255).optional(),
 }).strict();

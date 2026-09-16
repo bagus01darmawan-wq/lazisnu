@@ -129,6 +129,9 @@ jest.mock('../../src/services/api', () => ({
   default: {
     collection: {resubmitCollection: jest.fn()},
   },
+  collectionService: {
+    getVisits: jest.fn().mockResolvedValue({success: true, data: {items: []}}),
+  },
 }));
 
 import CollectionScreen from '../../src/screens/CollectionScreen';

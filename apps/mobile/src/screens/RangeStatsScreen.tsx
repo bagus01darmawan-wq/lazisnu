@@ -118,9 +118,12 @@ const RangeStatsScreen: React.FC = () => {
   }, []);
 
   const rangeComplete = !!startDate && !!endDate;
+  // Kontrak metrik final: selesai = COMPLETED + UNCOLLECTED.
+  // Fallback ke task_completed untuk respons server lama.
+  const taskClosed = stats?.task_closed ?? stats?.task_completed ?? 0;
   const taskProgress = useMemo(
-    () => (stats && stats.task_total ? stats.task_completed / stats.task_total : 0),
-    [stats],
+    () => (stats && stats.task_total ? taskClosed / stats.task_total : 0),
+    [stats, taskClosed],
   );
 
   return (
@@ -206,7 +209,7 @@ const RangeStatsScreen: React.FC = () => {
                   />
                   <StatBlock
                     icon={'check-circle-outline'}
-                    value={`${stats.task_completed}/${stats.task_total}`}
+                    value={`${taskClosed}/${stats.task_total}`}
                     label={'Tugas Selesai'}
                   />
                 </View>

@@ -11,6 +11,8 @@ import { waRoutes } from './wa';
 import { auditRoutes } from './audit';
 import { backupRoutes } from './backup';
 
+import { canProposalsRoutes } from './canProposals';
+
 export default async function adminRoutes(fastify: FastifyInstance) {
   // Apply auth middleware to all routes in this plugin
   fastify.addHook('preHandler', authenticate);
@@ -19,6 +21,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   await fastify.register(dukuhsRoutes);
   await fastify.register(dashboardRoutes);
   await fastify.register(cansRoutes);
+  await fastify.register(canProposalsRoutes);
   await fastify.register(officersRoutes);
   await fastify.register(assignmentsRoutes);
   await fastify.register(districtRoutes);
