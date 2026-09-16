@@ -98,6 +98,18 @@ describe('shouldShowUpdate', () => {
     expect(shouldShowUpdate(17, baseRelease, 99)).toBe(false);
   });
 
+  it('ignoreDismissed: true memunculkan ulang walau sudah di-Nanti', () => {
+    // Permintaan eksplisit "Periksa Pembaruan" — tunda diabaikan.
+    expect(shouldShowUpdate(17, baseRelease, 18, true)).toBe(true);
+    expect(shouldShowUpdate(17, baseRelease, 99, true)).toBe(true);
+  });
+
+  it('ignoreDismissed tetap false bila versi terpasang sama/lebih baru', () => {
+    // Tidak peduli tunda: bila sudah versi terbaru, tidak ada yang ditampilkan.
+    expect(shouldShowUpdate(18, baseRelease, 0, true)).toBe(false);
+    expect(shouldShowUpdate(19, baseRelease, 0, true)).toBe(false);
+  });
+
   it('true untuk versi BARU walau versi lama lain pernah di-Nanti', () => {
     expect(shouldShowUpdate(17, {...baseRelease, version_code: 19}, 18)).toBe(true);
   });

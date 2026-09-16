@@ -16,6 +16,11 @@ export function getUpdateStorage(): MMKV {
   return storage;
 }
 
-// version_code rilis yang sudah dipilih "Nanti" oleh petugas — modal update
-// tidak muncul lagi untuk versi itu (muncul lagi saat versi lebih baru).
+// version_code rilis yang sudah dipilih "Nanti" oleh petugas.
+//
+// Catatan sejak v1.2.0: tombol "Nanti" tidak lagi menulis kunci ini — modal
+// pembaruan muncul lagi setiap kali aplikasi dibuka, sampai pengguna benar-benar
+// memperbarui. Kunci tetap DIBACA agar pengguna yang menunda versi pada aplikasi
+// ≤ v1.1.9 langsung mendapat perilaku baru (nilainya diabaikan oleh cek manual,
+// dan write path sudah dihapus).
 export const DISMISSED_VERSION_CODE_KEY = 'dismissed_version_code';
