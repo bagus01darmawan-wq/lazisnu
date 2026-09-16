@@ -296,24 +296,53 @@ berjarak** supaya keduanya tidak berdesakan mengunci koneksi yang sama.
    `fix/postponed-dead-enum-2026-09-16` (semua unmerged sesuai permintaan
    "marge nanti"). Saat merge + deploy: **migrasi tidak akan dijalankan
    ulang** (hash 0007 tercatat, simulate-deploy exit 0).
-2. **Tambah regression test metrik campuran** (§C.2) — **prioritas tertinggi
-   yang tersisa**. Penghapusan `POSTPONED` menyentuh `task_total` di 4 tempat
-   tanpa jaring otomatis. Test harus: (a) mock driver ala
-   `overviewReturnedCounts.test.ts` dengan campuran
-   ACTIVE+COMPLETED+UNCOLLECTED; (b) **satu test yang membandingkan output
-   `overviewService.getTaskSummary` dengan route mobile** untuk skenario
-   yang sama, agar keduanya tidak bisa berangsur lepas.
+2. **~~Tambah regression test metrik campuran~~ (§C.2)** ✅ **Selesai.**
+   Penghapusan `POSTPONED` menyentuh `task_total` di 4 tempat tanpa jaring
+   otomatis. Solusi yang diambil: **memindahkan rumus ke satu fungsi murni
+   `computeTaskMetrics()`** (`src/services/taskMetrics.ts`, baru) yang
+   sekarang dipakai keempat call site — `overviewService.getTaskSummary`
+   (web), `routes/mobile/tasks.ts` (`month_stats` + `stats-range`), dan
+   `officerService`. Pemusatan ini menggantikan pendekatan "test
+   membandingkan 2 output" dengan sesuatu yang lebih kuat: **secara fisik
+   tidak mungkin** web dan mobile berangsur lepas karena keduanya memanggil
+   fungsi yang sama.
+
+   Pemusatan juga memperbaiki pola lama yang berbahaya: `taskRows.reduce(...)`
+   memasukkan **setiap** baris groupBy ke total, termasuk enum tak dikenal.
+   Fungsi baru menjumlahkan per status eksplisit (`TOTAL_STATUSES`) dan
+   melaporkan baris tak terhitung lewat `task_unaccounted`, plus
+   `assertMetricsAccountForAllRows()` yang melempar bila total ≠ jumlah baris.
+   Artinya: menambah status enum baru tanpa mendaftarkannya **tidak lagi
+   diam-diam mengubah total** — menjadi alarm yang gagalkan build.
+
+   Test `__tests__/taskMetrics.test.ts` (11 tes) mencakup sebaran produksi
+   riil (212 baris), POSTPONED sebagai status tak terhitung, count
+   bigint/string dari driver, input kosong, dan `count: null`.
+   **315 backend test hijau**, `tsc --noEmit` hijau.
 3. **Tambah webhook Discord ke `.env.backup-prod`** (§E) — tanpa ini, backup
-   produksi gagal hanya terlihat di log.
+   produksi gagal hanya terlihat di log. **Masih terbuka** (staging sudah
+   punya webhook di channel yang sama; tinggal salin env).
 4. **Luruskan laporan:** ganti "22 baseline" → 18 (atau bukti ulang), hapus
    rujukan ke `tmp/mobile-tsc.log`, perbarui "12 suite/87 tes" → 20/191.
+   **Masih terbuka.**
 5. **Dokumentasikan pengecualian scope web↔mobile** (§C.3) — ubah kriteria
    "identik" menjadi "identik untuk petugas yang tidak menjemput lintas
    ranting; perbedaan harus dapat dijelaskan dari scope".
-6. **Keputusan kecil** (bukan blocker): `MonthStats.task_active` wajib atau
-   opsional (§C.4); banner proposal hanya untuk `ACTIVE` atau semua (§C.5).
-7. Baru kemudian jalankan 5 skenario manual staging di laporan §"Sisa
-   pekerjaan sebelum rilis".
+   **Masih terbuka** (perbaikan arsitektur H.2 mengurangi — tidak menghapus —
+   gap ini: scope memang berbeda, `cans.branch_id` vs `officerId`).
+6. **~~`MonthStats.task_active` wajib atau opsional?~~** ✅ **Diselesaikan.**
+   Ditemukan bahwa route `month_stats` **menghitung** field baru
+   (`task_active`/`task_closed`/`task_uncollected`) tapi **hanya mengirim 4
+   field lama** — field opsional itu sebenarnya selalu ada di server, hanya
+   tidak pernah sampai ke client. Sekarang ketiganya dikirim di
+   `month_stats`; tipe shared tetap opsional demi APK lama. (Banner proposal
+   §C.5 tetap terbuka: keputusan produk, bukan teknis.)
+7. **5 skenario manual staging** — **tidak dapat dijalankan saat ini**:
+   container backend staging sedang mati (hanya redis + web yang up). Ini
+   adalah **prasyarat rilis**, bukan langkah yang bisa selesai sebelum
+   deploy. Jalankan setelah branch merge + deploy ke staging: skip `CAN_LOST`
+   → approve → angka overview; kunjungan VERIFIKASI/PENGGANTIAN; APK lama;
+   scan `CAN_RETURNED`; banner proposal.
 
 ---
 

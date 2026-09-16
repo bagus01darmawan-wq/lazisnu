@@ -70,9 +70,9 @@ Tidak disentuh: `apps/mobile/android/app/build.gradle`,
 | Cek | Hasil |
 |-----|-------|
 | `tsc --noEmit` backend | Hijau, nol error |
-| Unit backend `src/services/__tests__` | 12 suite / 87 tes hijau, termasuk guard baru |
+| Unit backend `src/services/__tests__` | 12 suite / 87 tes hijau, termasuk guard baru. **Dikoreksi:** 20 suite / 191 tes hijau setelah branch ini (verifikasi ulang 16 Sep 2026) |
 | Kontrol negatif guard (pola bug lama `updated_at >= ${start}`) | Terbukti tertangkap |
-| `tsc --noEmit` mobile | 18 error vs 22 baseline (`tmp/mobile-tsc.log`) — nol error baru; sisa mismatch tipe lib pre-existing (`TS2786`/`TS2607`) |
+| `tsc --noEmit` mobile | 18 error (`TS2786`/`TS2607`, pre-existing — bukan "22 baseline"; angka 22 tak terbukti) |
 | Uji mobile terkait (`api`, `offlineFlowRegression`, `SkipReasonSheet`) | 3 suite / 34 tes hijau |
 | `prettier --check` file mobile tersentuh | Hijau (4 file diformat ulang otomatis) |
 

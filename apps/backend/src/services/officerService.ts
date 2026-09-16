@@ -1,6 +1,7 @@
 import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { eq, and, inArray, sql, desc, asc, gte, lte } from 'drizzle-orm';
+import { computeTaskMetrics } from './taskMetrics';
 
 export async function getOfficerDetailWithStats(
   officerId: string,
@@ -115,17 +116,18 @@ export async function getOfficerDetailWithStats(
   const totalCollections = Number(collectionStats[0]?.count || 0);
   const totalAmount = Number(collectionStats[0]?.total || 0);
 
-  const countsByStatus = Object.fromEntries(
-    assignmentStats.map((row) => [row.status, Number(row.count)])
-  ) as Record<string, number>;
-
   // POSTPONED dihapus 2026-09-16 (dead enum). Jangan tambahkan
   // fallback 'POSTPONED' kemari: tidak ada lagi status demikian.
-  const totalAssignments = Object.values(countsByStatus).reduce((a, b) => a + b, 0);
-  const completedAssignments = countsByStatus['COMPLETED'] || 0;
-  const activeAssignments = countsByStatus['ACTIVE'] || 0;
-  const uncollectedAssignments = countsByStatus['UNCOLLECTED'] || 0;
-  const reassignedAssignments = countsByStatus['REASSIGNED'] || 0;
+  // Rumus dipusatkan di taskMetrics (kontrak metrik final,
+  // docs/audit/dasar-perbaikan-metrik-tugas-mobile-2026-09-13.md §7).
+  const metrics = computeTaskMetrics(
+    assignmentStats.map((row) => ({ status: row.status, count: row.count })),
+  );
+  const completedAssignments = metrics.task_completed;
+  const activeAssignments = metrics.task_active;
+  const uncollectedAssignments = metrics.task_uncollected;
+  const reassignedAssignments = metrics.task_reassigned;
+  const totalAssignments = metrics.task_total;
 
   const completionRate = totalAssignments > 0
     ? Math.round((completedAssignments / totalAssignments) * 100)

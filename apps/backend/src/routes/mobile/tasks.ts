@@ -9,6 +9,7 @@ import { getLatestCollectionCondition } from '../../services/collectionSubmissio
 import { skipAssignmentSchema, canVisitSchema } from './schemas';
 import { AppError, isAppError } from '../../utils/AppError';
 import { parseStatsRange, computeMonthsCovered } from '../../utils/statsRange';
+import { computeTaskMetrics } from '../../services/taskMetrics';
 import {
   actionLabel,
   conditionAfterReplacementVisit,
@@ -83,25 +84,18 @@ export async function tasksRoutes(fastify: FastifyInstance) {
             ))
             .groupBy(schema.assignments.status),
         ]).then(([colRes, taskRows]) => {
-          // Kontrak metrik final
-          // (docs/audit/dasar-perbaikan-metrik-tugas-mobile-2026-09-13.md §7):
-          // tugas_belum = ACTIVE, tugas_selesai = COMPLETED + UNCOLLECTED,
-          // tugas_total = seluruh assignment pada scope + periode.
+          // Kontrak metrik final — rumus dipusatkan di taskMetrics
+          // (docs/audit/dasar-perbaikan-metrik-tugas-mobile-2026-09-13.md §7).
           // Field lama (task_total/task_completed) dipertahankan untuk APK lama.
-          const countOf = (status: string) =>
-            Number(taskRows.find((r) => r.status === status)?.count ?? 0);
-          const taskActive = countOf('ACTIVE');
-          const taskCompleted = countOf('COMPLETED');
-          const taskUncollected = countOf('UNCOLLECTED');
-          const taskTotal = taskRows.reduce((sum, r) => sum + Number(r.count ?? 0), 0);
+          const metrics = computeTaskMetrics(taskRows);
           return {
             collected: colRes.collected,
             total_nominal: colRes.total_nominal,
-            task_total: taskTotal,
-            task_completed: taskCompleted,
-            task_active: taskActive,
-            task_closed: taskCompleted + taskUncollected,
-            task_uncollected: taskUncollected,
+            task_total: metrics.task_total,
+            task_completed: metrics.task_completed,
+            task_active: metrics.task_active,
+            task_closed: metrics.task_closed,
+            task_uncollected: metrics.task_uncollected,
           };
         }),
         db.query.assignments.findMany({
@@ -146,6 +140,11 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           total_nominal: Number(monthStats.total_nominal),
           task_total: monthStats.task_total,
           task_completed: monthStats.task_completed,
+          // Field baru (kontrak 2026-09-13) — selalu ada sejak taskMetrics
+          // dipusatkan; MonthStats mempertahankannya opsional demi APK lama.
+          task_active: monthStats.task_active,
+          task_closed: monthStats.task_closed,
+          task_uncollected: monthStats.task_uncollected,
         },
         pending_tasks: pendingAssignments.map((a) => ({
           id: a.id,
@@ -315,23 +314,15 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           .groupBy(schema.assignments.status),
       ]);
 
-      const countOf = (status: string) =>
-        Number(taskRows.find((r) => r.status === status)?.count ?? 0);
-      const completedCount = countOf('COMPLETED');
-      const activeCount = countOf('ACTIVE');
-      const uncollectedCount = countOf('UNCOLLECTED');
-      // Seluruh assignment pada scope + periode (kontrak metrik final,
-      // docs/audit/dasar-perbaikan-metrik-tugas-mobile-2026-09-13.md §7).
-      const totalCount = taskRows.reduce((sum, r) => sum + Number(r.count ?? 0), 0);
-
+      const metrics = computeTaskMetrics(taskRows);
       return sendSuccess(reply, {
         collected: colRes.collected,
         total_nominal: Number(colRes.total_nominal),
-        task_active: activeCount,
-        task_completed: completedCount,
-        task_closed: completedCount + uncollectedCount,
-        task_uncollected: uncollectedCount,
-        task_total: totalCount,
+        task_active: metrics.task_active,
+        task_completed: metrics.task_completed,
+        task_closed: metrics.task_closed,
+        task_uncollected: metrics.task_uncollected,
+        task_total: metrics.task_total,
         months_covered: monthsCovered,
       });
     } catch (error) {
