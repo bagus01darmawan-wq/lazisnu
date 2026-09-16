@@ -4,7 +4,13 @@ import { relations, sql } from 'drizzle-orm';
 // Enums
 export const userRoleEnum = pgEnum('user_role', ['ADMIN_KECAMATAN', 'ADMIN_RANTING', 'PETUGAS']);
 export const collectionStatusEnum = pgEnum('collection_status', ['PENDING', 'COMPLETED', 'FAILED', 'CANCELLED']);
-export const assignmentStatusEnum = pgEnum('assignment_status', ['ACTIVE', 'COMPLETED', 'POSTPONED', 'REASSIGNED', 'UNCOLLECTED']);
+// POSTPONED dihapus 2026-09-16: dead enum — tidak pernah ditulis oleh alur
+// manapun (generator hanya ACTIVE; transfer REASSIGNED; skip UNCOLLECTED)
+// dan tidak ada baris POSTPONED di DB. "Tunda" diwakili oleh status ACTIVE
+// + catatan notes; perubahan periode = assignment baru. Menghapus nilai dari
+// enum di DB memerlukan rekreasi tipe (PostgreSQL tak punya DROP VALUE),
+// lihat docs/ci/RENCANA-HAPUS-POSTPONED-2026-09-16.md.
+export const assignmentStatusEnum = pgEnum('assignment_status', ['ACTIVE', 'COMPLETED', 'REASSIGNED', 'UNCOLLECTED']);
 
 /**
  * Kondisi kaleng — sumber kebenaran perilaku bisnis (menggantikan makna ganda `is_active`).

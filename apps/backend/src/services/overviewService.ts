@@ -233,7 +233,6 @@ export async function getTaskSummary(
   const task_completed = get('COMPLETED');
   const task_uncollected = get('UNCOLLECTED');
   const task_reassigned = get('REASSIGNED');
-  const task_postponed = get('POSTPONED');
 
   return {
     task_active,
@@ -241,8 +240,9 @@ export async function getTaskSummary(
     task_uncollected,
     task_reassigned,
     task_closed: task_completed + task_uncollected,
-    // POSTPONED tetap dihitung pada total sampai datanya dipetakan (fase 4).
-    task_total: task_active + task_completed + task_uncollected + task_reassigned + task_postponed,
+    // POSTPONED dihapus 2026-09-16 (dead enum), sehingga total kini
+    // = ACTIVE + COMPLETED + UNCOLLECTED + REASSIGNED.
+    task_total: task_active + task_completed + task_uncollected + task_reassigned,
   };
 }
 

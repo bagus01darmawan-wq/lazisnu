@@ -49,7 +49,7 @@ interface CanExtended extends BaseCan {
   dukuh_id?: string;
   assignments?: {
     id: string;
-    status: 'ACTIVE' | 'COMPLETED' | 'POSTPONED' | 'REASSIGNED';
+    status: 'ACTIVE' | 'COMPLETED' | 'REASSIGNED';
   }[];
   branch?: {
     name: string;

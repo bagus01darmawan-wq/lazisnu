@@ -239,7 +239,7 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       const body = z.object({
         officer_id: z.string().uuid().optional(),
         backup_officer_id: z.string().uuid().optional(),
-        status: z.enum(['ACTIVE', 'COMPLETED', 'POSTPONED', 'REASSIGNED']).optional(),
+        status: z.enum(['ACTIVE', 'COMPLETED', 'REASSIGNED']).optional(),
         notes: z.string().optional(),
       }).parse(request.body);
 

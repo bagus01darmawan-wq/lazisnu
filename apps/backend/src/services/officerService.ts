@@ -119,11 +119,12 @@ export async function getOfficerDetailWithStats(
     assignmentStats.map((row) => [row.status, Number(row.count)])
   ) as Record<string, number>;
 
+  // POSTPONED dihapus 2026-09-16 (dead enum). Jangan tambahkan
+  // fallback 'POSTPONED' kemari: tidak ada lagi status demikian.
   const totalAssignments = Object.values(countsByStatus).reduce((a, b) => a + b, 0);
   const completedAssignments = countsByStatus['COMPLETED'] || 0;
   const activeAssignments = countsByStatus['ACTIVE'] || 0;
   const uncollectedAssignments = countsByStatus['UNCOLLECTED'] || 0;
-  const postponedAssignments = countsByStatus['POSTPONED'] || 0;
   const reassignedAssignments = countsByStatus['REASSIGNED'] || 0;
 
   const completionRate = totalAssignments > 0
@@ -164,7 +165,6 @@ export async function getOfficerDetailWithStats(
       completed_assignments: completedAssignments,
       active_assignments: activeAssignments,
       uncollected_assignments: uncollectedAssignments,
-      postponed_assignments: postponedAssignments,
       reassigned_assignments: reassignedAssignments,
       completion_rate: completionRate,
       average_per_collection: averagePerCollection,

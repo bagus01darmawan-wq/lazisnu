@@ -14,7 +14,6 @@ export enum UserRole {
 export enum AssignmentStatus {
   ACTIVE = "ACTIVE",
   COMPLETED = "COMPLETED",
-  POSTPONED = "POSTPONED",
   REASSIGNED = "REASSIGNED",
   UNCOLLECTED = "UNCOLLECTED",
 }
