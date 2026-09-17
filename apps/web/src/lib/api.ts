@@ -96,12 +96,17 @@ apiInstance.interceptors.response.use(
 
         originalRequest.headers.Authorization = `Bearer ${access_token}`;
         return apiInstance(originalRequest);
-      } catch (refreshError) {
+      } catch (refreshError: unknown) {
         isRefreshing = false;
         onRefreshFailed(refreshError);
-        
-        // Refresh gagal, paksa logout
-        if (typeof window !== 'undefined') {
+
+        // Logout permanen HANYA jika refresh DITOLAK otoritatif (401/403 =
+        // token invalid/expired/dicabut). 5xx / network error = gangguan
+        // infrastruktur — jangan logout; sesi pulih saat backend normal lagi.
+        const status = (refreshError as { response?: { status?: number } })?.response?.status;
+        const authRejected = status === 401 || status === 403;
+
+        if (typeof window !== 'undefined' && authRejected) {
           authHelper.removeToken();
           window.location.href = '/login';
         }

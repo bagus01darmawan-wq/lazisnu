@@ -5,6 +5,7 @@ import Sidebar from '@/components/Sidebar';
 import { useAuthStore } from '@/store/useAuthStore';
 import { usePathname } from 'next/navigation';
 import api from '@/lib/api';
+import { startSessionKeeper } from '@/lib/session-keeper';
 import type { User } from '@lazisnu/shared-types';
 import { Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -17,6 +18,13 @@ export default function DashboardLayout({
 }) {
   const { user, setUser } = useAuthStore();
   const pathname = usePathname();
+
+  // Refresh token proaktif — access token (15 menit) selalu diperbarui
+  // sebelum expire selama tab terbuka, sehingga pengguna tidak di-logout
+  // setelah idle (penyebab utama "keluar sendiri" di dashboard).
+  useEffect(() => {
+    startSessionKeeper();
+  }, []);
 
   // Hidrasi profil: sessionStorage (zustand persist) kosong di tab baru,
   // padahal cookie token masih valid. Tanpa ini Sidebar spinner selamanya.

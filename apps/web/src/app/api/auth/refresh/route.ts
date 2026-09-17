@@ -44,14 +44,29 @@ export async function POST(request: NextRequest) {
     const data = await backendRes.json();
 
     if (!backendRes.ok || !data.success) {
-      // Clear cookies if refresh fails (since token is invalid or expired)
-      const response = NextResponse.json(data, { status: backendRes.status });
-      response.cookies.delete('lazisnu_token');
-      response.cookies.delete('lazisnu_refresh_token');
+      const status = backendRes.status;
+      // Hapus cookie HANYA jika token ditolak otoritatif (401/403 = token
+      // memang invalid/expired/dicabut). 5xx / gangguan infrastruktur TIDAK
+      // boleh menghapus refresh token — sesi harus bisa pulih saat backend
+      // kembali normal (dulu semua error menghapus cookie → logout massal).
+      const shouldClearCookies = status === 401 || status === 403;
+      const response = NextResponse.json(data, { status });
+      if (shouldClearCookies) {
+        response.cookies.delete('lazisnu_token');
+        response.cookies.delete('lazisnu_refresh_token');
+      }
       return response;
     }
 
     const { access_token, refresh_token: newRefreshToken } = data.data;
+
+    // Sinkronkan maxAge cookie refresh dengan TTL JWT refresh dari backend
+    // (fallback 365d = default JWT_REFRESH_TTL).
+    const REFRESH_FALLBACK_SECONDS = 60 * 60 * 24 * 365;
+    const refreshMaxAge =
+      typeof data.data.refresh_expires_in === 'number' && data.data.refresh_expires_in > 0
+        ? data.data.refresh_expires_in
+        : REFRESH_FALLBACK_SECONDS;
 
     const response = NextResponse.json({
       success: true,
@@ -75,7 +90,7 @@ export async function POST(request: NextRequest) {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
-        maxAge: 60 * 60 * 24 * 7, // 7 days
+        maxAge: refreshMaxAge, // = TTL JWT refresh (dari backend)
         path: '/',
       });
     }

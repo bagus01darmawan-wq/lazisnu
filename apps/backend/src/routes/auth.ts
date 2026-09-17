@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { db } from '../config/database';
 import { users, officers, userSessions } from '../database/schema';
 import { eq, or, and, isNull } from 'drizzle-orm';
-import { generateTokens } from '../middleware/auth';
+import { generateTokens, getRefreshTtlSeconds } from '../middleware/auth';
 import { otpService } from '../services/otp';
 import { storeDeviceSession, isDeviceRevoked, revokeDeviceSession, revokeAllUserSessions, clearDeviceRevocation } from '../services/tokenService';
 import { createSession, getUserSessions } from '../services/sessionService';
@@ -216,6 +216,8 @@ export async function authRoutes(fastify: FastifyInstance) {
       return sendSuccess(reply, {
         access_token: tokens.accessToken,
         refresh_token: tokens.refreshToken,
+        // Sinkronisasi cookie web: maxAge cookie refresh = TTL JWT refresh
+        refresh_expires_in: getRefreshTtlSeconds(user.role),
         user: {
           id: user.id,
           email: user.email,
@@ -567,6 +569,8 @@ export async function authRoutes(fastify: FastifyInstance) {
       return sendSuccess(reply, {
         access_token: tokens.accessToken,
         refresh_token: tokens.refreshToken,
+        // Sinkronisasi cookie web: maxAge cookie refresh = TTL JWT refresh
+        refresh_expires_in: getRefreshTtlSeconds(user.role),
       });
     } catch (error) {
       // F2: semua jalur 401 legitimen sudah return di atas — apapun yang lolos

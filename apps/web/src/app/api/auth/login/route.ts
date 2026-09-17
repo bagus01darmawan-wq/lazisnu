@@ -46,6 +46,15 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Sinkronkan maxAge cookie refresh dengan TTL JWT refresh dari backend
+    // (fallback 365d = default JWT_REFRESH_TTL) agar keduanya tidak pernah
+    // miss-match (dulu cookie 7 hari vs JWT 365 hari → logout paksa hari ke-7).
+    const REFRESH_FALLBACK_SECONDS = 60 * 60 * 24 * 365;
+    const refreshMaxAge =
+      typeof data.data.refresh_expires_in === 'number' && data.data.refresh_expires_in > 0
+        ? data.data.refresh_expires_in
+        : REFRESH_FALLBACK_SECONDS;
+
     // Set Access Token (non-HttpOnly for client Axios and middleware)
     // maxAge 15 menit = 900 detik, sesuai TTL access token
     response.cookies.set('lazisnu_token', access_token, {
@@ -61,7 +70,7 @@ export async function POST(request: NextRequest) {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
-        maxAge: 60 * 60 * 24 * 7, // 7 days
+        maxAge: refreshMaxAge, // = TTL JWT refresh (dari backend), bukan angka bebas
         path: '/',
       });
     }

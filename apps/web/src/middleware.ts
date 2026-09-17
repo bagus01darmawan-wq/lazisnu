@@ -62,7 +62,12 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/dashboard/overview', request.url));
       }
     } catch {
-      // Invalid token or missing JWT_SECRET
+      // Access token expire/invalid — JANGAN langsung logout bila refresh token
+      // masih ada. Client akan memulihkan sesi via POST /api/auth/refresh
+      // (interceptor axios / session-keeper). RBAC tetap ditegakkan backend.
+      if (request.cookies.get('lazisnu_refresh_token')?.value) {
+        return NextResponse.next();
+      }
       const response = NextResponse.redirect(new URL('/login', request.url));
       response.cookies.delete('lazisnu_token');
       return response;
