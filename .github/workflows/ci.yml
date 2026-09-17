@@ -472,6 +472,80 @@ jobs:
         working-directory: apps/mobile/android
         run: ./gradlew assembleDebug --no-daemon
 
+  # ─── Build Staging APK (reproduksi di perangkat nyata) ────────────────────
+  # Tujuan: tiap perubahan kode mobile menghasilkan 1 APK staging (arm64-v8a)
+  # sebagai GITHUB ARTIFACT — bisa diunduh & di-install di HP untuk merepro-
+  # duksi bug di environment staging. Ini BUKAN rilis: tidak menyentuh R2 /
+  # apk.lazisnu.site, dan hanya bisa diakses yang punya akses repo (private).
+  # Jalur rilis resmi (release.yml → R2) tidak terpengaruh.
+  build-staging-apk:
+    name: Build Staging APK (arm64-v8a, API staging)
+    needs: [changes, verify, test-mobile]
+    # Jalankan hanya jika kode mobile berubah (sama persis kondisi job
+    # "Build Android Debug" di atas) atau saat dipicu workflow_dispatch.
+    if: >-
+      always() && !cancelled() &&
+      needs.verify.result == 'success' &&
+      needs.test-mobile.result != 'failure' &&
+      (needs.changes.outputs.mobile == 'true' ||
+       github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          # Pin eksak = packageManager di root package.json (pnpm@10.33.2).
+          # Tanpa ini action menginstal pnpm latest (v11) lalu downgrade
+          # diri (~3 mnt di runner dingin). Upgrade pnpm = ubah sini + packageManager.
+          version: 10.33.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Install dependencies
+        run: |
+          # Sama dengan job Android Debug: dependabot kadang tidak ikut
+          # meng-update pnpm-lock.yaml (ERR_PNPM_OUTDATED_LOCKFILE).
+          if [ "${{ github.actor }}" = "dependabot[bot]" ]; then
+            pnpm install --no-frozen-lockfile
+          else
+            pnpm install --frozen-lockfile
+          fi
+
+      - name: Build shared types
+        run: pnpm build:shared
+
+      # API_URL di-inline ke JS bundle oleh Babel
+      # (transform-inline-environment-variables, lihat apps/mobile/babel.config.js).
+      # Jika TIDAK di-set, fallback di api.ts menunjuk ke API PRODUKSI —
+      # jadi wajib eksplisit di sini.
+      - name: Build Staging APK (arm64-v8a)
+        working-directory: apps/mobile/android
+        env:
+          API_URL: https://staging-api.lazisnu.site
+        run: ./gradlew assembleStagingDebug --no-daemon "-PabiFilter=arm64-v8a" "-PdisableFirebase=true"
+
+      # Artifact private (hanya yang punya akses repo), kedaluwarsa otomatis
+      # setelah 14 hari. if-no-files-found: error → job merah bila APK tidak
+      # ada, agar tidak silently sukses tanpa artifact.
+      - name: Unggah artifact APK staging
+        uses: actions/upload-artifact@v4
+        with:
+          name: lazisnu-staging-arm64-v8a
+          path: apps/mobile/android/app/build/outputs/apk/staging/debug/*.apk
+          retention-days: 14
+          if-no-files-found: error
+
+
   # ─── Build & push image ke GHCR (matrix paralel) ─────────────────────────
   # Tiga image dibangun di runner terpisah secara paralel; dinding ≈ image
   # terlambat (~3 mnt) bukan jumlah ketiganya (~6 mnt). fail-fast default

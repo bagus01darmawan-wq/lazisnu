@@ -1,8 +1,17 @@
 apply plugin: "com.android.application"
-apply plugin: "com.google.gms.google-services"
-apply plugin: "com.google.firebase.crashlytics"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+
+// Firebase Crashlytics & google-services: plugin wajib google-services.json
+// yang mencantumkan applicationId flavor ini. Saat ini hanya ada client
+// com.lazisnucollectorapp dan .debug — TIDAK .staging (butuh akses Firebase
+// console manual). Maka untuk build staging plugin dikondisikan OFF.
+if (project.hasProperty('disableFirebase') && project.getProperty('disableFirebase') == 'true') {
+    logger.lifecycle('Build staging: plugin Firebase & google-services DIKOMPILASI-OUT')
+} else {
+    apply plugin: "com.google.gms.google-services"
+    apply plugin: "com.google.firebase.crashlytics"
+}
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -126,6 +135,30 @@ android {
             }
         }
     }
+
+    // ── productFlavors: memisahkan target API antara staging & produksi ──
+    // Variant = flavor × buildType → assembleStagingDebug, assembleProductionRelease, dst.
+    // Rilis resmi tetap melalui assembleProductionRelease (lihat release.yml).
+    flavorDimensions "env"
+    productFlavors {
+        staging {
+            dimension "env"
+            // WAJIB applicationIdSuffix berbeda agar bisa diinstal paralel
+            // dengan app produksi/debug di HP yang sama (data terpisah,
+            // tidak saling timpa). google-services.json belum punya client
+            // ".staging" → crashlytics DIMATIKAN untuk flavor ini (lihat
+            // blok apply plugin kondisional di atas file ini).
+            applicationIdSuffix ".staging"
+            versionNameSuffix "-staging"
+            resValue "string", "app_name", "Lazisnu (Staging)"
+        }
+        production {
+            dimension "env"
+            // Flavor default: perilaku identik dengan build sebelum
+            // perubahan ini — tidak ada suffix, tetap menuju API produksi.
+        }
+    }
+
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
