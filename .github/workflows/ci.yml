@@ -470,7 +470,13 @@ jobs:
 
       - name: Build Android Debug APK
         working-directory: apps/mobile/android
-        run: ./gradlew assembleDebug --no-daemon
+        # Setelah productFlavors ditambahkan, `assembleDebug` membangun SEMUA
+        # variant (termasuk staging). Job ini hanya verifikasi compile biasa,
+        # jadi pakai flavor production eksplisit. Build staging punya job
+        # tersendiri (build-staging-apk di bawah) yang mematikan plugin
+        # google-services via -PdisableFirebase=true (google-services.json
+        # belum punya client .staging).
+        run: ./gradlew assembleProductionDebug --no-daemon
 
   # ─── Build Staging APK (reproduksi di perangkat nyata) ────────────────────
   # Tujuan: tiap perubahan kode mobile menghasilkan 1 APK staging (arm64-v8a)
