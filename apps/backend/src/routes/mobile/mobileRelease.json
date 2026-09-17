@@ -1,11 +1,11 @@
 {
-  "version": "1.1.9",
-  "versionCode": 27,
-  "apkUrl": "https://apk.lazisnu.site/lazisnu-1.1.9.apk",
+  "version": "1.2.0",
+  "versionCode": 28,
+  "apkUrl": "https://apk.lazisnu.site/lazisnu-1.2.0.apk",
   "apkUrls": {
-    "arm64_v8a": "https://apk.lazisnu.site/lazisnu-1.1.9-arm64-v8a.apk",
-    "armeabi_v7a": "https://apk.lazisnu.site/lazisnu-1.1.9-armeabi-v7a.apk"
+    "arm64_v8a": "https://apk.lazisnu.site/lazisnu-1.2.0-arm64-v8a.apk",
+    "armeabi_v7a": "https://apk.lazisnu.site/lazisnu-1.2.0-armeabi-v7a.apk"
   },
-  "changelog": "- Rilis web: health check /api/health untuk deploy blue-green & produksi - CI: job test-web (12 tes) jadi gate rilis - Perbaiki label audit log (bug case-sensitivity) - Build: image Docker lebih ramping & fail-fast",
+  "changelog": "- Rilis hanya 2 APK per-ABI (arm64 + armeabi), tanpa universal\n- Tombol \"Nanti\" sekarang menunda sesi ini saja: modal update muncul lagi saat aplikasi dibuka kembali\n- Tombol \"Periksa Pembaruan\" benar-benar memeriksa, tidak lagi mengabaikan versi yang ditunda",
   "minimumVersionCode": 0
 }
