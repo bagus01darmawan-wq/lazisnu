@@ -909,7 +909,10 @@ jobs:
             PROBE_ENV=/opt/lazisnu/secrets/env.auth-probe.staging
             if [ "${SKIP_AUTH_PROBE:-0}" = "1" ]; then
               echo "⏭️ SKIP_AUTH_PROBE=1 — probe dilewati (escape hatch)"
-            elif [ ! -e "$PROBE_ENV" ]; then
+            # Uji keberadaan pakai sudo: folder secrets adalah drwx------ root
+            # sehingga user deploy tidak bisa melihat isinya — `[ -e ]` biasa
+            # selalu salah menganggap file belum ada (temuan 2026-09-18).
+            elif ! sudo test -e "$PROBE_ENV"; then
               echo "⚠️ $PROBE_ENV belum ada di VM — probe dilewati (bootstrap). Pasang secret + akun uji sesuai rencana §B.3."
             else
               echo "▶ Menjalankan probe autentikasi staging ..."
