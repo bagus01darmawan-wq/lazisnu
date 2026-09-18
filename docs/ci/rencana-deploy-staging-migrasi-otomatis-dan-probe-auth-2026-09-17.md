@@ -231,3 +231,17 @@ Perubahan kode CI bisa dikerjakan dalam 1 commit kecil. Setelah itu prasyarat
 | Secret file `/opt/lazisnu/secrets/env.auth-probe.staging` (root, 600) | ✅ dibuat 2026-09-18, nama variabel sudah dikoreksi |
 | Uji manual probe sebelum wiring | ✅ `SUCCESS` (LOGIN_OK → ME_OK → PREFETCH_OK 200 → REFRESH_OK → ME_AFTER_REFRESH_OK) |
 
+
+## H. Verifikasi akhir (2026-09-18) — rencana SELESAI ✅
+
+| Gate rencana §D | Hasil |
+|---|---|
+| 1. Migrasi: deploy memuat mig-rasi + `__drizzle_migrations` bertambah + health OK | ✅ `▶ Migrasi DB staging … ✅ Migrasi selesai — skema sudah mutakhir` (~2 detik, idempotent, drizzle 8 baris), `✅ Staging healthy` — terbukti di run 35338486445 & 35345164164 |
+| 2. Probe: deploy memuat `LOGIN_OK … SUCCESS` | ✅ run 35345164164: log `/opt/lazisnu/auth-probe/auth-probe-staging.log` bertambah 19:35:46 `LOGIN_OK → ME_OK → PREFETCH_OK 200 → REFRESH_OK → ME_AFTER_REFRESH_OK → SUCCESS` |
+| 3. Uji negatif | ⏳ disarankan terjadwal terpisah (sengaja salah env ⇒ job merah) — tidak dijalankan hari ini agar staging tidak ditinggal merah |
+| 4. Escape hatch | ✅ kode ada (`skip_db_migrate`/`skip_auth_probe`); perilaku default `'false'` — dispatch kering tidak dijalankan terpisah, jalur push terbukti tidak berubah |
+
+Status pekerjaan: **kedua pekerjaan hidup di deploy staging**. Yang tersisa
+hanyalah operasional: (a) uji negatif sekali saat ada jendela, (b) migrasi
+destruktif tetap lewat SOP maintenance + `SKIP_DB_MIGRATE=1`.
+
