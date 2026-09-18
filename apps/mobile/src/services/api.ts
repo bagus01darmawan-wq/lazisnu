@@ -713,6 +713,17 @@ export const collectionService = {
     return apiRequest('/mobile/cans/visit-required', {method: 'GET'});
   },
 
+  /**
+   * B2: pastikan ada assignment periode berjalan untuk kaleng NON_AKTIF yang
+   * akan diisi petugas. Penjemputan butuh assignment asli
+   * (collections.assignment_id NOT NULL); idempoten.
+   */
+  ensureAssignment: async (
+    canId: string,
+  ): Promise<ApiResponse<{assignment_id: string; status: string}>> => {
+    return apiRequest(`/mobile/cans/${canId}/ensure-assignment`, {method: 'POST'});
+  },
+
   completePeriod: async (): Promise<
     ApiResponse<{period: string; skipped_count: number; message: string}>
   > => {

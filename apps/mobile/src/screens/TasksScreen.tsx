@@ -82,6 +82,13 @@ const TasksScreen: React.FC = () => {
   }, []);
 
   const filteredTasks = tasks.filter(task => {
+    // B2: kaleng NON_AKTIF mendapat section sendiri ("Perlu Dikunjungi").
+    // Meskipun backend /tasks mengembalikan assignment periode berjalan untuk
+    // kaleng NON_AKTIF (diperlukan agar penjemputan berisi bisa tersimpan),
+    // kaleng itu BUKAN tugas penjemputan biasa — jangan tampilkan dua-duanya.
+    if (task.condition === CanCondition.NON_AKTIF) {
+      return false;
+    }
     const query = searchQuery.toLowerCase().trim();
     if (!query) {
       return true;
@@ -186,8 +193,11 @@ const TasksScreen: React.FC = () => {
       {visitRequired.map(v => {
         // Kaleng NON_AKTIF tidak punya assignment asli — bentuk tugas ringkas
         // dari data visit-required supaya layar detail bisa dipakai.
+        // B2: assignment_id dari backend (periode berjalan) bila sudah ada;
+        // kalau belum, id sintetis dipakai hanya sebagai key React —
+        // TaskDetailScreen tahu membedakannya via is_visit_task.
         const visitTask: Task = {
-          id: `visit-${v.can_id}`,
+          id: v.assignment_id ?? `visit-${v.can_id}`,
           can_id: v.can_id,
           qr_code: v.qr_code,
           owner_name: v.owner_name,
@@ -200,6 +210,8 @@ const TasksScreen: React.FC = () => {
           status: AssignmentStatus.ACTIVE,
           assigned_at: v.last_visit ?? new Date().toISOString(),
           period: '',
+          is_visit_task: true,
+          assignment_status: (v.assignment_status as AssignmentStatus | null) ?? null,
         };
         return (
           <TouchableOpacity

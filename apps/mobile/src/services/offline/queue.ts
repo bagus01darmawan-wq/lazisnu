@@ -140,6 +140,28 @@ export const offlineQueue = {
     return true;
   },
 
+  /**
+   * B2: lengkapi assignment_id item yang masih sintetis ("visit-<can_id>")
+   * dengan assignment_id asli. Visit-task (kaleng NON_AKTIF) bisa dibuat saat
+   * offline; assignment aslinya baru didapat saat online. Mengembalikan true
+   * bila item ditemukan dan diperbarui.
+   */
+  patchAssignmentId: (offline_id: string, assignmentId: string): boolean => {
+    if (!assignmentId || assignmentId.startsWith('visit-')) {
+      return false;
+    }
+    const queue = offlineQueue.getQueue();
+    const idx = queue.findIndex(item => item.offline_id === offline_id);
+    const item = queue[idx];
+    if (idx === -1 || !item) {
+      return false;
+    }
+    item.assignment_id = assignmentId;
+    getOfflineStorage().set(getQueueKey(), JSON.stringify(queue));
+    notifyQueueChanged();
+    return true;
+  },
+
   getRetryableQueue: (): QueuedCollection[] => {
     const queue = offlineQueue.getQueue();
     const now = Date.now();

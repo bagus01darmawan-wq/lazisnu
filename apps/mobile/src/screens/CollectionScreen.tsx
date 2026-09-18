@@ -12,6 +12,7 @@ import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useCollectionStore} from '../stores';
 import type {RootStackParamList} from '../navigation/types';
+import {collectionService} from '../services/api';
 import {AppButton, AppCard, AppHeader, AppTextInput} from '../components/ui';
 import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
 import {formatCurrency, formatInputCurrency} from '../utils';
@@ -60,8 +61,31 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
 
   const doSubmit = async (numericNominal: number) => {
     reset();
+
+    // B2: visit-task (kaleng NON_AKTIF) belum tentu punya assignment_id asli.
+    // Id sintetis "visit-<can_id>" TIDAK valid sebagai assignment_id server
+    // (bukan UUID → 400). Buat assignment on-demand dulu; jika offline, antri
+    // dan sync.ts akan melengkapinya saat mengirim.
+    let assignmentId = task.id;
+    if (task.is_visit_task && task.id.startsWith('visit-')) {
+      const res = await collectionService.ensureAssignment(task.can_id);
+      if (res.success && res.data?.assignment_id) {
+        assignmentId = res.data.assignment_id;
+      } else {
+        const code = res.error?.code;
+        const isOffline = code === 'NETWORK_ERROR' || code === 'SESSION_EXPIRED' || !code;
+        if (!isOffline) {
+          // Server menjawab tegas (mis. sudah dijemput periode ini) — jangan
+          // antri data yang pasti ditolak; beri tahu petugas apa adanya.
+          Alert.alert('Tidak Bisa Disimpan', res.error?.message || 'Assignment kaleng ini tidak bisa disiapkan.');
+          return;
+        }
+        // Offline: lanjut antri; sync.ts melengkapi assignment_id saat online.
+      }
+    }
+
     const result = await submitCollection({
-      assignment_id: task.id,
+      assignment_id: assignmentId,
       can_id: task.can_id,
       nominal: numericNominal,
       collected_at: new Date().toISOString(),

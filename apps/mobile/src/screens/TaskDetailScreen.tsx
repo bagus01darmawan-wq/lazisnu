@@ -7,7 +7,7 @@ import {AppButton, AppHeader, SkipReasonSheet} from '../components/ui';
 import type {SkipReasonCode} from '../components/ui';
 import {useTasksStore} from '../stores';
 import {collectionService, tasksService} from '../services/api';
-import {CanCondition} from '@lazisnu/shared-types';
+import {CanCondition, AssignmentStatus} from '@lazisnu/shared-types';
 import type {ProposalStatusResponse} from '@lazisnu/shared-types';
 import {KalengInfoCard} from './scan';
 import {Colors, Radius, Spacing, Typography} from '../theme';
@@ -33,8 +33,16 @@ const TaskDetailScreen: React.FC = () => {
 
   // Status usulan kondisi terbaru untuk tugas ini (on-demand, gagal senyap —
   // banner hanya pelengkap, bukan penghalang alur utama).
+  // B2: untuk visit-task (kaleng NON_AKTIF), task.id MUNGKIN id sintetis
+  // "visit-<can_id>" bila backend belum menyediakan assignment_id. Jangan
+  // kirim id sintetis ke endpoint assignment — itu UUID di DB (invalid input
+  // → crash). Hanya panggil bila id ini assignment asli.
+  const isVisitTaskWithoutAssignment = !!(task.is_visit_task && task.id.startsWith('visit-'));
   useEffect(() => {
     let cancelled = false;
+    if (isVisitTaskWithoutAssignment) {
+      return;
+    }
     tasksService
       .getProposalStatus(task.id)
       .then(res => {
@@ -46,7 +54,7 @@ const TaskDetailScreen: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [task.id]);
+  }, [task.id, isVisitTaskWithoutAssignment]);
 
   const handleSkip = () => {
     setSkipSheetVisible(true);
@@ -113,7 +121,26 @@ const TaskDetailScreen: React.FC = () => {
 
   // B2: kaleng NON_AKTIF ternyata berisi → input penjemputan biasa; setelah
   // nominal masuk, sistem mengembalikannya ke AKTIF (shouldRestoreActive).
+  // Penjemputan butuh assignment asli (collections.assignment_id NOT NULL).
+  // Jika belum ada assignment periode berjalan, CollectionScreen membuatnya
+  // on-demand (POST /mobile/cans/:canId/ensure-assignment); saat offline item
+  // diantri dan dilengkapi otomatis oleh sync.
+  // Yang TIDAK boleh lanjut: kaleng ini sudah dijemput pada periode berjalan
+  // (assignment sudah selesai) — penjemputan kedua akan ditolak server.
+  const visitAlreadyCollectedThisPeriod = !!(
+    task.is_visit_task &&
+    task.assignment_status &&
+    task.assignment_status !== AssignmentStatus.ACTIVE
+  );
   const handleFilled = () => {
+    if (visitAlreadyCollectedThisPeriod) {
+      Alert.alert(
+        'Sudah Dijemput Periode Ini',
+        'Kaleng ini sudah dijemput pada periode berjalan, jadi penjemputan baru tidak bisa dicatat. ' +
+        'Hubungi admin bila nominalnya perlu dikoreksi.',
+      );
+      return;
+    }
     navigation.navigate('Collection', {task});
   };
 

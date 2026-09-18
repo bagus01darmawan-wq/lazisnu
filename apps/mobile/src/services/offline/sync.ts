@@ -171,7 +171,41 @@ export const syncService = {
       }
 
       try {
-        const payload = remaining.map(toBatchPayload);
+        // B2: item dari visit-task (kaleng NON_AKTIF) mungkin masih membawa
+        // assignment_id sintetis "visit-<can_id>" bila dibuat saat offline.
+        // Sebelum mengirim batch, lengkapi assignment_id asli on-demand;
+        // item yang masih sintetis ditahan (jangan dikirim → 400 pasti).
+        const ready: QueuedCollection[] = [];
+        const held: QueuedCollection[] = [];
+        for (const item of remaining) {
+          if (item.assignment_id.startsWith('visit-')) {
+            try {
+              const res = await collectionService.ensureAssignment(item.can_id);
+              if (res.success && res.data?.assignment_id) {
+                offlineQueue.patchAssignmentId(item.offline_id, res.data.assignment_id);
+                ready.push({...item, assignment_id: res.data.assignment_id});
+                continue;
+              }
+            } catch {
+              // belum online / gagal → tahan item ini
+            }
+            held.push(item);
+          } else {
+            ready.push(item);
+          }
+        }
+
+        if (ready.length === 0) {
+          devLog(`[Sync] ${held.length} item ditahan (assignment_id belum tersedia).`);
+          return {
+            success: held.length === 0,
+            synced: totalSynced,
+            failed: totalFailed,
+            remaining: held.length,
+          };
+        }
+
+        const payload = ready.map(toBatchPayload);
         const response = await collectionService.batchSubmit(payload);
 
         if (response.success && response.data) {

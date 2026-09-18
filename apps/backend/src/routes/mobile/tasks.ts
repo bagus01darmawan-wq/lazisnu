@@ -229,6 +229,10 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         return sendSuccess(reply, { items: [], total: 0 });
       }
 
+      const currentPeriod = new Date();
+      const year = currentPeriod.getFullYear();
+      const month = currentPeriod.getMonth() + 1;
+
       const cans = await db.query.cans.findMany({
         where: and(
           eq(schema.cans.branchId, officer.branchId),
@@ -245,19 +249,130 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         orderBy: [asc(schema.cans.qrCode)],
       });
 
-      const items = cans.map((c) => ({
-        can_id: c.id,
-        qr_code: c.qrCode,
-        owner_name: c.ownerName,
-        owner_address: c.ownerAddress,
-        latitude: c.latitude,
-        longitude: c.longitude,
-        condition: c.condition,
-        last_visit: c.visits[0]?.visitedAt ?? null,
-        last_visit_purpose: c.visits[0]?.purpose ?? null,
+      const items = await Promise.all(cans.map(async (c) => {
+        // B2: kaleng NON_AKTIF tidak diberi assignment oleh aturan
+        // (ASSIGNABLE_CONDITIONS). Tapi kaleng NON_AKTIF yang TERNYATA berisi
+        // harus bisa dikembalikan ke AKTIF — penjemputan berisi butuh assignment
+        // (collections.assignment_id NOT NULL). Karena itu cari assignment
+        // periode berjalan untuk kaleng ini; bila tidak ada, app membuatnya
+        // on-demand lewat POST /mobile/cans/:canId/ensure-assignment.
+        // null = belum ada assignment.
+        const assignment = await db.query.assignments.findFirst({
+          where: and(
+            eq(schema.assignments.canId, c.id),
+            eq(schema.assignments.periodYear, year),
+            eq(schema.assignments.periodMonth, month),
+          ),
+          columns: { id: true, status: true },
+        });
+
+        return {
+          can_id: c.id,
+          qr_code: c.qrCode,
+          owner_name: c.ownerName,
+          owner_address: c.ownerAddress,
+          latitude: c.latitude,
+          longitude: c.longitude,
+          condition: c.condition,
+          assignment_id: assignment?.id ?? null,
+          assignment_status: assignment?.status ?? null,
+          last_visit: c.visits[0]?.visitedAt ?? null,
+          last_visit_purpose: c.visits[0]?.purpose ?? null,
+        };
       }));
 
       return sendSuccess(reply, { items, total: items.length });
+    } catch (error: unknown) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  /**
+   * POST /mobile/cans/:canId/ensure-assignment (B2)
+   *
+   * Kaleng NON_AKTIF tidak punya assignment (ASSIGNABLE_CONDITIONS tidak
+   * termasuk NON_AKTIF). Saat petugas menekan "Kaleng Terisi", app butuh
+   * assignment asli agar penjemputan bisa disimpan (collections.assignment_id
+   * NOT NULL). Endpoint ini membuat assignment periode berjalan jika belum
+   * ada (idempoten), lalu mengembalikannya.
+   */
+  fastify.post('/cans/:canId/ensure-assignment', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { canId } = request.params as { canId: string };
+      const user = request.currentUser!;
+      const officerId = user.officerId;
+
+      if (!officerId) {
+        return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
+      }
+
+      const can = await db.query.cans.findFirst({
+        where: eq(schema.cans.id, canId),
+        columns: { id: true, branchId: true, condition: true, isActive: true },
+      });
+      if (!can) {
+        return sendError(reply, 404, 'NOT_FOUND', 'Kaleng tidak ditemukan');
+      }
+
+      // Wilayah: petugas hanya boleh kaleng di branch-nya sendiri.
+      await assertCanAccess(user, can, 'Kaleng ini bukan wilayah Anda');
+
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+
+      const existing = await db.query.assignments.findFirst({
+        where: and(
+          eq(schema.assignments.canId, canId),
+          eq(schema.assignments.officerId, officerId),
+          eq(schema.assignments.periodYear, year),
+          eq(schema.assignments.periodMonth, month),
+        ),
+        columns: { id: true, status: true },
+      });
+      if (existing) {
+        if (existing.status !== 'ACTIVE') {
+          // Sudah ada penjemputan periode ini (mis. tersimpan Rp 0 sebelum kaleng
+          // NON_AKTIF). Bukan kasus "belum ada assignment" — jangan ciptakan yang
+          // baru (melanggar can_officer_period_unq) dan jangan diam-diam gagal.
+          return sendError(
+            reply,
+            409,
+            'ASSIGNMENT_NOT_ACTIVE',
+            `Kaleng ini sudah dijemput pada periode ${month}/${year} (status: ${existing.status}).`,
+          );
+        }
+        return sendSuccess(reply, { assignment_id: existing.id, status: existing.status });
+      }
+
+      const [assignment] = await db.insert(schema.assignments).values({
+        canId,
+        officerId,
+        periodYear: year,
+        periodMonth: month,
+        status: 'ACTIVE',
+        assignedAt: now,
+        notes: 'Dibuat otomatis saat petugas menandai kaleng NON_AKTIF berisi (B2)',
+      }).onConflictDoNothing().returning({ id: schema.assignments.id });
+
+      if (!assignment) {
+        // Balapan jarang: baris sudah dibuat permintaan lain — ambil yang ada.
+        const raced = await db.query.assignments.findFirst({
+          where: and(
+            eq(schema.assignments.canId, canId),
+            eq(schema.assignments.officerId, officerId),
+            eq(schema.assignments.periodYear, year),
+            eq(schema.assignments.periodMonth, month),
+          ),
+          columns: { id: true, status: true },
+        });
+        if (!raced) {
+          return sendInternalError(reply, new Error('Gagal membuat assignment'), fastify.log);
+        }
+        return sendSuccess(reply, { assignment_id: raced.id, status: raced.status });
+      }
+
+      return sendSuccess(reply, { assignment_id: assignment.id, status: 'ACTIVE' });
     } catch (error: unknown) {
       return sendInternalError(reply, error, fastify.log);
     }

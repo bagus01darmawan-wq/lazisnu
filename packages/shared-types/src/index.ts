@@ -301,6 +301,19 @@ export interface Task {
     nominal: number;
     date: string;
   };
+  /**
+   * B2: true jika tugas ini berasal dari daftar "Perlu Dikunjungi" (kaleng
+   * NON_AKTIF), bukan dari assignment asli. `id` mungkin berisi assignment_id
+   * asli bila backend menyediakannya — jika tidak, id TIDAK boleh dipakai
+   * sebagai assignment_id (lihat isVisitTask guard di TaskDetailScreen).
+   */
+  is_visit_task?: boolean;
+  /**
+   * B2 (khusus visit-task): status assignment periode berjalan kaleng ini.
+   * null/undefined = belum ada assignment (dibuat on-demand saat penjemputan).
+   * Selain ACTIVE = sudah dijemput periode ini → penjemputan baru ditolak.
+   */
+  assignment_status?: AssignmentStatus | null;
 }
 
 /** B2: kaleng NON_AKTIF di wilayah petugas yang perlu dikunjungi (bukan assignment). */
@@ -312,6 +325,14 @@ export interface VisitTask {
   latitude?: number;
   longitude?: number;
   condition: CanCondition;
+  /**
+   * B2: assignment periode berjalan untuk kaleng NON_AKTIF, bila ada.
+   * Kaleng NON_AKTIF tidak diberi assignment saat dibuat (ASSIGNABLE_CONDITIONS),
+   * tapi penjemputan berisi butuh assignment (collections.assignment_id NOT NULL).
+   * null = belum ada assignment; app wajib membuatnya on-demand sebelum submit.
+   */
+  assignment_id?: string | null;
+  assignment_status?: string | null;
   last_visit: string | null;
   last_visit_purpose: CanVisitPurpose | null;
 }
