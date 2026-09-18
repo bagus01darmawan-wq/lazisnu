@@ -137,7 +137,7 @@ const TaskDetailScreen: React.FC = () => {
       Alert.alert(
         'Sudah Dijemput Periode Ini',
         'Kaleng ini sudah dijemput pada periode berjalan, jadi penjemputan baru tidak bisa dicatat. ' +
-        'Hubungi admin bila nominalnya perlu dikoreksi.',
+          'Hubungi admin bila nominalnya perlu dikoreksi.',
       );
       return;
     }

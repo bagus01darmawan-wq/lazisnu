@@ -70,9 +70,10 @@ describe('B2 — visit-task assignment resolution (sync.ts)', () => {
       goOnline();
       offlineQueue.enqueue(createVisitItem());
 
-      const ensureSpy = jest
-        .spyOn(collectionService, 'ensureAssignment')
-        .mockResolvedValueOnce({success: true, data: {assignment_id: REAL_ASSIGNMENT_ID, status: 'ACTIVE'}});
+      const ensureSpy = jest.spyOn(collectionService, 'ensureAssignment').mockResolvedValueOnce({
+        success: true,
+        data: {assignment_id: REAL_ASSIGNMENT_ID, status: 'ACTIVE'},
+      });
 
       const batchSubmitSpy = jest.spyOn(collectionService, 'batchSubmit').mockResolvedValueOnce({
         success: true,
@@ -101,9 +102,10 @@ describe('B2 — visit-task assignment resolution (sync.ts)', () => {
       goOnline();
       offlineQueue.enqueue(createVisitItem());
 
-      jest
-        .spyOn(collectionService, 'ensureAssignment')
-        .mockResolvedValueOnce({success: false, error: {code: 'NETWORK_ERROR', message: 'Tidak ada koneksi'}});
+      jest.spyOn(collectionService, 'ensureAssignment').mockResolvedValueOnce({
+        success: false,
+        error: {code: 'NETWORK_ERROR', message: 'Tidak ada koneksi'},
+      });
 
       const batchSubmitSpy = jest.spyOn(collectionService, 'batchSubmit');
 
@@ -123,7 +125,10 @@ describe('B2 — visit-task assignment resolution (sync.ts)', () => {
 
       jest.spyOn(collectionService, 'ensureAssignment').mockResolvedValueOnce({
         success: false,
-        error: {code: 'ASSIGNMENT_NOT_ACTIVE', message: 'Kaleng ini sudah dijemput pada periode 9/2026'},
+        error: {
+          code: 'ASSIGNMENT_NOT_ACTIVE',
+          message: 'Kaleng ini sudah dijemput pada periode 9/2026',
+        },
       });
       const batchSubmitSpy = jest.spyOn(collectionService, 'batchSubmit');
 

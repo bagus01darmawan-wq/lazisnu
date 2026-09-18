@@ -212,7 +212,9 @@ export const syncService = {
         if (permanentlyRejected.length > 0) {
           offlineQueue.moveToFailedPermanent(permanentlyRejected);
           totalFailed += permanentlyRejected.length;
-          devLog(`[Sync] ${permanentlyRejected.length} item ditolak permanen (assignment tidak tersedia).`);
+          devLog(
+            `[Sync] ${permanentlyRejected.length} item ditolak permanen (assignment tidak tersedia).`,
+          );
         }
 
         if (ready.length === 0) {

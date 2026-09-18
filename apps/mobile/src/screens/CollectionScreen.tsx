@@ -77,7 +77,10 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
         if (!isOffline) {
           // Server menjawab tegas (mis. sudah dijemput periode ini) — jangan
           // antri data yang pasti ditolak; beri tahu petugas apa adanya.
-          Alert.alert('Tidak Bisa Disimpan', res.error?.message || 'Assignment kaleng ini tidak bisa disiapkan.');
+          Alert.alert(
+            'Tidak Bisa Disimpan',
+            res.error?.message || 'Assignment kaleng ini tidak bisa disiapkan.',
+          );
           return;
         }
         // Offline: lanjut antri; sync.ts melengkapi assignment_id saat online.
