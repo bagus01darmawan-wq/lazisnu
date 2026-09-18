@@ -11,7 +11,8 @@ import { Errors } from '../../utils/errorCatalog';
 import { correctCollection } from '../../services/collectionCorrectionService';
 
 import { validateAssignmentForSubmit, submitCollection, getLatestCollectionCondition } from '../../services/collectionSubmission';
-import { getPostgresError } from '../../utils/error-guards';
+import { getPostgresError, getErrorMessage } from '../../utils/error-guards';
+import { evaluateEmptyStreakForCan } from '../../services/conditionProposalService';
 
 type MobileHistoryCollection = {
   id: string;
@@ -93,6 +94,20 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
           deviceInfo: body.device_info as any,
         });
       });
+
+      // B2: kaleng NON_AKTIF yang ternyata berisi harus kembali AKTIF, dan ini
+      // harus berlaku juga pada jalur submit ONLINE (bukan hanya batch sync).
+      // Tanpa ini, kaleng tetap NON_AKTIF sampai ada sinkronisasi berikutnya —
+      // muncul lagi di daftar "Perlu Dikunjungi" padahal sudah dijemput.
+      // Kegagalan evaluasi tidak boleh menggagalkan penjemputan yang tercatat.
+      try {
+        await evaluateEmptyStreakForCan(body.can_id);
+      } catch (conditionError) {
+        fastify.log.warn(
+          { err: conditionError },
+          `evaluasi kondisi kaleng gagal setelah submit online: ${getErrorMessage(conditionError)}`,
+        );
+      }
 
       const insertedCan = await db.query.cans.findFirst({ 
         where: eq(schema.cans.id, body.can_id),
