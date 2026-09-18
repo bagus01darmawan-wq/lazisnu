@@ -32,6 +32,32 @@ export async function tasksRoutes(fastify: FastifyInstance) {
 
       const latestCollectionCondition = getLatestCollectionCondition();
 
+      // B2: hitung kaleng NON_AKTIF "perlu dikunjungi" di wilayah petugas.
+      // Branch officer diambil dari token (sama dengan mekanisme akses lain).
+      const officerRec = await db.query.officers.findFirst({
+        where: eq(schema.officers.id, officerId),
+        columns: { id: true, branchId: true },
+      });
+      let visitTasks = { total: 0, completed: 0 };
+      if (officerRec?.branchId) {
+        const nonaktifCans = await db.query.cans.findMany({
+          where: and(
+            eq(schema.cans.branchId, officerRec.branchId),
+            eq(schema.cans.condition, 'NON_AKTIF'),
+            eq(schema.cans.isActive, true),
+          ),
+          columns: { id: true },
+          with: {
+            visits: { limit: 1, columns: { id: true } },
+          },
+        });
+        visitTasks = {
+          total: nonaktifCans.length,
+          // Menghitung KALENG, bukan kunjungan: 1 kaleng 3x visit = 1 selesai.
+          completed: nonaktifCans.filter((c) => c.visits.length > 0).length,
+        };
+      }
+
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const weekStart = new Date(today);
@@ -102,7 +128,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           where: and(eq(schema.assignments.officerId, officerId), eq(schema.assignments.status, 'ACTIVE')),
           with: {
             can: {
-              columns: { id: true, qrCode: true, ownerName: true, ownerAddress: true, latitude: true, longitude: true },
+              columns: { id: true, qrCode: true, ownerName: true, ownerAddress: true, latitude: true, longitude: true, condition: true, isActive: true },
             },
           },
           limit: 10,
@@ -154,8 +180,15 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           address: a.can.ownerAddress,
           latitude: a.can.latitude,
           longitude: a.can.longitude,
+          condition: a.can.condition,
+          is_active: a.can.isActive,
           assigned_at: a.assignedAt,
         })),
+        // B2: kaleng NON_AKTIF di wilayah petugas — "tugas kunjungan"
+        // (bukan assignment). Dihitung sebagai jumlah KALENG, bukan jumlah
+        // kunjungan: 1 kaleng 3x visit = 1. Kaleng yang sudah ditarik
+        // (DIKEMBALIKAN) otomatis keluar dari pembilang & penyebut.
+        visit_tasks: visitTasks,
         recent_collections: latestRecent.map((c) => ({
           id: c.id,
           qr_code: c.can.qrCode,
@@ -170,6 +203,66 @@ export async function tasksRoutes(fastify: FastifyInstance) {
   });
 
   // GET /mobile/tasks
+  /**
+   * GET /mobile/cans/visit-required
+   *
+   * Daftar kaleng NON_AKTIF di wilayah petugas yang perlu dikunjungi untuk
+   * penyelesaian (pencabutan / verifikasi). Tidak menggunakan assignments —
+   * kaleng NON_AKTIF memang tidak punya assignment (di luar mekanisme normal).
+   * Filter wilayah tetap lewat `assertCanAccess` per item.
+   */
+  fastify.get('/cans/visit-required', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = request.currentUser!;
+      const officerId = user.officerId;
+      if (!officerId) {
+        return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
+      }
+
+      // Officer selalu terikat ke 1 branch (ranting) — filter dari sana, bukan
+      // dari parameter permintaan, supaya tidak bisa melihat wilayah lain.
+      const officer = await db.query.officers.findFirst({
+        where: eq(schema.officers.id, officerId),
+        columns: { id: true, branchId: true, districtId: true },
+      });
+      if (!officer?.branchId) {
+        return sendSuccess(reply, { items: [], total: 0 });
+      }
+
+      const cans = await db.query.cans.findMany({
+        where: and(
+          eq(schema.cans.branchId, officer.branchId),
+          eq(schema.cans.condition, 'NON_AKTIF'),
+          eq(schema.cans.isActive, true),
+        ),
+        with: {
+          visits: {
+            limit: 1,
+            orderBy: [desc(schema.canVisits.visitedAt)],
+            columns: { id: true, purpose: true, visitedAt: true },
+          },
+        },
+        orderBy: [asc(schema.cans.qrCode)],
+      });
+
+      const items = cans.map((c) => ({
+        can_id: c.id,
+        qr_code: c.qrCode,
+        owner_name: c.ownerName,
+        owner_address: c.ownerAddress,
+        latitude: c.latitude,
+        longitude: c.longitude,
+        condition: c.condition,
+        last_visit: c.visits[0]?.visitedAt ?? null,
+        last_visit_purpose: c.visits[0]?.purpose ?? null,
+      }));
+
+      return sendSuccess(reply, { items, total: items.length });
+    } catch (error: unknown) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
   fastify.get('/tasks', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const user = request.currentUser!;
@@ -199,7 +292,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           where: whereClause,
           with: {
             can: {
-              columns: { id: true, qrCode: true, ownerName: true, ownerPhone: true, ownerAddress: true, latitude: true, longitude: true },
+              columns: { id: true, qrCode: true, ownerName: true, ownerPhone: true, ownerAddress: true, latitude: true, longitude: true, condition: true, isActive: true },
             },
           },
           orderBy: [
@@ -240,6 +333,8 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         owner_address: a.can.ownerAddress,
         latitude: a.can.latitude,
         longitude: a.can.longitude,
+        condition: a.can.condition,
+        is_active: a.can.isActive,
         status: a.status,
         assigned_at: a.assignedAt,
         period: `${a.periodYear}-${String(a.periodMonth).padStart(2, '0')}`,
@@ -672,7 +767,33 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       }).returning();
 
       let newCondition: CanConditionValue | null = null;
-      if (body.purpose === 'PENGGANTIAN') {
+      let visitMessage = 'Kunjungan tercatat sebagai kunjungan, bukan penjemputan';
+      if (body.purpose === 'PENCABUTAN') {
+        // Petugas menarik kaleng NON_AKTIF untuk dikembalikan ke kantor (B2).
+        // Hanya dari NON_AKTIF — kondisi lain tidak punya "kasus terbuka" untuk
+        // ditutup. Transisi dikunci oleh ALLOWED_TRANSITIONS.
+        const current = can.condition as CanConditionValue;
+        if (current !== 'NON_AKTIF') {
+          return sendError(reply, 409, 'CAN_NOT_WITHDRAWN',
+            `Kaleng berstatus ${current} — hanya kaleng NON_AKTIF yang dapat dicabut`);
+        }
+        if (!isTransitionAllowed(current, 'DIKEMBALIKAN')) {
+          return sendError(reply, 409, 'INVALID_TRANSITION',
+            'Kaleng dalam kondisi yang tidak dapat ditarik saat ini');
+        }
+        await db.update(schema.cans)
+          .set({ condition: 'DIKEMBALIKAN', isActive: false, updatedAt: new Date() })
+          .where(eq(schema.cans.id, canId));
+        // Kasus tertutup → assignment tidak lagi dianggap aktif.
+        await db.update(schema.assignments)
+          .set({ status: 'COMPLETED', updatedAt: new Date() })
+          .where(and(
+            eq(schema.assignments.canId, canId),
+            eq(schema.assignments.status, 'ACTIVE'),
+          ));
+        newCondition = 'DIKEMBALIKAN';
+        visitMessage = 'Kaleng dicabut dan ditandai dikembalikan ke kantor';
+      } else if (body.purpose === 'PENGGANTIAN') {
         const current = can.condition as CanConditionValue;
         const target = conditionAfterReplacementVisit(current);
         if (target && isTransitionAllowed(current, target)) {
@@ -689,7 +810,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         purpose: visit.purpose,
         visited_at: visit.visitedAt,
         condition: newCondition ?? can.condition,
-        message: 'Kunjungan tercatat sebagai kunjungan, bukan penjemputan',
+        message: visitMessage,
       }, 201);
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {

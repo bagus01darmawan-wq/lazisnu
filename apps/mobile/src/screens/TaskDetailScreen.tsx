@@ -7,6 +7,7 @@ import {AppButton, AppHeader, SkipReasonSheet} from '../components/ui';
 import type {SkipReasonCode} from '../components/ui';
 import {useTasksStore} from '../stores';
 import {collectionService, tasksService} from '../services/api';
+import {CanCondition} from '@lazisnu/shared-types';
 import type {ProposalStatusResponse} from '@lazisnu/shared-types';
 import {KalengInfoCard} from './scan';
 import {Colors, Radius, Spacing, Typography} from '../theme';
@@ -54,11 +55,20 @@ const TaskDetailScreen: React.FC = () => {
   // Kunjungan non-penjemputan (Fase 3): verifikasi kaleng non-aktif atau
   // penggantian unit rusak/hilang. Bukan collection — tanpa nominal dan
   // tidak mengubah angka infak.
-  const submitVisit = async (purpose: 'VERIFIKASI' | 'PENGGANTIAN') => {
+  const submitVisit = async (purpose: 'VERIFIKASI' | 'PENGGANTIAN' | 'PENCABUTAN') => {
     setVisiting(true);
     try {
       const res = await collectionService.recordCanVisit(task.can_id, purpose);
       if (res.success && res.data) {
+        // B2: pencabutan menutup kasus — kembali ke daftar, jangan hanya diam.
+        if (purpose === 'PENCABUTAN') {
+          Alert.alert(
+            'Kaleng Dicabut',
+            res.data.message || 'Kaleng ditandai dikembalikan ke kantor. Tugas selesai.',
+            [{text: 'OK', onPress: () => navigation.goBack()}],
+          );
+          return;
+        }
         Alert.alert(
           'Kunjungan Tercatat',
           `Kondisi kaleng: ${res.data.condition}. Angka infak tidak berubah.`,
@@ -86,6 +96,25 @@ const TaskDetailScreen: React.FC = () => {
         {text: 'Penggantian', onPress: () => void submitVisit('PENGGANTIAN')},
       ],
     );
+  };
+
+  // B2: kaleng NON_AKTIF — petugas menarik kaleng untuk dikembalikan ke kantor.
+  // Konfirmasi tegas karena tindakan ini menutup kasus (DIKEMBALIKAN).
+  const handleWithdraw = () => {
+    Alert.alert(
+      'Cabut Kaleng',
+      'Kaleng akan ditandai DIKEMBALIKAN ke kantor dan kasusnya ditutup. Hanya lakukan jika kaleng sudah Anda bawa.',
+      [
+        {text: 'Batal', style: 'cancel'},
+        {text: 'Cabut Kaleng', style: 'destructive', onPress: () => void submitVisit('PENCABUTAN')},
+      ],
+    );
+  };
+
+  // B2: kaleng NON_AKTIF ternyata berisi → input penjemputan biasa; setelah
+  // nominal masuk, sistem mengembalikannya ke AKTIF (shouldRestoreActive).
+  const handleFilled = () => {
+    navigation.navigate('Collection', {task});
   };
 
   const handleSkipConfirm = async (reasonCode: SkipReasonCode, notes: string) => {
@@ -149,21 +178,53 @@ const TaskDetailScreen: React.FC = () => {
           </View>
         ) : null}
 
+        {/** B2: kaleng NON_AKTIF — perlakuan berbeda: kunjungan + pencabutan. */}
+        {task.condition === CanCondition.NON_AKTIF ? (
+          <View style={styles.proposalBox}>
+            <Text style={styles.proposalTitle}>Kaleng Nonaktif</Text>
+            <Text style={styles.proposalText}>
+              Kaleng ini sudah 6x kosong berturut-turut. Bukan tugas penjemputan biasa — cabut
+              kalengnya untuk dikembalikan ke kantor, atau catat jika kaleng ternyata berisi.
+            </Text>
+          </View>
+        ) : null}
+
         <View style={styles.actions}>
-          <AppButton label="Tidak Dijemput" variant="outline" onPress={handleSkip} fullWidth />
-          <AppButton
-            label={visiting ? 'Mencatat…' : 'Catat Kunjungan'}
-            variant="outline"
-            onPress={handleVisit}
-            fullWidth
-            disabled={visiting}
-          />
-          <AppButton
-            label="Lanjutkan"
-            icon="arrow-right"
-            onPress={() => navigation.navigate('Collection', {task})}
-            fullWidth
-          />
+          {task.condition === CanCondition.NON_AKTIF ? (
+            <>
+              <AppButton
+                label="Kaleng Terisi"
+                icon="cash-multiple"
+                onPress={handleFilled}
+                fullWidth
+              />
+              <AppButton
+                label={visiting ? 'Memproses…' : 'Cabut Kaleng'}
+                icon="package-down"
+                variant="outline"
+                onPress={handleWithdraw}
+                fullWidth
+                disabled={visiting}
+              />
+            </>
+          ) : (
+            <>
+              <AppButton label="Tidak Dijemput" variant="outline" onPress={handleSkip} fullWidth />
+              <AppButton
+                label={visiting ? 'Mencatat…' : 'Catat Kunjungan'}
+                variant="outline"
+                onPress={handleVisit}
+                fullWidth
+                disabled={visiting}
+              />
+              <AppButton
+                label="Lanjutkan"
+                icon="arrow-right"
+                onPress={() => navigation.navigate('Collection', {task})}
+                fullWidth
+              />
+            </>
+          )}
         </View>
       </View>
 

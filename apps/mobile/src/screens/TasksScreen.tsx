@@ -16,6 +16,8 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
 import DraggableFlatList, {RenderItemParams, ScaleDecorator} from 'react-native-draggable-flatlist';
 import type {Task} from '@lazisnu/shared-types';
+import {AssignmentStatus, CanCondition, VisitTask} from '@lazisnu/shared-types';
+import {collectionService} from '../services/api';
 import {useTasksStore, useSyncStore} from '../stores';
 import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
 import type {MainNavigationProp} from '../navigation/types';
@@ -50,12 +52,29 @@ const TasksScreen: React.FC = () => {
   // Urutan pribadi hanya bermakna pada daftar penuh — saat mencari, drag dinonaktifkan.
   const dragEnabled = !searchQuery.trim();
   const [issuesVisible, setIssuesVisible] = useState(false);
+  const [visitRequired, setVisitRequired] = useState<VisitTask[]>([]);
+  const [visitLoading, setVisitLoading] = useState(false);
+
+  const fetchVisitRequired = useCallback(async () => {
+    setVisitLoading(true);
+    try {
+      const res = await collectionService.getVisitRequired();
+      if (res.success && res.data) {
+        setVisitRequired(res.data.items);
+      }
+    } catch {
+      // Bukan halangan utama — daftar penjemputan tetap tampil.
+    } finally {
+      setVisitLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetchTasks();
     fetchStats();
+    fetchVisitRequired();
     checkStatus();
-  }, [checkStatus, fetchTasks, fetchStats]);
+  }, [checkStatus, fetchTasks, fetchStats, fetchVisitRequired]);
 
   const copyToClipboard = useCallback((text: string) => {
     Clipboard.setString(text);
@@ -160,6 +179,40 @@ const TasksScreen: React.FC = () => {
 
       <Text style={[styles.sectionTitle, styles.sectionTitleFirst]}>Perlu Dijemput</Text>
 
+      {/* B2: kaleng NON_AKTIF — bukan penjemputan, tapi kunjungan penyelesaian. */}
+      {visitRequired.length > 0 && (
+        <Text style={styles.sectionTitle}>Perlu Dikunjungi ({visitRequired.length})</Text>
+      )}
+      {visitRequired.map(v => {
+        // Kaleng NON_AKTIF tidak punya assignment asli — bentuk tugas ringkas
+        // dari data visit-required supaya layar detail bisa dipakai.
+        const visitTask: Task = {
+          id: `visit-${v.can_id}`,
+          can_id: v.can_id,
+          qr_code: v.qr_code,
+          owner_name: v.owner_name,
+          owner_phone: '',
+          owner_address: v.owner_address ?? '',
+          latitude: v.latitude,
+          longitude: v.longitude,
+          condition: CanCondition.NON_AKTIF,
+          is_active: true,
+          status: AssignmentStatus.ACTIVE,
+          assigned_at: v.last_visit ?? new Date().toISOString(),
+          period: '',
+        };
+        return (
+          <TouchableOpacity
+            key={v.can_id}
+            accessibilityRole={'button'}
+            accessibilityLabel={`Detail kaleng nonaktif ${v.qr_code}`}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('TaskDetail', {task: visitTask})}>
+            <TaskItem item={visitTask} index={0} onCopy={copyToClipboard} />
+          </TouchableOpacity>
+        );
+      })}
+
       {!!error && !isLoading && (
         <TouchableOpacity
           accessibilityRole={'button'}
@@ -194,6 +247,7 @@ const TasksScreen: React.FC = () => {
             onRefresh={() => {
               fetchTasks();
               fetchStats();
+              fetchVisitRequired();
               checkStatus();
             }}
             colors={[Colors.brand.emerald]}
