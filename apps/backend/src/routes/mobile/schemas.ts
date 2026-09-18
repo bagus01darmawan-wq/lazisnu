@@ -60,7 +60,7 @@ export const skipAssignmentSchema = z.object({
 
 /** POST /mobile/cans/:canId/visits — kunjungan verifikasi / penggantian (BUKAN penjemputan). */
 export const canVisitSchema = z.object({
-  purpose: z.enum(['VERIFIKASI', 'PENGGANTIAN']),
+  purpose: z.enum(['VERIFIKASI', 'PENGGANTIAN', 'PENCABUTAN']),
   visited_at: z.string().datetime().optional(),
   assignment_id: z.string().uuid().optional(),
   notes: z.string().max(255).optional(),

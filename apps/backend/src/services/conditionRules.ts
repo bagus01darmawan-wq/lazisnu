@@ -194,5 +194,5 @@ export function conditionAfterReplacementVisit(current: CanConditionValue): CanC
 }
 
 export function isValidVisitPurpose(purpose: string): purpose is CanVisitPurpose {
-  return purpose === 'VERIFIKASI' || purpose === 'PENGGANTIAN';
+  return purpose === 'VERIFIKASI' || purpose === 'PENGGANTIAN' || purpose === 'PENCABUTAN';
 }

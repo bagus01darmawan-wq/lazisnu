@@ -63,6 +63,10 @@ global.crypto = {
   },
 };
 
+// Unit tests have no native Firebase app. Production behavior is covered by
+// config/__tests__/crashlytics.test.ts with an explicit default-app fixture.
+jest.mock('@react-native-firebase/app', () => ({getApps: jest.fn(() => [])}));
+
 jest.mock('@react-native-firebase/crashlytics', () => {
   const reporter = {
     log: jest.fn(),

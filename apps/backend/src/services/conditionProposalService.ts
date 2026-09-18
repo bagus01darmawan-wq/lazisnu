@@ -253,7 +253,7 @@ export async function getValidCollectionNominals(canId: string, limit = 24) {
   return rows.map((r) => Number(r.nominal));
 }
 
-export type EmptyStreakAction = 'NONE' | 'PROPOSED_INACTIVE' | 'RESTORED_ACTIVE';
+export type EmptyStreakAction = 'NONE' | 'AUTO_NON_AKTIF' | 'RESTORED_ACTIVE';
 
 /**
  * Evaluasi satu kaleng:
@@ -283,19 +283,46 @@ export async function evaluateEmptyStreakForCan(canId: string) {
   }
 
   if (shouldProposeInactive(condition, emptyStreak)) {
-    const proposal = await createConditionProposal({
-      canId,
-      toCondition: 'NON_AKTIF',
-      triggerSource: 'EMPTY_THRESHOLD',
-      reasonCode: 'EMPTY_STREAK',
-      reasonNote: `${emptyStreak} penjemputan kosong berturut-turut (ambang ${EMPTY_STREAK_THRESHOLD})`,
-      evidenceCount: emptyStreak,
+    // Ambang 6x kosong adalah toleransinya sendiri — tidak perlu approval admin
+    // (amandemen keputusan 3 & 19, 2026-09-18). Kondisi diterapkan langsung, tapi
+    // jejaknya tetap ditulis sebagai proposal APPROVED supaya audit "kapan dan
+    // kenapa kaleng ini jadi nonaktif" tidak hilang.
+    const now = new Date();
+    await db.transaction(async (tx) => {
+      await tx.update(schema.cans)
+        .set({ condition: 'NON_AKTIF', isActive: true, updatedAt: now })
+        .where(eq(schema.cans.id, canId));
+
+      await tx.insert(schema.canConditionProposals).values({
+        canId,
+        fromCondition: condition,
+        toCondition: 'NON_AKTIF',
+        triggerSource: 'EMPTY_THRESHOLD',
+        reasonCode: 'EMPTY_STREAK',
+        reasonNote: `${emptyStreak} penjemputan kosong berturut-turut (ambang ${EMPTY_STREAK_THRESHOLD}) — diterapkan otomatis`,
+        evidenceCount: emptyStreak,
+        status: 'APPROVED',
+        approvedBy: null,
+        approvedAt: now,
+      });
+
+      // Usulan pending lain untuk kaleng yang sama tidak lagi relevan.
+      await tx.update(schema.canConditionProposals)
+        .set({
+          status: 'REJECTED',
+          approvedBy: null,
+          approvedAt: now,
+          reasonNote: 'Ditutup otomatis: kondisi kaleng sudah berubah',
+        })
+        .where(and(
+          eq(schema.canConditionProposals.canId, canId),
+          eq(schema.canConditionProposals.status, 'PENDING'),
+        ));
     });
     return {
       can_id: canId,
       empty_streak: emptyStreak,
-      action: 'PROPOSED_INACTIVE' as EmptyStreakAction,
-      proposal_id: proposal?.id,
+      action: 'AUTO_NON_AKTIF' as EmptyStreakAction,
     };
   }
 
@@ -328,7 +355,7 @@ export async function evaluateEmptyStreakForScope(
 
   return {
     evaluated: results.length,
-    proposed_inactive: results.filter((r) => r.action === 'PROPOSED_INACTIVE').length,
+    auto_nonaktif: results.filter((r) => r.action === 'AUTO_NON_AKTIF').length,
     restored_active: results.filter((r) => r.action === 'RESTORED_ACTIVE').length,
     results,
   };

@@ -1,4 +1,7 @@
 <resources>
-    <string name="app_name">LazisnuCollectorApp</string>
+    <!-- app_name dideklarasikan ulang per-flavor via resValue di
+         app/build.gradle (flavor "staging" meng-override menjadi
+         "Lazisnu (Staging)"). Jangan tambahkan app_name di sini —
+         duplikat resValue menyebabkan error build. -->
     <string name="CodePushDeploymentKey">placeholder-key</string>
 </resources>

@@ -162,7 +162,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEYSTORE_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
         run: |
-          ./gradlew assembleRelease --no-daemon \
+          ./gradlew assembleProductionRelease --no-daemon \
             "-PabiFilter=${{ matrix.abi_filter }}" \
             "-PreactNativeArchitectures=${{ matrix.rn_architectures }}" \
             -PMYAPP_UPLOAD_STORE_FILE=lazisnu-production.keystore \

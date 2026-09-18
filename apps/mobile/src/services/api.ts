@@ -17,6 +17,7 @@ import {
   RangeStatsResponse,
   ProposalStatusResponse,
   CanVisitHistoryItem,
+  VisitTask,
 } from '@lazisnu/shared-types';
 import {captureAuthEvent} from '../config/crashlytics';
 import {saveRefreshTokenSilent} from './biometric';
@@ -694,7 +695,7 @@ export const collectionService = {
    */
   recordCanVisit: async (
     canId: string,
-    purpose: 'VERIFIKASI' | 'PENGGANTIAN',
+    purpose: 'VERIFIKASI' | 'PENGGANTIAN' | 'PENCABUTAN',
     notes?: string,
   ): Promise<
     ApiResponse<{id: string; can_id: string; purpose: string; condition: string; message: string}>
@@ -703,6 +704,13 @@ export const collectionService = {
       method: 'POST',
       body: JSON.stringify(notes ? {purpose, notes} : {purpose}),
     });
+  },
+
+  /**
+   * B2: daftar kaleng NON_AKTIF di wilayah petugas yang perlu dikunjungi.
+   */
+  getVisitRequired: async (): Promise<ApiResponse<{items: VisitTask[]; total: number}>> => {
+    return apiRequest('/mobile/cans/visit-required', {method: 'GET'});
   },
 
   completePeriod: async (): Promise<

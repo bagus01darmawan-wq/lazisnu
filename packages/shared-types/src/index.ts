@@ -82,7 +82,7 @@ export type CanProposalTriggerSource = "EMPTY_THRESHOLD" | "SKIP_REASON" | "MANU
 export type CanProposalStatus = "PENDING" | "APPROVED" | "REJECTED";
 
 /** Jenis kunjungan non-penjemputan. */
-export type CanVisitPurpose = "VERIFIKASI" | "PENGGANTIAN";
+export type CanVisitPurpose = "VERIFIKASI" | "PENGGANTIAN" | "PENCABUTAN";
 
 // ─── District ─────────────────────────────────────────────────────────────────
 export interface District {
@@ -291,6 +291,9 @@ export interface Task {
   owner_address: string;
   latitude?: number;
   longitude?: number;
+  /** Kondisi kaleng (B2): menentukan perlakuan — NON_AKTIF butuh kunjungan, bukan penjemputan. */
+  condition?: CanCondition;
+  is_active?: boolean;
   status: AssignmentStatus;
   assigned_at: string;
   period: string;
@@ -298,6 +301,19 @@ export interface Task {
     nominal: number;
     date: string;
   };
+}
+
+/** B2: kaleng NON_AKTIF di wilayah petugas yang perlu dikunjungi (bukan assignment). */
+export interface VisitTask {
+  can_id: string;
+  qr_code: string;
+  owner_name: string;
+  owner_address: string;
+  latitude?: number;
+  longitude?: number;
+  condition: CanCondition;
+  last_visit: string | null;
+  last_visit_purpose: CanVisitPurpose | null;
 }
 
 // ─── Dashboard Stats ─────────────────────────────────────────────────────────
@@ -427,6 +443,8 @@ export interface DashboardResponse {
   /** Opsional untuk kompatibilitas aplikasi lama yang masih berjalan. */
   month_stats?: MonthStats;
   pending_tasks: DashboardTaskItem[];
+  /** B2: kaleng NON_AKTIF yang perlu dikunjungi (bukan assignment). Opsional demi APK lama. */
+  visit_tasks?: { total: number; completed: number };
   recent_collections: RecentCollectionSummary[];
 }
 
