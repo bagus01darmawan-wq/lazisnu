@@ -898,17 +898,22 @@ jobs:
             # ─── Probe autentikasi fungsional (versi cepat) ─────────────────
             # Siklus nyata: login → /auth/me → prefetch RSC middleware →
             # refresh → /auth/me. Gagal di tahap mana pun = deploy GAGAL
-            # (fail-closed). Bootstrap: bila secret env file belum dipasang
-            # di VM, probe DILEWATI dengan peringatan (bukan gagal) — begitu
-            # /opt/lazisnu/secrets/env.auth-probe.staging terpasang, probe
+            # (fail-closed).
+            # Dijalankan via sudo: secret sengaja root-only (600) mengikuti
+            # postur probe produksi, sedangkan skrip deploy ini berjalan
+            # sebagai user deploy biasa. Tanpa sudo, file tidak terbaca dan
+            # probe akan ter-skip diam-diam (temuan 2026-09-18).
+            # Bootstrap: bila secret belum ada di VM, probe DILEWATI dengan
+            # peringatan (bukan gagal) — begitu secret terpasang, probe
             # otomatis aktif penuh. Lihat rencana §B di docs/ci/.
+            PROBE_ENV=/opt/lazisnu/secrets/env.auth-probe.staging
             if [ "${SKIP_AUTH_PROBE:-0}" = "1" ]; then
               echo "⏭️ SKIP_AUTH_PROBE=1 — probe dilewati (escape hatch)"
-            elif [ ! -r /opt/lazisnu/secrets/env.auth-probe.staging ]; then
-              echo "⚠️ env.auth-probe.staging belum ada di VM — probe dilewati (bootstrap). Pasang secret + akun uji sesuai rencana §B.3."
+            elif [ ! -e "$PROBE_ENV" ]; then
+              echo "⚠️ $PROBE_ENV belum ada di VM — probe dilewati (bootstrap). Pasang secret + akun uji sesuai rencana §B.3."
             else
               echo "▶ Menjalankan probe autentikasi staging ..."
-              AUTH_PROBE_ENV_FILE=/opt/lazisnu/secrets/env.auth-probe.staging \
+              sudo -H env AUTH_PROBE_ENV_FILE="$PROBE_ENV" \
                 bash scripts/auth-probe.sh \
                 && echo "✅ Probe auth lolos — alur login/refresh sehat" \
                 || { echo "❌ Probe auth GAGAL — fitur autentikasi tidak sehat"; exit 1; }
