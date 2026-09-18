@@ -374,6 +374,11 @@ export async function tasksRoutes(fastify: FastifyInstance) {
 
       return sendSuccess(reply, { assignment_id: assignment.id, status: 'ACTIVE' });
     } catch (error: unknown) {
+      // AppError (mis. 403 "Kaleng ini bukan wilayah Anda") harus diteruskan apa
+      // adanya — sendInternalError akan mengubahnya menjadi 500.
+      if (isAppError(error)) {
+        return sendError(reply, error.statusCode, error.code, error.message);
+      }
       return sendInternalError(reply, error, fastify.log);
     }
   });
