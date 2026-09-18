@@ -37,7 +37,7 @@
     "bullmq": "^6.3.3",
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.45.2",
-    "fastify": "^5.12.1",
+    "fastify": "^5.12.3",
     "firebase-admin": "^13.8.0",
     "ioredis": "^5.4.1",
     "pdf-lib": "^1.17.1",
