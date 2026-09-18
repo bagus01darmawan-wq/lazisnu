@@ -32,7 +32,22 @@ on:
   pull_request:
     branches: [main, master, staging] # PR ke dapur (staging) juga di-CI
     paths-ignore: ['docs/**', '*.md']
-  workflow_dispatch: # Dipakai release.yml dan juga bisa dipicu manual
+  workflow_dispatch:
+    # Dipakai release.yml dan juga bisa dipicu manual (gh workflow run).
+    # Input hanya relevan untuk job Deploy staging; release.yml tidak
+    # mengirim input apa pun → semuanya default 'false' → perilaku identik
+    # dengan sebelum input ini ada.
+    inputs:
+      skip_db_migrate:
+        description: "Deploy staging: lewati migrasi DB (untuk migrasi destruktif via jendela maintenance)"
+        required: false
+        default: 'false'
+        type: boolean
+      skip_auth_probe:
+        description: "Deploy staging: lewati probe autentikasi (darurat)"
+        required: false
+        default: 'false'
+        type: boolean
 
 # Batalkan run lama pada PR yang diganti commit baru.
 # cancel-in-progress: false untuk main/tag → deploy tidak pernah dibatalkan
@@ -778,7 +793,8 @@ jobs:
       always() && !cancelled() &&
       needs.build-image.result == 'success' &&
       github.ref == 'refs/heads/staging' &&
-      (needs.changes.outputs.backend == 'true' ||
+      (github.event_name == 'workflow_dispatch' ||
+       needs.changes.outputs.backend == 'true' ||
        needs.changes.outputs.web    == 'true' ||
        needs.changes.outputs.infra  == 'true')
     runs-on: ubuntu-latest
@@ -792,6 +808,10 @@ jobs:
       GHCR_USER: ${{ github.actor }}
       GHCR_REPO: ${{ github.repository }}
       GIT_REF: ${{ github.ref_name }}
+      # Escape hatch dari input workflow_dispatch — di push biasa keduanya
+      # selalu 'false'. Lihat rencana §A.2/§B.2 di docs/ci/.
+      SKIP_DB_MIGRATE: ${{ inputs.skip_db_migrate || 'false' }}
+      SKIP_AUTH_PROBE: ${{ inputs.skip_auth_probe || 'false' }}
       VM_HOST: ${{ secrets.VM_HOST }}
       VM_USER: ${{ secrets.VM_USER }}
       VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
@@ -805,7 +825,7 @@ jobs:
           username: ${{ env.VM_USER }}
           key: ${{ env.VM_SSH_KEY }}
           # Lihat catatan `envs` di job deploy production.
-          envs: GHCR_TOKEN,GHCR_USER,GHCR_REPO,GIT_REF
+          envs: GHCR_TOKEN,GHCR_USER,GHCR_REPO,GIT_REF,SKIP_DB_MIGRATE,SKIP_AUTH_PROBE
           script: |
             set -e
             cd /opt/lazisnu
@@ -838,6 +858,25 @@ jobs:
             docker pull ghcr.io/$GHCR_REPO/web:latest
             docker pull ghcr.io/$GHCR_REPO/web:staging
 
+            # ─── Migrasi DB staging: skema dulu, kode baru kemudian ─────────
+            # Menirukan run_migrations() di scripts/deploy-blue-green.sh
+            # (produksi). migrate-cli.js idempotent (drizzle mencatat di
+            # __drizzle_migrations) dan exit 1 bila gagal — dengan `set -e`
+            # deploy berhenti SEBELUM compose down, jadi staging tetap hidup
+            # di versi lama. Posisi sebelum `compose up` menjamin container
+            # baru menemukan skema yang ia harap.
+            if [ "${SKIP_DB_MIGRATE:-0}" != "1" ]; then
+              echo "▶ Migrasi DB staging dari image backend:latest ..."
+              docker run --rm \
+                --env-file apps/backend/.env.staging \
+                -e NODE_ENV=production \
+                ghcr.io/$GHCR_REPO/backend:latest \
+                node apps/backend/dist/database/migrate-cli.js
+              echo "✅ Migrasi DB staging selesai"
+            else
+              echo "⏭️ SKIP_DB_MIGRATE=1 — migrasi dilewati (escape hatch)"
+            fi
+
             docker compose -f docker-compose.staging.yml down
             docker compose -f docker-compose.staging.yml up -d
 
@@ -855,6 +894,25 @@ jobs:
               sleep 5
             done
             if [ "$ok" = "1" ]; then echo "✅ Staging healthy"; else echo "❌ Staging DOWN"; exit 1; fi
+
+            # ─── Probe autentikasi fungsional (versi cepat) ─────────────────
+            # Siklus nyata: login → /auth/me → prefetch RSC middleware →
+            # refresh → /auth/me. Gagal di tahap mana pun = deploy GAGAL
+            # (fail-closed). Bootstrap: bila secret env file belum dipasang
+            # di VM, probe DILEWATI dengan peringatan (bukan gagal) — begitu
+            # /opt/lazisnu/secrets/env.auth-probe.staging terpasang, probe
+            # otomatis aktif penuh. Lihat rencana §B di docs/ci/.
+            if [ "${SKIP_AUTH_PROBE:-0}" = "1" ]; then
+              echo "⏭️ SKIP_AUTH_PROBE=1 — probe dilewati (escape hatch)"
+            elif [ ! -r /opt/lazisnu/secrets/env.auth-probe.staging ]; then
+              echo "⚠️ env.auth-probe.staging belum ada di VM — probe dilewati (bootstrap). Pasang secret + akun uji sesuai rencana §B.3."
+            else
+              echo "▶ Menjalankan probe autentikasi staging ..."
+              AUTH_PROBE_ENV_FILE=/opt/lazisnu/secrets/env.auth-probe.staging \
+                bash scripts/auth-probe.sh \
+                && echo "✅ Probe auth lolos — alur login/refresh sehat" \
+                || { echo "❌ Probe auth GAGAL — fitur autentikasi tidak sehat"; exit 1; }
+            fi
 
             docker image prune -af >/dev/null 2>&1 || true
             docker builder prune -f >/dev/null 2>&1 || true
