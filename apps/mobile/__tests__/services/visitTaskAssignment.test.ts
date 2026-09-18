@@ -116,5 +116,26 @@ describe('B2 — visit-task assignment resolution (sync.ts)', () => {
       expect(offlineQueue.getRetryableQueue().length).toBe(1);
       expect(offlineQueue.getFailedPermanent().length).toBe(0);
     });
+
+    it('memindahkan item ke gagal permanen saat server menolak tegas — antrean tidak menggantung', async () => {
+      goOnline();
+      offlineQueue.enqueue(createVisitItem());
+
+      jest.spyOn(collectionService, 'ensureAssignment').mockResolvedValueOnce({
+        success: false,
+        error: {code: 'ASSIGNMENT_NOT_ACTIVE', message: 'Kaleng ini sudah dijemput pada periode 9/2026'},
+      });
+      const batchSubmitSpy = jest.spyOn(collectionService, 'batchSubmit');
+
+      const result = await syncService.autoSync();
+
+      expect(batchSubmitSpy).not.toHaveBeenCalled();
+      // Tidak lagi menunggu sinkron (bukan zombi) dan alasannya tersimpan.
+      expect(offlineQueue.getRetryableQueue().length).toBe(0);
+      const failed = offlineQueue.getFailedPermanent();
+      expect(failed.length).toBe(1);
+      expect(failed[0]?.error_message).toContain('sudah dijemput');
+      expect(result.failed).toBe(1);
+    });
   });
 });
