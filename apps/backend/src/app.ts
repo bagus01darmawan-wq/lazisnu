@@ -38,6 +38,31 @@ export async function buildApp() {
   // Paling awal: correlation ID untuk semua request
   server.addHook('onRequest', correlationIdHook);
 
+  // Sebagian klien mobile memasang `Content-Type: application/json` pada POST
+  // tanpa body. Parser bawaan Fastify menolak body kosong dengan
+  // FST_ERR_CTP_EMPTY_JSON_BODY (HTTP 400) sehingga endpoint yang tidak
+  // membutuhkan body — POST /mobile/cans/:canId/ensure-assignment dan
+  // POST /mobile/periods/complete — gagal sebelum handler dijalankan.
+  // Body kosong diperlakukan sebagai {} dan JSON yang rusak tetap 400.
+  server.addContentTypeParser(
+    'application/json',
+    { parseAs: 'string' },
+    (_request, body, done) => {
+      const raw = typeof body === 'string' ? body.trim() : '';
+      if (!raw) {
+        done(null, {});
+        return;
+      }
+      try {
+        done(null, JSON.parse(raw));
+      } catch (err) {
+        const parseError = err as Error & { statusCode?: number };
+        parseError.statusCode = 400;
+        done(parseError, undefined);
+      }
+    },
+  );
+
   // Plugins
   await server.register(cors, {
     origin: isProduction ? corsOrigins : true,
