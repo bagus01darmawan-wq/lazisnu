@@ -721,7 +721,12 @@ export const collectionService = {
   ensureAssignment: async (
     canId: string,
   ): Promise<ApiResponse<{assignment_id: string; status: string}>> => {
-    return apiRequest(`/mobile/cans/${canId}/ensure-assignment`, {method: 'POST'});
+    // Body eksplisit: Fastify menolak POST dengan Content-Type application/json
+    // tanpa body (FST_ERR_CTP_EMPTY_JSON_BODY → 400).
+    return apiRequest(`/mobile/cans/${canId}/ensure-assignment`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
   },
 
   completePeriod: async (): Promise<
@@ -729,6 +734,7 @@ export const collectionService = {
   > => {
     return apiRequest('/mobile/periods/complete', {
       method: 'POST',
+      body: JSON.stringify({}),
     });
   },
 
