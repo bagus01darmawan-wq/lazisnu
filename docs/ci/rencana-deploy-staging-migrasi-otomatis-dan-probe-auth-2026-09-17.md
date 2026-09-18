@@ -136,8 +136,8 @@ root, chmod 600 — pola sama dengan env file probe produksi):
 | `TEST_EMAIL` / `TEST_PASSWORD` | akun uji khusus **DB staging** | dilarang memakai akun produksi |
 | `REFRESH_WAIT_SECONDS` | `0` | **versi cepat** — default 960s (menunggu 16 menit) tidak layak di jalur deploy; script sudah toleran terhadap token yang belum expire (`ME2_STILL_VALID`) dan tetap menguji refresh |
 | `PROBE_DEVICE_ID` | `auth-probe-staging` | beda dari device probe produksi agar tidak saling tabrak di UI daftar perangkat |
-| `LOG_FILE` | `/opt/lazisnu/auth-probe/auth-probe-staging.log` | log terpisah |
-| `STATE_FILE` | `/opt/lazisnu/auth-probe/.auth-probe-staging-alert` | state dedup terpisah |
+| `AUTH_PROBE_LOG_FILE` | `/opt/lazisnu/auth-probe/auth-probe-staging.log` | log terpisah — **nama variabel harus `AUTH_PROBE_LOG_FILE`**; script mengabaikan `LOG_FILE` (temuan saat eksekusi 2026-09-18: tanpa koreksi ini probe staging menulis ke log probe produksi) |
+| `AUTH_PROBE_STATE_FILE` | `/opt/lazisnu/auth-probe/.auth-probe-staging-alert` | state dedup terpisah — **nama variabel harus `AUTH_PROBE_STATE_FILE`**; memakai state produksi akan mengacaukan dedup alert produksi |
 | `ALERT_WEBHOOK_URL` | *(kosong)* | deploy gagal sudah cukup terlihat di job CI merah; alert Discord tetap dari monitor uptime. Bisa diisi belakangan kalau mau |
 
 Profil kegagalan yang kini otomatis tertangkap di staging (semuanya lewat
@@ -210,4 +210,24 @@ Perubahan kode CI bisa dikerjakan dalam 1 commit kecil. Setelah itu prasyarat
 | Prasyarat VM (akun uji + secret file) | ~30 menit |
 | Verifikasi (positif + negatif + escape hatch) | ~30 menit |
 | **Total** | **~1,5 jam** |
+
+
+## F. Temuan saat eksekusi (2026-09-18) & tindak lanjut
+
+| # | Temuan | Status |
+|---|---|---|
+| 1 | **Nama variabel env probe:** script membaca `AUTH_PROBE_LOG_FILE` / `AUTH_PROBE_STATE_FILE`, bukan `LOG_FILE` / `STATE_FILE`. Versi awal secret staging memakai nama yang salah → probe staging menulis ke log & state **milik probe produksi** | ✅ Diperbaiki di VM 2026-09-18 (secret ditulis ulang, probe diuji ulang `SUCCESS`, log staging kini terpisah: `auth-probe-staging.log`) |
+| 2 | **Header komentar `scripts/auth-probe.sh` menyesatkan** — baris 11-13 menyebut `LOG_FILE, STATE_FILE`, padahal kode memakai `AUTH_PROBE_LOG_FILE`, `AUTH_PROBE_STATE_FILE` | ⏳ Tindak lanjut: perbaiki komentar header (docs-only, tanpa perubahan perilaku) |
+| 3 | **`bcryptjs` tidak bisa dipanggil via `docker run … node -e`** dari image backend (`require.resolve` gagal) | ✅ Diketahui jalur yang bekerja: `docker exec -e P=… -w /app/apps/backend <container-backend-staging> node -e "…"` — dipakai untuk membuat hash akun uji |
+| 4 | **Akun uji staging dibuat**: `probe-staging@lazisnu.test`, role `ADMIN_KECAMATAN`, is_active true, tanpa branch/district (keduanya nullable) | ✅ Kata sandi acak dibuat di VM, hanya tersimpan di `/opt/lazisnu/secrets/env.auth-probe.staging` (root, 600) — tidak pernah dicetak/di-log |
+| 5 | **Log probe produksi sempat memuat baris probe staging** (efek temuan #1, sebelum perbaikan) | ℹ️ Kosmetik — tidak mempengaruhi alert; tidak ada state alert produksi aktif saat diperiksa |
+| 6 | **Deploy staging pertama** (merge PR #108) membuktikan blok migrasi bekerja: `▶ Migrasi DB staging … ✅ Migrasi selesai — skema sudah mutakhir` (~2 detik), lalu `✅ Staging healthy`, probe ter-skip dengan pesan bootstrap | ✅ Terverifikasi di run 35338486445 |
+
+## G. Status akhir prasyarat §B.3
+
+| Prasyarat | Status |
+|---|---|
+| Akun uji di DB staging (ADMIN_KECAMATAN) | ✅ dibuat 2026-09-18 |
+| Secret file `/opt/lazisnu/secrets/env.auth-probe.staging` (root, 600) | ✅ dibuat 2026-09-18, nama variabel sudah dikoreksi |
+| Uji manual probe sebelum wiring | ✅ `SUCCESS` (LOGIN_OK → ME_OK → PREFETCH_OK 200 → REFRESH_OK → ME_AFTER_REFRESH_OK) |
 
