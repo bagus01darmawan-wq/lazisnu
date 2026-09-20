@@ -12,6 +12,7 @@ import { auditRoutes } from './audit';
 import { backupRoutes } from './backup';
 
 import { canProposalsRoutes } from './canProposals';
+import { periodDraftsRoutes } from './periodDrafts';
 
 export default async function adminRoutes(fastify: FastifyInstance) {
   // Apply auth middleware to all routes in this plugin
@@ -28,4 +29,5 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   await fastify.register(waRoutes);
   await fastify.register(auditRoutes);
   await fastify.register(backupRoutes);
+  await fastify.register(periodDraftsRoutes);
 }

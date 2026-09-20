@@ -69,8 +69,15 @@ export function classifyScan(rows: ScanAssignmentRow[], now: Date = new Date()):
   const sorted = [...rows].sort(byPeriodDesc);
 
   // 1. HIT — ACTIVE dalam jendela (berjalan dulu, lalu toleransi bulan lalu).
+  // Guard C1-T3 (syarat review-T2 butir a): HIT hanya sah untuk period <=
+  // periode berjalan. Assignment ACTIVE masa depan (mis. Nov dipindai Okt)
+  // jatuh ke WRONG_PERIOD di bawah — robot T3 memang tidak pernah melahirkan
+  // assignment sebelum bulannya berjalan (hanya draft), dan approve menolak
+  // draft masa depan. Nuansa §6: assignment Okt yang lahir 10 Okt (< assign
+  // tgl 20) tetap sah karena Okt <= Okt berjalan (jemput awal).
   const activeInWindow = sorted.filter((r) => {
     if (r.status !== 'ACTIVE') return false;
+    if (r.periodYear > cur.year || (r.periodYear === cur.year && r.periodMonth > cur.month)) return false;
     const b = buildPeriodBoundaries(r.periodYear, r.periodMonth);
     return !isPeriodLocked(now, b.toleranceEnd);
   });

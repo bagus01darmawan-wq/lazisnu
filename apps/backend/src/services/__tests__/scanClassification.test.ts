@@ -85,3 +85,26 @@ describe('C1-T2 classifyScan — penolakan', () => {
     expect(r).toEqual({ kind: 'NOT_ASSIGNED' });
   });
 });
+
+describe('C1-T3 guard HIT masa depan (syarat review-T2 butir a)', () => {
+  test('ACTIVE Nov dipindai Okt → WRONG_PERIOD (bukan HIT)', () => {
+    const r = classifyScan([row(2026, 11, 'ACTIVE')], new Date(2026, 9, 15, 12, 0, 0));
+    expect(r).toEqual({ kind: 'WRONG_PERIOD', period: '2026-11' });
+  });
+
+  test('Okt + Nov aktif dipindai Okt → HIT Okt (masa depan diabaikan)', () => {
+    const r = classifyScan(
+      [row(2026, 11, 'ACTIVE', 'nov'), row(2026, 10, 'ACTIVE', 'okt')],
+      new Date(2026, 9, 15, 12, 0, 0),
+    );
+    expect(r).toMatchObject({ kind: 'HIT', period: '2026-10', tolerance: false });
+  });
+
+  test('hanya Nov aktif (Okt COMPLETED) → ALREADY_COLLECTED Okt, bukan HIT Nov', () => {
+    const r = classifyScan(
+      [row(2026, 11, 'ACTIVE', 'nov'), row(2026, 10, 'COMPLETED', 'okt')],
+      new Date(2026, 9, 15, 12, 0, 0),
+    );
+    expect(r).toEqual({ kind: 'ALREADY_COLLECTED', period: '2026-10' });
+  });
+});

@@ -23,6 +23,9 @@ export const ErrorCode = {
   QR_WRONG_PERIOD: 'QR_WRONG_PERIOD',
   QR_PERIOD_CLOSED: 'QR_PERIOD_CLOSED',
 
+  // C1-T3 (§14.12): draft penugasan tidak ditemukan.
+  DRAFT_NOT_FOUND: 'DRAFT_NOT_FOUND',
+
   // Auth / access
   FORBIDDEN: 'FORBIDDEN',
   FORBIDDEN_SCOPE: 'FORBIDDEN_SCOPE',
@@ -83,6 +86,9 @@ export const Errors = {
 
   QR_PERIOD_CLOSED: (msg?: string, details?: unknown) =>
     new AppError(ErrorCode.QR_PERIOD_CLOSED, msg || 'Periode sudah dikunci, pakai tugas periode berjalan', 409, false, details),
+
+  DRAFT_NOT_FOUND: (msg?: string, details?: unknown) =>
+    new AppError(ErrorCode.DRAFT_NOT_FOUND, msg || 'Draft penugasan tidak ditemukan', 404, false, details),
 
   FORBIDDEN: (msg?: string) =>
     new AppError(ErrorCode.FORBIDDEN, msg || 'Anda tidak memiliki akses', 403),

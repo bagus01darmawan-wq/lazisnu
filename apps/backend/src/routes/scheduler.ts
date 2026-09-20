@@ -9,8 +9,10 @@ import { config } from '../config/env';
 import { getLatestCollectionCondition } from '../services/collectionSubmission';
 import { findCansWithoutAssignment, buildFirstOfficerAssignments, insertAssignments } from '../services/assignmentGenerator';
 import { periodKey } from '../services/periodCalendar';
+import { preparePeriodDraft } from '../services/periodDrafts';
 import { sendSuccess, sendError, sendInternalError } from '../utils/response';
 import { insertActivityLog } from '../services/auditLogService';
+import { isAppError } from '../utils/AppError';
 
 const generateTasksSchema = z.object({
   year: z.number().min(2020).max(2100),
@@ -68,6 +70,51 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
         return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+      }
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  // POST /scheduler/prepare-draft
+  // C1-T3 robot (§6, §14.12): siapkan draft siap-jalan (DRAFT + baris
+  // period_calendar identik buildPeriodBoundaries). Idempoten: aman dipanggil
+  // ulang / dobel cron — draft yang ada hanya di-top-up, approve tetap sekali.
+  //
+  // JADWAL CRON (wiring deploy = T12, zona WIB; {year,month} = bulan BERJALAN
+  // saat cron jalan — endpoint menolak bulan masa depan):
+  //   tgl 10 00:00 → siapkan draft bulan berjalan (= M+1 pasca-kunci M):
+  //     0 0 10 * * curl -s -X POST $BASE/v1/scheduler/prepare-draft \
+  //       -H "x-internal-api-key: $KEY" -H 'Content-Type: application/json' \
+  //       -d "{\"year\":$(date +\%Y),\"month\":$(date +\%m)}"
+  //   tgl 20 00:00 → sapuan susulan kaleng/PPK baru + kickoff pengingat (T11):
+  //     0 0 20 * * curl ... (payload sama: bulan berjalan)
+  // Tidak ada tombol manual terpisah — Staf hanya melihat/mengedit/menyetujui
+  // via /v1/admin/period-drafts (otorisasi peran, bukan kunci internal).
+  fastify.post('/prepare-draft', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const body = generateTasksSchema.parse(request.body);
+      const { year, month } = body;
+
+      const result = await preparePeriodDraft(year, month);
+
+      return sendSuccess(reply, {
+        period: result.period,
+        calendar_row_written: result.calendarRowWritten,
+        drafts: result.drafts.map((d) => ({
+          branch_id: d.branchId,
+          draft_id: d.draftId,
+          status: d.draftStatus,
+          added_items: d.addedItems,
+          total_items: d.totalItems,
+          direct_assignments: d.directAssignments,
+        })),
+      });
+    } catch (error: unknown) {
+      if (error instanceof z.ZodError) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+      }
+      if (isAppError(error)) {
+        return sendError(reply, error.statusCode, error.code, error.message, error.details);
       }
       return sendInternalError(reply, error, fastify.log);
     }
