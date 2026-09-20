@@ -302,6 +302,22 @@ describe('C1-T3 generate approve (DB)', () => {
     expect(after.items).toHaveLength(0);
   });
 
+  test('temuan review-T3 #2: petugas dinonaktifkan setelah prepare → approve ditolak, draft tetap DRAFT', async () => {
+    const tDetail = await getDraftDetail(keuMwc, tDraftId);
+    expect(tDetail.items).toHaveLength(1);
+    await db.update(schema.officers).set({ isActive: false }).where(eq(schema.officers.id, offT));
+    try {
+      // Lewat 24 jam agar gerbang eskalasi lolos — yang menolak harus gerbang aktif.
+      await expect(approveDraft(keuMwc, tDraftId, new Date(2026, 9, 6, 13, 0, 0))).rejects.toMatchObject({
+        code: ErrorCode.VALIDATION_ERROR,
+      });
+      const still = await db.query.periodDrafts.findFirst({ where: eq(schema.periodDrafts.id, tDraftId) });
+      expect(still?.status).toBe('DRAFT');
+    } finally {
+      await db.update(schema.officers).set({ isActive: true }).where(eq(schema.officers.id, offT));
+    }
+  });
+
   test('eskalasi: Keuangan dini ditolak, lewat 24 jam lolos (draft Taqwa)', async () => {
     await expect(approveDraft(keuMwc, tDraftId, new Date(2026, 9, 5, 12, 0, 0))).rejects.toMatchObject({
       code: ErrorCode.FORBIDDEN,

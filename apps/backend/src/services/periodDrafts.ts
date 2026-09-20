@@ -651,6 +651,24 @@ export async function approveDraft(
       where: eq(schema.periodDraftItems.draftId, draft.id),
     });
 
+    // Temuan review-T3 #2: petugas yang dinonaktifkan antara prepare (tgl 10)
+    // dan approve tidak boleh melahirkan tugas ACTIVE. Satu query di dalam
+    // transaksi yang sama (tidak mengubah semantik tombol-mati/eskalasi).
+    const itemOfficerIds = [...new Set(items.map((it) => it.officerId))];
+    if (itemOfficerIds.length > 0) {
+      const activeRows = await tx
+        .select({ id: schema.officers.id })
+        .from(schema.officers)
+        .where(and(inArray(schema.officers.id, itemOfficerIds), eq(schema.officers.isActive, true)));
+      const activeSet = new Set(activeRows.map((r) => r.id));
+      const inactiveCount = itemOfficerIds.filter((id) => !activeSet.has(id)).length;
+      if (inactiveCount > 0) {
+        throw Errors.VALIDATION_ERROR(
+          `${inactiveCount} petugas dalam draft sudah tidak aktif — perbarui draft (ganti/hapus item) sebelum menyetujui.`,
+        );
+      }
+    }
+
     let created = 0;
     if (items.length > 0) {
       const inserted = await tx
