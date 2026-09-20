@@ -446,6 +446,33 @@ antrean gagal permanen); `collected_at` di luar jendela periode ditolak
 }
 ```
 
+### 3.8 Setoran PPK — Lihat & FINAL-kan (C1-T4)
+
+Angka (total, bisyaroh 10% ceil ribuan, bersih) dihitung server dari
+collections periode itu — tanpa ketik nominal. Baris DRAFT dihitung ulang
+tiap dibuka; baris FINAL beku. Setelah FINAL, submit/resubmit/skip periode
+itu ditolak (`QR_ALREADY_SUBMITTED`).
+
+**Endpoint:** `GET /mobile/submissions?year=&month=` (PETUGAS, miliknya)
+
+**Endpoint:** `POST /mobile/submissions/{id}/finalize` (PETUGAS pemilik /
+STAF_KEUANGAN seranting / ADMIN_RANTING seranting via force + alasan)
+
+**Request:**
+```json
+{
+  "ppk_signer_id": "uuid",
+  "bendahara_signer_id": "uuid",
+  "expected_version": 1,
+  "force_reason": "opsional, hanya Admin Ranting bila sisa ACTIVE"
+}
+```
+
+**Response (200):** `{ id, period, total_amount, bisyaroh_amount, net_amount, status: "FINAL", version, ... }`.
+
+FINAL ganda / versi basi → `409 CONFLICT`. Sisa ACTIVE → `400
+VALIDATION_ERROR` (atau force + alasan via Admin Ranting).
+
 ---
 
 ## 4. Web API (Admin & Bendahara)
@@ -769,6 +796,31 @@ ditolak ("tombol mati sekali").
 ```
 
 **Endpoint:** `PATCH /admin/period-drafts/items/{itemId}` body `{ "officer_id": "uuid" }` (hanya Staf Pengumpulan, draft DRAFT, petugas satu ranting/program) • `DELETE /admin/period-drafts/items/{itemId}` (keluarkan kaleng dari draft).
+
+### 4.12 Setoran Ranting — Kunci (C1-T4)
+
+Agregat PPK FINAL + ekspektasi share 30% × sisa + selisih. Kunci aktif hanya
+bila semua PPK sudah FINAL (disebut namanya bila belum). Selisih
+`|aktual − ekspektasi| > Rp 10.000` wajib alasan; `GABUNG_PERIODE` wajib
+`linked_periods`. `as_nol: true` = kunci 0 pemasukan (totals 0 + alasan wajib)
+→ status `FINAL_NOL`. Orkestrasi berlapis + `FINAL_NOL` massal MWC = T6.
+
+**Endpoint:** `GET /admin/branch-submissions?year=&month=` • `GET /admin/branch-submissions/{id}` (+ `ppk_penyusun`)
+
+**Endpoint:** `POST /admin/branch-submissions/{id}/finalize` (ADMIN_RANTING pemilik)
+
+**Request:**
+```json
+{
+  "share_mwc": 1675000,
+  "variance_reason": "LEBIH_BAYAR",
+  "linked_periods": ["2026-07", "2026-08"],
+  "ranting_signer_id": "uuid",
+  "mwc_bendahara_signer_id": "uuid",
+  "expected_version": 1,
+  "as_nol": false
+}
+```
 
 ---
 

@@ -5,7 +5,7 @@ import { eq, and, desc, asc, gte, lte, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { isValidQRCode } from '../../utils/qr';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
-import { getLatestCollectionCondition } from '../../services/collectionSubmission';
+import { getLatestCollectionCondition, assertAssignmentSkippable } from '../../services/collectionSubmission';
 import { skipAssignmentSchema, canVisitSchema } from './schemas';
 import { AppError, isAppError } from '../../utils/AppError';
 import { parseStatsRange, computeMonthsCovered } from '../../utils/statsRange';
@@ -675,6 +675,14 @@ export async function tasksRoutes(fastify: FastifyInstance) {
 
       if (!assignment) {
         return sendError(reply, 403, 'ASSIGNMENT_INVALID', 'Assignment tidak valid, bukan milik Anda, atau sudah selesai');
+      }
+
+      // C1-T4 (§7.5): skip pasca-FINAL ditolak (betulkan = reopen T7 dulu).
+      try {
+        await assertAssignmentSkippable(db, assignment);
+      } catch (skipErr: unknown) {
+        const appErr = AppError.fromUnknown(skipErr, 'Setoran sudah FINAL');
+        return sendError(reply, appErr.statusCode, appErr.code, appErr.message);
       }
 
       // APK lama (pra-rilis pemilih alasan) belum mengirim reason_code → OTHER.

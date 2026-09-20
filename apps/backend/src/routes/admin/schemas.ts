@@ -48,3 +48,14 @@ export const createAssignmentSchema = z.object({
 export const updateDraftItemSchema = z.object({
   officer_id: z.string().uuid(),
 });
+
+/** C1-T4: kunci setoran ranting (mekanik; orkestrasi berlapis + FINAL_NOL massal = T6). */
+export const finalizeBranchSchema = z.object({
+  share_mwc: z.number().min(0),
+  variance_reason: z.enum(['KURANG_BAYAR', 'LEBIH_BAYAR', 'GABUNG_PERIODE', 'KOREKSI_ADMIN', 'HP_HILANG']).optional(),
+  linked_periods: z.array(z.string()).optional(),
+  ranting_signer_id: z.string().uuid(),
+  mwc_bendahara_signer_id: z.string().uuid(),
+  expected_version: z.number().int().min(1).optional(),
+  as_nol: z.boolean().optional(),
+}).strict();
