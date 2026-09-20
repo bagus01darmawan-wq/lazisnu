@@ -11,7 +11,10 @@ import {
   LucideIcon
 } from 'lucide-react';
 
-export type UserRole = 'ADMIN_KECAMATAN' | 'ADMIN_RANTING' | 'PETUGAS';
+// C1-T0 (§14.13): 2 role staf baru dikenali agar cocok dengan enum UserRole
+// shared-types. Belum punya menu dashboard (getMenuItems mengembalikan []
+// untuk mereka) sampai UI T4-T6 selesai.
+export type UserRole = 'ADMIN_KECAMATAN' | 'ADMIN_RANTING' | 'PETUGAS' | 'STAF_PENGUMPULAN' | 'STAF_KEUANGAN';
 
 export interface MenuItem {
   title: string;
