@@ -17,7 +17,9 @@
  * ada di `buildPeriodBoundaries` ini (satu helper tunggal). Dilarang menyebar
  * `new Date(y, m, ...)` asumsi-zona di file lain — preseden bug: server VM UTC,
  * `monthStart` dari `new Date()` (dashboard.ts:30, district.ts:194-195).
- * Verifikasi TZ container/VM dilakukan saat deploy (T12) via `checkOperationalTimezone`.
+ * Verifikasi TZ container/VM dilakukan saat deploy (T12) via `checkOperationalTimezone`,
+ * ditambah cek SESSION PostgreSQL (`SHOW timezone`) — lihat
+ * `docs/implementation/C1-T12-CHECKLIST-VERIFIKASI-TZ-DEPLOY-2026-09-20.md`.
  */
 import { OPERATIONAL_TIMEZONE, operationalOffsetMinutes } from '../utils/operationalTimeZone';
 
@@ -87,7 +89,12 @@ export function resolvePeriodStatus(now: Date, b: PeriodBoundaries): PeriodStatu
   return 'OPEN';
 }
 
-/** True bila periode sudah dikunci pada titik waktu `now` (pemicu: kunci sistem tgl 10 00:00). */
+/**
+ * True bila periode sudah dikunci pada titik waktu `now` (pemicu: kunci sistem tgl 10 00:00).
+ * Saran review T1 (2026-09-20): pemanggil (T2/T3) WAJIB mengoper
+ * `buildPeriodBoundaries(...).toleranceEnd` — jangan membangun tanggal
+ * sendiri — agar tidak ada sumber batas kedua yang bisa geser.
+ */
 export function isPeriodLocked(now: Date, toleranceEnd: Date): boolean {
   return now.getTime() > toleranceEnd.getTime();
 }
@@ -96,6 +103,12 @@ export function isPeriodLocked(now: Date, toleranceEnd: Date): boolean {
  * Cek deploy T12 (murni, tidak throw — aman di CI ber-TZ apa pun):
  * apakah zona server == zona operasional? Dipakai pipeline/runbook verifikasi,
  * bukan logika bisnis.
+ *
+ * Catatan review T1: `ok` membandingkan NAMA zona (`Intl…timeZone`), sehingga
+ * alias yang setara (mis. server melaporkan `Etc/GMT-7` = sama-sama +07:00)
+ * akan `ok=false`. Bila nama beda tapi `offsetMinutes` == offset operasional
+ * (WIB = 420 menit), perlakukan sebagai pass-with-note di T12 dan verifikasi
+ * manual `SHOW timezone` sesi PostgreSQL (lihat checklist T12).
  */
 export function checkOperationalTimezone(at: Date = new Date()): {
   ok: boolean;
