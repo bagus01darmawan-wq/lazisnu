@@ -70,6 +70,15 @@ export const purgeSignatureSchema = z.object({
 }).strict();
 
 /**
+ * C1-T7 (§14.8): reopen ranting FINAL/FINAL_NOL → DRAFT. Hanya Admin Ranting
+ * pemilik + MWC (scope di service); alasan wajib min 10 untuk audit.
+ */
+export const reopenBranchSchema = z.object({
+  reason: z.string().min(10).max(255),
+  expected_version: z.number().int().min(1).optional(),
+}).strict();
+
+/**
  * C1-T6 (§14.7): Kunci Periode MWC 2 tahap — REKAP (27–9, tarik FINAL saja)
  * vs KUNCI_KERAS (10+, FINAL_NOL massal + LOCKED). Hanya ADMIN_KECAMATAN.
  */

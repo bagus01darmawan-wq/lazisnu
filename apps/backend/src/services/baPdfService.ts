@@ -393,6 +393,8 @@ export async function ensureBranchBaPdf(submissionId: string, opts: { force?: bo
  * C1-T6 (F3): `valid` berarti "BA SAH + konten cocok hash" — baris harus
  * `FINAL`/`FINAL_NOL` (QR hanya dicetak di PDF FINAL). Hash benar + status
  * DRAFT/PPK_SIGNED → `false`.
+ * C1-T7: versi lama yang sudah di-reopen tetap terverifikasi via
+ * `ba_pdf_archives` (hash konten versi itu vs status saat diarsipkan).
  */
 export async function verifyBaRecord(
   type: 'ppk' | 'branch',
@@ -405,12 +407,33 @@ export async function verifyBaRecord(
   }
   if (type === 'ppk') {
     const row = await db.query.ppkSubmissions.findFirst({ where: eq(schema.ppkSubmissions.id, id) });
-    if (!row || row.version !== version) return false;
-    if (row.status !== 'FINAL') return false;
-    return baContentHash('ppk', ppkContentSnapshot(row)) === hash;
+    if (row && row.version === version) {
+      if (row.status !== 'FINAL') return false;
+      return baContentHash('ppk', ppkContentSnapshot(row)) === hash;
+    }
+    // Versi lama pasca-reopen T7: cocokkan arsip (seragam false bila tak ada).
+    const arch = await db.query.baPdfArchives.findFirst({
+      where: and(
+        eq(schema.baPdfArchives.tier, 'ppk'),
+        eq(schema.baPdfArchives.submissionId, id),
+        eq(schema.baPdfArchives.version, version),
+      ),
+    });
+    if (!arch || (arch.status !== 'FINAL' && arch.status !== 'FINAL_NOL')) return false;
+    return arch.contentHash === hash;
   }
   const row = await db.query.branchSubmissions.findFirst({ where: eq(schema.branchSubmissions.id, id) });
-  if (!row || row.version !== version) return false;
-  if (row.status !== 'FINAL' && row.status !== 'FINAL_NOL') return false;
-  return baContentHash('branch', branchContentSnapshot(row)) === hash;
+  if (row && row.version === version) {
+    if (row.status !== 'FINAL' && row.status !== 'FINAL_NOL') return false;
+    return baContentHash('branch', branchContentSnapshot(row)) === hash;
+  }
+  const arch = await db.query.baPdfArchives.findFirst({
+    where: and(
+      eq(schema.baPdfArchives.tier, 'branch'),
+      eq(schema.baPdfArchives.submissionId, id),
+      eq(schema.baPdfArchives.version, version),
+    ),
+  });
+  if (!arch || (arch.status !== 'FINAL' && arch.status !== 'FINAL_NOL')) return false;
+  return arch.contentHash === hash;
 }

@@ -45,7 +45,8 @@ import {
   type DbOrTx,
   type SubmissionActor,
 } from './ppkSubmissions';
-import { periodKey } from './periodCalendar';
+import { periodKey, REOPEN_WINDOW_HOURS } from './periodCalendar';
+import { assertReopenWindowOpen } from './collectionSubmission';
 
 // ---------------------------------------------------------------------------
 // Validasi murni (tanpa DB/IO) — unit-testable.
@@ -191,6 +192,7 @@ export async function signPpkSubmission(
       where: eq(schema.ppkSubmissions.id, input.submissionId),
     });
     if (!sub) throw Errors.VALIDATION_ERROR('Setoran PPK tidak ditemukan');
+    assertReopenWindowOpen(sub, now);
     const officer = await tx.query.officers.findFirst({
       where: eq(schema.officers.id, sub.officerId),
       columns: { userId: true },
@@ -276,6 +278,7 @@ export async function countersignPpkSubmission(
       where: eq(schema.ppkSubmissions.id, input.submissionId),
     });
     if (!sub) throw Errors.VALIDATION_ERROR('Setoran PPK tidak ditemukan');
+    assertReopenWindowOpen(sub, now);
     if (sub.status === 'FINAL') {
       throw Errors.CONFLICT('Setoran ini sudah FINAL.');
     }
@@ -341,6 +344,7 @@ export async function countersignPpkSubmission(
         status: 'FINAL',
         finalizedAt: now,
         finalizedBy: actor.userId,
+        reopenedUntil: null,
         updatedAt: now,
       })
       .where(
@@ -354,6 +358,21 @@ export async function countersignPpkSubmission(
     if (finalized.length === 0) {
       throw Errors.CONFLICT('Setoran baru saja di-FINAL-kan pihak lain.');
     }
+    // C1-T7: PPK selesai betulkan → episode koreksi lanjut ke tingkat ranting:
+    // segarkan jendela branch DRAFT-reopened pasangan (tanpa audit terpisah;
+    // episode sudah tercatat di audit reopen).
+    await tx
+      .update(schema.branchSubmissions)
+      .set({ reopenedUntil: new Date(now.getTime() + REOPEN_WINDOW_HOURS * 3_600_000), updatedAt: now })
+      .where(
+        and(
+          eq(schema.branchSubmissions.branchId, sub.branchId),
+          eq(schema.branchSubmissions.periodYear, sub.periodYear),
+          eq(schema.branchSubmissions.periodMonth, sub.periodMonth),
+          eq(schema.branchSubmissions.status, 'DRAFT'),
+          sql`reopened_until IS NOT NULL`,
+        ),
+      );
     return { finalized: true as const, row: finalized[0], activeLeft: 0 };
     });
   } catch (e) {
@@ -462,6 +481,7 @@ export async function signBranchSubmission(
       where: eq(schema.branchSubmissions.id, input.submissionId),
     });
     if (!sub) throw Errors.VALIDATION_ERROR('Setoran ranting tidak ditemukan');
+    assertReopenWindowOpen(sub, now);
     if (actor.branchId !== sub.branchId) {
       throw Errors.FORBIDDEN_SCOPE('Bukan setoran ranting Anda');
     }
@@ -557,6 +577,7 @@ export async function countersignBranchSubmission(
       where: eq(schema.branchSubmissions.id, input.submissionId),
     });
     if (!sub) throw Errors.VALIDATION_ERROR('Setoran ranting tidak ditemukan');
+    assertReopenWindowOpen(sub, now);
     if (sub.status !== 'DRAFT') {
       throw Errors.CONFLICT('Setoran ranting ini sudah dikunci.');
     }
@@ -610,6 +631,7 @@ export async function countersignBranchSubmission(
         mwcBendaharaSignerId: actor.userId,
         mwcBendaharaSignedAt: now,
         mwcBendaharaSignatureUrl: key,
+        reopenedUntil: null,
         updatedAt: now,
       })
       .where(
@@ -623,6 +645,17 @@ export async function countersignBranchSubmission(
     if (finalized.length === 0) {
       throw Errors.CONFLICT('Setoran baru saja dikunci pihak lain.');
     }
+    // C1-T7: ranting re-FINAL menutup DIBUKA_SEBAGIAN → LOCKED (kalender cache).
+    await tx
+      .update(schema.periodCalendar)
+      .set({ status: 'LOCKED', lockedAt: now, lockedBy: actor.userId, updatedAt: now })
+      .where(
+        and(
+          eq(schema.periodCalendar.periodYear, sub.periodYear),
+          eq(schema.periodCalendar.periodMonth, sub.periodMonth),
+          eq(schema.periodCalendar.status, 'DIBUKA_SEBAGIAN'),
+        ),
+      );
     return finalized[0];
     });
   } catch (e) {

@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm';
 import { authorize } from '../../middleware/auth';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { isAppError } from '../../utils/AppError';
-import { countersignBranchSchema, forceFinalizePpkSchema, signSubmissionSchema } from './schemas';
+import { countersignBranchSchema, forceFinalizePpkSchema, reopenSubmissionSchema, signSubmissionSchema } from './schemas';
 import {
   ensurePpkSubmission,
   toPpkResponse,
@@ -21,6 +21,7 @@ import {
   signPpkSubmission,
   type RequestContext,
 } from '../../services/cosign';
+import { reopenPpkSubmission } from '../../services/reopen';
 
 function actorOf(request: FastifyRequest) {
   const user = request.currentUser!;
@@ -137,6 +138,27 @@ export async function submissionsRoutes(fastify: FastifyInstance) {
           forceReason: body.force_reason,
           expectedVersion: body.expected_version,
         }, ctxOf(request));
+        return sendSuccess(reply, result);
+      } catch (error: unknown) {
+        return sendAppError(reply, error, fastify.log);
+      }
+    },
+  );
+
+  // POST /mobile/submissions/:id/reopen — C1-T7 (§14.8): Admin Ranting
+  // pemilik / MWC membuka FINAL → DRAFT (menular ke ranting) + jendela 48 jam.
+  fastify.post(
+    '/submissions/:id/reopen',
+    { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = request.params as { id: string };
+        const body = reopenSubmissionSchema.parse(request.body);
+        const result = await reopenPpkSubmission(actorOf(request), {
+          submissionId: id,
+          reason: body.reason,
+          expectedVersion: body.expected_version,
+        }, new Date());
         return sendSuccess(reply, result);
       } catch (error: unknown) {
         return sendAppError(reply, error, fastify.log);

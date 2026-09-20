@@ -304,6 +304,9 @@ export const ppkSubmissions = pgTable('ppk_submissions', {
   version: integer('version').default(1).notNull(),
   pdfUrl: varchar('pdf_url', { length: 500 }),
   pdfHash: varchar('pdf_hash', { length: 128 }),
+  // C1-T7 (§14.8): jendela koreksi pasca-reopen (NULL = DRAFT normal, selalu
+  // boleh ditulis; terisi = DRAFT-dibuka-kembali, tulis ditolak bila lewat).
+  reopenedUntil: timestamp('reopened_until'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => ({
@@ -351,11 +354,45 @@ export const branchSubmissions = pgTable('branch_submissions', {
   version: integer('version').default(1).notNull(),
   pdfUrl: varchar('pdf_url', { length: 500 }),
   pdfHash: varchar('pdf_hash', { length: 128 }),
+  // C1-T7 (§14.8): jendela koreksi pasca-reopen (NULL = DRAFT normal).
+  reopenedUntil: timestamp('reopened_until'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => ({
   branchPeriodUnq: uniqueIndex('branch_period_unq').on(t.branchId, t.periodYear, t.periodMonth),
   branchDistrictPeriodStatusIdx: index('branch_district_period_status_idx').on(t.districtId, t.periodYear, t.periodMonth, t.status),
+}));
+
+// ============================================================================
+// C1-T7: arsip PDF berita acara per versi (§14.8 + F1b review-T5).
+// Kolom pdf_url/pdf_hash di submission hanya menyimpan versi TERAKHIR; tiap
+// reopen mengarsipkan versi lama ke sini SEBELUM di-null-kan, agar PDF yang
+// sudah terlanjur diunduh orang tetap terverifikasi (hash cocok = asli versi
+// itu). Bytes PDF tak deterministik (doc-ID acak) sehingga regen tak bisa
+// menggantikan arsip — wajib tabel riwayat, bukan kolom tunggal.
+// Tanpa FK ke submission (baris arsip dipertahankan walau submission
+// dihapus di test/retensi; join manual via submission_id + version).
+// ============================================================================
+export const baPdfArchives = pgTable('ba_pdf_archives', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  /** 'ppk' | 'branch' — tier submission pemilik PDF. */
+  tier: varchar('tier', { length: 10 }).notNull(),
+  submissionId: uuid('submission_id').notNull(),
+  version: integer('version').notNull(),
+  /** Key R2 PDF versi itu (NULL bila versi itu tak pernah diunduh). */
+  pdfKey: varchar('pdf_key', { length: 500 }),
+  /** SHA-256 hex bytes PDF (NULL bila tak pernah di-generate). */
+  pdfHash: varchar('pdf_hash', { length: 128 }),
+  /** SHA-256 hash konten kanonis (masukan QR verifikasi) — selalu terisi. */
+  contentHash: varchar('content_hash', { length: 128 }).notNull(),
+  /** Status saat diarsipkan: FINAL / FINAL_NOL. */
+  status: varchar('status', { length: 20 }).notNull(),
+  archivedAt: timestamp('archived_at').defaultNow().notNull(),
+  archivedBy: uuid('archived_by').references(() => users.id),
+  reopenReason: varchar('reopen_reason', { length: 255 }),
+}, (t) => ({
+  baArchiveTierSubmissionVersionUnq: uniqueIndex('ba_archive_tier_submission_version_unq').on(t.tier, t.submissionId, t.version),
+  baArchiveSubmissionIdx: index('ba_archive_submission_idx').on(t.tier, t.submissionId),
 }));
 
 // ============================================================================
