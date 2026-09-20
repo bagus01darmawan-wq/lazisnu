@@ -8,6 +8,7 @@ import { eq, and, gte, lte, inArray, sql } from 'drizzle-orm';
 import { config } from '../config/env';
 import { getLatestCollectionCondition } from '../services/collectionSubmission';
 import { findCansWithoutAssignment, buildFirstOfficerAssignments, insertAssignments } from '../services/assignmentGenerator';
+import { periodKey } from '../services/periodCalendar';
 import { sendSuccess, sendError, sendInternalError } from '../utils/response';
 import { insertActivityLog } from '../services/auditLogService';
 
@@ -62,7 +63,7 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
         total_assignments: created,
         assigned_to_officers: new Set(assignmentItems.map((a: any) => a.officerId)).size,
         skipped_no_officer: cansToAssign.length - assignmentItems.length,
-        period: `${year}-${String(month).padStart(2, '0')}`,
+        period: periodKey(year, month),
       });
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
@@ -153,7 +154,7 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
       }
 
       return sendSuccess(reply, {
-        period: `${year}-${String(month).padStart(2, '0')}`,
+        period: periodKey(year, month),
         districts_processed: Object.keys(byDistrict).length,
         branches_processed: Object.keys(byBranch).length,
         officers_processed: Object.keys(byOfficer).length,

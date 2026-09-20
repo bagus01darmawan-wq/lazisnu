@@ -36,8 +36,16 @@ const QR_ERROR_MESSAGES: Record<string, string> = {
   CAN_RETURNED: 'Kaleng ini sudah dikembalikan dan ditarik admin, bukan tugas aktif.',
   QR_NOT_ASSIGNED: 'Kaleng ini bukan tugas Anda pada periode berjalan.',
   QR_ALREADY_SUBMITTED: 'Kaleng ini sudah disetor pada periode berjalan.',
+  // C1-T2: pesan server untuk dua kode ini sudah menyematkan periode
+  // (mis. "Periode 2026-09 sudah dikunci, pakai tugas 2026-10.") — teks di
+  // sini hanya fallback bila pesan server kosong (lihat processQRCode).
+  QR_WRONG_PERIOD: 'Kaleng ini tugas Anda pada periode lain — di luar periode berjalan.',
+  QR_PERIOD_CLOSED: 'Periode sudah dikunci, pakai tugas periode berjalan.',
   NETWORK_ERROR: 'Tidak ada koneksi internet. Coba lagi setelah jaringan tersedia.',
 };
+
+// Kode yang pesannya wajib memakai teks server (menyematkan periode spesifik).
+const SERVER_MESSAGE_CODES = new Set(['QR_WRONG_PERIOD', 'QR_PERIOD_CLOSED']);
 
 const ScanScreen: React.FC = () => {
   const navigation = useNavigation<ScanNavigationProp>();
@@ -170,8 +178,10 @@ const ScanScreen: React.FC = () => {
       } else {
         Vibration.vibrate([0, 100, 50, 100]);
         const errorCode = result.error?.code || '';
-        const errorMessage =
-          QR_ERROR_MESSAGES[errorCode] || result.error?.message || 'Kode QR tidak valid.';
+        const serverMessage = result.error?.message || '';
+        const errorMessage = SERVER_MESSAGE_CODES.has(errorCode)
+          ? serverMessage || QR_ERROR_MESSAGES[errorCode] || 'Kode QR tidak valid.'
+          : QR_ERROR_MESSAGES[errorCode] || serverMessage || 'Kode QR tidak valid.';
         Alert.alert('QR Tidak Dapat Diproses', errorMessage, [{text: 'COBA LAGI'}]);
       }
     } catch {

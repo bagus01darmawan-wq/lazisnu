@@ -395,6 +395,11 @@ export interface Task {
   status: AssignmentStatus;
   assigned_at: string;
   period: string;
+  /**
+   * C1-T2: true bila hasil scan berasal dari periode toleransi (bulan lalu,
+   * masih dalam jendela s/d tgl 9). Dipakai chip "Toleransi" + countdown (T9).
+   */
+  tolerance?: boolean;
   last_collection?: {
     nominal: number;
     date: string;

@@ -198,6 +198,11 @@
 melakukan trim atau perubahan kapitalisasi. Endpoint dilindungi JWT dan hanya
 mengembalikan detail ketika assignment aktif dimiliki petugas pada periode berjalan.
 
+> C1-T2 (20 Sep 2026): lookup toleran lintas periode. Scan assignment periode
+> bulan lalu **tetap lolos** selama `now <= tolerance_end` (tgl 9 bln berikut
+> 23:59 WIB) dengan flag `tolerance: true` (badge "Toleransi" di HP).
+> Patokan periode = `assignments.(periodYear, periodMonth)`, bukan waktu scan.
+
 **Response (200):**
 ```json
 {
@@ -215,10 +220,15 @@ mengembalikan detail ketika assignment aktif dimiliki petugas pada periode berja
       "amount": 75000,
       "date": "2026-03-15"
     },
-    "status": "ACTIVE"
+    "status": "ACTIVE",
+    "period": "2026-09",
+    "tolerance": false
   }
 }
 ```
+
+`period` = periode assignment (`YYYY-MM`); `tolerance: true` berarti jemputan
+tercatat pada periode bulan lalu (masih dalam jendela toleransi s/d tgl 9).
 
 **Response (403 - bukan assignment petugas):**
 ```json
@@ -230,6 +240,48 @@ mengembalikan detail ketika assignment aktif dimiliki petugas pada periode berja
   }
 }
 ```
+
+**Response (409 - tugas periode lain, C1-T2):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "QR_WRONG_PERIOD",
+    "message": "Kaleng ini tugas Anda pada periode 2026-07 — di luar periode berjalan.",
+    "details": { "period": "2026-07" }
+  }
+}
+```
+
+**Response (409 - periode sudah dikunci, C1-T2):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "QR_PERIOD_CLOSED",
+    "message": "Periode 2026-09 sudah dikunci, pakai tugas 2026-10.",
+    "details": { "period": "2026-09", "next_period": "2026-10" }
+  }
+}
+```
+
+**Response (409 - sudah dijemput periode ini, C1-T2):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "QR_ALREADY_SUBMITTED",
+    "message": "Kaleng ini sudah dijemput pada periode 2026-09.",
+    "details": { "period": "2026-09" }
+  }
+}
+```
+
+Kasus "benar-benar bukan tugas" (`QR_NOT_ASSIGNED`) tetap tanpa data pemilik
+(`owner_*`) — jaminan privasi. Kode baru juga dipakai jalur submit/sync:
+submit ke periode terkunci ditolak `QR_PERIOD_CLOSED` (non-retry, terlihat di
+antrean gagal permanen); `collected_at` di luar jendela periode ditolak
+`VALIDATION_ERROR`.
 
 **Response (404):**
 ```json

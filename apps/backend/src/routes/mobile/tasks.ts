@@ -18,6 +18,13 @@ import {
 import type { CanConditionValue } from '../../services/conditionRules';
 import { createProposalFromSkipReason, getLatestProposalForCan } from '../../services/conditionProposalService';
 import { assertCanAccess } from '../../services/canService';
+import { ErrorCode } from '../../utils/errorCatalog';
+import {
+  classifyScan,
+  scanAlreadyCollectedMessage,
+  scanClosedMessage,
+  scanWrongPeriodMessage,
+} from '../../services/scanClassification';
 
 export async function tasksRoutes(fastify: FastifyInstance) {
   // GET /mobile/dashboard
@@ -568,14 +575,6 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         where: eq(schema.cans.qrCode, qrCode),
         with: {
           collections: { orderBy: [desc(schema.collections.collectedAt)], limit: 1 },
-          assignments: {
-            where: and(
-              eq(schema.assignments.officerId, officerId!),
-              eq(schema.assignments.status, 'ACTIVE'),
-              eq(schema.assignments.periodYear, new Date().getFullYear()),
-              eq(schema.assignments.periodMonth, new Date().getMonth() + 1)
-            ),
-          },
         },
       });
 
@@ -592,13 +591,45 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         return sendError(reply, 400, 'QR_INVALID', 'Kaleng tidak aktif');
       }
 
-      const lastCollection = can.collections[0];
-      const activeAssignment = can.assignments[0];
+      // C1-T2 (§5 + §14.2/14.4): lookup toleran lintas periode. Hanya assignment
+      // MILIK petugas yang dibaca — bukan tugas orang lain tidak tersentuh,
+      // sehingga respons error tidak membocorkan owner_* (uji scan-qr tetap lulus).
+      const myAssignments = await db.query.assignments.findMany({
+        where: and(
+          eq(schema.assignments.officerId, officerId!),
+          eq(schema.assignments.canId, can.id),
+        ),
+        columns: { id: true, status: true, periodYear: true, periodMonth: true, assignedAt: true },
+        orderBy: [desc(schema.assignments.periodYear), desc(schema.assignments.periodMonth)],
+      });
 
-      if (!activeAssignment) {
-        return sendError(reply, 403, 'QR_NOT_ASSIGNED', 'Kaleng ini bukan tugas Anda pada periode berjalan');
+      const verdict = classifyScan(myAssignments, new Date());
+      const lastCollection = can.collections[0];
+
+      if (verdict.kind === 'NOT_ASSIGNED') {
+        return sendError(reply, 403, ErrorCode.QR_NOT_ASSIGNED, 'Kaleng ini bukan tugas Anda pada periode berjalan');
       }
 
+      if (verdict.kind === 'WRONG_PERIOD') {
+        return sendError(reply, 409, ErrorCode.QR_WRONG_PERIOD, scanWrongPeriodMessage(verdict.period), {
+          period: verdict.period,
+        });
+      }
+
+      if (verdict.kind === 'PERIOD_CLOSED') {
+        return sendError(reply, 409, ErrorCode.QR_PERIOD_CLOSED, scanClosedMessage(verdict.period, verdict.nextPeriod), {
+          period: verdict.period,
+          next_period: verdict.nextPeriod,
+        });
+      }
+
+      if (verdict.kind === 'ALREADY_COLLECTED') {
+        return sendError(reply, 409, ErrorCode.QR_ALREADY_SUBMITTED, scanAlreadyCollectedMessage(verdict.period), {
+          period: verdict.period,
+        });
+      }
+
+      const activeAssignment = verdict.assignment;
       return sendSuccess(reply, {
         id: activeAssignment.id,
         can_id: can.id,
@@ -613,7 +644,9 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           : null,
         status: activeAssignment.status,
         assigned_at: activeAssignment.assignedAt,
-        period: `${activeAssignment.periodYear}-${String(activeAssignment.periodMonth).padStart(2, '0')}`,
+        period: verdict.period,
+        // C1-T2: badge Toleransi (chip periode di HP pada T9) + countdown.
+        tolerance: verdict.tolerance,
       });
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);

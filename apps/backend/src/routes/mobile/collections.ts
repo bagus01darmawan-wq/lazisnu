@@ -10,9 +10,10 @@ import { AppError, isAppError } from '../../utils/AppError';
 import { Errors } from '../../utils/errorCatalog';
 import { correctCollection } from '../../services/collectionCorrectionService';
 
-import { validateAssignmentForSubmit, submitCollection, getLatestCollectionCondition } from '../../services/collectionSubmission';
+import { validateAssignmentForSubmit, submitCollection, getLatestCollectionCondition, assertCollectedAtInWindow } from '../../services/collectionSubmission';
 import { getPostgresError, getErrorMessage } from '../../utils/error-guards';
 import { evaluateEmptyStreakForCan } from '../../services/conditionProposalService';
+import { insertActivityLog } from '../../services/auditLogService';
 
 type MobileHistoryCollection = {
   id: string;
@@ -72,12 +73,42 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
       }
 
       const result = await db.transaction(async (tx) => {
+        let assignment;
         try {
-          await validateAssignmentForSubmit(tx, body.assignment_id, body.can_id, officerId);
+          assignment = await validateAssignmentForSubmit(tx, body.assignment_id, body.can_id, officerId);
         } catch (err: unknown) {
           const appErr = AppError.fromUnknown(err, 'Assignment tidak valid');
           if (appErr.code === 'CAN_ID_MISMATCH') {
             throw Errors.CAN_ID_MISMATCH(appErr.message);
+          }
+          throw appErr;
+        }
+
+        // C1-T2 (§14.3): collected_at (klaim HP) wajib dalam jendela periode
+        // milik assignment. Pelanggaran → tolak + audit (bukan diam-diam).
+        try {
+          assertCollectedAtInWindow(new Date(body.collected_at), assignment.periodYear, assignment.periodMonth);
+        } catch (err: unknown) {
+          const appErr = AppError.fromUnknown(err, 'collected_at di luar jendela periode');
+          try {
+            await insertActivityLog({
+              userId: user.userId,
+              officerId,
+              actionType: 'COLLECTED_AT_REJECTED',
+              entityType: 'assignment',
+              entityId: body.assignment_id,
+              oldData: null,
+              newData: {
+                collected_at: body.collected_at,
+                periodYear: assignment.periodYear,
+                periodMonth: assignment.periodMonth,
+                reason: (appErr.details as any)?.reason ?? null,
+              },
+              ipAddress: request.ip,
+              userAgent: request.headers['user-agent'] || null,
+            });
+          } catch {
+            // Audit tidak boleh menggagalkan penolakan yang sah.
           }
           throw appErr;
         }

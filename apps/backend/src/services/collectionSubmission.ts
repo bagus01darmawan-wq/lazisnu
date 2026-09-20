@@ -3,6 +3,20 @@ import * as schema from '../database/schema';
 import { eq, and, sql, ExtractTablesWithRelations } from 'drizzle-orm';
 import { alias, PgTransaction } from 'drizzle-orm/pg-core';
 import { Errors } from '../utils/errorCatalog';
+import {
+  buildPeriodBoundaries,
+  isPeriodLocked,
+  periodKey,
+  shiftPeriod,
+} from './periodCalendar';
+import { scanClosedMessage } from './scanClassification';
+
+/**
+ * C1-T2 (§14.3): toleransi selisih jam HP vs server. `collected_at` adalah
+ * klaim petugas (diisi HP), `serverTimestamp` adalah bukti sah kapan data
+ * sampai server.
+ */
+export const CLOCK_SKEW_MINUTES = 10;
 
 type Transaction = PgTransaction<
   any,
@@ -39,13 +53,17 @@ export function getLatestCollectionCondition() {
 }
 
 /**
- * Validasi apakah assignment aktif, valid, dan dimiliki oleh officer.
+ * Validasi apakah assignment aktif, valid, dimiliki officer, dan periodenya
+ * belum dikunci sistem (§14.1–14.2: patokan = assignment.period, bukan waktu
+ * kirim; submit Sept yang tiba setelah 10 Okt 00:00 DITOLAK untuk Sept dan
+ * diarahkan ke assignment Okt).
  */
 export async function validateAssignmentForSubmit(
   tx: Transaction,
   assignmentId: string,
   canId: string,
-  officerId: string
+  officerId: string,
+  now: Date = new Date()
 ) {
   const assignment = await tx.query.assignments.findFirst({
     where: and(
@@ -62,7 +80,53 @@ export async function validateAssignmentForSubmit(
     throw Errors.CAN_ID_MISMATCH();
   }
 
+  const b = buildPeriodBoundaries(assignment.periodYear, assignment.periodMonth);
+  if (isPeriodLocked(now, b.toleranceEnd)) {
+    const period = periodKey(assignment.periodYear, assignment.periodMonth);
+    const next = shiftPeriod(assignment.periodYear, assignment.periodMonth, 1);
+    const nextPeriod = periodKey(next.year, next.month);
+    throw Errors.QR_PERIOD_CLOSED(scanClosedMessage(period, nextPeriod), {
+      period,
+      next_period: nextPeriod,
+    });
+  }
+
   return assignment;
+}
+
+/**
+ * C1-T2 (§14.3): `collected_at` (klaim HP) wajib berada dalam jendela periode
+ * milik assignment — `[assign_date 00:00, tolerance_end 23:59]` + skew ±10 mnt.
+ * Di luar → VALIDATION_ERROR (non-retry: antrean HP memindah ke gagal permanen
+ * yang terlihat + audit di pemanggil, bukan hilang diam-diam).
+ */
+export function assertCollectedAtInWindow(
+  collectedAt: Date,
+  periodYear: number,
+  periodMonth: number
+): void {
+  const b = buildPeriodBoundaries(periodYear, periodMonth);
+  const skewMs = CLOCK_SKEW_MINUTES * 60 * 1000;
+  const t = collectedAt.getTime();
+  const period = periodKey(periodYear, periodMonth);
+  if (Number.isNaN(t)) {
+    throw Errors.VALIDATION_ERROR(`collected_at tidak valid untuk periode ${period}.`, {
+      reason: 'COLLECTED_AT_OUT_OF_WINDOW',
+      period,
+    });
+  }
+  if (t < b.assignDate.getTime() - skewMs || t > b.toleranceEnd.getTime() + skewMs) {
+    throw Errors.VALIDATION_ERROR(
+      `collected_at di luar jendela periode ${period} (20 00:00 s/d 9 bln berikut 23:59).`,
+      {
+        reason: 'COLLECTED_AT_OUT_OF_WINDOW',
+        period,
+        collected_at: collectedAt.toISOString(),
+        window_start: new Date(b.assignDate.getTime() - skewMs).toISOString(),
+        window_end: new Date(b.toleranceEnd.getTime() + skewMs).toISOString(),
+      }
+    );
+  }
 }
 
 async function assertNoExistingFirstSubmit(
