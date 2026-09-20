@@ -24,8 +24,8 @@ import { ErrorCode } from '../../utils/errorCatalog';
 const OCT5 = new Date(2026, 9, 5, 12, 0, 0);
 
 const T4_EMAILS = [
-  'ppk1-t4@test.com', 'ppk2-t4@test.com', 'ppk3-t4@test.com',
-  'adminr-t4@test.com', 'adminr3-t4@test.com', 'keur-t4@test.com', 'keumwc-t4@test.com',
+  'ppk1-t4@test.com', 'ppk2-t4@test.com', 'ppk3-t4@test.com', 'ppkr3-t4@test.com',
+  'adminr-t4@test.com', 'adminr3-t4@test.com', 'keur-t4@test.com', 'keumwc-t4@test.com', 'keur3-t4@test.com',
 ];
 const T4_BRANCH_CODES = ['BT4-R', 'BT4-R2', 'BT4-R3'];
 
@@ -66,21 +66,26 @@ describe('C1-T4 submission PPK & ranting (DB)', () => {
   let off1: string;
   let off2: string;
   let off3: string;
+  let offR3: string;
   let uPpk1: string;
   let uPpk2: string;
+  let uPpkR3: string;
   let uAdminR: string;
   let uAdminR3: string;
   let uKeuR: string;
   let uKeuMwc: string;
+  let uKeuR3: string;
   let asgC5: string;
   let colSeq2Id: string;
 
   let ppk1: SubmissionActor;
   let ppk2: SubmissionActor;
+  let ppkR3: SubmissionActor;
   let adminR: SubmissionActor;
   let adminR3: SubmissionActor;
   let keuR: SubmissionActor;
   let keuMwc: SubmissionActor;
+  let keuR3: SubmissionActor;
 
   async function mkPetugas(email: string, phone: string, branchId: string, code: string, name: string) {
     const [u] = await db.insert(schema.users).values({
@@ -152,9 +157,11 @@ describe('C1-T4 submission PPK & ranting (DB)', () => {
     const p1 = await mkPetugas('ppk1-t4@test.com', '083000000101', branchR, 'EMP-T4-1', 'Petugas T4 Satu');
     const p2 = await mkPetugas('ppk2-t4@test.com', '083000000102', branchR, 'EMP-T4-2', 'Petugas T4 Dua');
     const p3 = await mkPetugas('ppk3-t4@test.com', '083000000103', branchR2, 'EMP-T4-3', 'Petugas T4 Tiga');
+    const pR3 = await mkPetugas('ppkr3-t4@test.com', '083000000105', branchR3, 'EMP-T4-R3', 'Petugas T4 R3');
     uPpk1 = p1.userId; off1 = p1.officerId;
     uPpk2 = p2.userId; off2 = p2.officerId;
     off3 = p3.officerId;
+    uPpkR3 = pR3.userId; offR3 = pR3.officerId;
 
     async function mkStaf(email: string, phone: string, role: 'ADMIN_RANTING' | 'STAF_KEUANGAN', branchId: string | null) {
       const [u] = await db.insert(schema.users).values({
@@ -167,6 +174,7 @@ describe('C1-T4 submission PPK & ranting (DB)', () => {
     uAdminR3 = await mkStaf('adminr3-t4@test.com', '083000000202', 'ADMIN_RANTING', branchR3);
     uKeuR = await mkStaf('keur-t4@test.com', '083000000203', 'STAF_KEUANGAN', branchR);
     uKeuMwc = await mkStaf('keumwc-t4@test.com', '083000000204', 'STAF_KEUANGAN', null);
+    uKeuR3 = await mkStaf('keur3-t4@test.com', '083000000205', 'STAF_KEUANGAN', branchR3);
 
     ppk1 = { userId: uPpk1, role: 'PETUGAS', branchId: branchR, districtId, officerId: off1 };
     ppk2 = { userId: uPpk2, role: 'PETUGAS', branchId: branchR, districtId, officerId: off2 };
@@ -174,6 +182,8 @@ describe('C1-T4 submission PPK & ranting (DB)', () => {
     adminR3 = { userId: uAdminR3, role: 'ADMIN_RANTING', branchId: branchR3, districtId };
     keuR = { userId: uKeuR, role: 'STAF_KEUANGAN', branchId: branchR, districtId };
     keuMwc = { userId: uKeuMwc, role: 'STAF_KEUANGAN', branchId: null, districtId };
+    ppkR3 = { userId: uPpkR3, role: 'PETUGAS', branchId: branchR3, districtId, officerId: offR3 };
+    keuR3 = { userId: uKeuR3, role: 'STAF_KEUANGAN', branchId: branchR3, districtId };
 
     async function mkCan(branchId: string, qr: string, condition: 'AKTIF' | 'NON_AKTIF' = 'AKTIF') {
       const [c] = await db.insert(schema.cans).values({
@@ -446,5 +456,31 @@ describe('C1-T4 submission PPK & ranting (DB)', () => {
     }, OCT5);
     expect(res.status).toBe('FINAL_NOL');
     expect(res.total_amount).toBe(0);
+  });
+
+  test('syarat review-T4 #1: bendahara ranting lain → FORBIDDEN_SCOPE (tingkat PPK)', async () => {
+    const sub = await ensurePpkSubmission(offR3, branchR3, 2026, 9);
+    expect(sub.status).toBe('DRAFT');
+    await expect(
+      finalizePpkSubmission(ppkR3, {
+        submissionId: sub.id, ppkSignerId: uPpkR3, bendaharaSignerId: uKeuR,
+      }, OCT5),
+    ).rejects.toMatchObject({ code: ErrorCode.FORBIDDEN_SCOPE });
+    const ok = await finalizePpkSubmission(ppkR3, {
+      submissionId: sub.id, ppkSignerId: uPpkR3, bendaharaSignerId: uKeuR3,
+    }, OCT5);
+    expect(ok.status).toBe('FINAL');
+  });
+
+  test('syarat review-T4 #1: bendahara cabang (bukan MWC) → FORBIDDEN_SCOPE (tingkat ranting)', async () => {
+    const sub = await ensureBranchSubmission(branchR2, 2026, 10);
+    expect(sub.status).toBe('DRAFT');
+    const adminR2x = { userId: 'x', role: 'ADMIN_RANTING', branchId: branchR2, districtId } as SubmissionActor;
+    await expect(
+      finalizeBranchSubmission(adminR2x, {
+        submissionId: sub.id, shareMwc: 0,
+        rantingSignerId: 'x', mwcBendaharaSignerId: uKeuR,
+      }, OCT5),
+    ).rejects.toMatchObject({ code: ErrorCode.FORBIDDEN_SCOPE });
   });
 });

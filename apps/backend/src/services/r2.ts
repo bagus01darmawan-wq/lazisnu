@@ -45,6 +45,8 @@ export async function uploadToR2(params: {
   body: Buffer | Uint8Array | string;
   contentType: string;
   metadata?: Record<string, string>;
+  /** C1-T5 (§14.9): berkas privat — selalu 'private' untuk TTD/BA. */
+  cacheControl?: string;
 }): Promise<{ success: boolean; key?: string; url?: string; error?: string }> {
   const client = getR2Client();
   if (!client) return { success: false, error: 'R2 storage tidak dikonfigurasi' };
@@ -56,6 +58,7 @@ export async function uploadToR2(params: {
       Body: params.body,
       ContentType: params.contentType,
       Metadata: params.metadata,
+      ...(params.cacheControl ? { CacheControl: params.cacheControl } : {}),
     }));
 
     return { success: true, key: params.key };
@@ -63,6 +66,32 @@ export async function uploadToR2(params: {
     const message = getErrorMessage(err, 'Gagal upload file');
     console.error('[R2] Gagal upload:', message);
     return { success: false, error: message };
+  }
+}
+
+/**
+ * C1-T5: unduh bytes dari R2 (untuk menyematkan gambar TTD ke PDF di server).
+ * Bucket privat — hanya dipakai server-side, tidak pernah diekspos ke klien.
+ */
+export async function downloadFromR2(key: string): Promise<Buffer | null> {
+  const client = getR2Client();
+  if (!client) return null;
+
+  try {
+    const out = await client.send(new GetObjectCommand({
+      Bucket: config.R2_BUCKET_NAME,
+      Key: key,
+    }));
+    const body = out.Body as unknown as AsyncIterable<Uint8Array> | undefined;
+    if (!body || typeof body[Symbol.asyncIterator] !== 'function') return null;
+    const chunks: Buffer[] = [];
+    for await (const chunk of body) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  } catch (err: unknown) {
+    console.error('[R2] Gagal unduh:', getErrorMessage(err, 'Gagal unduh file'));
+    return null;
   }
 }
 

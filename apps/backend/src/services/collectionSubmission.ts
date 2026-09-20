@@ -35,6 +35,11 @@ export async function assertSubmissionOpen(
   year: number,
   month: number,
 ): Promise<void> {
+  // Syarat review-T4 #2: kunci baris submission (SELECT … FOR UPDATE) agar
+  // submit yang commit tepat setelah FINAL commit tidak lolos di READ
+  // COMMITTED. Di luar transaksi (rute skip, autocommit) klausa ini tidak
+  // berpengaruh — perilaku "baris belum ada = terbuka" tetap.
+  await dbOrTx.execute(sql`SELECT id FROM ppk_submissions WHERE officer_id = ${officerId} AND period_year = ${year} AND period_month = ${month} FOR UPDATE`);
   const sub = await dbOrTx.query.ppkSubmissions.findFirst({
     where: and(
       eq(schema.ppkSubmissions.officerId, officerId),

@@ -12,6 +12,7 @@ import adminRoutes from './routes/admin';
 import { bendaharaRoutes } from './routes/bendahara';
 import { schedulerRoutes } from './routes/scheduler';
 import { healthRoutes } from './routes/health';
+import { verifyRoutes } from './routes/verify';
 import { metricsRoutes } from './routes/metrics';
 import { httpRequestDurationMs, httpRequestsTotal } from './routes/metrics';
 import { correlationIdHook } from './middleware/correlationId';
@@ -257,6 +258,8 @@ export async function buildApp() {
   await server.register(authRoutes, { prefix: '/v1/auth' });
   // Publik (tanpa auth): info rilis untuk fitur update-in-app Tingkat 1
   await server.register(versionRoutes, { prefix: '/v1/mobile' });
+  // Publik (tanpa auth): verifikasi QR BA — hanya { valid }, tanpa bocor data.
+  await server.register(verifyRoutes, { prefix: '/v1/verify' });
   await server.register(mobileRoutes, { prefix: '/v1/mobile' });
   await server.register(adminRoutes, { prefix: '/v1/admin' });
   await server.register(bendaharaRoutes, { prefix: '/v1/bendahara' });
