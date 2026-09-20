@@ -9,7 +9,9 @@ import { v4 as uuidv4 } from 'uuid';
 // JWT Payload type
 export interface JWTPayload {
   userId: string;
-  role: 'ADMIN_KECAMATAN' | 'ADMIN_RANTING' | 'PETUGAS';
+  // C1-T0: tambah STAF_PENGUMPULAN + STAF_KEUANGAN (§14.13). Izin tulis
+  // (FINAL/kunci) tetap ditolak di routes T4-T6; di sini hanya dikenali.
+  role: 'ADMIN_KECAMATAN' | 'ADMIN_RANTING' | 'PETUGAS' | 'STAF_PENGUMPULAN' | 'STAF_KEUANGAN';
   officerId?: string;
   branchId?: string;
   districtId?: string;

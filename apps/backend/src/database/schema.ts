@@ -2,7 +2,25 @@ import { pgTable, uuid, varchar, text, timestamp, boolean, decimal, integer, jso
 import { relations, sql } from 'drizzle-orm';
 
 // Enums
-export const userRoleEnum = pgEnum('user_role', ['ADMIN_KECAMATAN', 'ADMIN_RANTING', 'PETUGAS']);
+// C1-T0: tambah STAF_PENGUMPULAN (siapkan jadwal, pantau — tanpa FINAL/kunci/ubah nominal)
+// dan STAF_KEUANGAN (pegang uang fisik, TTD kedua, unduh PDF — tanpa ubah nominal).
+// Penegakan "tidak boleh" ada di server (routes/services, T4-T6), bukan cuma di UI.
+export const userRoleEnum = pgEnum('user_role', ['ADMIN_KECAMATAN', 'ADMIN_RANTING', 'PETUGAS', 'STAF_PENGUMPULAN', 'STAF_KEUANGAN']);
+/**
+ * C1-T0: jenis cabang.
+ * - RANTING     : ranting biasa (wajib setor share 30% ke MWC).
+ * - PROGRAM_MWC : program milik MWC langsung (mis. Koin Taqwa — 100% ke MWC, tanpa share).
+ * Default RANTING agar data lama tetap terbaca sebagai ranting; Taqwa di-backfill via migrasi.
+ */
+export const branchKindEnum = pgEnum('branch_kind', ['RANTING', 'PROGRAM_MWC']);
+/** C1-T0: status setoran PPK — co-sign 2 HP (§14.6): DRAFT → PPK_SIGNED → FINAL. */
+export const ppkSubmissionStatusEnum = pgEnum('ppk_submission_status', ['DRAFT', 'PPK_SIGNED', 'FINAL']);
+/** C1-T0: status setoran ranting — FINAL_NOL = dikunci 0 pemasukan (§14.7). */
+export const branchSubmissionStatusEnum = pgEnum('branch_submission_status', ['DRAFT', 'FINAL', 'FINAL_NOL']);
+/** C1-T0: status kalender periode (§14.8): OPEN → TOLERANCE → LOCKED → DIBUKA_SEBAGIAN → LOCKED. */
+export const periodStatusEnum = pgEnum('period_status', ['OPEN', 'TOLERANCE', 'LOCKED', 'DIBUKA_SEBAGIAN']);
+/** C1-T0: alasan selisih share — wajib bila |selisih| > Rp 10.000 (§8). */
+export const varianceReasonEnum = pgEnum('variance_reason', ['KURANG_BAYAR', 'LEBIH_BAYAR', 'GABUNG_PERIODE', 'KOREKSI_ADMIN', 'HP_HILANG']);
 export const collectionStatusEnum = pgEnum('collection_status', ['PENDING', 'COMPLETED', 'FAILED', 'CANCELLED']);
 // POSTPONED dihapus 2026-09-16: dead enum — tidak pernah ditulis oleh alur
 // manapun (generator hanya ACTIVE; transfer REASSIGNED; skip UNCOLLECTED)
@@ -44,6 +62,8 @@ export const branches = pgTable('branches', {
   districtId: uuid('district_id').references(() => districts.id, { onDelete: 'cascade' }).notNull(),
   code: varchar('code', { length: 10 }).unique().notNull(),
   name: varchar('name', { length: 100 }).notNull(),
+  // C1-T0 (§8b opsi 1): diskriminator ranting vs program MWC. Default RANTING.
+  kind: branchKindEnum('kind').default('RANTING').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -246,6 +266,112 @@ export const activityLogs = pgTable('activity_logs', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+// ============================================================================
+// C1-T0: submission PPK — satu baris per PPK per periode (§9.1 + §14.6/14.8/14.9/14.10).
+// Total = SUM(collections.nominal) milik officer+periode, dihitung server (tanpa ketik manual).
+// Unik (officer_id, period_year, period_month) agar FINAL dobel ditolak DB.
+// TTD: PPK dulu (HP PPK) lalu bendahara (HP bendahara); beda userId ditegakkan
+// aplikasi + CHECK DB; reopen menghanguskan TTD (T7).
+// pdf_hash: SHA-256 hex PDF per versi agar unduhan lama tetap terverifikasi.
+// ============================================================================
+export const ppkSubmissions = pgTable('ppk_submissions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  officerId: uuid('officer_id').references(() => officers.id).notNull(),
+  branchId: uuid('branch_id').references(() => branches.id).notNull(),
+  periodYear: integer('period_year').notNull(),
+  periodMonth: integer('period_month').notNull(),
+  totalAmount: bigint('total_amount', { mode: 'bigint' }).default(sql`0`).notNull(),
+  collectionCount: integer('collection_count').default(0).notNull(),
+  bisyarohAmount: bigint('bisyaroh_amount', { mode: 'bigint' }).default(sql`0`).notNull(),
+  netAmount: bigint('net_amount', { mode: 'bigint' }).default(sql`0`).notNull(),
+  formulaSnapshot: json('formula_snapshot'),
+  status: ppkSubmissionStatusEnum('status').default('DRAFT').notNull(),
+  finalizedAt: timestamp('finalized_at'),
+  finalizedBy: uuid('finalized_by').references(() => users.id),
+  ppkSignerId: uuid('ppk_signer_id').references(() => users.id),
+  ppkSignedAt: timestamp('ppk_signed_at'),
+  ppkSignatureUrl: varchar('ppk_signature_url', { length: 500 }),
+  bendaharaSignerId: uuid('bendahara_signer_id').references(() => users.id),
+  bendaharaSignedAt: timestamp('bendahara_signed_at'),
+  bendaharaSignatureUrl: varchar('bendahara_signature_url', { length: 500 }),
+  version: integer('version').default(1).notNull(),
+  pdfUrl: varchar('pdf_url', { length: 500 }),
+  pdfHash: varchar('pdf_hash', { length: 128 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  ppkOfficerPeriodUnq: uniqueIndex('ppk_officer_period_unq').on(t.officerId, t.periodYear, t.periodMonth),
+  ppkBranchPeriodStatusIdx: index('ppk_branch_period_status_idx').on(t.branchId, t.periodYear, t.periodMonth, t.status),
+}));
+
+// ============================================================================
+// C1-T0: submission ranting — satu baris per ranting per periode (§9.2 + B-4).
+// share_mwc = nominal aktual disetor (boleh ≠ ekspektasi, wajib alasan bila |selisih|>10rb).
+// 6 angka kaleng = snapshot kondisi saat FINAL (total + 5 keranjang §8c; ditarik tak dihitung).
+// Taqwa (kind=PROGRAM_MWC) memakai tabel yang sama dengan share_mwc=0, label program.
+// ============================================================================
+export const branchSubmissions = pgTable('branch_submissions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  branchId: uuid('branch_id').references(() => branches.id).notNull(),
+  districtId: uuid('district_id').references(() => districts.id).notNull(),
+  periodYear: integer('period_year').notNull(),
+  periodMonth: integer('period_month').notNull(),
+  totalAmount: bigint('total_amount', { mode: 'bigint' }).default(sql`0`).notNull(),
+  bisyarohTotal: bigint('bisyaroh_total', { mode: 'bigint' }).default(sql`0`).notNull(),
+  shareMwc: bigint('share_mwc', { mode: 'bigint' }).default(sql`0`).notNull(),
+  netAmount: bigint('net_amount', { mode: 'bigint' }).default(sql`0`).notNull(),
+  expectedShare: bigint('expected_share', { mode: 'bigint' }).default(sql`0`).notNull(),
+  shareVariance: bigint('share_variance', { mode: 'bigint' }).default(sql`0`).notNull(),
+  varianceReason: varianceReasonEnum('variance_reason'),
+  linkedPeriods: json('linked_periods'),
+  collectionCount: integer('collection_count').default(0).notNull(),
+  canTotal: integer('can_total').default(0).notNull(),
+  canAktif: integer('can_aktif').default(0).notNull(),
+  canNonaktif: integer('can_nonaktif').default(0).notNull(),
+  canRusak: integer('can_rusak').default(0).notNull(),
+  canHilang: integer('can_hilang').default(0).notNull(),
+  canDikembalikan: integer('can_dikembalikan').default(0).notNull(),
+  formulaSnapshot: json('formula_snapshot'),
+  status: branchSubmissionStatusEnum('status').default('DRAFT').notNull(),
+  finalizedAt: timestamp('finalized_at'),
+  finalizedBy: uuid('finalized_by').references(() => users.id),
+  rantingSignerId: uuid('ranting_signer_id').references(() => users.id),
+  rantingSignedAt: timestamp('ranting_signed_at'),
+  rantingSignatureUrl: varchar('ranting_signature_url', { length: 500 }),
+  mwcBendaharaSignerId: uuid('mwc_bendahara_signer_id').references(() => users.id),
+  mwcBendaharaSignedAt: timestamp('mwc_bendahara_signed_at'),
+  mwcBendaharaSignatureUrl: varchar('mwc_bendahara_signature_url', { length: 500 }),
+  version: integer('version').default(1).notNull(),
+  pdfUrl: varchar('pdf_url', { length: 500 }),
+  pdfHash: varchar('pdf_hash', { length: 128 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  branchPeriodUnq: uniqueIndex('branch_period_unq').on(t.branchId, t.periodYear, t.periodMonth),
+  branchDistrictPeriodStatusIdx: index('branch_district_period_status_idx').on(t.districtId, t.periodYear, t.periodMonth, t.status),
+}));
+
+// ============================================================================
+// C1-T0: kalender periode — satu baris per periode YYYY-MM (§9.3).
+// Tanggal tetap: assign tgl 20 00:00, due tgl 27, toleransi s/d tgl 9 bln berikut
+// 23:59 WIB. Semua batas dihitung server WIB (T1 memakai operationalTimeZone).
+// ============================================================================
+export const periodCalendar = pgTable('period_calendar', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  periodYear: integer('period_year').notNull(),
+  periodMonth: integer('period_month').notNull(),
+  assignDate: timestamp('assign_date').notNull(),
+  dueDate: timestamp('due_date').notNull(),
+  toleranceEnd: timestamp('tolerance_end').notNull(),
+  status: periodStatusEnum('status').default('OPEN').notNull(),
+  lockedAt: timestamp('locked_at'),
+  lockedBy: uuid('locked_by').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  periodCalendarYearMonthUnq: uniqueIndex('period_calendar_year_month_unq').on(t.periodYear, t.periodMonth),
+}));
+
 // Collection Summary
 export const collectionSummaries = pgTable('collection_summaries', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -355,5 +481,23 @@ export const userSessions = pgTable('user_sessions', {
 
 export const userSessionsRelations = relations(userSessions, ({ one }) => ({
   user: one(users, { fields: [userSessions.userId], references: [users.id] }),
+}));
+
+export const ppkSubmissionsRelations = relations(ppkSubmissions, ({ one }) => ({
+  officer: one(officers, { fields: [ppkSubmissions.officerId], references: [officers.id] }),
+  branch: one(branches, { fields: [ppkSubmissions.branchId], references: [branches.id] }),
+  ppkSigner: one(users, { fields: [ppkSubmissions.ppkSignerId], references: [users.id] }),
+  bendaharaSigner: one(users, { fields: [ppkSubmissions.bendaharaSignerId], references: [users.id] }),
+}));
+
+export const branchSubmissionsRelations = relations(branchSubmissions, ({ one }) => ({
+  branch: one(branches, { fields: [branchSubmissions.branchId], references: [branches.id] }),
+  district: one(districts, { fields: [branchSubmissions.districtId], references: [districts.id] }),
+  rantingSigner: one(users, { fields: [branchSubmissions.rantingSignerId], references: [users.id] }),
+  mwcBendaharaSigner: one(users, { fields: [branchSubmissions.mwcBendaharaSignerId], references: [users.id] }),
+}));
+
+export const periodCalendarRelations = relations(periodCalendar, ({ one }) => ({
+  locker: one(users, { fields: [periodCalendar.lockedBy], references: [users.id] }),
 }));
 
