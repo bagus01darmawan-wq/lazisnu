@@ -9,8 +9,9 @@
  *   siap", bukan FINAL gagal.
  * - Idempoten: versi sama + `pdf_url`/`pdf_hash` terisi → pakai tersimpan
  *   (hash sama, uji §12.8). `pdf_url` menyimpan KEY R2 (bukan URL publik).
- * - Deterministik: metadata tanggal PDF difiksasi agar bytes stabil;
- *   `finalized_at` yang benar tampil sebagai TEKS di badan.
+ * - Metadata tanggal PDF difiksasi untuk mengurangi variasi bytes; bytes TIDAK
+ *   dijamin identik antar-generate (doc-ID pdf-lib acak) — idempotensi dijamin
+ *   `pdf_hash`/`pdf_url` tersimpan, bukan determinisme renderer (koreksi F5).
  * - Dua hash, dua guna (terdokumentasi eksplisit):
  *   - `pdf_hash` = SHA-256 bytes PDF → integritas arsip (banding V1/V2, T7).
  *   - hash QR = `baContentHash` atas snapshot kanonis → otentisitas ISI,
@@ -385,9 +386,13 @@ export async function ensureBranchBaPdf(submissionId: string, opts: { force?: bo
 }
 
 /**
- * Verifikasi minimal (§14.9): hanya `{ valid }`. Seragam untuk id tak dikenal
- * / format salah / hash salah — tidak membocorkan nominal, nama, pihak, atau
- * keberadaan id.
+ * Verifikasi minimal (§14.9 + F3 review-T5): hanya `{ valid }`. Seragam untuk
+ * id tak dikenal / format salah / hash salah — tidak membocorkan nominal,
+ * nama, pihak, atau keberadaan id.
+ *
+ * C1-T6 (F3): `valid` berarti "BA SAH + konten cocok hash" — baris harus
+ * `FINAL`/`FINAL_NOL` (QR hanya dicetak di PDF FINAL). Hash benar + status
+ * DRAFT/PPK_SIGNED → `false`.
  */
 export async function verifyBaRecord(
   type: 'ppk' | 'branch',
@@ -401,9 +406,11 @@ export async function verifyBaRecord(
   if (type === 'ppk') {
     const row = await db.query.ppkSubmissions.findFirst({ where: eq(schema.ppkSubmissions.id, id) });
     if (!row || row.version !== version) return false;
+    if (row.status !== 'FINAL') return false;
     return baContentHash('ppk', ppkContentSnapshot(row)) === hash;
   }
   const row = await db.query.branchSubmissions.findFirst({ where: eq(schema.branchSubmissions.id, id) });
   if (!row || row.version !== version) return false;
+  if (row.status !== 'FINAL' && row.status !== 'FINAL_NOL') return false;
   return baContentHash('branch', branchContentSnapshot(row)) === hash;
 }

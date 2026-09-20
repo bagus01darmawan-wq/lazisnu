@@ -482,7 +482,9 @@ snapshot; sebelum FINAL berlabel `DRAFT — belum sah`.
 
 **Endpoint:** `GET /mobile/submissions/{id}/pdf` (peran sama; FINAL saja) —
 lazy-generate → `{ download_url (signed, pendek), expires_in_seconds,
-pdf_hash, reused }`. Tanda ulang / versi basi → `409 CONFLICT`.
+pdf_hash, reused }`. Idempoten: versi sama + berkas sudah ada → `reused: true`
+(hash sama). `sign`/`countersign` dengan versi basi atau tanda ulang →
+`409 CONFLICT`.
 
 ---
 
@@ -808,17 +810,26 @@ ditolak ("tombol mati sekali").
 
 **Endpoint:** `PATCH /admin/period-drafts/items/{itemId}` body `{ "officer_id": "uuid" }` (hanya Staf Pengumpulan, draft DRAFT, petugas satu ranting/program) • `DELETE /admin/period-drafts/items/{itemId}` (keluarkan kaleng dari draft).
 
-### 4.12 Setoran Ranting — Co-sign, Berita Acara, PDF (C1-T4/T5)
+### 4.12 Setoran Ranting — Co-sign, Berita Acara, PDF (C1-T4/T5/T6)
 
 Agregat PPK FINAL + ekspektasi share 30% × sisa + selisih. Kunci aktif hanya
 bila semua PPK sudah FINAL (disebut namanya bila belum). Selisih
 `|aktual − ekspektasi| > Rp 10.000` wajib alasan; `GABUNG_PERIODE` wajib
 `linked_periods`. `as_nol: true` = kunci 0 pemasukan (totals 0 + alasan wajib)
-→ status `FINAL_NOL`. Orkestrasi berlapis + `FINAL_NOL` massal MWC = T6.
+→ status `FINAL_NOL`.
 
 Upacara co-sign (C1-T5): Admin Ranting sign di sesinya (+ angka; status tetap
 DRAFT) → Bendahara MWC (STAF_KEUANGAN sedistrik) countersign di HP-nya →
 `FINAL`/`FINAL_NOL`. `signer_id` selalu pemilik sesi.
+
+Keputusan T6 (review-T5): (F6) `as_nol` tidak dipersistensi — `FINAL_NOL`
+diturunkan sebagai total 0 + share 0 + alasan tersimpan (aman karena variance
+0 normalnya tak butuh alasan); massal MWC memakai `KOREKSI_ADMIN` + audit
+"tidak ada laporan penjemputan". (F8) countersign ulang selama `PPK_SIGNED`
+dibiarkan sebagai koreksi coretan sebelum FINAL (konsisten menimpa tier-2).
+(F3) verifikasi QR mensyaratkan `FINAL`/`FINAL_NOL` — hash benar + status
+DRAFT → `valid: false`. (F1a) coretan yang gagal gerbang dihapus best-effort
+agar tak ada objek yatim.
 
 **Endpoint:** `GET /admin/branch-submissions?year=&month=` • `GET /admin/branch-submissions/{id}` (+ `ppk_penyusun`)
 
@@ -847,10 +858,52 @@ pemilik / kecamatan sedistrik / keuangan se-scope) •
 `{ download_url, expires_in_seconds, pdf_hash, reused }`.
 
 **Endpoint publik:** `GET /v1/verify/ba?type=ppk|branch&id=&version=&hash=`
-→ `{ valid: true|false }` saja (tanpa nominal/nama/pihak).
+→ `{ valid: true|false }` saja (tanpa nominal/nama/pihak). `valid: true`
+berarti "BA SAH (FINAL/FINAL_NOL) + konten cocok hash" (C1-T6 F3).
 
 **Endpoint:** `DELETE /admin/signatures` (ADMIN_KECAMATAN) — hapus coretan
 TTD (retensi UU 27/2022), body `{ key, reason }`.
+
+### 4.13 Kunci Periode MWC — Berlapis 2 Tahap (C1-T6, §14.7)
+
+Tombol aktif sejak 27 00:00 bulan berjalan. Hanya `ADMIN_KECAMATAN`
+sedistrik; massal hanya `kind=RANTING` (program MWC/Taqwa dikecualikan).
+`FINAL_NOL` tidak dihitung "sudah lapor" (flag merah UI) — `reported_count`
+= FINAL saja. Notifikasi push/WA = T11 (tiket ini audit + daftar untuk UI).
+
+**Endpoint:** `POST /admin/kunci-periode` — body `{ "year": 2026, "month": 9 }`.
+
+- `<27 00:00` → `400 VALIDATION_ERROR` (belum saatnya).
+- `27 00:00–9 23:59` → fase `REKAP`: tarik FINAL saja, tanpa men-nolkan,
+  tanpa LOCKED. Balasan `{ phase: "REKAP", final_count, final_nol_count,
+  reported_count, pending_count, pending[], created_final_nol: [] }`.
+- `≥10 00:00` → fase `KUNCI_KERAS`: buat `FINAL_NOL` (0 + `KOREKSI_ADMIN` +
+  snapshot kaleng + `finalizedBy=MWC`, signer NULL = segel sistem) untuk tiap
+  ranting TANPA baris submission DAN TANPA baris PPK (DRAFT/ranting parsial
+  dibiarkan pending manual — tidak menghapus uang) + `period_calendar=LOCKED`
+  + audit. Idempoten (panggil dua kali → `created_final_nol: []` kedua kali).
+
+**Response (200) KUNCI_KERAS:**
+```json
+{
+  "success": true,
+  "data": {
+    "period": "2026-09",
+    "phase": "KUNCI_KERAS",
+    "period_status": "LOCKED",
+    "total_ranting": 5,
+    "final_count": 1,
+    "final_nol_count": 1,
+    "reported_count": 1,
+    "pending_count": 3,
+    "pending": [{ "branch_id": "uuid", "branch_name": "Ranting", "submission_status": "DRAFT", "has_ppk_rows": true }],
+    "created_final_nol": [{ "branch_id": "uuid", "branch_name": "Ranting diam", "submission_id": "uuid" }],
+    "program_mwc_total": 1,
+    "program_mwc_final": 0,
+    "calendar_locked": true
+  }
+}
+```
 
 ---
 
