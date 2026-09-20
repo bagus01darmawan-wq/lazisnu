@@ -88,6 +88,7 @@ describe('ErrorCatalog — pre-built Errors', () => {
     { name: 'QR_NOT_ASSIGNED', factory: Errors.QR_NOT_ASSIGNED, expectedCode: ErrorCode.QR_NOT_ASSIGNED, expectedStatus: 403, expectedRetryable: false },
     { name: 'QR_WRONG_PERIOD', factory: Errors.QR_WRONG_PERIOD, expectedCode: ErrorCode.QR_WRONG_PERIOD, expectedStatus: 409, expectedRetryable: false },
     { name: 'QR_PERIOD_CLOSED', factory: Errors.QR_PERIOD_CLOSED, expectedCode: ErrorCode.QR_PERIOD_CLOSED, expectedStatus: 409, expectedRetryable: false },
+    { name: 'DRAFT_NOT_FOUND', factory: Errors.DRAFT_NOT_FOUND, expectedCode: ErrorCode.DRAFT_NOT_FOUND, expectedStatus: 404, expectedRetryable: false },
     { name: 'WA_SEND_FAILED', factory: Errors.WA_SEND_FAILED, expectedCode: ErrorCode.WA_SEND_FAILED, expectedStatus: 502, expectedRetryable: true },
     { name: 'INTERNAL_ERROR', factory: Errors.INTERNAL_ERROR, expectedCode: ErrorCode.INTERNAL_ERROR, expectedStatus: 500, expectedRetryable: true },
     { name: 'VALIDATION_ERROR', factory: Errors.VALIDATION_ERROR, expectedCode: ErrorCode.VALIDATION_ERROR, expectedStatus: 400, expectedRetryable: false },

@@ -736,6 +736,40 @@ antrean gagal permanen); `collected_at` di luar jendela periode ditolak
 }
 ```
 
+### 4.11 Draft Penugasan — Generate Approve (C1-T3)
+
+Robot menyiapkan draft siap-jalan per ranting/program tepat tgl 10 & 20
+(via Scheduler §5.3); Staf Bid. Pengumpulan melihat–mengedit–menyetujui,
+diam 24 jam → eskalasi ke Staf Keuangan (Bendahara/Sekretaris). Semua route
+di bawah otorisasi `STAF_PENGUMPULAN` + `STAF_KEUANGAN` (scope rantingnya /
+program MWC distriknya). Setujui = tugas aktif dalam 1 transaksi; kedua kali
+ditolak ("tombol mati sekali").
+
+**Endpoint:** `GET /admin/period-drafts?year=&month=`
+
+**Response (200):** daftar `{ id, period, branch_id, branch_name, branch_kind, status, prepared_at, item_count, event_kind, period_status }` — `event_kind`: `PENDING` (menunggu Staf) / `ESCALATED` (lewat 24 jam, giliran Keuangan) / `APPROVED`.
+
+**Endpoint:** `GET /admin/period-drafts/{id}` — rincian + item `{ id, can_id, qr_code, owner_name, officer_id, officer_name }`.
+
+**Endpoint:** `POST /admin/period-drafts/{id}/approve`
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "draft_id": "uuid",
+    "period": "2026-10",
+    "item_count": 120,
+    "created_assignments": 118,
+    "approved_by_role": "STAF_PENGUMPULAN",
+    "escalated": false
+  }
+}
+```
+
+**Endpoint:** `PATCH /admin/period-drafts/items/{itemId}` body `{ "officer_id": "uuid" }` (hanya Staf Pengumpulan, draft DRAFT, petugas satu ranting/program) • `DELETE /admin/period-drafts/items/{itemId}` (keluarkan kaleng dari draft).
+
 ---
 
 ## 5. Scheduler API (Internal)
@@ -772,6 +806,30 @@ antrean gagal permanen); `collected_at` di luar jendela periode ditolak
 {
   "year": 2026,
   "month": 4
+}
+```
+
+### 5.3 Prepare Draft Penugasan (C1-T3, robot)
+
+**Endpoint:** `POST /scheduler/prepare-draft` (kunci `x-internal-api-key`)
+
+Menyiapkan draft siap-jalan untuk `{year, month}` = **bulan berjalan**
+(cron tgl 10 → bulan itu; cron tgl 20 → susulan bulan itu; bulan masa depan
+ditolak). Robot tidak menulis `assignments` — hanya draft + baris
+`period_calendar` yang identik `buildPeriodBoundaries(y, m)`. Idempoten
+(aman cron ganda).
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "period": "2026-10",
+    "calendar_row_written": true,
+    "drafts": [
+      { "branch_id": "uuid", "draft_id": "uuid", "status": "DRAFT", "added_items": 120, "total_items": 120, "direct_assignments": 0 }
+    ]
+  }
 }
 ```
 

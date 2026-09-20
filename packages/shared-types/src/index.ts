@@ -43,6 +43,12 @@ export enum PeriodStatus {
   DIBUKA_SEBAGIAN = "DIBUKA_SEBAGIAN",
 }
 
+// C1-T3 (§14.12): DRAFT = menunggu setujui (boleh diedit); APPROVED = tugas aktif.
+export enum PeriodDraftStatus {
+  DRAFT = "DRAFT",
+  APPROVED = "APPROVED",
+}
+
 // C1-T0 (§8): alasan wajib bila |aktual − ekspektasi| > Rp 10.000.
 export type VarianceReason =
   | "KURANG_BAYAR"
@@ -200,6 +206,32 @@ export interface PeriodCalendar {
   due_date: string;
   tolerance_end: string;
   status: PeriodStatus;
+}
+
+// ─── C1-T3: Draft penugasan (1 draft = 1 ranting/program × 1 periode) ─────────
+export interface PeriodDraft {
+  id: string;
+  period: string;
+  period_year: number;
+  period_month: number;
+  branch_id: string;
+  branch_name: string;
+  branch_kind: BranchKind;
+  status: PeriodDraftStatus;
+  prepared_at: string;
+  item_count: number;
+  /** PENDING = menunggu Staf; ESCALATED = lewat 24 jam, giliran Keuangan. */
+  event_kind: "APPROVED" | "ESCALATED" | "PENDING";
+  period_status: PeriodStatus;
+}
+
+export interface PeriodDraftItem {
+  id: string;
+  can_id: string;
+  qr_code?: string | null;
+  owner_name: string;
+  officer_id: string;
+  officer_name: string;
 }
 
 // ─── User ─────────────────────────────────────────────────────────────────────

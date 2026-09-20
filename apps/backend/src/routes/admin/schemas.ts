@@ -43,3 +43,8 @@ export const createAssignmentSchema = z.object({
   period_year: z.number().min(2020).max(2100),
   period_month: z.number().min(1).max(12),
 });
+
+/** C1-T3: ganti petugas satu item draft (harus aktif + satu ranting/program). */
+export const updateDraftItemSchema = z.object({
+  officer_id: z.string().uuid(),
+});

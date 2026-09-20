@@ -21,6 +21,13 @@ export const branchSubmissionStatusEnum = pgEnum('branch_submission_status', ['D
 export const periodStatusEnum = pgEnum('period_status', ['OPEN', 'TOLERANCE', 'LOCKED', 'DIBUKA_SEBAGIAN']);
 /** C1-T0: alasan selisih share — wajib bila |selisih| > Rp 10.000 (§8). */
 export const varianceReasonEnum = pgEnum('variance_reason', ['KURANG_BAYAR', 'LEBIH_BAYAR', 'GABUNG_PERIODE', 'KOREKSI_ADMIN', 'HP_HILANG']);
+/**
+ * C1-T3: status draft penugasan — robot siapkan → manusia setujui (§14.12).
+ * DRAFT = menunggu persetujuan Staf (boleh diedit); APPROVED = sudah jadi
+ * tugas aktif (tombol mati, tidak bisa disetujui dua kali). Tidak ada EXPIRED:
+ * draft basi ditolak saat approve bila periodenya sudah dikunci (T3).
+ */
+export const draftStatusEnum = pgEnum('draft_status', ['DRAFT', 'APPROVED']);
 export const collectionStatusEnum = pgEnum('collection_status', ['PENDING', 'COMPLETED', 'FAILED', 'CANCELLED']);
 // POSTPONED dihapus 2026-09-16: dead enum — tidak pernah ditulis oleh alur
 // manapun (generator hanya ACTIVE; transfer REASSIGNED; skip UNCOLLECTED)
@@ -372,6 +379,48 @@ export const periodCalendar = pgTable('period_calendar', {
   periodCalendarYearMonthUnq: uniqueIndex('period_calendar_year_month_unq').on(t.periodYear, t.periodMonth),
 }));
 
+// ============================================================================
+// C1-T3: draft penugasan — robot siapkan, manusia setujui (§14.12, §6).
+// Satu draft per (periode, ranting): draft ranting (branch kind=RANTING) dan
+// draft program (branch kind=PROGRAM_MWC, mis. Taqwa) — keduanya baris branches
+// biasa (Opsi 1 T0), sehingga branchId selalu terisi dan unik per periode.
+// Robot TIDAK PERNAH menulis tabel assignments (hanya draft + period_calendar);
+// tugas aktif lahir saat approve (sekali, tombol mati) atau sapuan susulan
+// pasca-approve yang sudah diaudit.
+// ============================================================================
+export const periodDrafts = pgTable('period_drafts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  periodYear: integer('period_year').notNull(),
+  periodMonth: integer('period_month').notNull(),
+  branchId: uuid('branch_id').references(() => branches.id).notNull(),
+  districtId: uuid('district_id').references(() => districts.id).notNull(),
+  status: draftStatusEnum('status').default('DRAFT').notNull(),
+  preparedAt: timestamp('prepared_at').defaultNow().notNull(),
+  approvedAt: timestamp('approved_at'),
+  approvedBy: uuid('approved_by').references(() => users.id),
+  approvedByRole: varchar('approved_by_role', { length: 20 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  periodBranchUnq: uniqueIndex('period_draft_period_branch_unq').on(t.periodYear, t.periodMonth, t.branchId),
+  draftsDistrictPeriodStatusIdx: index('period_drafts_district_period_status_idx').on(t.districtId, t.periodYear, t.periodMonth, t.status),
+}));
+
+// Calon (kaleng → petugas) di dalam satu draft. officerId boleh diubah Staf
+// Pengumpulan sebelum approve (edit draft, §14.12); backupOfficerId diteruskan
+// ke assignments saat approve.
+export const periodDraftItems = pgTable('period_draft_items', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  draftId: uuid('draft_id').references(() => periodDrafts.id, { onDelete: 'cascade' }).notNull(),
+  canId: uuid('can_id').references(() => cans.id).notNull(),
+  officerId: uuid('officer_id').references(() => officers.id).notNull(),
+  backupOfficerId: uuid('backup_officer_id').references(() => officers.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  draftCanUnq: uniqueIndex('period_draft_item_draft_can_unq').on(t.draftId, t.canId),
+  draftItemsDraftIdx: index('period_draft_items_draft_idx').on(t.draftId),
+}));
+
 // Collection Summary
 export const collectionSummaries = pgTable('collection_summaries', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -499,5 +548,18 @@ export const branchSubmissionsRelations = relations(branchSubmissions, ({ one })
 
 export const periodCalendarRelations = relations(periodCalendar, ({ one }) => ({
   locker: one(users, { fields: [periodCalendar.lockedBy], references: [users.id] }),
+}));
+
+export const periodDraftsRelations = relations(periodDrafts, ({ one, many }) => ({
+  branch: one(branches, { fields: [periodDrafts.branchId], references: [branches.id] }),
+  district: one(districts, { fields: [periodDrafts.districtId], references: [districts.id] }),
+  approver: one(users, { fields: [periodDrafts.approvedBy], references: [users.id] }),
+  items: many(periodDraftItems),
+}));
+
+export const periodDraftItemsRelations = relations(periodDraftItems, ({ one }) => ({
+  draft: one(periodDrafts, { fields: [periodDraftItems.draftId], references: [periodDrafts.id] }),
+  can: one(cans, { fields: [periodDraftItems.canId], references: [cans.id] }),
+  officer: one(officers, { fields: [periodDraftItems.officerId], references: [officers.id] }),
 }));
 
