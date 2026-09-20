@@ -58,12 +58,23 @@ export const skipAssignmentSchema = z.object({
   notes: z.string().max(255).optional(),
 }).strict();
 
-/** C1-T4: FINAL-kan setoran PPK (TTD ditangkap upacara T5; FINAL menutup). */
-export const finalizePpkSchema = z.object({
-  ppk_signer_id: z.string().uuid(),
-  bendahara_signer_id: z.string().uuid(),
+/**
+ * C1-T5: upacara co-sign. signer_id SELALU pemilik sesi (bukan body —
+ * kunci berisi *_signer_id otomatis 400 karena .strict()).
+ */
+export const signSubmissionSchema = z.object({
+  signature_png: z.string().min(100),
+  consent: z.boolean(),
   expected_version: z.number().int().min(1).optional(),
-  force_reason: z.string().min(5).max(255).optional(),
+}).strict();
+
+/** C1-T5: countersign ranting oleh Bendahara MWC (angka sudah di-sign). */
+export const countersignBranchSchema = signSubmissionSchema;
+
+/** C1-T5: force FINAL Admin Ranting (mensyaratkan PPK_SIGNED + kedua TTD). */
+export const forceFinalizePpkSchema = z.object({
+  force_reason: z.string().min(5).max(255),
+  expected_version: z.number().int().min(1).optional(),
 }).strict();
 
 /** POST /mobile/cans/:canId/visits — kunjungan verifikasi / penggantian (BUKAN penjemputan). */

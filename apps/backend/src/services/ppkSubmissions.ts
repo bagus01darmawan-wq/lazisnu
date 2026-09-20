@@ -18,7 +18,7 @@
  */
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { and, eq, sql, type ExtractTablesWithRelations } from 'drizzle-orm';
+import { and, eq, inArray, sql, type ExtractTablesWithRelations } from 'drizzle-orm';
 import { type PgTransaction } from 'drizzle-orm/pg-core';
 import { Errors } from '../utils/errorCatalog';
 import { insertActivityLog } from './auditLogService';
@@ -345,10 +345,9 @@ export async function finalizePpkSubmission(actor: SubmissionActor, input: PpkFi
     if (input.ppkSignerId !== officer.userId) {
       throw Errors.VALIDATION_ERROR('Penandatangan PPK harus pemilik setoran.');
     }
-    const bendaharaRole = await loadUserRoleTx(tx, input.bendaharaSignerId);
-    if (bendaharaRole !== 'STAF_KEUANGAN') {
-      throw Errors.VALIDATION_ERROR('Penandatangan kedua harus Staf Keuangan (Bendahara/Sekretaris).');
-    }
+    // Syarat review-T4 #1 (T5): bendahara = STAF_KEUANGAN *seranting* dengan
+    // setoran (keuangan ranting/distrik lain ditolak — bukan sekadar peran).
+    await assertPpkBendaharaScope(tx, input.bendaharaSignerId, sub.branchId);
 
     const updated = await tx
       .update(schema.ppkSubmissions)
@@ -370,7 +369,9 @@ export async function finalizePpkSubmission(actor: SubmissionActor, input: PpkFi
       .where(
         and(
           eq(schema.ppkSubmissions.id, sub.id),
-          eq(schema.ppkSubmissions.status, 'DRAFT'),
+          // C1-T5: FINAL sah dari DRAFT (jalur lama) maupun PPK_SIGNED
+          // (upacara co-sign: countersign/force mendelegasikan ke sini).
+          inArray(schema.ppkSubmissions.status, ['DRAFT', 'PPK_SIGNED']),
           eq(schema.ppkSubmissions.version, sub.version),
         ),
       )
@@ -406,12 +407,47 @@ export async function finalizePpkSubmission(actor: SubmissionActor, input: PpkFi
   return toPpkResponse(result.row);
 }
 
-async function loadUserRoleTx(tx: DbOrTx, userId: string): Promise<string | null> {
+/**
+ * Syarat review-T4 #1 (dipakai finalize + countersign T5): bendahara FINAL PPK
+ * wajib STAF_KEUANGAN *seranting* dengan setoran (`branchId` sama).
+ */
+export async function assertPpkBendaharaScope(
+  tx: DbOrTx,
+  bendaharaUserId: string,
+  submissionBranchId: string,
+): Promise<void> {
   const row = await tx.query.users.findFirst({
-    where: eq(schema.users.id, userId),
-    columns: { role: true },
+    where: eq(schema.users.id, bendaharaUserId),
+    columns: { role: true, branchId: true },
   });
-  return row?.role ?? null;
+  // Kontrak T4 dipertahankan: peran salah → 400; scope salah → 403 (baru T5).
+  if (!row || row.role !== 'STAF_KEUANGAN') {
+    throw Errors.VALIDATION_ERROR('Penandatangan kedua harus Staf Keuangan (Bendahara/Sekretaris).');
+  }
+  if (row.branchId !== submissionBranchId) {
+    throw Errors.FORBIDDEN_SCOPE('Penandatangan kedua harus Bendahara/Sekretaris ranting setoran ini.');
+  }
+}
+
+/**
+ * Syarat review-T4 #1 tingkat ranting: bendahara MWC = STAF_KEUANGAN level
+ * distrik (`branchId` kosong) satu distrik dengan ranting itu.
+ */
+export async function assertMwcBendaharaScope(
+  tx: DbOrTx,
+  bendaharaUserId: string,
+  submissionDistrictId: string,
+): Promise<void> {
+  const row = await tx.query.users.findFirst({
+    where: eq(schema.users.id, bendaharaUserId),
+    columns: { role: true, branchId: true, districtId: true },
+  });
+  if (!row || row.role !== 'STAF_KEUANGAN') {
+    throw Errors.VALIDATION_ERROR('Penandatangan kedua harus Staf Keuangan MWC.');
+  }
+  if (row.branchId !== null || row.districtId !== submissionDistrictId) {
+    throw Errors.FORBIDDEN_SCOPE('Penandatangan kedua harus Bendahara/Sekretaris MWC distrik ini.');
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -430,6 +466,85 @@ export interface BranchFinalizeInput {
   expectedVersion?: number;
   /** Kunci 0 pemasukan (ranting diam): totals harus 0 + alasan wajib. */
   asNol?: boolean;
+}
+
+export interface BranchFinalNumbers {
+  total: number;
+  bisyarohTotal: number;
+  collectionCount: number;
+  expectedShare: number;
+  shareMwc: number;
+  variance: number;
+  cans: Record<string, number>;
+}
+
+type BranchNumbersInput = Pick<BranchFinalizeInput, 'shareMwc' | 'varianceReason' | 'linkedPeriods' | 'asNol'>;
+type BranchSubmissionRow = typeof schema.branchSubmissions.$inferSelect;
+
+/**
+ * Gerbang §7.2 + hitung §8 + snapshot kaleng — dipakai finalize (T4) dan
+ * sign tingkat ranting (T5). Murni baca + validasi; tidak menulis apa pun.
+ */
+export async function computeBranchFinalValues(
+  tx: DbOrTx,
+  sub: BranchSubmissionRow,
+  input: BranchNumbersInput,
+): Promise<BranchFinalNumbers> {
+  const ppkRows = await tx.query.ppkSubmissions.findMany({
+    where: and(
+      eq(schema.ppkSubmissions.branchId, sub.branchId),
+      eq(schema.ppkSubmissions.periodYear, sub.periodYear),
+      eq(schema.ppkSubmissions.periodMonth, sub.periodMonth),
+    ),
+    with: { officer: { columns: { fullName: true } } },
+  });
+  const openNames = ppkRows.filter((r) => r.status !== 'FINAL').map((r) => r.officer?.fullName ?? r.officerId);
+  if (openNames.length > 0) {
+    const sebut = openNames.slice(0, 3).join(', ');
+    const lebih = openNames.length > 3 ? ` (+${openNames.length - 3} lainnya)` : '';
+    throw Errors.VALIDATION_ERROR(`Masih ada PPK belum FINAL: ${sebut}${lebih}.`);
+  }
+
+  let total = 0;
+  let bisyarohTotal = 0;
+  let collectionCount = 0;
+  for (const r of ppkRows) {
+    total += Number(r.totalAmount);
+    bisyarohTotal += Number(r.bisyarohAmount);
+    collectionCount += r.collectionCount;
+  }
+  const expectedShare = calcExpectedShare(total, bisyarohTotal);
+  const shareMwc = Math.round(input.shareMwc);
+  if (!Number.isInteger(shareMwc) || shareMwc < 0) {
+    throw Errors.VALIDATION_ERROR('share_mwc harus bilangan bulat >= 0.');
+  }
+  const variance = calcShareVariance(shareMwc, expectedShare);
+
+  if (input.asNol) {
+    if (total !== 0 || shareMwc !== 0) {
+      throw Errors.VALIDATION_ERROR('FINAL_NOL hanya untuk 0 pemasukan.');
+    }
+    if (!input.varianceReason) {
+      throw Errors.VALIDATION_ERROR('FINAL_NOL wajib alasan (mis. tidak ada laporan).');
+    }
+  } else if (needsVarianceReason(variance) && !input.varianceReason) {
+    throw Errors.VALIDATION_ERROR(
+      `Selisih share Rp ${variance} di luar toleransi Rp 10.000 — wajib alasan (KURANG_BAYAR/LEBIH_BAYAR/GABUNG_PERIODE/KOREKSI_ADMIN).`,
+    );
+  }
+  if (input.varianceReason === 'GABUNG_PERIODE' && (!input.linkedPeriods || input.linkedPeriods.length === 0)) {
+    throw Errors.VALIDATION_ERROR('GABUNG_PERIODE wajib cantumkan periode terkait (mis. 2026-07, 2026-08).');
+  }
+
+  const canRows = await tx
+    .select({ condition: schema.cans.condition, n: sql<number>`count(*)::int` })
+    .from(schema.cans)
+    .where(eq(schema.cans.branchId, sub.branchId))
+    .groupBy(schema.cans.condition);
+  const cans: Record<string, number> = { AKTIF: 0, NON_AKTIF: 0, RUSAK: 0, HILANG: 0, DIKEMBALIKAN: 0 };
+  for (const r of canRows) cans[r.condition] = r.n;
+
+  return { total, bisyarohTotal, collectionCount, expectedShare, shareMwc, variance, cans };
 }
 
 export async function finalizeBranchSubmission(actor: SubmissionActor, input: BranchFinalizeInput, now: Date = new Date()) {
@@ -455,53 +570,14 @@ export async function finalizeBranchSubmission(actor: SubmissionActor, input: Br
       });
     }
 
-    // Gerbang §7.2: semua PPK sudah FINAL — tolak sambil sebut nama (uji §12.5).
-    const ppkRows = await tx.query.ppkSubmissions.findMany({
-      where: and(
-        eq(schema.ppkSubmissions.branchId, sub.branchId),
-        eq(schema.ppkSubmissions.periodYear, sub.periodYear),
-        eq(schema.ppkSubmissions.periodMonth, sub.periodMonth),
-      ),
-      with: { officer: { columns: { fullName: true } } },
+    // Gerbang §7.2 + angka (§8) — dipakai finalize (T4) dan sign (T5).
+    const computed = await computeBranchFinalValues(tx, sub, {
+      shareMwc: input.shareMwc,
+      varianceReason: input.varianceReason,
+      linkedPeriods: input.linkedPeriods,
+      asNol: input.asNol,
     });
-    const openNames = ppkRows.filter((r) => r.status !== 'FINAL').map((r) => r.officer?.fullName ?? r.officerId);
-    if (openNames.length > 0) {
-      const sebut = openNames.slice(0, 3).join(', ');
-      const lebih = openNames.length > 3 ? ` (+${openNames.length - 3} lainnya)` : '';
-      throw Errors.VALIDATION_ERROR(`Masih ada PPK belum FINAL: ${sebut}${lebih}.`);
-    }
-
-    // Agregat segar dari baris PPK FINAL (ranting tanpa PPK = nol).
-    let total = 0;
-    let bisyarohTotal = 0;
-    let collectionCount = 0;
-    for (const r of ppkRows) {
-      total += Number(r.totalAmount);
-      bisyarohTotal += Number(r.bisyarohAmount);
-      collectionCount += r.collectionCount;
-    }
-    const expectedShare = calcExpectedShare(total, bisyarohTotal);
-    const shareMwc = Math.round(input.shareMwc);
-    if (!Number.isInteger(shareMwc) || shareMwc < 0) {
-      throw Errors.VALIDATION_ERROR('share_mwc harus bilangan bulat >= 0.');
-    }
-    const variance = calcShareVariance(shareMwc, expectedShare);
-
-    if (input.asNol) {
-      if (total !== 0 || shareMwc !== 0) {
-        throw Errors.VALIDATION_ERROR('FINAL_NOL hanya untuk 0 pemasukan.');
-      }
-      if (!input.varianceReason) {
-        throw Errors.VALIDATION_ERROR('FINAL_NOL wajib alasan (mis. tidak ada laporan).');
-      }
-    } else if (needsVarianceReason(variance) && !input.varianceReason) {
-      throw Errors.VALIDATION_ERROR(
-        `Selisih share Rp ${variance} di luar toleransi Rp 10.000 — wajib alasan (KURANG_BAYAR/LEBIH_BAYAR/GABUNG_PERIODE/KOREKSI_ADMIN).`,
-      );
-    }
-    if (input.varianceReason === 'GABUNG_PERIODE' && (!input.linkedPeriods || input.linkedPeriods.length === 0)) {
-      throw Errors.VALIDATION_ERROR('GABUNG_PERIODE wajib cantumkan periode terkait (mis. 2026-07, 2026-08).');
-    }
+    const { total, bisyarohTotal, collectionCount, expectedShare, shareMwc, variance, cans } = computed;
 
     // Syarat review-T0 →T4 butir 1 (tingkat ranting): kedua signer terisi.
     // Jangkar: penandatangan ranting = Admin Ranting pemanggil; kedua = Keuangan MWC.
@@ -514,19 +590,9 @@ export async function finalizeBranchSubmission(actor: SubmissionActor, input: Br
     if (input.rantingSignerId !== actor.userId) {
       throw Errors.VALIDATION_ERROR('Penandatangan ranting harus Admin Ranting yang mengunci.');
     }
-    const mwcRole = await loadUserRoleTx(tx, input.mwcBendaharaSignerId);
-    if (mwcRole !== 'STAF_KEUANGAN') {
-      throw Errors.VALIDATION_ERROR('Penandatangan kedua harus Staf Keuangan MWC.');
-    }
-
-    // Snapshot kondisi kaleng saat kunci (5 keranjang §8c + yang ditarik).
-    const canRows = await tx
-      .select({ condition: schema.cans.condition, n: sql<number>`count(*)::int` })
-      .from(schema.cans)
-      .where(eq(schema.cans.branchId, sub.branchId))
-      .groupBy(schema.cans.condition);
-    const cans: Record<string, number> = { AKTIF: 0, NON_AKTIF: 0, RUSAK: 0, HILANG: 0, DIKEMBALIKAN: 0 };
-    for (const r of canRows) cans[r.condition] = r.n;
+    // Syarat review-T4 #1 (T5): bendahara MWC = STAF_KEUANGAN level distrik
+    // (tanpa branchId) satu distrik dengan ranting itu.
+    await assertMwcBendaharaScope(tx, input.mwcBendaharaSignerId, sub.districtId);
 
     const updated = await tx
       .update(schema.branchSubmissions)

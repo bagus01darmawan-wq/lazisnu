@@ -7,16 +7,46 @@ import { authorize } from '../../middleware/auth';
 import { assertBranchAccess } from '../../middleware/ownership';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { isAppError } from '../../utils/AppError';
-import { finalizeBranchSchema } from './schemas';
+import { signBranchSchema } from './schemas';
 import {
   ensureBranchSubmission,
-  finalizeBranchSubmission,
   toBranchResponse,
 } from '../../services/ppkSubmissions';
+import {
+  getBaDownload,
+  getBranchBeritaAcara,
+  signBranchSubmission,
+  type RequestContext,
+} from '../../services/cosign';
 
-// C1-T4: Kunci Ranting = Manager Subarea. Orkestrasi berlapis MWC + FINAL_NOL
-// massal = T6 (memakai service finalize di bawah).
+// C1-T5: Kunci Ranting = upacara sign (Admin Ranting) + countersign (MWC).
+// Orkestrasi berlapis MWC + FINAL_NOL massal = T6.
 const rantingOnly = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
+const baReadRoles = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN', 'STAF_KEUANGAN')] };
+
+function actorOf(request: FastifyRequest) {
+  const user = request.currentUser!;
+  return {
+    userId: user.userId,
+    role: user.role,
+    branchId: user.branchId ?? null,
+    districtId: user.districtId ?? null,
+  };
+}
+
+function ctxOf(request: FastifyRequest): RequestContext {
+  return { ipAddress: request.ip, userAgent: request.headers['user-agent'] || null };
+}
+
+function sendAppError(reply: FastifyReply, error: unknown, logger?: { error: (e: unknown) => void }) {
+  if (isAppError(error)) {
+    return sendError(reply, error.statusCode, error.code, error.message, error.details);
+  }
+  if (error instanceof z.ZodError) {
+    return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+  }
+  return sendInternalError(reply, error, logger);
+}
 
 export async function branchSubmissionsRoutes(fastify: FastifyInstance) {
   // GET /v1/admin/branch-submissions?year=&month= — daftar scope-nya.
@@ -93,42 +123,60 @@ export async function branchSubmissionsRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // POST /v1/admin/branch-submissions/:id/finalize — Kunci Ranting (T4 mekanik).
+  // POST /v1/admin/branch-submissions/:id/sign — Admin Ranting pemilik
+  // menandatangani di sesinya (+ angka T4); status tetap DRAFT menunggu MWC.
+  // signer_id = pemilik sesi (bukan body).
   fastify.post(
-    '/branch-submissions/:id/finalize',
+    '/branch-submissions/:id/sign',
     { preHandler: [authorize('ADMIN_RANTING')] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const { id } = request.params as { id: string };
-        const body = finalizeBranchSchema.parse(request.body);
-        const user = request.currentUser!;
-        const result = await finalizeBranchSubmission(
-          {
-            userId: user.userId,
-            role: user.role,
-            branchId: user.branchId ?? null,
-            districtId: user.districtId ?? null,
-          },
-          {
-            submissionId: id,
-            shareMwc: body.share_mwc,
-            varianceReason: body.variance_reason,
-            linkedPeriods: body.linked_periods,
-            rantingSignerId: body.ranting_signer_id,
-            mwcBendaharaSignerId: body.mwc_bendahara_signer_id,
-            expectedVersion: body.expected_version,
-            asNol: body.as_nol,
-          },
-        );
+        const body = signBranchSchema.parse(request.body);
+        const result = await signBranchSubmission(actorOf(request), {
+          submissionId: id,
+          signaturePng: body.signature_png,
+          consent: body.consent,
+          expectedVersion: body.expected_version,
+          shareMwc: body.share_mwc,
+          varianceReason: body.variance_reason,
+          linkedPeriods: body.linked_periods,
+          asNol: body.as_nol,
+        }, ctxOf(request));
         return sendSuccess(reply, result);
       } catch (error: unknown) {
-        if (isAppError(error)) {
-          return sendError(reply, error.statusCode, error.code, error.message, error.details);
-        }
-        if (error instanceof z.ZodError) {
-          return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
-        }
-        return sendInternalError(reply, error, fastify.log);
+        return sendAppError(reply, error, fastify.log);
+      }
+    },
+  );
+
+  // GET /v1/admin/branch-submissions/:id/berita-acara — teks readable snapshot.
+  fastify.get(
+    '/branch-submissions/:id/berita-acara',
+    baReadRoles,
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = request.params as { id: string };
+        return sendSuccess(reply, await getBranchBeritaAcara(actorOf(request), id));
+      } catch (error: unknown) {
+        return sendAppError(reply, error, fastify.log);
+      }
+    },
+  );
+
+  // GET /v1/admin/branch-submissions/:id/pdf — unduh BA (FINAL/FINAL_NOL saja).
+  fastify.get(
+    '/branch-submissions/:id/pdf',
+    {
+      ...baReadRoles,
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = request.params as { id: string };
+        return sendSuccess(reply, await getBaDownload(actorOf(request), 'branch', id, ctxOf(request)));
+      } catch (error: unknown) {
+        return sendAppError(reply, error, fastify.log);
       }
     },
   );

@@ -446,32 +446,43 @@ antrean gagal permanen); `collected_at` di luar jendela periode ditolak
 }
 ```
 
-### 3.8 Setoran PPK — Lihat & FINAL-kan (C1-T4)
+### 3.8 Setoran PPK — Lihat, Co-sign 2 HP, Berita Acara, PDF (C1-T4/T5)
 
 Angka (total, bisyaroh 10% ceil ribuan, bersih) dihitung server dari
 collections periode itu — tanpa ketik nominal. Baris DRAFT dihitung ulang
 tiap dibuka; baris FINAL beku. Setelah FINAL, submit/resubmit/skip periode
 itu ditolak (`QR_ALREADY_SUBMITTED`).
 
+Upacara co-sign (C1-T5, §14.6): PPK menandatangani di HP-nya, bendahara di
+HP-nya — `signer_id` selalu pemilik sesi login, tidak pernah dari body
+(kunci `*_signer_id` di body otomatis 400). Alur: `sign` (DRAFT →
+PPK_SIGNED) → `countersign` (→ FINAL bila tak ada ACTIVE tersisa, atau tetap
+PPK_SIGNED + `needs_force: true`) → `force-finalize` (Admin Ranting, butuh
+PPK_SIGNED + kedua TTD + alasan; menimpa gerbang ACTIVE saja).
+
 **Endpoint:** `GET /mobile/submissions?year=&month=` (PETUGAS, miliknya)
 
-**Endpoint:** `POST /mobile/submissions/{id}/finalize` (PETUGAS pemilik /
-STAF_KEUANGAN seranting / ADMIN_RANTING seranting via force + alasan)
+**Endpoint:** `POST /mobile/submissions/{id}/sign` (PETUGAS pemilik)
 
 **Request:**
 ```json
-{
-  "ppk_signer_id": "uuid",
-  "bendahara_signer_id": "uuid",
-  "expected_version": 1,
-  "force_reason": "opsional, hanya Admin Ranting bila sisa ACTIVE"
-}
+{ "signature_png": "<base64 PNG ≤ 50KB>", "consent": true, "expected_version": 1 }
 ```
 
-**Response (200):** `{ id, period, total_amount, bisyaroh_amount, net_amount, status: "FINAL", version, ... }`.
+**Endpoint:** `POST /mobile/submissions/{id}/countersign` (STAF_KEUANGAN
+seranting) — body sama. Balasan `FINAL` atau `{ status: "PPK_SIGNED",
+needs_force: true, active_left: N }`.
 
-FINAL ganda / versi basi → `409 CONFLICT`. Sisa ACTIVE → `400
-VALIDATION_ERROR` (atau force + alasan via Admin Ranting).
+**Endpoint:** `POST /mobile/submissions/{id}/force-finalize`
+(ADMIN_RANTING pemilik) — body `{ "force_reason": "...", "expected_version": 1 }`.
+
+**Endpoint:** `GET /mobile/submissions/{id}/berita-acara` (pemilik,
+keuangan/ranting seranting, kecamatan sedistrik) — teks readable dari
+snapshot; sebelum FINAL berlabel `DRAFT — belum sah`.
+
+**Endpoint:** `GET /mobile/submissions/{id}/pdf` (peran sama; FINAL saja) —
+lazy-generate → `{ download_url (signed, pendek), expires_in_seconds,
+pdf_hash, reused }`. Tanda ulang / versi basi → `409 CONFLICT`.
 
 ---
 
@@ -797,7 +808,7 @@ ditolak ("tombol mati sekali").
 
 **Endpoint:** `PATCH /admin/period-drafts/items/{itemId}` body `{ "officer_id": "uuid" }` (hanya Staf Pengumpulan, draft DRAFT, petugas satu ranting/program) • `DELETE /admin/period-drafts/items/{itemId}` (keluarkan kaleng dari draft).
 
-### 4.12 Setoran Ranting — Kunci (C1-T4)
+### 4.12 Setoran Ranting — Co-sign, Berita Acara, PDF (C1-T4/T5)
 
 Agregat PPK FINAL + ekspektasi share 30% × sisa + selisih. Kunci aktif hanya
 bila semua PPK sudah FINAL (disebut namanya bila belum). Selisih
@@ -805,22 +816,41 @@ bila semua PPK sudah FINAL (disebut namanya bila belum). Selisih
 `linked_periods`. `as_nol: true` = kunci 0 pemasukan (totals 0 + alasan wajib)
 → status `FINAL_NOL`. Orkestrasi berlapis + `FINAL_NOL` massal MWC = T6.
 
+Upacara co-sign (C1-T5): Admin Ranting sign di sesinya (+ angka; status tetap
+DRAFT) → Bendahara MWC (STAF_KEUANGAN sedistrik) countersign di HP-nya →
+`FINAL`/`FINAL_NOL`. `signer_id` selalu pemilik sesi.
+
 **Endpoint:** `GET /admin/branch-submissions?year=&month=` • `GET /admin/branch-submissions/{id}` (+ `ppk_penyusun`)
 
-**Endpoint:** `POST /admin/branch-submissions/{id}/finalize` (ADMIN_RANTING pemilik)
+**Endpoint:** `POST /admin/branch-submissions/{id}/sign` (ADMIN_RANTING pemilik)
 
 **Request:**
 ```json
 {
+  "signature_png": "<base64 PNG ≤ 50KB>",
+  "consent": true,
+  "expected_version": 1,
   "share_mwc": 1675000,
   "variance_reason": "LEBIH_BAYAR",
   "linked_periods": ["2026-07", "2026-08"],
-  "ranting_signer_id": "uuid",
-  "mwc_bendahara_signer_id": "uuid",
-  "expected_version": 1,
   "as_nol": false
 }
 ```
+
+**Endpoint:** `POST /mobile/branch-submissions/{id}/countersign`
+(STAF_KEUANGAN sedistrik) — body `{ signature_png, consent,
+expected_version }`.
+
+**Endpoint:** `GET /admin/branch-submissions/{id}/berita-acara` (ranting
+pemilik / kecamatan sedistrik / keuangan se-scope) •
+`GET /admin/branch-submissions/{id}/pdf` (FINAL/FINAL_NOL saja) →
+`{ download_url, expires_in_seconds, pdf_hash, reused }`.
+
+**Endpoint publik:** `GET /v1/verify/ba?type=ppk|branch&id=&version=&hash=`
+→ `{ valid: true|false }` saja (tanpa nominal/nama/pihak).
+
+**Endpoint:** `DELETE /admin/signatures` (ADMIN_KECAMATAN) — hapus coretan
+TTD (retensi UU 27/2022), body `{ key, reason }`.
 
 ---
 

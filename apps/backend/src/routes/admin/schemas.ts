@@ -49,13 +49,22 @@ export const updateDraftItemSchema = z.object({
   officer_id: z.string().uuid(),
 });
 
-/** C1-T4: kunci setoran ranting (mekanik; orkestrasi berlapis + FINAL_NOL massal = T6). */
-export const finalizeBranchSchema = z.object({
+/**
+ * C1-T5: sign tingkat ranting (Admin Ranting di sesinya + angka T4).
+ * signer_id = pemilik sesi — kunci *_signer_id otomatis 400 (.strict()).
+ */
+export const signBranchSchema = z.object({
+  signature_png: z.string().min(100),
+  consent: z.boolean(),
+  expected_version: z.number().int().min(1).optional(),
   share_mwc: z.number().min(0),
   variance_reason: z.enum(['KURANG_BAYAR', 'LEBIH_BAYAR', 'GABUNG_PERIODE', 'KOREKSI_ADMIN', 'HP_HILANG']).optional(),
   linked_periods: z.array(z.string()).optional(),
-  ranting_signer_id: z.string().uuid(),
-  mwc_bendahara_signer_id: z.string().uuid(),
-  expected_version: z.number().int().min(1).optional(),
   as_nol: z.boolean().optional(),
+}).strict();
+
+/** C1-T5: hapus coretan TTD (retensi UU 27/2022) — Admin MWC beralasan. */
+export const purgeSignatureSchema = z.object({
+  key: z.string().min(1),
+  reason: z.string().min(5).max(255),
 }).strict();
