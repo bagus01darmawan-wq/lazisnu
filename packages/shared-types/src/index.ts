@@ -9,7 +9,47 @@ export enum UserRole {
   ADMIN_KECAMATAN = "ADMIN_KECAMATAN",
   ADMIN_RANTING = "ADMIN_RANTING",
   PETUGAS = "PETUGAS",
+  // C1-T0 (§14.13): Staf Bid. Pengumpulan (jadwal+monitor, tanpa FINAL/kunci/nominal)
+  // dan Staf Bid. Adm & Keuangan (TTD kedua, unduh PDF, tanpa ubah nominal).
+  STAF_PENGUMPULAN = "STAF_PENGUMPULAN",
+  STAF_KEUANGAN = "STAF_KEUANGAN",
 }
+
+// C1-T0 (§8b): RANTING vs program milik MWC langsung (mis. Koin Taqwa).
+export enum BranchKind {
+  RANTING = "RANTING",
+  PROGRAM_MWC = "PROGRAM_MWC",
+}
+
+// C1-T0 (§14.6): co-sign 2 HP — PPK dulu lalu bendahara.
+export enum PpkSubmissionStatus {
+  DRAFT = "DRAFT",
+  PPK_SIGNED = "PPK_SIGNED",
+  FINAL = "FINAL",
+}
+
+// C1-T0 (§14.7): FINAL_NOL = dikunci 0 pemasukan (ranting diam lewat 10).
+export enum BranchSubmissionStatus {
+  DRAFT = "DRAFT",
+  FINAL = "FINAL",
+  FINAL_NOL = "FINAL_NOL",
+}
+
+// C1-T0 (§14.8): OPEN → TOLERANCE → LOCKED → DIBUKA_SEBAGIAN → LOCKED.
+export enum PeriodStatus {
+  OPEN = "OPEN",
+  TOLERANCE = "TOLERANCE",
+  LOCKED = "LOCKED",
+  DIBUKA_SEBAGIAN = "DIBUKA_SEBAGIAN",
+}
+
+// C1-T0 (§8): alasan wajib bila |aktual − ekspektasi| > Rp 10.000.
+export type VarianceReason =
+  | "KURANG_BAYAR"
+  | "LEBIH_BAYAR"
+  | "GABUNG_PERIODE"
+  | "KOREKSI_ADMIN"
+  | "HP_HILANG";
 
 export enum AssignmentStatus {
   ACTIVE = "ACTIVE",
@@ -94,14 +134,72 @@ export interface District {
   updated_at?: string;
 }
 
-// ─── Branch (Ranting) ────────────────────────────────────────────────────────
+// ─── Branch (Ranting / Program MWC) ──────────────────────────────────────────
 export interface Branch {
   id: string;
   district_id: string;
   code: string;
   name: string;
+  /** C1-T0: RANTING vs PROGRAM_MWC (Taqwa). Default RANTING. */
+  kind?: BranchKind;
   created_at?: string;
   updated_at?: string;
+}
+
+// ─── C1-T0: Submission PPK (1 PPK × 1 periode) ───────────────────────────────
+export interface PpkSubmission {
+  id: string;
+  officer_id: string;
+  branch_id: string;
+  period_year: number;
+  period_month: number;
+  total_amount: number;
+  collection_count: number;
+  bisyaroh_amount: number;
+  net_amount: number;
+  formula_snapshot?: { bisyaroh_pct: number; rounding: string } | null;
+  status: PpkSubmissionStatus;
+  version: number;
+  pdf_url?: string | null;
+  pdf_hash?: string | null;
+}
+
+// ─── C1-T0: Submission ranting (1 ranting × 1 periode) ───────────────────────
+export interface BranchSubmission {
+  id: string;
+  branch_id: string;
+  district_id: string;
+  period_year: number;
+  period_month: number;
+  total_amount: number;
+  bisyaroh_total: number;
+  share_mwc: number;
+  net_amount: number;
+  expected_share: number;
+  share_variance: number;
+  variance_reason?: VarianceReason | null;
+  linked_periods?: string[] | null;
+  collection_count: number;
+  can_total: number;
+  can_aktif: number;
+  can_nonaktif: number;
+  can_rusak: number;
+  can_hilang: number;
+  can_dikembalikan: number;
+  status: BranchSubmissionStatus;
+  version: number;
+  pdf_url?: string | null;
+  pdf_hash?: string | null;
+}
+
+// ─── C1-T0: Kalender periode (1 baris = 1 bulan) ─────────────────────────────
+export interface PeriodCalendar {
+  period_year: number;
+  period_month: number;
+  assign_date: string;
+  due_date: string;
+  tolerance_end: string;
+  status: PeriodStatus;
 }
 
 // ─── User ─────────────────────────────────────────────────────────────────────
