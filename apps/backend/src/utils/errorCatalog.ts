@@ -26,6 +26,9 @@ export const ErrorCode = {
   // C1-T3 (§14.12): draft penugasan tidak ditemukan.
   DRAFT_NOT_FOUND: 'DRAFT_NOT_FOUND',
 
+  // C1-T4 (§14.10): konflik versi / status pada FINAL (tombol ganda, data berubah).
+  CONFLICT: 'CONFLICT',
+
   // Auth / access
   FORBIDDEN: 'FORBIDDEN',
   FORBIDDEN_SCOPE: 'FORBIDDEN_SCOPE',
@@ -89,6 +92,9 @@ export const Errors = {
 
   DRAFT_NOT_FOUND: (msg?: string, details?: unknown) =>
     new AppError(ErrorCode.DRAFT_NOT_FOUND, msg || 'Draft penugasan tidak ditemukan', 404, false, details),
+
+  CONFLICT: (msg?: string, details?: unknown) =>
+    new AppError(ErrorCode.CONFLICT, msg || 'Data berubah — muat ulang lalu coba lagi', 409, false, details),
 
   FORBIDDEN: (msg?: string) =>
     new AppError(ErrorCode.FORBIDDEN, msg || 'Anda tidak memiliki akses', 403),

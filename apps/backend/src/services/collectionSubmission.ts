@@ -24,6 +24,40 @@ type Transaction = PgTransaction<
   ExtractTablesWithRelations<typeof schema>
 >;
 
+// ---------------------------------------------------------------------------
+// C1-T4 (§7.5, baris T4) — kunci pasca-FINAL di choke point submit/resubmit.
+// Baris submission yang belum ada = terbuka (belum FINAL).
+// ---------------------------------------------------------------------------
+
+export async function assertSubmissionOpen(
+  dbOrTx: Transaction | typeof db,
+  officerId: string,
+  year: number,
+  month: number,
+): Promise<void> {
+  const sub = await dbOrTx.query.ppkSubmissions.findFirst({
+    where: and(
+      eq(schema.ppkSubmissions.officerId, officerId),
+      eq(schema.ppkSubmissions.periodYear, year),
+      eq(schema.ppkSubmissions.periodMonth, month),
+    ),
+    columns: { status: true },
+  });
+  if (sub?.status === 'FINAL') {
+    throw Errors.QR_ALREADY_SUBMITTED(
+      `Setoran periode ${periodKey(year, month)} sudah FINAL — hubungi Admin Ranting bila perlu reopen.`,
+    );
+  }
+}
+
+/** Untuk rute skip: assignment ACTIVE milik petugas tak bisa di-skip bila FINAL. */
+export async function assertAssignmentSkippable(
+  dbOrTx: Transaction | typeof db,
+  assignment: { officerId: string; periodYear: number; periodMonth: number },
+): Promise<void> {
+  await assertSubmissionOpen(dbOrTx, assignment.officerId, assignment.periodYear, assignment.periodMonth);
+}
+
 type ResubmitCollectionInput = {
   collectionId: string;
   nominal: number;
@@ -171,6 +205,15 @@ export async function submitCollection(
 ) {
   await assertNoExistingFirstSubmit(tx, data.assignmentId, data.canId);
 
+  // C1-T4 (§7.5): setoran periode yang sudah FINAL terkunci penuh.
+  const target = await tx.query.assignments.findFirst({
+    where: eq(schema.assignments.id, data.assignmentId),
+    columns: { periodYear: true, periodMonth: true },
+  });
+  if (target) {
+    await assertSubmissionOpen(tx, data.officerId, target.periodYear, target.periodMonth);
+  }
+
   const [collection] = await tx.insert(schema.collections).values({
     assignmentId: data.assignmentId,
     canId: data.canId,
@@ -240,6 +283,15 @@ export async function resubmitCollection(
   const latestSequence = Number(latestRecord?.maxSeq || 0);
   if (oldCollection.submitSequence !== latestSequence) {
     throw Errors.NOT_LATEST();
+  }
+
+  // C1-T4 (§7.5): koreksi pasca-FINAL ditolak (ubah = reopen T7 dulu).
+  const resubmitTarget = await tx.query.assignments.findFirst({
+    where: eq(schema.assignments.id, oldCollection.assignmentId),
+    columns: { periodYear: true, periodMonth: true },
+  });
+  if (resubmitTarget) {
+    await assertSubmissionOpen(tx, oldCollection.officerId, resubmitTarget.periodYear, resubmitTarget.periodMonth);
   }
 
   const nextSequence = latestSequence + 1;

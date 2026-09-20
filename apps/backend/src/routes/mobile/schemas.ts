@@ -58,6 +58,14 @@ export const skipAssignmentSchema = z.object({
   notes: z.string().max(255).optional(),
 }).strict();
 
+/** C1-T4: FINAL-kan setoran PPK (TTD ditangkap upacara T5; FINAL menutup). */
+export const finalizePpkSchema = z.object({
+  ppk_signer_id: z.string().uuid(),
+  bendahara_signer_id: z.string().uuid(),
+  expected_version: z.number().int().min(1).optional(),
+  force_reason: z.string().min(5).max(255).optional(),
+}).strict();
+
 /** POST /mobile/cans/:canId/visits — kunjungan verifikasi / penggantian (BUKAN penjemputan). */
 export const canVisitSchema = z.object({
   purpose: z.enum(['VERIFIKASI', 'PENGGANTIAN', 'PENCABUTAN']),
