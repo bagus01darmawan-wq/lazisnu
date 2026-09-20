@@ -34,6 +34,13 @@ export interface PeriodBoundaries {
   dueDate: Date;
   /** Tgl 9 bulan berikut 23:59:59.999 waktu server. */
   toleranceEnd: Date;
+  /**
+   * C1-T6 (§14.7): awal jendela Kunci Periode MWC — tgl 27 00:00:00.000 bulan
+   * berjalan. Tombol aktif sejak titik ini (ekor OPEN 27 + seluruh TOLERANCE
+   * 28–9 = fase REKAP; ≥10 00:00 = fase KUNCI_KERAS). Dibangun di sini agar
+   * tetap satu helper tunggal (larangan `new Date(y,m,…)` di file lain).
+   */
+  kunciPeriodeStart: Date;
 }
 
 /** Batas validasi input — cerminan `generateTasksSchema` di routes/scheduler.ts. */
@@ -72,7 +79,9 @@ export function buildPeriodBoundaries(year: number, month: number): PeriodBounda
   const dueDate = new Date(year, month - 1, 27, 23, 59, 59, 999);
   // Bulan berikut via konstruktor (otomatis rollover Des → Jan tahun+1).
   const toleranceEnd = new Date(year, month, 9, 23, 59, 59, 999);
-  return { periodYear: year, periodMonth: month, assignDate, dueDate, toleranceEnd };
+  // C1-T6: awal jendela kunci (27 00:00 bulan berjalan).
+  const kunciPeriodeStart = new Date(year, month - 1, 27, 0, 0, 0, 0);
+  return { periodYear: year, periodMonth: month, assignDate, dueDate, toleranceEnd, kunciPeriodeStart };
 }
 
 /**
@@ -97,6 +106,27 @@ export function resolvePeriodStatus(now: Date, b: PeriodBoundaries): PeriodStatu
  */
 export function isPeriodLocked(now: Date, toleranceEnd: Date): boolean {
   return now.getTime() > toleranceEnd.getTime();
+}
+
+/**
+ * C1-T6 (§14.7 KUNCI BERLAPIS, 2 tahap).
+ *
+ * - `BELUM_SAATNYA`: now < 27 00:00 bulan berjalan → tolak (VALIDATION_ERROR).
+ * - `REKAP`: 27 00:00 s/d 9 23:59:59 bulan berikut → tarik FINAL saja,
+ *   dilarang men-nolkan (tanpa tulis submission, tanpa LOCKED).
+ * - `KUNCI_KERAS`: now > toleranceEnd (≥10 00:00) → boleh buat FINAL_NOL
+ *   massal + tulis period_calendar LOCKED.
+ *
+ * Murni (tanpa DB/IO) — unit-testable; `now` diinjeksi agar uji batas
+ * 26→27 dan 9 23:59:59→10 00:00 deterministik.
+ */
+export type KunciPeriodePhase = 'BELUM_SAATNYA' | 'REKAP' | 'KUNCI_KERAS';
+
+export function resolveKunciPeriodePhase(now: Date, b: PeriodBoundaries): KunciPeriodePhase {
+  const t = now.getTime();
+  if (t < b.kunciPeriodeStart.getTime()) return 'BELUM_SAATNYA';
+  if (t > b.toleranceEnd.getTime()) return 'KUNCI_KERAS';
+  return 'REKAP';
 }
 
 /**

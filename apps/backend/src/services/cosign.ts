@@ -182,7 +182,11 @@ export async function signPpkSubmission(
     tier: 'ppk', submissionId: input.submissionId, role: 'ppk', pngBase64: input.signaturePng,
   });
 
-  const row = await db.transaction(async (tx) => {
+  // F1a (review-T5): upload terjadi sebelum gerbang DB — bila transaksi gagal
+  // (403/400/409), hapus objek yatim best-effort agar bucket tidak bocor.
+  let row;
+  try {
+    row = await db.transaction(async (tx) => {
     const sub = await tx.query.ppkSubmissions.findFirst({
       where: eq(schema.ppkSubmissions.id, input.submissionId),
     });
@@ -221,7 +225,11 @@ export async function signPpkSubmission(
       throw Errors.CONFLICT('Setoran baru saja berubah — muat ulang lalu coba lagi.');
     }
     return updated[0];
-  });
+    });
+  } catch (e) {
+    try { await deleteFromR2(key); } catch { /* best-effort F1a */ }
+    throw e;
+  }
 
   await auditSign({
     userId: actor.userId,
@@ -239,6 +247,12 @@ export async function signPpkSubmission(
  * Bendahara menandatangani di HP-nya (STAF_KEUANGAN *seranting*, syarat
  * review-T4 #1). Satu transaksi: catat TTD → bila tak ada ACTIVE tersisa
  * langsung FINAL; bila masih ada → tetap PPK_SIGNED + arahan force.
+ *
+ * Kebijakan F8 (review-T5, diputuskan T6): countersign ulang selama
+ * PPK_SIGNED DIBIARKAN (menimpa coretan sebagai koreksi sebelum FINAL,
+ * konsisten dengan semantik menimpa tier-2). TTD lama menjadi yatim dan
+ * dibersihkan saat reopen T7 (F1b); kegagalan transaksi menghapus coretan
+ * baru best-effort (F1a).
  */
 export async function countersignPpkSubmission(
   actor: SubmissionActor,
@@ -255,7 +269,9 @@ export async function countersignPpkSubmission(
     tier: 'ppk', submissionId: input.submissionId, role: 'bendahara', pngBase64: input.signaturePng,
   });
 
-  const outcome = await db.transaction(async (tx) => {
+  let outcome;
+  try {
+    outcome = await db.transaction(async (tx) => {
     const sub = await tx.query.ppkSubmissions.findFirst({
       where: eq(schema.ppkSubmissions.id, input.submissionId),
     });
@@ -339,7 +355,11 @@ export async function countersignPpkSubmission(
       throw Errors.CONFLICT('Setoran baru saja di-FINAL-kan pihak lain.');
     }
     return { finalized: true as const, row: finalized[0], activeLeft: 0 };
-  });
+    });
+  } catch (e) {
+    try { await deleteFromR2(key); } catch { /* best-effort F1a */ }
+    throw e;
+  }
 
   await auditSign({
     userId: actor.userId,
@@ -435,7 +455,9 @@ export async function signBranchSubmission(
     tier: 'branch', submissionId: input.submissionId, role: 'ranting', pngBase64: input.signaturePng,
   });
 
-  const row = await db.transaction(async (tx) => {
+  let row;
+  try {
+    row = await db.transaction(async (tx) => {
     const sub = await tx.query.branchSubmissions.findFirst({
       where: eq(schema.branchSubmissions.id, input.submissionId),
     });
@@ -491,7 +513,11 @@ export async function signBranchSubmission(
       throw Errors.CONFLICT('Setoran baru saja berubah — muat ulang lalu coba lagi.');
     }
     return updated[0];
-  });
+    });
+  } catch (e) {
+    try { await deleteFromR2(key); } catch { /* best-effort F1a */ }
+    throw e;
+  }
 
   await auditSign({
     userId: actor.userId,
@@ -524,7 +550,9 @@ export async function countersignBranchSubmission(
     tier: 'branch', submissionId: input.submissionId, role: 'mwc-bendahara', pngBase64: input.signaturePng,
   });
 
-  const outcome = await db.transaction(async (tx) => {
+  let outcome;
+  try {
+    outcome = await db.transaction(async (tx) => {
     const sub = await tx.query.branchSubmissions.findFirst({
       where: eq(schema.branchSubmissions.id, input.submissionId),
     });
@@ -596,7 +624,11 @@ export async function countersignBranchSubmission(
       throw Errors.CONFLICT('Setoran baru saja dikunci pihak lain.');
     }
     return finalized[0];
-  });
+    });
+  } catch (e) {
+    try { await deleteFromR2(key); } catch { /* best-effort F1a */ }
+    throw e;
+  }
 
   await auditSign({
     userId: actor.userId,

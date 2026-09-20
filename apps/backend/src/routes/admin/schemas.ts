@@ -68,3 +68,12 @@ export const purgeSignatureSchema = z.object({
   key: z.string().min(1),
   reason: z.string().min(5).max(255),
 }).strict();
+
+/**
+ * C1-T6 (§14.7): Kunci Periode MWC 2 tahap — REKAP (27–9, tarik FINAL saja)
+ * vs KUNCI_KERAS (10+, FINAL_NOL massal + LOCKED). Hanya ADMIN_KECAMATAN.
+ */
+export const kunciPeriodeSchema = z.object({
+  year: z.number().int().min(2020).max(2100),
+  month: z.number().int().min(1).max(12),
+}).strict();

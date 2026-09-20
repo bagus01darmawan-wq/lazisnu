@@ -14,6 +14,7 @@ import { backupRoutes } from './backup';
 import { canProposalsRoutes } from './canProposals';
 import { periodDraftsRoutes } from './periodDrafts';
 import { branchSubmissionsRoutes } from './branchSubmissions';
+import { kunciPeriodeRoutes } from './kunciPeriode';
 import { signaturesRoutes } from './signatures';
 
 export default async function adminRoutes(fastify: FastifyInstance) {
@@ -33,5 +34,6 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   await fastify.register(backupRoutes);
   await fastify.register(periodDraftsRoutes);
   await fastify.register(branchSubmissionsRoutes);
+  await fastify.register(kunciPeriodeRoutes);
   await fastify.register(signaturesRoutes);
 }
