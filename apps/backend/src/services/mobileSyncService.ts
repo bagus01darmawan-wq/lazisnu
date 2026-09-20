@@ -8,10 +8,11 @@
 import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { eq } from 'drizzle-orm';
-import { validateAssignmentForSubmit, submitCollection } from './collectionSubmission';
+import { validateAssignmentForSubmit, submitCollection, assertCollectedAtInWindow } from './collectionSubmission';
 import { evaluateEmptyStreakForCan } from './conditionProposalService';
 import { getErrorMessage } from '../utils/error-guards';
-import { isAppError } from '../utils/AppError';
+import { isAppError, AppError } from '../utils/AppError';
+import { insertActivityLog } from './auditLogService';
 import { sendWhatsAppNotification } from './whatsapp';
 
 /** Satu item batch dari request mobile */
@@ -87,9 +88,39 @@ async function processSyncItem(
     };
   }
 
-  // Transaction: validate assignment + submit collection
+  // Transaction: validate assignment (+ kunci periode §14.2) + jendela
+  // collected_at (§14.3) + submit collection. Kunci/jendela melempar AppError
+  // non-retryable → item batch jadi FAILED can_retry=false → antrean HP
+  // memindah ke gagal permanen yang terlihat (tidak spam, tidak hilang).
   const collection = await db.transaction(async (tx) => {
-    await validateAssignmentForSubmit(tx, item.assignment_id, item.can_id, officerId);
+    const assignment = await validateAssignmentForSubmit(tx, item.assignment_id, item.can_id, officerId);
+
+    try {
+      assertCollectedAtInWindow(new Date(item.collected_at), assignment.periodYear, assignment.periodMonth);
+    } catch (err: unknown) {
+      const appErr = AppError.fromUnknown(err, 'collected_at di luar jendela periode');
+      try {
+        await insertActivityLog({
+          userId: null,
+          officerId,
+          actionType: 'COLLECTED_AT_REJECTED',
+          entityType: 'assignment',
+          entityId: item.assignment_id,
+          oldData: null,
+          newData: {
+            offline_id: item.offline_id,
+            collected_at: item.collected_at,
+            periodYear: assignment.periodYear,
+            periodMonth: assignment.periodMonth,
+          },
+          ipAddress: 'mobile-sync',
+          userAgent: null,
+        });
+      } catch {
+        // Audit tidak boleh menggagalkan penolakan yang sah.
+      }
+      throw appErr;
+    }
 
     return await submitCollection(tx, {
       assignmentId: item.assignment_id,
