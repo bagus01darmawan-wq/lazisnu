@@ -41,7 +41,25 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-if ! command -v pnpm >/dev/null 2>&1; then
+# ─── Resolusi pnpm yang SEHAT ───────────────────────────────────────────────
+# Di lingkungan `pnpm run` (mis. `pnpm cek:semua`), pnpm menyuntikkan shim
+# dirinya ke depan PATH: .../Local/pnpm/store/v11/links/@/pnpm/<ver>/<hash>/bin/pnpm
+# Shim itu memanggil node dengan jalur POSIX yang salah dikonversi di Windows
+# → "Cannot find module 'C:\\c\\Users\\...\\pnpm.cjs'" dan SEMUA langkah gagal
+# dalam ~0 dtk, padahal `bash scripts/cek-lokal.sh` langsung hijau.
+# Jadi: pilih pnpm yang sehat lebih dulu (shim npm Roaming / exe lokal),
+# jangan percaya `pnpm` yang kebetulan ada di depan PATH.
+cari_pnpm() {
+  local k
+  for k in "${PNPM_GERBANG:-}" "$APPDATA/npm/pnpm" "$LOCALAPPDATA/pnpm/pnpm.exe"; do
+    [ -n "$k" ] || continue
+    case "$k" in *"/store/v11/links/"*) continue ;; esac
+    if [ -x "$k" ]; then printf '%s' "$k"; return 0; fi
+  done
+  command -v pnpm 2>/dev/null || true
+}
+PNPM="$(cari_pnpm)"
+if [ -z "$PNPM" ]; then
   echo "⚠️  pnpm tidak ada di PATH — gerbang lokal dilewati (fail-open)."
   exit 0
 fi
@@ -129,8 +147,8 @@ perbaiki_area() {
   satu="$(printf '%s' "$daftar" | tr '\n' ' ')"
   echo "   • ${dir}: ${satu}"
   # shellcheck disable=SC2086 — sengaja tanpa kutip: ini daftar berkas per spasi.
-  ( cd "${akar_repo}/${dir}" && pnpm exec eslint --fix $satu ) >/dev/null 2>&1 || true
-  ( cd "${akar_repo}/${dir}" && pnpm exec prettier --write --end-of-line auto $satu ) >/dev/null 2>&1 || true
+  ( cd "${akar_repo}/${dir}" && "$PNPM" exec eslint --fix $satu ) >/dev/null 2>&1 || true
+  ( cd "${akar_repo}/${dir}" && "$PNPM" exec prettier --write --end-of-line auto $satu ) >/dev/null 2>&1 || true
 }
 
 if [ "$PERBAIKI" = 1 ]; then
@@ -146,13 +164,13 @@ perintah_langkah=()
 
 tambah() { nama_langkah+=("$1"); perintah_langkah+=("$2"); }
 
-tambah "Build shared types" "pnpm build:shared"
-[ "$B_BACKEND" = 1 ] && tambah "Lint backend (tsc --noEmit)"   "pnpm --filter lazisnu-backend run lint"
-[ "$B_WEB" = 1 ]     && tambah "Lint web (eslint)"             "pnpm --filter web run lint"
-[ "$B_MOBILE" = 1 ]  && tambah "Lint mobile (eslint)"          "pnpm --filter lazisnu-collector-app run lint"
-[ "$B_MOBILE" = 1 ]  && tambah "Prettier check (mobile)"       "pnpm --filter lazisnu-collector-app exec prettier --check . --end-of-line auto"
-tambah "Typecheck semua workspace" "pnpm -r exec tsc --noEmit"
-[ "$B_BACKEND" = 1 ] && tambah "Cek migration orphans"         "pnpm --filter lazisnu-backend db:check-orphans"
+tambah "Build shared types" "\"$PNPM\" build:shared"
+[ "$B_BACKEND" = 1 ] && tambah "Lint backend (tsc --noEmit)"   "\"$PNPM\" --filter lazisnu-backend run lint"
+[ "$B_WEB" = 1 ]     && tambah "Lint web (eslint)"             "\"$PNPM\" --filter web run lint"
+[ "$B_MOBILE" = 1 ]  && tambah "Lint mobile (eslint)"          "\"$PNPM\" --filter lazisnu-collector-app run lint"
+[ "$B_MOBILE" = 1 ]  && tambah "Prettier check (mobile)"       "\"$PNPM\" --filter lazisnu-collector-app exec prettier --check . --end-of-line auto"
+tambah "Typecheck semua workspace" "\"$PNPM\" -r exec tsc --noEmit"
+[ "$B_BACKEND" = 1 ] && tambah "Cek migration orphans"         "\"$PNPM\" --filter lazisnu-backend db:check-orphans"
 
 # ─── Jalankan ───────────────────────────────────────────────────────────────
 gagal=0
