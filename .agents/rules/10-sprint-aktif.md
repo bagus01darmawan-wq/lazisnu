@@ -38,14 +38,19 @@ Catatan untuk agent:
 | `rg "Sentry|@sentry|config/sentry" apps/mobile` | ✅ 0 match | Sentry mobile sudah dihapus dari source aktif. |
 | `rg "@react-native-firebase|Crashlytics|google-services" apps/mobile` | ✅ match valid | Firebase/Crashlytics aktif di package, Gradle, index, helper config. |
 
-### Backend/Web — Status Tercatat, Belum Diverifikasi Ulang di Audit Firebase
+### Rerun Test Monorepo — 2026-09-21 (semua workspace)
 
-| Area | Status tercatat | Catatan skeptis |
+| Area | Hasil rerun 2026-09-21 | Bukti |
 |---|---:|---|
-| Backend unit test | 135 PASS / 10 suite | Angka dari sprint sebelumnya; tidak direrun saat setup Firebase. |
-| Mobile unit test | 18 PASS / 2 suite | Sudah direrun 2026-06-13. |
-| Regression checklist | 19/28 selesai | 9 item sisa masih perlu device/browser/integration. |
-| Web manual/browser checks | Pending | Belum dibuktikan oleh audit Firebase. |
+| Backend test (jest, DB ter-mock) | ✅ 317 PASS / 35 suite | `pnpm --filter lazisnu-backend exec jest --runInBand` (93,8 dtk; log memuat ECONNREFUSED Redis dari bullmq — tidak menggagalkan test) |
+| Backend test auth | ✅ 27 PASS / 2 suite | `auth.integration.test.ts` + `auth-refresh.integration.test.ts` |
+| Mobile test | ✅ 235 PASS / 29 suite | `pnpm --filter lazisnu-collector-app test` |
+| Web test (vitest) | ✅ 25 PASS / 5 suite | `pnpm --filter web test` |
+| Gerbang lokal (cermin job Verify CI) | ✅ PASS | `bash scripts/cek-lokal.sh --semua` — lint backend/web/mobile, prettier mobile, `tsc` semua paket, `db:check-orphans` |
+| Regression checklist | 20/29 berbukti | Pemeriksa `periksa_centang.py` (Rp 0): 9 item menunggu bukti manual |
+| Web manual/browser checks | ⬜ Pending | Suite unit lulus, tetapi CRUD/date-picker/pagination tetap butuh browser |
+
+> Angka lama yang kini **usang**: backend "135 PASS / 10 suite", mobile "18 PASS / 2 suite" (2026-06-13), regression "19/28".
 
 ---
 
@@ -69,7 +74,7 @@ Catatan untuk agent:
 - `apps/mobile/src/screens/ScanScreen.tsx` menavigasi ke `Collection` dengan `{ task: scannedData }` menggunakan `CompositeNavigationProp` bertipe.
 - `apps/mobile/src/screens/CollectionScreen.tsx` menerima `NativeStackScreenProps<RootStackParamList, 'Collection'>`.
 
-**Status verifikasi:** patch routing sudah ada di source pada audit 2026-07-17. Belum ada bukti baru bahwa `typecheck`, `lint`, `test`, `build:debug`, dan smoke test emulator setelah patch ini semuanya lulus. Jalankan:
+**Status verifikasi (diperbarui 2026-09-21):** patch routing terverifikasi ada di source — `AppNavigator.tsx:63` (`Tab.Screen name="History"` → `HistoryScreen`), `types.ts:10` (`Collection: {task: Task}`), `CollectionScreen.tsx:19,22` (`NativeStackScreenProps<RootStackParamList,'Collection'>` + `route.params`). `typecheck` + `lint` mobile **PASS** dan `test` mobile **235/235 PASS (29 suite)** pada 2026-09-21 (gerbang lokal + jest). **Belum:** `build:debug` dan smoke test emulator. Jalankan:
 
 ```bash
 pnpm --filter lazisnu-collector-app typecheck
@@ -80,8 +85,6 @@ pnpm --filter lazisnu-collector-app build:debug
 
 Setelah command lulus, verifikasi emulator: buka tab Riwayat tanpa crash, scan QR, tekan Lanjutkan, lalu pastikan `CollectionScreen` menerima task yang benar. Baru ubah status menjadi **VERIFIED** beserta tanggal dan hasil command.
 
-**Status verifikasi:** diagnosis source selesai; patch, typecheck, lint, test, dan uji emulator belum dilakukan.
-
 ### P0 — Bukti Manual / Integration yang Belum Selesai
 
 | Item | Status | Kenapa belum selesai |
@@ -89,13 +92,14 @@ Setelah command lulus, verifikasi emulator: buka tab Riwayat tanpa crash, scan Q
 | TC-MOB-01 mobile buka offline | ⬜ Pending | Perlu device/emulator Android + simulasi offline. |
 | TC-MOB-03 simpan queue offline | ⬜ Pending | Perlu mode pesawat + MMKV device runtime. |
 | TC-MOB-04 auto-sync saat online | ⬜ Pending | Perlu network toggle dan observasi sync end-to-end. |
+| TC-MOB-07 smoke patch routing P0 | ⬜ Pending | Patch ada di source; perlu emulator (buka tab Riwayat, scan QR, Lanjutkan). |
 | TC-WEB-01 CRUD Master | ⬜ Pending | Perlu browser/E2E atau minimal supertest tambahan. |
 | TC-WEB-02 date picker | ⬜ Pending | Perlu browser. |
 | TC-WEB-03 UI konsistensi | ⬜ Pending | Perlu browser visual check. |
 | TC-WEB-05 pagination state | ⬜ Pending | Perlu browser. |
 | TC-WA-01 WA worker kirim | ⬜ Pending | Perlu integration mock/WA API sandbox. |
 
-> Catatan data: status regression masih 19/28 karena daftar lama mencatat 9 pending, tetapi tabel pending eksplisit yang masih relevan berisi 8 item. Agent berikutnya perlu membuka `regression-checklist.md` dan menyelaraskan hitungan final sebelum mengklaim 20/28 atau 19/28.
+> Catatan data (diselaraskan 2026-09-21 — tidak perlu ditebak lagi): daftar resmi berisi **29 item** (penyebut lama "28" salah hitung). Status: **20/29 berbukti**, **9 item menunggu bukti manual** = 8 item di tabel ini + **TC-MOB-07** (smoke test emulator, lihat status P0 di atas). Rincian per item: `docs/archive/regression-checklist.md`.
 
 ### P1 — Cleanup Warning Mobile [SELESAI]
 
@@ -325,4 +329,4 @@ Catatan mismatch yang belum diputuskan:
 
 *Lazisnu Infaq Collection System — rules/10-sprint-aktif.md*
 *⚠️ Update file ini setiap berganti sprint/fase*
-*Last updated: 2026-07-02 (Android Emulator, AEHD, Webcam Config, local backend settings, and mobile API interceptor fix)*
+*Last updated: 2026-09-21 (rerun test backend/mobile/web + selaras `regression-checklist.md` 20/29 + status P0 routing)*
