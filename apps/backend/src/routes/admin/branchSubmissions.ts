@@ -7,7 +7,7 @@ import { authorize } from '../../middleware/auth';
 import { assertBranchAccess } from '../../middleware/ownership';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { isAppError } from '../../utils/AppError';
-import { signBranchSchema } from './schemas';
+import { signBranchSchema, reopenBranchSchema } from './schemas';
 import {
   ensureBranchSubmission,
   toBranchResponse,
@@ -18,6 +18,7 @@ import {
   signBranchSubmission,
   type RequestContext,
 } from '../../services/cosign';
+import { reopenBranchSubmission } from '../../services/reopen';
 
 // C1-T5: Kunci Ranting = upacara sign (Admin Ranting) + countersign (MWC).
 // Orkestrasi berlapis MWC + FINAL_NOL massal = T6.
@@ -143,6 +144,27 @@ export async function branchSubmissionsRoutes(fastify: FastifyInstance) {
           linkedPeriods: body.linked_periods,
           asNol: body.as_nol,
         }, ctxOf(request));
+        return sendSuccess(reply, result);
+      } catch (error: unknown) {
+        return sendAppError(reply, error, fastify.log);
+      }
+    },
+  );
+
+  // POST /v1/admin/branch-submissions/:id/reopen — C1-T7 (§14.8): Admin
+  // Ranting pemilik / MWC membuka FINAL/FINAL_NOL → DRAFT + jendela 48 jam.
+  fastify.post(
+    '/branch-submissions/:id/reopen',
+    { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = request.params as { id: string };
+        const body = reopenBranchSchema.parse(request.body);
+        const result = await reopenBranchSubmission(actorOf(request), {
+          submissionId: id,
+          reason: body.reason,
+          expectedVersion: body.expected_version,
+        }, new Date());
         return sendSuccess(reply, result);
       } catch (error: unknown) {
         return sendAppError(reply, error, fastify.log);

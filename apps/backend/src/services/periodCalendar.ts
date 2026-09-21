@@ -130,6 +130,18 @@ export function resolveKunciPeriodePhase(now: Date, b: PeriodBoundaries): KunciP
 }
 
 /**
+ * C1-T7 (§14.8 "mis. 2x24 jam"): jendela koreksi pasca-reopen. Rumah netral
+ * (periodCalendar tidak diimpor oleh service lain secara siklik) agar
+ * collectionSubmission/cosign/ppkSubmissions/reopen bisa memakai bersama.
+ */
+export const REOPEN_WINDOW_HOURS = 48;
+
+/** `now + 48 jam` — awal jendela ditulis saat reopen / refresh. */
+export function reopenWindowUntil(now: Date): Date {
+  return new Date(now.getTime() + REOPEN_WINDOW_HOURS * 3_600_000);
+}
+
+/**
  * Cek deploy T12 (murni, tidak throw — aman di CI ber-TZ apa pun):
  * apakah zona server == zona operasional? Dipakai pipeline/runbook verifikasi,
  * bukan logika bisnis.

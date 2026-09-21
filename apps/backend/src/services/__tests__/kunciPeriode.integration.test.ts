@@ -114,6 +114,15 @@ describe('C1-T6 kunci berlapis MWC (DB, R2 mock)', () => {
       const branches = await db.select({ id: schema.branches.id }).from(schema.branches).where(inArray(schema.branches.code, T6_BRANCH_CODES));
       const bIds = branches.map((b) => b.id);
       if (bIds.length > 0) {
+        // Cross-talk T3: preparePeriodDraft membuat draft untuk SEMUA ranting
+        // (termasuk fixture kita, tergantung urutan suite) — hapus dulu agar
+        // FK draft_items → officers tak memblokir cleanup.
+        const drafts = await db.select({ id: schema.periodDrafts.id }).from(schema.periodDrafts).where(inArray(schema.periodDrafts.branchId, bIds));
+        const dIds = drafts.map((d) => d.id);
+        if (dIds.length > 0) {
+          await db.delete(schema.periodDraftItems).where(inArray(schema.periodDraftItems.draftId, dIds));
+          await db.delete(schema.periodDrafts).where(inArray(schema.periodDrafts.id, dIds));
+        }
         const cans = await db.select({ id: schema.cans.id }).from(schema.cans).where(inArray(schema.cans.branchId, bIds));
         const cIds = cans.map((c) => c.id);
         if (cIds.length > 0) {
@@ -242,6 +251,13 @@ describe('C1-T6 kunci berlapis MWC (DB, R2 mock)', () => {
       const branches = await db.select({ id: schema.branches.id }).from(schema.branches).where(inArray(schema.branches.code, T6_BRANCH_CODES));
       const bIds = branches.map((b) => b.id);
       if (bIds.length > 0) {
+        // Cross-talk T3: siapkan hapus draft (lihat beforeAll).
+        const drafts = await db.select({ id: schema.periodDrafts.id }).from(schema.periodDrafts).where(inArray(schema.periodDrafts.branchId, bIds));
+        const dIds = drafts.map((d) => d.id);
+        if (dIds.length > 0) {
+          await db.delete(schema.periodDraftItems).where(inArray(schema.periodDraftItems.draftId, dIds));
+          await db.delete(schema.periodDrafts).where(inArray(schema.periodDrafts.id, dIds));
+        }
         const cans = await db.select({ id: schema.cans.id }).from(schema.cans).where(inArray(schema.cans.branchId, bIds));
         const cIds = cans.map((c) => c.id);
         if (cIds.length > 0) {

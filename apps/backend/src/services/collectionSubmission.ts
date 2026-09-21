@@ -27,13 +27,30 @@ type Transaction = PgTransaction<
 // ---------------------------------------------------------------------------
 // C1-T4 (§7.5, baris T4) — kunci pasca-FINAL di choke point submit/resubmit.
 // Baris submission yang belum ada = terbuka (belum FINAL).
+// C1-T7 (§14.8): + jendela reopen — DRAFT-dibuka-kembali yang lewat
+// `reopened_until` terkunci lagi (minta reopen ulang = perpanjangan).
 // ---------------------------------------------------------------------------
+
+/**
+ * C1-T7: tolak tulis bila jendela koreksi reopen sudah berakhir.
+ * DRAFT normal (`reopenedUntil` NULL) selalu lolos — hanya baris reopened
+ * yang dibatasi waktu. Batas inklusif: `now == until` masih boleh.
+ */
+export function assertReopenWindowOpen(sub: { reopenedUntil: Date | null }, now: Date = new Date()): void {
+  if (sub.reopenedUntil !== null && now.getTime() > sub.reopenedUntil.getTime()) {
+    throw Errors.VALIDATION_ERROR('Jendela koreksi reopen berakhir — minta reopen ulang ke Admin.', {
+      reason: 'REOPEN_WINDOW_CLOSED',
+      reopened_until: sub.reopenedUntil.toISOString(),
+    });
+  }
+}
 
 export async function assertSubmissionOpen(
   dbOrTx: Transaction | typeof db,
   officerId: string,
   year: number,
   month: number,
+  now: Date = new Date(),
 ): Promise<void> {
   // Syarat review-T4 #2: kunci baris submission (SELECT … FOR UPDATE) agar
   // submit yang commit tepat setelah FINAL commit tidak lolos di READ
@@ -46,21 +63,23 @@ export async function assertSubmissionOpen(
       eq(schema.ppkSubmissions.periodYear, year),
       eq(schema.ppkSubmissions.periodMonth, month),
     ),
-    columns: { status: true },
+    columns: { status: true, reopenedUntil: true },
   });
   if (sub?.status === 'FINAL') {
     throw Errors.QR_ALREADY_SUBMITTED(
       `Setoran periode ${periodKey(year, month)} sudah FINAL — hubungi Admin Ranting bila perlu reopen.`,
     );
   }
+  if (sub) assertReopenWindowOpen(sub, now);
 }
 
 /** Untuk rute skip: assignment ACTIVE milik petugas tak bisa di-skip bila FINAL. */
 export async function assertAssignmentSkippable(
   dbOrTx: Transaction | typeof db,
   assignment: { officerId: string; periodYear: number; periodMonth: number },
+  now: Date = new Date(),
 ): Promise<void> {
-  await assertSubmissionOpen(dbOrTx, assignment.officerId, assignment.periodYear, assignment.periodMonth);
+  await assertSubmissionOpen(dbOrTx, assignment.officerId, assignment.periodYear, assignment.periodMonth, now);
 }
 
 type ResubmitCollectionInput = {
@@ -206,17 +225,19 @@ export async function submitCollection(
     longitude?: string | null;
     offlineId?: string | null;
     deviceInfo?: any;
-  }
+  },
+  now: Date = new Date(),
 ) {
   await assertNoExistingFirstSubmit(tx, data.assignmentId, data.canId);
 
   // C1-T4 (§7.5): setoran periode yang sudah FINAL terkunci penuh.
+  // C1-T7: + jendela reopen (now diinjeksi agar uji deterministik).
   const target = await tx.query.assignments.findFirst({
     where: eq(schema.assignments.id, data.assignmentId),
     columns: { periodYear: true, periodMonth: true },
   });
   if (target) {
-    await assertSubmissionOpen(tx, data.officerId, target.periodYear, target.periodMonth);
+    await assertSubmissionOpen(tx, data.officerId, target.periodYear, target.periodMonth, now);
   }
 
   const [collection] = await tx.insert(schema.collections).values({
@@ -255,7 +276,8 @@ export async function submitCollection(
  */
 export async function resubmitCollection(
   tx: Transaction,
-  input: ResubmitCollectionInput
+  input: ResubmitCollectionInput,
+  now: Date = new Date(),
 ) {
   const oldCollection = await tx.query.collections.findFirst({
     where: eq(schema.collections.id, input.collectionId),
@@ -291,12 +313,13 @@ export async function resubmitCollection(
   }
 
   // C1-T4 (§7.5): koreksi pasca-FINAL ditolak (ubah = reopen T7 dulu).
+  // C1-T7: + jendela reopen.
   const resubmitTarget = await tx.query.assignments.findFirst({
     where: eq(schema.assignments.id, oldCollection.assignmentId),
     columns: { periodYear: true, periodMonth: true },
   });
   if (resubmitTarget) {
-    await assertSubmissionOpen(tx, oldCollection.officerId, resubmitTarget.periodYear, resubmitTarget.periodMonth);
+    await assertSubmissionOpen(tx, oldCollection.officerId, resubmitTarget.periodYear, resubmitTarget.periodMonth, now);
   }
 
   const nextSequence = latestSequence + 1;

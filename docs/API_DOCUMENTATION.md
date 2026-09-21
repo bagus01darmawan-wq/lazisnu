@@ -874,9 +874,10 @@ sedistrik; massal hanya `kind=RANTING` (program MWC/Taqwa dikecualikan).
 **Endpoint:** `POST /admin/kunci-periode` — body `{ "year": 2026, "month": 9 }`.
 
 - `<27 00:00` → `400 VALIDATION_ERROR` (belum saatnya).
-- `27 00:00–9 23:59` → fase `REKAP`: tarik FINAL saja, tanpa men-nolkan,
-  tanpa LOCKED. Balasan `{ phase: "REKAP", final_count, final_nol_count,
-  reported_count, pending_count, pending[], created_final_nol: [] }`.
+- `27 00:00–9 23:59` → fase `REKAP`: tarik FINAL saja, tanpa tulis
+  submission/LOCKED (baris kalender di-ensure bila belum ada). Balasan
+  `{ phase: "REKAP", final_count, final_nol_count, reported_count,
+  pending_count, pending[], created_final_nol: [] }`.
 - `≥10 00:00` → fase `KUNCI_KERAS`: buat `FINAL_NOL` (0 + `KOREKSI_ADMIN` +
   snapshot kaleng + `finalizedBy=MWC`, signer NULL = segel sistem) untuk tiap
   ranting TANPA baris submission DAN TANPA baris PPK (DRAFT/ranting parsial
@@ -904,6 +905,28 @@ sedistrik; massal hanya `kind=RANTING` (program MWC/Taqwa dikecualikan).
   }
 }
 ```
+
+### 4.14 Reopen Menular + Arsip PDF per Versi (C1-T7, §14.8)
+
+Reopen 1 PPK FINAL → DRAFT + otomatis menurunkan branch pasangannya yang
+sudah FINAL/FINAL_NOL ke DRAFT + TTD tingkat 2 hangus. Reopen langsung 1
+ranting (mis. FINAL_NOL massal T6 yang butuh koreksi susulan) juga didukung.
+Hanya Admin Ranting pemilik + MWC sedistrik; wajib alasan min 10 + audit.
+Jendela koreksi 48 jam (`reopened_until`): tulis lewat jendela ditolak
+`VALIDATION_ERROR` (`details.reason: REOPEN_WINDOW_CLOSED`) — perpanjang via
+reopen ulang. DRAFT normal (`reopened_until` NULL) tidak terpengaruh.
+PPK re-FINAL menyegarkan jendela branch pasangan (satu episode koreksi).
+Tiap reopen menaikkan `version`; PDF versi lama diarsipkan ke
+`ba_pdf_archives` (QR lama tetap `valid: true`); coretan TTD dihapus dari R2
+(bytes PDF lama dipertahankan sebagai arsip imut).
+
+**Endpoint:** `POST /mobile/submissions/{id}/reopen` (ADMIN_RANTING,
+ADMIN_KECAMATAN) • `POST /admin/branch-submissions/{id}/reopen` (sama) —
+body `{ "reason": "...", "expected_version": 2 }`.
+
+**Response (200):** `{ ...submission, reopened_until, archived_version,
+extended: false, contagion: { ...branch, reopened_until, archived_version } }`
+(`extended: true` = perpanjangan jendela tanpa arsip/bump).
 
 ---
 

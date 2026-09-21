@@ -22,7 +22,7 @@ import { and, eq, inArray, sql, type ExtractTablesWithRelations } from 'drizzle-
 import { type PgTransaction } from 'drizzle-orm/pg-core';
 import { Errors } from '../utils/errorCatalog';
 import { insertActivityLog } from './auditLogService';
-import { getLatestCollectionCondition } from './collectionSubmission';
+import { getLatestCollectionCondition, assertReopenWindowOpen } from './collectionSubmission';
 import {
   calcBisyaroh,
   calcExpectedShare,
@@ -31,7 +31,7 @@ import {
   BISYAROH_PCT,
   SHARE_PCT,
 } from '../utils/c1Math';
-import { periodKey } from './periodCalendar';
+import { periodKey, REOPEN_WINDOW_HOURS } from './periodCalendar';
 
 export interface SubmissionActor {
   userId: string;
@@ -273,6 +273,7 @@ export async function finalizePpkSubmission(actor: SubmissionActor, input: PpkFi
       where: eq(schema.ppkSubmissions.id, input.submissionId),
     });
     if (!sub) throw Errors.VALIDATION_ERROR('Setoran PPK tidak ditemukan');
+    assertReopenWindowOpen(sub, now);
 
     const officer = await tx.query.officers.findFirst({
       where: eq(schema.officers.id, sub.officerId),
@@ -364,6 +365,7 @@ export async function finalizePpkSubmission(actor: SubmissionActor, input: PpkFi
         ppkSignedAt: sub.ppkSignedAt ?? now,
         bendaharaSignerId: input.bendaharaSignerId,
         bendaharaSignedAt: sub.bendaharaSignedAt ?? now,
+        reopenedUntil: null,
         updatedAt: now,
       })
       .where(
@@ -380,6 +382,20 @@ export async function finalizePpkSubmission(actor: SubmissionActor, input: PpkFi
       // Balapan FINAL ganda: pemenang lain mengunci duluan (tombol mati sekali).
       throw Errors.CONFLICT('Setoran baru saja di-FINAL-kan pihak lain.');
     }
+    // C1-T7: PPK selesai betulkan → segarkan jendela branch DRAFT-reopened
+    // pasangan (episode koreksi lanjut ke tingkat ranting).
+    await tx
+      .update(schema.branchSubmissions)
+      .set({ reopenedUntil: new Date(now.getTime() + REOPEN_WINDOW_HOURS * 3_600_000), updatedAt: now })
+      .where(
+        and(
+          eq(schema.branchSubmissions.branchId, sub.branchId),
+          eq(schema.branchSubmissions.periodYear, sub.periodYear),
+          eq(schema.branchSubmissions.periodMonth, sub.periodMonth),
+          eq(schema.branchSubmissions.status, 'DRAFT'),
+          sql`reopened_until IS NOT NULL`,
+        ),
+      );
     return { row: updated[0], totals, activeLeft, forced };
   });
 
@@ -553,6 +569,7 @@ export async function finalizeBranchSubmission(actor: SubmissionActor, input: Br
       where: eq(schema.branchSubmissions.id, input.submissionId),
     });
     if (!sub) throw Errors.VALIDATION_ERROR('Setoran ranting tidak ditemukan');
+    assertReopenWindowOpen(sub, now);
 
     // Kunci Ranting = Manager Subarea (ketua ranting). MWC massal = T6.
     if (actor.role !== 'ADMIN_RANTING' || !actor.branchId || actor.branchId !== sub.branchId) {
@@ -620,6 +637,7 @@ export async function finalizeBranchSubmission(actor: SubmissionActor, input: Br
         rantingSignedAt: sub.rantingSignedAt ?? now,
         mwcBendaharaSignerId: input.mwcBendaharaSignerId,
         mwcBendaharaSignedAt: sub.mwcBendaharaSignedAt ?? now,
+        reopenedUntil: null,
         updatedAt: now,
       })
       .where(

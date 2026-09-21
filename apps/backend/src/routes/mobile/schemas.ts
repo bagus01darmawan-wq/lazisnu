@@ -77,6 +77,15 @@ export const forceFinalizePpkSchema = z.object({
   expected_version: z.number().int().min(1).optional(),
 }).strict();
 
+/**
+ * C1-T7 (§14.8): reopen PPK FINAL → DRAFT menular. Hanya Admin Ranting
+ * pemilik + MWC (scope di service); alasan wajib min 10 untuk audit.
+ */
+export const reopenSubmissionSchema = z.object({
+  reason: z.string().min(10).max(255),
+  expected_version: z.number().int().min(1).optional(),
+}).strict();
+
 /** POST /mobile/cans/:canId/visits — kunjungan verifikasi / penggantian (BUKAN penjemputan). */
 export const canVisitSchema = z.object({
   purpose: z.enum(['VERIFIKASI', 'PENGGANTIAN', 'PENCABUTAN']),

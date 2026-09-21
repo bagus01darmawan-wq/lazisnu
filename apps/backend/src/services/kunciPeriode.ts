@@ -81,7 +81,9 @@ export interface KunciPeriodeResult {
   calendar_locked: boolean;
 }
 
-async function ensurePeriodCalendarRow(year: number, month: number): Promise<void> {
+// G2 (tinjauan-T6): baris yang baru lahir memakai status waktu berjalan
+// (bukan selalu OPEN) agar tak ada OPEN-vs-waktu yang meleset di REKAP-akhir.
+async function ensurePeriodCalendarRow(year: number, month: number, now: Date): Promise<void> {
   const b = buildPeriodBoundaries(year, month);
   await db
     .insert(schema.periodCalendar)
@@ -91,7 +93,7 @@ async function ensurePeriodCalendarRow(year: number, month: number): Promise<voi
       assignDate: b.assignDate,
       dueDate: b.dueDate,
       toleranceEnd: b.toleranceEnd,
-      status: 'OPEN',
+      status: resolvePeriodStatus(now, b),
     })
     .onConflictDoNothing({
       target: [schema.periodCalendar.periodYear, schema.periodCalendar.periodMonth],
@@ -155,7 +157,7 @@ export async function kunciPeriode(
   }
   const periodStatus = resolvePeriodStatus(now, b);
 
-  await ensurePeriodCalendarRow(input.year, input.month);
+  await ensurePeriodCalendarRow(input.year, input.month, now);
 
   const branches = await db
     .select({ id: schema.branches.id, name: schema.branches.name, kind: schema.branches.kind })
