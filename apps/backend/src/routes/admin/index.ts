@@ -16,6 +16,8 @@ import { periodDraftsRoutes } from './periodDrafts';
 import { branchSubmissionsRoutes } from './branchSubmissions';
 import { kunciPeriodeRoutes } from './kunciPeriode';
 import { signaturesRoutes } from './signatures';
+import { incidentRoutes } from './incidents';
+import { laporanMwcRoutes } from './laporanMwc';
 
 export default async function adminRoutes(fastify: FastifyInstance) {
   // Apply auth middleware to all routes in this plugin
@@ -36,4 +38,6 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   await fastify.register(branchSubmissionsRoutes);
   await fastify.register(kunciPeriodeRoutes);
   await fastify.register(signaturesRoutes);
+  await fastify.register(incidentRoutes);
+  await fastify.register(laporanMwcRoutes);
 }

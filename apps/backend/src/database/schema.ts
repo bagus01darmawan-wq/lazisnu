@@ -364,6 +364,36 @@ export const branchSubmissions = pgTable('branch_submissions', {
 }));
 
 // ============================================================================
+// C1-T8: agregat darurat PPK (§14 C-1/C-2 #5c + §8).
+// HP + catatan kertas hilang → admin catat 1 angka total dari uang fisik +
+// saksi bendahara + alasan HP_HILANG. Masuk total setoran, TIDAK masuk rincian
+// per kaleng (collection_count tak bertambah). Satu baris aktif per
+// officer+periode (upsert-ganti + audit); alasan KOREKSI_ADMIN didukung untuk
+// koreksi administratif tanpa kertas.
+// Compute: computePpkTotals menambahkan SUM agregat ke total (bisyaroh ikut
+// dihitung dari total gabungan — uang fisiknya nyata di tangan bendahara).
+// ============================================================================
+export const ppkEmergencyAggregates = pgTable('ppk_emergency_aggregates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  officerId: uuid('officer_id').references(() => officers.id).notNull(),
+  branchId: uuid('branch_id').references(() => branches.id).notNull(),
+  periodYear: integer('period_year').notNull(),
+  periodMonth: integer('period_month').notNull(),
+  amount: bigint('amount', { mode: 'bigint' }).notNull(),
+  reason: varianceReasonEnum('reason').notNull(),
+  /** Saksi bendahara/sekretaris (STAF_KEUANGAN seranting) — wajib tercatat. */
+  witnessUserId: uuid('witness_user_id').references(() => users.id).notNull(),
+  /** Admin pencatat (ADMIN_RANTING pemilik / ADMIN_KECAMATAN sedistrik). */
+  createdBy: uuid('created_by').references(() => users.id).notNull(),
+  note: varchar('note', { length: 255 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  emergencyOfficerPeriodUnq: uniqueIndex('emergency_officer_period_unq').on(t.officerId, t.periodYear, t.periodMonth),
+  emergencyBranchPeriodIdx: index('emergency_branch_period_idx').on(t.branchId, t.periodYear, t.periodMonth),
+}));
+
+// ============================================================================
 // C1-T7: arsip PDF berita acara per versi (§14.8 + F1b review-T5).
 // Kolom pdf_url/pdf_hash di submission hanya menyimpan versi TERAKHIR; tiap
 // reopen mengarsipkan versi lama ke sini SEBELUM di-null-kan, agar PDF yang

@@ -25,6 +25,7 @@ import * as schema from '../database/schema';
 import { and, eq } from 'drizzle-orm';
 import { Errors } from '../utils/errorCatalog';
 import { downloadFromR2, uploadToR2 } from './r2';
+import { getAggregateTotal } from './emergencyAggregates';
 import {
   asciiSafe,
   baContentHash,
@@ -325,10 +326,12 @@ export async function ensurePpkBaPdf(submissionId: string, opts: { force?: boole
   const contentHash = baContentHash('ppk', snapshot);
   const qrPayload = buildBaVerifyPayload({ type: 'ppk', id: sub.id, version: sub.version, hash: contentHash });
   const [ppkImg, bendaharaImg] = await fetchSignatureImages([sub.ppkSignatureUrl, sub.bendaharaSignatureUrl]);
+  const { total: aggregateTotal } = await getAggregateTotal(db, sub.officerId, sub.periodYear, sub.periodMonth);
   const ba = buildPpkBaText({
     sub,
     officerName: sub.officer?.fullName ?? sub.officerId,
     branchName: sub.branch?.name ?? '',
+    aggregateTotal,
   });
   const pdf = await renderBaPdf({
     ba,
