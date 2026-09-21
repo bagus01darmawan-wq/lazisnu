@@ -18,7 +18,10 @@
     "build:backend": "pnpm --filter lazisnu-backend build",
     "build:web": "pnpm --filter web build",
     "build:shared": "pnpm --filter @lazisnu/shared-types build",
-    "build:all": "pnpm build:shared && pnpm build:backend && pnpm build:web"
+    "build:all": "pnpm build:shared && pnpm build:backend && pnpm build:web",
+    "cek": "bash scripts/cek-lokal.sh",
+    "cek:semua": "bash scripts/cek-lokal.sh --semua",
+    "cek:perbaiki": "bash scripts/cek-lokal.sh --perbaiki"
   },
   "dependencies": {},
   "devDependencies": {
