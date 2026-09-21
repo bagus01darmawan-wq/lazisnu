@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+# ============================================================================
+#  Hook pre-push: menjalankan gerbang mutu lokal sebelum push.
+#
+#  AKTIF bila: git config core.hooksPath .githooks
+#  MATIKAN   : git config --unset core.hooksPath
+#  LEWATI sekali: git push --no-verify
+#
+#  Isinya cuma memanggil scripts/cek-lokal.sh (cermin job Verify di ci.yml),
+#  supaya kegagalan format/lint ketahuan di laptop, bukan setelah CI merah.
+# ============================================================================
+root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+exec bash "$root/scripts/cek-lokal.sh"
