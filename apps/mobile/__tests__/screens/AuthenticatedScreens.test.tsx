@@ -127,6 +127,10 @@ jest.mock('../../src/services/api', () => ({
   collectionService: {
     getVisits: jest.fn().mockResolvedValue({success: true, data: {items: []}}),
   },
+  // C1-T9: Dashboard memuat info periode (chip toleransi + countdown).
+  c1Service: {
+    getPeriodInfo: jest.fn().mockResolvedValue({success: true, data: null}),
+  },
 }));
 
 import DashboardScreen from '../../src/screens/DashboardScreen';

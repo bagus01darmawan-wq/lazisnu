@@ -93,3 +93,11 @@ export const canVisitSchema = z.object({
   assignment_id: z.string().uuid().optional(),
   notes: z.string().max(255).optional(),
 }).strict();
+
+/**
+ * C1-T9: token perangkat milik sendiri (fondasi push T11). Token milik sesi
+ * login — tanpa userId body.
+ */
+export const deviceTokenSchema = z.object({
+  fcm_token: z.string().min(1).max(255),
+}).strict();

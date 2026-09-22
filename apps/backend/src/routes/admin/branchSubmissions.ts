@@ -19,6 +19,7 @@ import {
   type RequestContext,
 } from '../../services/cosign';
 import { reopenBranchSubmission } from '../../services/reopen';
+import { listBranchBaVersions } from '../../services/baPdfService';
 
 // C1-T5: Kunci Ranting = upacara sign (Admin Ranting) + countersign (MWC).
 // Orkestrasi berlapis MWC + FINAL_NOL massal = T6.
@@ -197,6 +198,22 @@ export async function branchSubmissionsRoutes(fastify: FastifyInstance) {
       try {
         const { id } = request.params as { id: string };
         return sendSuccess(reply, await getBaDownload(actorOf(request), 'branch', id, ctxOf(request)));
+      } catch (error: unknown) {
+        return sendAppError(reply, error, fastify.log);
+      }
+    },
+  );
+
+  // GET /v1/admin/branch-submissions/:id/pdf-versions — C1-T9 (H3 review-T7):
+  // riwayat versi BA (live + arsip). Gerbang baca = gerbang berita-acara.
+  fastify.get(
+    '/branch-submissions/:id/pdf-versions',
+    baReadRoles,
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = request.params as { id: string };
+        await getBranchBeritaAcara(actorOf(request), id);
+        return sendSuccess(reply, await listBranchBaVersions(id));
       } catch (error: unknown) {
         return sendAppError(reply, error, fastify.log);
       }
