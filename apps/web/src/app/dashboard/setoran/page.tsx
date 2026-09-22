@@ -72,7 +72,8 @@ export default function SetoranPage() {
   }, [year, month]);
 
   useEffect(() => {
-    fetchData();
+    // react-hooks/set-state-in-effect (React Hooks v6): lihat persetujuan.
+    void Promise.resolve().then(fetchData);
   }, [fetchData]);
 
   const openDetail = async (id: string) => {
