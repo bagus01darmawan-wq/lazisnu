@@ -36,6 +36,15 @@
 ## 3. Tindak lanjut
 
 - T8 **selesai, boleh merge**. Bukti live sesi ini: tsc backend+web EXIT 0; jest **55/55 suite, 480/480 test**.
-- Ditinggalkan dengan benar: T9/T10 UI + endpoint riwayat arsip (H3 review-T7); T11 notifikasi; T12 wiring cron + **rollout migrasi 0010 + 0011 ke staging/prod via runbook** (WAJIB sebelum rilis — kode membaca tabel/kolom baru; 0011 tanpa tabel = `computePpkTotals` 500 di semua jalur).
+- ⚠️ **KOREKSI framing (22 Sep 2026):** butir berikut ternyata salah untuk
+  bagian staging — merge ke `staging` = auto-deploy (`Deploy staging: success`
+  22 Sep 03:53Z, run `35684837759`), sehingga backend staging berjalan dengan
+  DB tanpa 0010/0011 dan jalur `ensurePpkSubmission → computePpkTotals` berpotensi
+  500 (`42P01`). Runbook 0010+0011 ke **staging dieksekusi SEKARANG**
+  (`docs/ci/RUNBOOK-0010-0011-STAGING-2026-09-22.md` + `apps/backend/scripts/
+  0010-0011-journal-recon.sql`). Yang benar-benar menunggu T12: rollout ke
+  **produksi** + cron + TZ. Pelajaran: **DB mendahului kode di lingkungan
+  auto-deploy** — migrasi aditif staging diberlakukan sebelum PR merge.
+- Ditinggalkan dengan benar: T9/T10 UI + endpoint riwayat arsip (H3 review-T7); T11 notifikasi; T12 wiring cron + rollout migrasi 0010 + 0011 ke **produksi** via runbook (WAJIB sebelum rilis kode yang membaca tabel/kolom baru; 0011 tanpa tabel = `computePpkTotals` 500 di semua jalur).
 - Backlog tetap: F2 (purge scope distrik), F7 (bungkus teks PDF), H1-test (J1).
 - Baseline baru untuk T9/T10: **55 suite / 480 test**.
