@@ -5,15 +5,15 @@ import {c1Service, type KeuanganInboxItemDto} from '../services/api';
 import {AppCard} from '../components/ui/AppCard';
 import {AppHeader} from '../components/ui/AppHeader';
 import {StatusBadge} from '../components/ui/StatusBadge';
+import {SignSheet} from '../components/SignSheet';
 import {Colors, Spacing, Typography} from '../theme';
 import {formatCurrency} from '../utils/format';
 import {getErrorMessage} from '../utils/error';
 
 /**
  * C1-T9 — Layar Keuangan (BA/TTD kedua + unduh).
+ * C1-T10 — TTD interaktif: countersign PPK + ranting via kanvas (PNG murni).
  * Antrean countersign dalam scope-nya + unduh BA per baris FINAL.
- * Tanda tangan interaktif = T10; tombol TTD di sini hanya tampil bila
- * backend mengizinkan (kontrak T5 sudah teruji — klien tinggal memanggil).
  */
 export const KeuanganScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -21,6 +21,10 @@ export const KeuanganScreen: React.FC = () => {
   const [period, setPeriod] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // C1-T10: item yang sedang ditandatangani (kanvas → PNG murni).
+  const [signing, setSigning] = useState<KeuanganInboxItemDto | null>(null);
+  const [signBusy, setSignBusy] = useState(false);
+  const [signError, setSignError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -40,6 +44,30 @@ export const KeuanganScreen: React.FC = () => {
   useEffect(() => {
     load();
   }, [load]);
+
+  const submitSign = async (signaturePngBase64: string) => {
+    if (!signing) return;
+    setSignBusy(true);
+    setSignError(null);
+    try {
+      const body = {
+        signature_png: signaturePngBase64,
+        consent: true,
+        expected_version: signing.version,
+      };
+      const res =
+        signing.kind === 'ppk'
+          ? await c1Service.countersignSubmission(signing.submission_id, body)
+          : await c1Service.countersignBranch(signing.submission_id, body);
+      if (!res.success) throw new Error(res.error?.message || 'Gagal menandatangani');
+      setSigning(null);
+      await load();
+    } catch (e: unknown) {
+      setSignError(getErrorMessage(e, 'Gagal menandatangani'));
+    } finally {
+      setSignBusy(false);
+    }
+  };
 
   return (
     <View style={[styles.container, {paddingTop: insets.top}]}>
@@ -73,10 +101,31 @@ export const KeuanganScreen: React.FC = () => {
                 Masih ada tugas ACTIVE — teruskan ke Admin Ranting (force).
               </Text>
             ) : (
-              <Text style={styles.hint}>Siap ditandatangani bersama (2 HP).</Text>
+              <Text
+                style={styles.signLink}
+                onPress={() => {
+                  setSignError(null);
+                  setSigning(item);
+                }}>
+                Tanda tangani di HP ini →
+              </Text>
             )}
           </AppCard>
         ))}
+        {signing ? (
+          <SignSheet
+            title={
+              signing.kind === 'ppk'
+                ? `Counter-sign ${signing.officer_name ?? ''}`
+                : `Counter-sign ${signing.branch_name}`
+            }
+            submitLabel="Tanda Tangani"
+            submitting={signBusy}
+            serverError={signError}
+            onSubmit={submitSign}
+            onClose={() => setSigning(null)}
+          />
+        ) : null}
         {isLoading && items.length === 0 ? <ActivityIndicator size="large" /> : null}
       </ScrollView>
     </View>
@@ -96,6 +145,12 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
   },
   hint: {...Typography.caption, color: Colors.text.muted, marginTop: Spacing.sm},
+  signLink: {
+    ...Typography.body,
+    color: Colors.brand.emerald,
+    fontWeight: '700',
+    marginTop: Spacing.sm,
+  },
   error: {...Typography.body, color: Colors.status.error},
 });
 

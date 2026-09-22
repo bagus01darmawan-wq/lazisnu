@@ -8,6 +8,9 @@ import {
   ShieldAlert, 
   MessageSquare,
   Database,
+  ClipboardCheck,
+  FileSignature,
+  PieChart,
   LucideIcon
 } from 'lucide-react';
 
@@ -76,6 +79,26 @@ export const MENU_ITEMS: MenuItem[] = [
     title: 'Data Master',
     path: '/dashboard/master',
     icon: Database,
+    roles: ['ADMIN_KECAMATAN'],
+  },
+  // C1-T10 (§15): menu peran siklus periode — Staf (monitor/setuju),
+  // Ranting (kunci), MWC (tarik). Penjaga tetap di server.
+  {
+    title: 'Persetujuan',
+    path: '/dashboard/persetujuan',
+    icon: ClipboardCheck,
+    roles: ['STAF_PENGUMPULAN', 'STAF_KEUANGAN'],
+  },
+  {
+    title: 'Setoran Ranting',
+    path: '/dashboard/setoran',
+    icon: FileSignature,
+    roles: ['ADMIN_RANTING'],
+  },
+  {
+    title: 'Rekap MWC',
+    path: '/dashboard/rekap-mwc',
+    icon: PieChart,
     roles: ['ADMIN_KECAMATAN'],
   },
 ];

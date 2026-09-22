@@ -78,6 +78,10 @@ export async function saveDeviceToken(userId: string, fcmToken: string): Promise
 export interface StafSummary {
   period: string;
   period_status: string;
+  // K1 (review-T9): countdown nyata dari server agar pengingat klien jujur.
+  days_to_due: number;
+  days_to_lock: number;
+  in_tolerance: boolean;
   scope: { kind: 'RANTING' | 'PROGRAM_MWC'; branch_id: string | null; district_id: string | null };
   drafts: { pending: number; escalated: number; approved: number };
   ppk: { final_count: number; total_count: number };
@@ -102,7 +106,8 @@ export async function getStafSummary(
   } catch {
     throw Errors.VALIDATION_ERROR('Periode tidak valid (year 2020–2100, month 1–12).');
   }
-  const periodStatus = resolvePeriodStatus(now, buildPeriodBoundaries(year, month));
+  const countdown = getPeriodInfo(year, month, now);
+  const periodStatus = countdown.period_status;
 
   // Scope: ranting (branchId) atau program MWC distrik (districtId).
   let draftBranchIds: string[];
@@ -175,6 +180,9 @@ export async function getStafSummary(
   return {
     period: periodKey(year, month),
     period_status: periodStatus,
+    days_to_due: countdown.days_to_due,
+    days_to_lock: countdown.days_to_lock,
+    in_tolerance: countdown.in_tolerance,
     scope,
     drafts: { pending, escalated, approved },
     ppk: { final_count: finalCount, total_count: totalCount },
