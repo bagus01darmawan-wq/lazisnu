@@ -215,16 +215,22 @@ export async function reopenPpkSubmission(actor: SubmissionActor, input: ReopenI
   }
 
   // Perpanjangan jendela: DRAFT/PPK_SIGNED yang memang dibuka via reopen.
+  // H1 (review-T7): kunci status ikut di WHERE agar re-FINAL yang commit di
+  // antara baca & update tak tertimpa jendela basi (harmless, tapi diperketat).
   if (head.status !== 'FINAL') {
     if ((head.status === 'DRAFT' || head.status === 'PPK_SIGNED') && head.reopenedUntil !== null) {
       const until = windowUntil(now);
+      const statusGuard =
+        head.status === 'DRAFT'
+          ? eq(schema.ppkSubmissions.status, 'DRAFT')
+          : eq(schema.ppkSubmissions.status, 'PPK_SIGNED');
       const updated = await db
         .update(schema.ppkSubmissions)
         .set({ reopenedUntil: until, updatedAt: now })
         .where(
           input.expectedVersion !== undefined
-            ? and(eq(schema.ppkSubmissions.id, head.id), eq(schema.ppkSubmissions.version, head.version))
-            : eq(schema.ppkSubmissions.id, head.id),
+            ? and(eq(schema.ppkSubmissions.id, head.id), eq(schema.ppkSubmissions.version, head.version), statusGuard)
+            : and(eq(schema.ppkSubmissions.id, head.id), statusGuard),
         )
         .returning();
       if (updated.length === 0) throw Errors.CONFLICT('Setoran baru saja berubah — muat ulang lalu coba lagi.');
@@ -382,8 +388,12 @@ export async function reopenBranchSubmission(actor: SubmissionActor, input: Reop
         .set({ reopenedUntil: until, updatedAt: now })
         .where(
           input.expectedVersion !== undefined
-            ? and(eq(schema.branchSubmissions.id, head.id), eq(schema.branchSubmissions.version, head.version))
-            : eq(schema.branchSubmissions.id, head.id),
+            ? and(
+                eq(schema.branchSubmissions.id, head.id),
+                eq(schema.branchSubmissions.version, head.version),
+                eq(schema.branchSubmissions.status, 'DRAFT'),
+              )
+            : and(eq(schema.branchSubmissions.id, head.id), eq(schema.branchSubmissions.status, 'DRAFT')),
         )
         .returning();
       if (updated.length === 0) throw Errors.CONFLICT('Setoran baru saja berubah — muat ulang lalu coba lagi.');

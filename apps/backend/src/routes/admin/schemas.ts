@@ -86,3 +86,30 @@ export const kunciPeriodeSchema = z.object({
   year: z.number().int().min(2020).max(2100),
   month: z.number().int().min(1).max(12),
 }).strict();
+
+/**
+ * C1-T8 (§14 #5c): agregat darurat — 1 angka dari uang fisik + saksi
+ * bendahara + alasan HP_HILANG/KOREKSI_ADMIN. Upsert per officer+periode.
+ */
+export const emergencyAggregateSchema = z.object({
+  officer_id: z.string().uuid(),
+  year: z.number().int().min(2020).max(2100),
+  month: z.number().int().min(1).max(12),
+  amount: z.number().int().min(1),
+  reason: z.enum(['HP_HILANG', 'KOREKSI_ADMIN']),
+  witness_user_id: z.string().uuid(),
+  note: z.string().min(10).max(255),
+}).strict();
+
+/**
+ * C1-T8 (§14 #5b): salin manual per kaleng dari catatan kertas + alasan
+ * KOREKSI_ADMIN. Validasi inti sama dengan submit PPK (service).
+ */
+export const manualCollectionSchema = z.object({
+  assignment_id: z.string().uuid(),
+  can_id: z.string().uuid(),
+  officer_id: z.string().uuid(),
+  nominal: z.number().min(0),
+  collected_at: z.string().datetime(),
+  reason: z.string().min(10).max(255),
+}).strict();

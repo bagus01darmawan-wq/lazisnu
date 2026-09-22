@@ -928,6 +928,33 @@ body `{ "reason": "...", "expected_version": 2 }`.
 extended: false, contagion: { ...branch, reopened_until, archived_version } }`
 (`extended: true` = perpanjangan jendela tanpa arsip/bump).
 
+### 4.15 Laporan MWC + Agregat Insiden (C1-T8, §8 + §14 #5b/#5c)
+
+MWC hanya menarik yang FINAL/FINAL_NOL — DRAFT tak berangka (belum lapor).
+Dua kartu (§8b): Perolehan Ranting (`kind=RANTING`, dengan share 30%) dan
+Perolehan Program MWC (`kind=PROGRAM_MWC`, bruto penuh, gerbang selisih
+dilepas). Angka dari snapshot beku submission (bukan hitung ulang).
+Flag merah otomatis: `SELISIH_TANPA_ALASAN` (defensif), `BELUM_LAPOR` /
+`MASIH_DRAFT` (rekonsiliasi hilang), `GABUNG_PERIODE`, `INSIDEN_*`,
+`MEMUAT_AGREGAT`.
+
+Agregat darurat: HP + kertas hilang → admin catat 1 angka uang fisik + saksi
+bendahara + `HP_HILANG`; masuk total, tak masuk rincian kaleng (satu baris
+aktif per officer+periode, upsert-ganti + audit). Salin manual: catatan
+kertas → admin salin per kaleng + alasan (min 10); validasi inti sama dengan
+submit PPK; provenance di audit `MANUAL_COLLECTION`; tanpa WA donatur.
+
+**Endpoint:** `GET /admin/laporan-mwc?year=&month=` (ADMIN_KECAMATAN) →
+`{ period, kartu_ranting, kartu_program, rows[] }`.
+
+**Endpoint:** `POST /admin/emergency-aggregates` (ADMIN_RANTING pemilik /
+ADMIN_KECAMATAN sedistrik) — body `{ officer_id, year, month, amount (>0),
+reason: HP_HILANG|KOREKSI_ADMIN, witness_user_id (Keuangan seranting),
+note (min 10) }`.
+
+**Endpoint:** `POST /admin/collections/manual` (sama) — body
+`{ assignment_id, can_id, officer_id, nominal, collected_at, reason (min 10) }`.
+
 ---
 
 ## 5. Scheduler API (Internal)

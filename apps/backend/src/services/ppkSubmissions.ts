@@ -55,6 +55,10 @@ export interface PpkTotals {
   collectionCount: number;
   bisyaroh: number;
   net: number;
+  /** C1-T8: bagian total yang berasal dari agregat darurat (tak masuk rincian kaleng). */
+  aggregateTotal: number;
+  /** C1-T8: 0/1 — satu baris aktif per officer+periode. */
+  aggregateCount: number;
 }
 
 // Tipe transaksi bersama (pola collectionSubmission.ts) untuk helper baca.
@@ -85,9 +89,22 @@ export async function computePpkTotals(
         latest,
       ),
     );
-  const total = rows.reduce((acc, r) => acc + Number(r.nominal), 0);
+  // C1-T8 (§14 #5c): agregat darurat (HP_HILANG) masuk total, tak masuk
+  // rincian kaleng. Satu baris aktif per officer+periode (upsert-ganti).
+  const aggs = await dbOrTx
+    .select({ amount: schema.ppkEmergencyAggregates.amount })
+    .from(schema.ppkEmergencyAggregates)
+    .where(
+      and(
+        eq(schema.ppkEmergencyAggregates.officerId, officerId),
+        eq(schema.ppkEmergencyAggregates.periodYear, year),
+        eq(schema.ppkEmergencyAggregates.periodMonth, month),
+      ),
+    );
+  const aggregateTotal = aggs.reduce((acc, r) => acc + Number(r.amount), 0);
+  const total = rows.reduce((acc, r) => acc + Number(r.nominal), 0) + aggregateTotal;
   const bisyaroh = calcBisyaroh(total);
-  return { total, collectionCount: rows.length, bisyaroh, net: total - bisyaroh };
+  return { total, collectionCount: rows.length, bisyaroh, net: total - bisyaroh, aggregateTotal, aggregateCount: aggs.length };
 }
 
 // ---------------------------------------------------------------------------
@@ -536,6 +553,15 @@ export async function computeBranchFinalValues(
   }
   const variance = calcShareVariance(shareMwc, expectedShare);
 
+  // C1-T8 (§8b): program MWC tak wajib setor share (100% milik MWC) — gerbang
+  // selisih/wajib-alasan hanya untuk RANTING. Variance tetap dihitung untuk
+  // display; asNol tetap butuh alasan (disengaja vs kebetulan).
+  const branchKindRow = await tx.query.branches.findFirst({
+    where: eq(schema.branches.id, sub.branchId),
+    columns: { kind: true },
+  });
+  const isProgram = (branchKindRow?.kind ?? 'RANTING') !== 'RANTING';
+
   if (input.asNol) {
     if (total !== 0 || shareMwc !== 0) {
       throw Errors.VALIDATION_ERROR('FINAL_NOL hanya untuk 0 pemasukan.');
@@ -543,7 +569,7 @@ export async function computeBranchFinalValues(
     if (!input.varianceReason) {
       throw Errors.VALIDATION_ERROR('FINAL_NOL wajib alasan (mis. tidak ada laporan).');
     }
-  } else if (needsVarianceReason(variance) && !input.varianceReason) {
+  } else if (!isProgram && needsVarianceReason(variance) && !input.varianceReason) {
     throw Errors.VALIDATION_ERROR(
       `Selisih share Rp ${variance} di luar toleransi Rp 10.000 — wajib alasan (KURANG_BAYAR/LEBIH_BAYAR/GABUNG_PERIODE/KOREKSI_ADMIN).`,
     );

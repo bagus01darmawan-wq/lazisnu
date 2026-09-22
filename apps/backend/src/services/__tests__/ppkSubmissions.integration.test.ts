@@ -244,7 +244,7 @@ describe('C1-T4 submission PPK & ranting (DB)', () => {
 
   test('hitung otomatis: total versi terbaru + ceil ribuan (75rb+100rb=175rb → bis 18rb)', async () => {
     const t = await computePpkTotals(db, off1, 2026, 9);
-    expect(t).toEqual({ total: 175000, collectionCount: 2, bisyaroh: 18000, net: 157000 });
+    expect(t).toEqual({ total: 175000, collectionCount: 2, bisyaroh: 18000, net: 157000, aggregateTotal: 0, aggregateCount: 0 });
     const sub = await ensurePpkSubmission(off1, branchR, 2026, 9);
     expect(sub.status).toBe('DRAFT');
     expect(sub.version).toBe(1);

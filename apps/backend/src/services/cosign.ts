@@ -47,6 +47,7 @@ import {
 } from './ppkSubmissions';
 import { periodKey, REOPEN_WINDOW_HOURS } from './periodCalendar';
 import { assertReopenWindowOpen } from './collectionSubmission';
+import { getAggregateTotal } from './emergencyAggregates';
 
 // ---------------------------------------------------------------------------
 // Validasi murni (tanpa DB/IO) — unit-testable.
@@ -751,6 +752,7 @@ export async function getPpkBeritaAcara(actor: SubmissionActor, submissionId: st
     sub,
     officerName: sub.officer.fullName,
     branchName: sub.branch.name,
+    aggregateTotal: (await getAggregateTotal(db, sub.officerId, sub.periodYear, sub.periodMonth)).total,
   });
 }
 

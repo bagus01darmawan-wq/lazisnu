@@ -110,21 +110,27 @@ export function buildPpkBaText(params: {
   };
   officerName: string;
   branchName: string;
+  /** C1-T8: bila >0 tampil baris rincian agregat darurat (transparansi). */
+  aggregateTotal?: number;
 }): PpkBaText {
-  const { sub, officerName, branchName } = params;
+  const { sub, officerName, branchName, aggregateTotal = 0 } = params;
   const draft = sub.status !== 'FINAL';
+  const table = [
+    { label: 'Total setoran', value: formatRupiah(Number(sub.totalAmount)) },
+    { label: 'Bisyaroh (10%)', value: formatRupiah(Number(sub.bisyarohAmount)) },
+    { label: 'Bersih', value: formatRupiah(Number(sub.netAmount)) },
+    { label: 'Jumlah kaleng', value: String(sub.collectionCount) },
+  ];
+  if (aggregateTotal > 0) {
+    table.push({ label: 'Termasuk agregat darurat', value: formatRupiah(aggregateTotal) });
+  }
   return {
     kind: 'ppk',
     title: 'BERITA ACARA PENYETORAN KOIN — PPK',
     period: periodKey(sub.periodYear, sub.periodMonth),
     officer_name: officerName,
     branch_name: branchName,
-    table: [
-      { label: 'Total setoran', value: formatRupiah(Number(sub.totalAmount)) },
-      { label: 'Bisyaroh (10%)', value: formatRupiah(Number(sub.bisyarohAmount)) },
-      { label: 'Bersih', value: formatRupiah(Number(sub.netAmount)) },
-      { label: 'Jumlah kaleng', value: String(sub.collectionCount) },
-    ],
+    table,
     statements: [
       `Pada hari ini PPK ${officerName} (${branchName}) menyerahkan hasil penjemputan periode tersebut kepada Bendahara Ranting.`,
       'Angka di atas dihitung otomatis oleh sistem dari per kaleng; tidak ada ketik manual.',
