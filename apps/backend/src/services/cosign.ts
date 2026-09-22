@@ -48,6 +48,7 @@ import {
 import { periodKey, REOPEN_WINDOW_HOURS } from './periodCalendar';
 import { assertReopenWindowOpen } from './collectionSubmission';
 import { getAggregateTotal } from './emergencyAggregates';
+import { notifyBaSiapBranch, notifyPpkFinal, notifySelisih } from './notifications';
 
 // ---------------------------------------------------------------------------
 // Validasi murni (tanpa DB/IO) — unit-testable.
@@ -390,6 +391,17 @@ export async function countersignPpkSubmission(
     newData: { signature_key: key, finalized: outcome.finalized, active_left: outcome.activeLeft },
     ctx,
   });
+  // C1-T11 (4+7 PPK): FINAL via upacara → Admin Ranting + BA siap untuk PPK.
+  // (Jalur force mendelegasikan ke finalizePpkSubmission yang sudah di-hook.)
+  if (outcome.finalized) {
+    await notifyPpkFinal(
+      outcome.row.officerId,
+      outcome.row.branchId,
+      periodKey(outcome.row.periodYear, outcome.row.periodMonth),
+      Number(outcome.row.totalAmount),
+      actor.userId,
+    );
+  }
   return {
     ...toPpkResponse(outcome.row),
     needs_force: !outcome.finalized,
@@ -548,6 +560,14 @@ export async function signBranchSubmission(
     newData: { signature_key: key, share_mwc: input.shareMwc },
     ctx,
   });
+  // C1-T11 (6): selisih besar → Admin Ranting + MWC (diam bila toleransi).
+  await notifySelisih(
+    row.branchId,
+    periodKey(row.periodYear, row.periodMonth),
+    Number(row.shareVariance),
+    row.varianceReason ?? '',
+    actor.userId,
+  );
   return toBranchResponse(row);
 }
 
@@ -672,6 +692,12 @@ export async function countersignBranchSubmission(
     newData: { signature_key: key, status: outcome.status },
     ctx,
   });
+  // C1-T11 (7): branch FINAL → Admin Ranting (BA siap unduh).
+  await notifyBaSiapBranch(
+    outcome.branchId,
+    periodKey(outcome.periodYear, outcome.periodMonth),
+    actor.userId,
+  );
   return toBranchResponse(outcome);
 }
 

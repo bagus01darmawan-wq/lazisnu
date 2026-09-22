@@ -17,6 +17,9 @@ export function SignaturePad({ onChange, height = 160 }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   const hasInk = useRef(false);
+  // L2 (review-T10): DPR dibekukan di ref saat init — move memakai nilai yang
+  // sama walau display/zoom berubah di tengah menggambar.
+  const dprRef = useRef(1);
   const [empty, setEmpty] = useState(true);
 
   const pos = useCallback((e: React.PointerEvent) => {
@@ -26,6 +29,11 @@ export function SignaturePad({ onChange, height = 160 }: SignaturePadProps) {
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
     return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+  }, []);
+
+  const toCss = useCallback((p: { x: number; y: number }) => {
+    const dpr = dprRef.current;
+    return { x: p.x / dpr, y: p.y / dpr };
   }, []);
 
   const emit = useCallback(() => {
@@ -43,6 +51,7 @@ export function SignaturePad({ onChange, height = 160 }: SignaturePadProps) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+    dprRef.current = dpr;
     const w = canvas.clientWidth || 300;
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(height * dpr);
@@ -67,17 +76,16 @@ export function SignaturePad({ onChange, height = 160 }: SignaturePadProps) {
           hasInk.current = true;
           setEmpty(false);
           const ctx = canvasRef.current?.getContext('2d');
-          const p = pos(e);
+          const p = toCss(pos(e));
           ctx?.beginPath();
-          ctx?.moveTo(p.x / (window.devicePixelRatio || 1), p.y / (window.devicePixelRatio || 1));
+          ctx?.moveTo(p.x, p.y);
           (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
         }}
         onPointerMove={(e) => {
           if (!drawing.current) return;
           const ctx = canvasRef.current?.getContext('2d');
-          const p = pos(e);
-          const dpr = window.devicePixelRatio || 1;
-          ctx?.lineTo(p.x / dpr, p.y / dpr);
+          const p = toCss(pos(e));
+          ctx?.lineTo(p.x, p.y);
           ctx?.stroke();
         }}
         onPointerUp={() => {

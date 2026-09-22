@@ -31,6 +31,7 @@ import * as schema from '../database/schema';
 import { eq, and, inArray, sql } from 'drizzle-orm';
 import { Errors } from '../utils/errorCatalog';
 import { insertActivityLog } from './auditLogService';
+import { notifyApproveDiminta, notifyTugasDigenerate } from './notifications';
 import { findCansWithoutAssignment, buildFirstOfficerAssignments } from './assignmentGenerator';
 import {
   buildPeriodBoundaries,
@@ -384,6 +385,12 @@ export async function preparePeriodDraft(
   } catch {
     // Audit tidak boleh menggagalkan prepare.
   }
+
+  // C1-T11 (2a): robot menyiapkan → Staf scope diminta menyetujui (dedup 20 jam).
+  await notifyApproveDiminta(
+    drafts.filter((d) => d.draftStatus === 'DRAFT').map((d) => d.draftId),
+    now,
+  );
 
   return { period: periodKey(year, month), periodYear: year, periodMonth: month, calendarRowWritten, drafts };
 }
@@ -740,6 +747,8 @@ export async function approveDraft(
     where: eq(schema.periodDrafts.id, draftId),
     columns: { periodYear: true, periodMonth: true },
   });
+  // C1-T11 (1): tugas lahir saat approve → PPK + Staf scope.
+  await notifyTugasDigenerate(draftId, actor.userId);
   return {
     draftId,
     period: periodKey(draft!.periodYear, draft!.periodMonth),

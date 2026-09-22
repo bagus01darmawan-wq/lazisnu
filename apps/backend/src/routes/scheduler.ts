@@ -10,6 +10,7 @@ import { getLatestCollectionCondition } from '../services/collectionSubmission';
 import { findCansWithoutAssignment, buildFirstOfficerAssignments, insertAssignments } from '../services/assignmentGenerator';
 import { periodKey } from '../services/periodCalendar';
 import { preparePeriodDraft } from '../services/periodDrafts';
+import { sweepNotifs } from '../services/notifications';
 import { sendSuccess, sendError, sendInternalError } from '../utils/response';
 import { insertActivityLog } from '../services/auditLogService';
 import { isAppError } from '../utils/AppError';
@@ -246,6 +247,39 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
         server_time: now.toISOString(),
       });
     } catch (error) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  // POST /scheduler/notifikasi-sapu
+  // C1-T11 (§14.15): sapuan notifikasi terjadwal — eskalasi approve (>24 jam
+  // → Keuangan), pengingat H-3 (ACTIVE tersisa), mendekati kunci (2 hari
+  // terakhir toleransi + ACTIVE tersisa). Semua dedup 20 jam; tak melempar.
+  //
+  // JADWAL CRON (wiring deploy = T12, zona WIB; {year,month} = periode yang
+  // disapu — biasanya bulan berjalan):
+  //   0 7 * * * curl -s -X POST $BASE/v1/scheduler/notifikasi-sapu \
+  //     -H "x-internal-api-key: $KEY" -H 'Content-Type: application/json' \
+  //     -d "{\"year\":$(date +\%Y),\"month\":$(date +\%m)}"
+  // Harian 07:00 WIB: mencakup H-3 (jendela due-3..due), kunci (2 hari
+  // terakhir toleransi), dan eskalasi (setiap hari sampai disetujui).
+  fastify.post('/notifikasi-sapu', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const body = generateTasksSchema.parse(request.body);
+      const { year, month } = body;
+
+      const result = await sweepNotifs(year, month, new Date());
+
+      return sendSuccess(reply, {
+        period: result.period,
+        eskalasi_terkirim: result.escalated,
+        pengingat_h3_terkirim: result.h3,
+        mendekati_kunci_terkirim: result.near_lock,
+      });
+    } catch (error: unknown) {
+      if (error instanceof z.ZodError) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+      }
       return sendInternalError(reply, error, fastify.log);
     }
   });

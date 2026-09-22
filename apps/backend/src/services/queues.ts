@@ -39,6 +39,23 @@ export async function addWhatsAppJob(data: {
   });
 }
 
+/**
+ * C1-T11 — Antrekan teks staf (fallback push). jobId deterministik per
+ * (template, entity, user) agar sapuan ganda tak mengantre duplikat selagi
+ * job masih menunggu; dedup lintas-waktu tetap via tabel notifications.
+ */
+export async function addStaffTextJob(data: {
+  phone: string;
+  body: string;
+  template: string;
+  entityId: string;
+  userId: string;
+}) {
+  return whatsappQueue.add('send-text', data, {
+    jobId: `staff-${data.template}-${data.entityId}-${data.userId}`,
+  });
+}
+
 export default {
   whatsappQueue,
   addWhatsAppJob,

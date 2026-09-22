@@ -478,6 +478,9 @@ export async function listPpkBaVersions(submissionId: string): Promise<BaVersion
   });
   for (const a of archs) {
     if (a.version === sub.version) continue;
+    // K2 (review-T9, preventif): arsip non-FINAL tak ditampilkan (hari ini
+    // arsip hanya lahir dari FINAL/FINAL_NOL — filter ini pengaman masa depan).
+    if (a.status !== 'FINAL' && a.status !== 'FINAL_NOL') continue;
     out.push({
       version: a.version,
       status: a.status,
@@ -512,6 +515,8 @@ export async function listBranchBaVersions(submissionId: string): Promise<BaVers
   });
   for (const a of archs) {
     if (a.version === sub.version) continue;
+    // K2 (review-T9, preventif): arsip non-FINAL tak ditampilkan.
+    if (a.status !== 'FINAL' && a.status !== 'FINAL_NOL') continue;
     out.push({
       version: a.version,
       status: a.status,
