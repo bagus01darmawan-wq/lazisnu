@@ -5,6 +5,7 @@ import { collectionsRoutes } from './collections';
 import { syncRoutes } from './sync';
 import { profileRoutes } from './profile';
 import { submissionsRoutes } from './submissions';
+import { rolesRoutes } from './roles';
 
 export async function mobileRoutes(fastify: FastifyInstance) {
   // Apply auth middleware to all routes
@@ -16,4 +17,5 @@ export async function mobileRoutes(fastify: FastifyInstance) {
   await fastify.register(syncRoutes);
   await fastify.register(profileRoutes);
   await fastify.register(submissionsRoutes);
+  await fastify.register(rolesRoutes);
 }

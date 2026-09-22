@@ -440,3 +440,88 @@ export async function verifyBaRecord(
   if (!arch || (arch.status !== 'FINAL' && arch.status !== 'FINAL_NOL')) return false;
   return arch.contentHash === hash;
 }
+
+// ---------------------------------------------------------------------------
+// C1-T9 (H3 review-T7) — riwayat versi BA untuk UI (unduh versi + verifikasi).
+// Tanpa pdf_key (R2 key tak diekspos; unduh tetap via endpoint pdf + audit).
+// `pdf_hash` NULL = versi itu belum pernah diunduh (bukan rusak — UI dilarang
+// menyimpulkan sebaliknya). Urut versi menanjak; entri live terakhir.
+// ---------------------------------------------------------------------------
+
+export interface BaVersionItem {
+  version: number;
+  status: string;
+  pdf_hash: string | null;
+  content_hash: string;
+  verify_url: string;
+  archived_at: Date | null;
+  is_current: boolean;
+}
+
+export async function listPpkBaVersions(submissionId: string): Promise<BaVersionItem[]> {
+  const sub = await db.query.ppkSubmissions.findFirst({
+    where: eq(schema.ppkSubmissions.id, submissionId),
+  });
+  if (!sub) throw Errors.VALIDATION_ERROR('Setoran PPK tidak ditemukan');
+  const liveHash = baContentHash('ppk', ppkContentSnapshot(sub));
+  const out: BaVersionItem[] = [{
+    version: sub.version,
+    status: sub.status,
+    pdf_hash: sub.pdfHash,
+    content_hash: liveHash,
+    verify_url: buildBaVerifyPayload({ type: 'ppk', id: sub.id, version: sub.version, hash: liveHash }),
+    archived_at: null,
+    is_current: true,
+  }];
+  const archs = await db.query.baPdfArchives.findMany({
+    where: and(eq(schema.baPdfArchives.tier, 'ppk'), eq(schema.baPdfArchives.submissionId, submissionId)),
+  });
+  for (const a of archs) {
+    if (a.version === sub.version) continue;
+    out.push({
+      version: a.version,
+      status: a.status,
+      pdf_hash: a.pdfHash,
+      content_hash: a.contentHash,
+      verify_url: buildBaVerifyPayload({ type: 'ppk', id: submissionId, version: a.version, hash: a.contentHash }),
+      archived_at: a.archivedAt,
+      is_current: false,
+    });
+  }
+  out.sort((x, y) => x.version - y.version);
+  return out;
+}
+
+export async function listBranchBaVersions(submissionId: string): Promise<BaVersionItem[]> {
+  const sub = await db.query.branchSubmissions.findFirst({
+    where: eq(schema.branchSubmissions.id, submissionId),
+  });
+  if (!sub) throw Errors.VALIDATION_ERROR('Setoran ranting tidak ditemukan');
+  const liveHash = baContentHash('branch', branchContentSnapshot(sub));
+  const out: BaVersionItem[] = [{
+    version: sub.version,
+    status: sub.status,
+    pdf_hash: sub.pdfHash,
+    content_hash: liveHash,
+    verify_url: buildBaVerifyPayload({ type: 'branch', id: sub.id, version: sub.version, hash: liveHash }),
+    archived_at: null,
+    is_current: true,
+  }];
+  const archs = await db.query.baPdfArchives.findMany({
+    where: and(eq(schema.baPdfArchives.tier, 'branch'), eq(schema.baPdfArchives.submissionId, submissionId)),
+  });
+  for (const a of archs) {
+    if (a.version === sub.version) continue;
+    out.push({
+      version: a.version,
+      status: a.status,
+      pdf_hash: a.pdfHash,
+      content_hash: a.contentHash,
+      verify_url: buildBaVerifyPayload({ type: 'branch', id: submissionId, version: a.version, hash: a.contentHash }),
+      archived_at: a.archivedAt,
+      is_current: false,
+    });
+  }
+  out.sort((x, y) => x.version - y.version);
+  return out;
+}

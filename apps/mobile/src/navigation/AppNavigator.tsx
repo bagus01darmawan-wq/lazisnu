@@ -1,8 +1,15 @@
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {createBottomTabNavigator, BottomTabBarProps} from '@react-navigation/bottom-tabs';
-import React, {useEffect} from 'react';
-import {View, ActivityIndicator, Image, StyleSheet} from 'react-native';
+import React, {useEffect, useRef} from 'react';
+import {
+  View,
+  ActivityIndicator,
+  Image,
+  StyleSheet,
+  AppState,
+  type AppStateStatus,
+} from 'react-native';
 
 // Screens
 import LoginScreen from '../screens/LoginScreen';
@@ -15,10 +22,15 @@ import HistoryScreen from '../screens/HistoryScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import RangeStatsScreen from '../screens/RangeStatsScreen';
 import TaskDetailScreen from '../screens/TaskDetailScreen';
+import SetoranScreen from '../screens/SetoranScreen';
+import PersetujuanScreen from '../screens/PersetujuanScreen';
+import KeuanganScreen from '../screens/KeuanganScreen';
+import RekapScreen from '../screens/RekapScreen';
 
 // Types
 import {RootStackParamList, MainTabParamList} from './types';
-import {useAuthStore, useUpdateStore} from '../stores';
+import {useAuthStore, useSyncStore, useUpdateStore} from '../stores';
+import {normalizeRole, tabsForRole, TAB_TITLES, type TabName} from '../roles/roleMap';
 import {Colors, Spacing} from '../theme';
 import UpdateModal from '../components/UpdateModal';
 import FloatingTabBar from '../components/FloatingTabBar';
@@ -47,24 +59,41 @@ const SplashScreen = () => (
   </View>
 );
 
-// Tab Navigator
-const renderTabBar = (props: BottomTabBarProps) => <FloatingTabBar {...props} />;
+// Tab Navigator — C1-T9: susunan tab mengikuti peran (1 APK beda kartu).
+// PPK tidak berubah; Scan (FAB) hanya dirender untuk PPK.
+const TAB_COMPONENTS: Record<TabName, React.ComponentType> = {
+  Dashboard: DashboardScreen,
+  Tasks: TasksScreen,
+  Scan: ScanScreen,
+  History: HistoryScreen,
+  Profile: ProfileScreen,
+  Persetujuan: PersetujuanScreen,
+  Keuangan: KeuanganScreen,
+  Rekap: RekapScreen,
+};
 
 const MainTabs = () => {
+  const role = normalizeRole(useAuthStore(state => state.user?.role));
+  const tabs = tabsForRole(role);
   return (
     <Tab.Navigator screenOptions={{headerShown: false}} tabBar={renderTabBar}>
-      <Tab.Screen name="Dashboard" component={DashboardScreen} options={{title: 'Beranda'}} />
-      <Tab.Screen name="Tasks" component={TasksScreen} options={{title: 'Tugas'}} />
-      <Tab.Screen
-        name="Scan"
-        component={ScanScreen}
-        options={{title: 'Scan', headerShown: false, unmountOnBlur: true}}
-      />
-      <Tab.Screen name="History" component={HistoryScreen} options={{title: 'Riwayat'}} />
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{title: 'Profil'}} />
+      {tabs.map(name => (
+        <Tab.Screen
+          key={name}
+          name={name}
+          component={TAB_COMPONENTS[name]}
+          options={
+            name === 'Scan'
+              ? {title: TAB_TITLES[name], headerShown: false, unmountOnBlur: true}
+              : {title: TAB_TITLES[name]}
+          }
+        />
+      ))}
     </Tab.Navigator>
   );
 };
+// Tab Navigator
+const renderTabBar = (props: BottomTabBarProps) => <FloatingTabBar {...props} />;
 
 // Authenticated Stack
 // MainTabs adalah layar utama, sedangkan Collection hanya dapat dibuka
@@ -80,6 +109,7 @@ const MainStack = () => {
         component={RangeStatsScreen}
         options={{title: 'Statistik Rentang'}}
       />
+      <Stack.Screen name="Setoran" component={SetoranScreen} options={{title: 'Setoran'}} />
     </Stack.Navigator>
   );
 };
@@ -100,6 +130,7 @@ const AuthStack = () => {
 // Main App Navigator
 const AppNavigator = () => {
   const {isAuthenticated, isInitializing} = useAuthStore();
+  const appState = useRef<AppStateStatus>(AppState.currentState);
 
   // Cek pembaruan sekali setiap kali aplikasi dibuka (setelah login).
   // Senyap: modal hanya muncul bila memang ada versi lebih baru.
@@ -107,6 +138,24 @@ const AppNavigator = () => {
     if (isAuthenticated && !isInitializing) {
       useUpdateStore.getState().checkOnLaunch();
     }
+  }, [isAuthenticated, isInitializing]);
+
+  // C1-T9: auto-sync saat aplikasi kembali ke depan (foreground). Guard
+  // SYNC_IN_PROGRESS ada di dalam triggerSync — panggilan ganda aman.
+  // Pengingat deadline tampil di layar peran (reminderFor); push asli = T11.
+  useEffect(() => {
+    if (!isAuthenticated || isInitializing) return;
+    const sub = AppState.addEventListener('change', next => {
+      const prev = appState.current;
+      appState.current = next;
+      if (prev.match(/inactive|background/) && next === 'active') {
+        const {isSyncing, triggerSync} = useSyncStore.getState();
+        if (!isSyncing) {
+          triggerSync().catch(() => {});
+        }
+      }
+    });
+    return () => sub.remove();
   }, [isAuthenticated, isInitializing]);
 
   // Selama initializeAuth() berjalan, tampilkan splash agar UI tidak

@@ -955,6 +955,34 @@ note (min 10) }`.
 **Endpoint:** `POST /admin/collections/manual` (sama) — body
 `{ assignment_id, can_id, officer_id, nominal, collected_at, reason (min 10) }`.
 
+### 4.16 Mobile 1 APK Peran (C1-T9, §14.6/13/15)
+
+Satu APK, tampil beda per kartu (penjaga tetap di server): PPK = tab penuh +
+layar Setoran (status/TTD/BA/riwayat versi); Staf Pengumpulan = Persetujuan
+(ringkasan scope + setujui draft); Keuangan = antrean TTD + unduh;
+Manager = Rekap (MWC: 2 kartu; ranting: info web). Chip toleransi +
+countdown dari `period-info`; pengingat deadline di aplikasi (push = T11);
+auto-sync saat foreground; TTD interaktif = T10 (perlu canvas→PNG +
+verifikasi perangkat). Token perangkat siap di `device-token` (T11 memanggil
+pasca integrasi messaging).
+
+**Endpoint:** `GET /mobile/period-info?year=&month=` (semua peran) →
+`{ period, *_date, period_status, days_to_due, days_to_lock, in_tolerance }`.
+
+**Endpoint:** `POST /mobile/device-token` — body `{ fcm_token (1–255) }`
+(milik sesi sendiri).
+
+**Endpoint:** `GET /mobile/staf/ringkasan?year=&month=` (STAF_PENGUMPULAN) →
+`{ period, scope, drafts{pending,escalated,approved}, ppk{final,total}, tugas_active }`.
+
+**Endpoint:** `GET /mobile/keuangan/inbox?year=&month=` (STAF_KEUANGAN) →
+PPK_SIGNED seranting / branch-signed sedistrik + `needs_force`.
+
+**Endpoint:** `GET /mobile/submissions/:id/pdf-versions` •
+`GET /admin/branch-submissions/:id/pdf-versions` (gerbang = berita-acara) →
+riwayat `{ version, status, pdf_hash, content_hash, verify_url, archived_at,
+is_current }` (tanpa `pdf_key`; `pdf_hash` NULL = belum diunduh, bukan rusak).
+
 ---
 
 ## 5. Scheduler API (Internal)

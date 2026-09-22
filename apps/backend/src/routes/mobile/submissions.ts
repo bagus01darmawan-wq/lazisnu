@@ -21,6 +21,7 @@ import {
   signPpkSubmission,
   type RequestContext,
 } from '../../services/cosign';
+import { listPpkBaVersions } from '../../services/baPdfService';
 import { reopenPpkSubmission } from '../../services/reopen';
 
 function actorOf(request: FastifyRequest) {
@@ -213,6 +214,22 @@ export async function submissionsRoutes(fastify: FastifyInstance) {
       try {
         const { id } = request.params as { id: string };
         return sendSuccess(reply, await getBaDownload(actorOf(request), 'ppk', id, ctxOf(request)));
+      } catch (error: unknown) {
+        return sendAppError(reply, error, fastify.log);
+      }
+    },
+  );
+
+  // GET /mobile/submissions/:id/pdf-versions — C1-T9 (H3 review-T7): riwayat
+  // versi BA (live + arsip). Gerbang baca = gerbang berita-acara (scope sama).
+  fastify.get(
+    '/submissions/:id/pdf-versions',
+    { preHandler: [authorize('PETUGAS', 'STAF_KEUANGAN', 'ADMIN_RANTING', 'ADMIN_KECAMATAN')] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = request.params as { id: string };
+        await getPpkBeritaAcara(actorOf(request), id);
+        return sendSuccess(reply, await listPpkBaVersions(id));
       } catch (error: unknown) {
         return sendAppError(reply, error, fastify.log);
       }

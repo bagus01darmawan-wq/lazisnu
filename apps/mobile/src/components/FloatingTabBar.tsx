@@ -12,6 +12,10 @@ const TAB_ICONS: Record<string, {active: string; inactive: string}> = {
   Tasks: {active: 'clipboard-text-clock', inactive: 'clipboard-text-clock-outline'},
   History: {active: 'history', inactive: 'history'},
   Profile: {active: 'account-circle', inactive: 'account-circle-outline'},
+  // C1-T9: tab peran (Scan FAB hanya dirender untuk PPK — lihat AppNavigator).
+  Persetujuan: {active: 'clipboard-check', inactive: 'clipboard-check-outline'},
+  Keuangan: {active: 'hand-coin', inactive: 'hand-coin-outline'},
+  Rekap: {active: 'chart-box', inactive: 'chart-box-outline'},
 };
 
 // Tab bar kustom ala mockup "Emerald Royal": pil putih mengambang dengan
