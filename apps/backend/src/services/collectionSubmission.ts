@@ -1,6 +1,6 @@
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { eq, and, sql, ExtractTablesWithRelations } from 'drizzle-orm';
+import { eq, and, or, sql, ExtractTablesWithRelations } from 'drizzle-orm';
 import { alias, PgTransaction } from 'drizzle-orm/pg-core';
 import { Errors } from '../utils/errorCatalog';
 import {
@@ -23,6 +23,43 @@ type Transaction = PgTransaction<
   typeof schema,
   ExtractTablesWithRelations<typeof schema>
 >;
+
+// ---------------------------------------------------------------------------
+// C1-T12 (§2.2) — agregat uang per PERIODE ASSIGNMENT (bukan collected_at).
+// collected_at 20 Sep–9 Okt milik assignment Sept = pemasukan Sept. Satu
+// helper bersama untuk dashboard monthStats + stats-range (dulu 2 SQL duplikat
+// berbasis bulan collected_at — sumber angka meleset lintas toleransi).
+// ---------------------------------------------------------------------------
+
+export interface PeriodSumFilter {
+  officerId?: string;
+  periods: Array<{ year: number; month: number }>;
+}
+
+export async function sumCollectionsByPeriod(
+  dbOrTx: Transaction | typeof db,
+  filter: PeriodSumFilter,
+): Promise<{ collected: number; total_nominal: number }> {
+  const conds = filter.periods.map((p) =>
+    and(eq(schema.assignments.periodYear, p.year), eq(schema.assignments.periodMonth, p.month)),
+  );
+  if (conds.length === 0) return { collected: 0, total_nominal: 0 };
+  const whereParts = [
+    ...(filter.officerId ? [eq(schema.collections.officerId, filter.officerId)] : []),
+    or(...conds),
+    eq(schema.collections.syncStatus, 'COMPLETED'),
+    getLatestCollectionCondition(),
+  ];
+  const [row] = await dbOrTx
+    .select({
+      collected: sql<number>`count(*)::int`,
+      total_nominal: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
+    })
+    .from(schema.collections)
+    .innerJoin(schema.assignments, eq(schema.collections.assignmentId, schema.assignments.id))
+    .where(and(...whereParts));
+  return { collected: row?.collected ?? 0, total_nominal: Number(row?.total_nominal ?? 0) };
+}
 
 // ---------------------------------------------------------------------------
 // C1-T4 (§7.5, baris T4) — kunci pasca-FINAL di choke point submit/resubmit.

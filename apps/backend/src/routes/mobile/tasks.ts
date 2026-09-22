@@ -5,7 +5,7 @@ import { eq, and, desc, asc, gte, lte, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { isValidQRCode } from '../../utils/qr';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
-import { getLatestCollectionCondition, assertAssignmentSkippable } from '../../services/collectionSubmission';
+import { getLatestCollectionCondition, assertAssignmentSkippable, sumCollectionsByPeriod } from '../../services/collectionSubmission';
 import { skipAssignmentSchema, canVisitSchema } from './schemas';
 import { AppError, isAppError } from '../../utils/AppError';
 import { parseStatsRange, computeMonthsCovered } from '../../utils/statsRange';
@@ -69,7 +69,6 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const weekStart = new Date(today);
       weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
       const periodYear = now.getFullYear();
       const periodMonth = now.getMonth() + 1;
 
@@ -94,18 +93,16 @@ export async function tasksRoutes(fastify: FastifyInstance) {
             eq(schema.collections.syncStatus, 'COMPLETED'),
             latestCollectionCondition
           )).then(r => r[0]),
-        // Statistik bulan berjalan: penjemputan + progres tugas periode berjalan
+        // Statistik bulan berjalan: penjemputan + progres tugas periode berjalan.
+        // C1-T12 (§2.2): uang bulan = atribusi PERIODE assignment (helper
+        // bersama), bukan bulan collected_at. collected_at 20 Sep–9 Okt milik
+        // assignment Sept = pemasukan Sept. Hari/Minggu Ini di bawah tetap
+        // wall-clock (aktivitas harian, bukan atribusi).
         Promise.all([
-          db.select({
-            collected: sql<number>`count(*)::int`,
-            total_nominal: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
-          }).from(schema.collections)
-            .where(and(
-              eq(schema.collections.officerId, officerId),
-              gte(schema.collections.collectedAt, monthStart),
-              eq(schema.collections.syncStatus, 'COMPLETED'),
-              latestCollectionCondition
-            )).then(r => r[0]),
+          sumCollectionsByPeriod(db, { officerId, periods: [{ year: periodYear, month: periodMonth }] }).then((s) => ({
+            collected: s.collected,
+            total_nominal: s.total_nominal,
+          })),
           db.select({
             status: schema.assignments.status,
             count: sql<number>`count(*)::int`,
@@ -514,17 +511,16 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       const latestCollectionCondition = getLatestCollectionCondition();
 
       const [colRes, taskRows] = await Promise.all([
-        db.select({
-          collected: sql<number>`count(*)::int`,
-          total_nominal: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
-        }).from(schema.collections)
-          .where(and(
-            eq(schema.collections.officerId, officerId),
-            gte(schema.collections.collectedAt, startDate),
-            lte(schema.collections.collectedAt, endDate),
-            eq(schema.collections.syncStatus, 'COMPLETED'),
-            latestCollectionCondition
-          )).then(r => r[0]),
+        // C1-T12 (§2.2): nominal per PERIODE assignment yang tersentuh rentang
+        // (konsisten dengan separuh tugas di bawah + months_covered) — bukan
+        // bulan collected_at.
+        sumCollectionsByPeriod(db, {
+          officerId,
+          periods: monthsCovered.map((period) => {
+            const [y, m] = period.split('-').map(Number);
+            return { year: y as number, month: m as number };
+          }),
+        }),
         db.select({
           status: schema.assignments.status,
           count: sql<number>`count(*)::int`,

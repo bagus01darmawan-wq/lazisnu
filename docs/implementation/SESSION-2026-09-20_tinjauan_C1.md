@@ -733,3 +733,180 @@ T6/T8, pemindahan/push `639104e` bila dikehendaki.
 
 
 
+## Sesi lanjutan tinjauan C1 — T6 s/d T12: review, fix CI, runbook, merge (20–22 Sep 2026)
+
+> Ditulis 22 Sep 2026 dari branch `feat/c1-t12-rollout-bersih-2026-09-22`
+> (HEAD `7424555`). Cakupan sesi-sesi ini: tinjau ulang T6→T12 (semua **LULUS**,
+> tiap tiket + tiap review di-commit lalu di-push lewat PR ke `staging` dan
+> di-merge), 3 putaran perbaikan CI web/mobile, eksekusi read-only + verifikasi
+> runbook migrasi 0010+0011 staging dari VM, serta catatan temuan non-blokir
+> per tiket. Setiap subseksi di bawah merujuk commit-nya masing-masing agar
+> jejak audit dapat diverifikasi ulang dengan `git show`/`git log --oneline`.
+
+### 11.1 Tinjau ulang T6 — kunci berlapis MWC (`927fbde`, LULUS)
+
+- Objek: `feat(c1-t6): kunci berlapis MWC 2 tahap + FINAL_NOL massal +
+  F3/F6/F8/F1a/F4/F5`, basis `0618f2c`.
+- Verifikasi sesi ini: 10 file tepat; `tsc` backend+web EXIT 0 (dijalankan ulang
+  live); aritmetika test konsisten (50 suite, 462 = 451+11) — jest penuh
+  diserahkan ke CI karena batas ±30 dtk per perintah.
+- Catatan: `docs/implementation/C1-TINJAUAN-ULANG-T6-2026-09-20.md`
+  (**LULUS**, 4 temuan non-blokir G1–G4), commit `7540f94`.
+- Jejak PR: #118 `feat(c1-t6)…` → `staging`, merged `c1ef8e1` (20 Sep 15:02Z);
+  `staging` lokal di-fast-forward.
+
+### 11.2 Tinjau ulang T7 — reopen + arsip PDF (`dcbb618`, LULUS)
+
+- Objek: `feat(c1-t7): reopen menular + arsip PDF per versi + jendela 48 jam`;
+  19 file (migrasi 0010 + snapshot + journal, `services/reopen.ts`,
+  2 test baru); F1b + G1/G2/G3 ditutup di sini.
+- Verifikasi sesi ini (live, proses latar): `tsc` backend+web EXIT 0; jest penuh
+  **52/52 suite, 472/472 test** (62,254 dtk) — cocok dengan klaim 462+10.
+- Catatan: `C1-TINJAUAN-ULANG-T7-2026-09-20.md` (**LULUS**, H1–H3) dan
+  `C1-SYARAT-LANJUTAN-REVIEW-T7-2026-09-20.md` (premise terkunci T7 + status
+  F1–G4 + jebakan T7), commit `6ea6f70`.
+- Jejak PR: #119 `feat(c1-t7)…` → `staging`, merged `09b7894` (21 Sep 09:51Z).
+
+### 11.3 Runbook darurat 0010+0011 staging + temuan auto-migrate (22 Sep)
+
+- Konteks: pasca-merge T8, analisis review menyimpulkan backend staging jalan
+  dengan DB tanpa 0010/0011 (potensi 500 `42P01` pada
+  `ensurePpkSubmission → computePpkTotals`).
+
+- State produksi terverifikasi read-only pada kesempatan ini: `main` pra-C1
+  (T0/T6/T7/T8 NOT in main; staging 72 commit di depan), DB produksi di jurnal
+  **0007** (tanpa objek 0008–0011, enum `user_role` 3 nilai); deploy produksi
+  tidak memigrasi (`RUN_MIGRATIONS=0`, empiris). → rollout prod BOLEH ditunda
+  ke rilis C1 (0008+0009+0010+0011 sekaligus + kedua recon, backup penuh,
+  jendela sepi) — ini jawaban atas pertanyaan "kenapa musti sebelum T9/T10":
+  **tidak musti**; yang wajib hanya *migrasi mendahului kode di `main`*.
+
+- **Runbook dibuat**: `docs/ci/RUNBOOK-0010-0011-STAGING-2026-09-22.md`
+  (inventaris, backup kilat, psql satu transaksi skenario A/B, kriteria lulus,
+  smoke, checklist operator) + `apps/backend/scripts/0010-0011-journal-recon.sql`
+  (insert jurnal idempoten, `when` dari `_journal.json`, hash sha256-LF).
+  Koreksi framing "runbook = T12" pada catatan review T8.
+  Commit `e05d925`, PR #124, merged `c2b1ac5`.
+
+- **Eksekusi dari VM**: SSH key-based `ubuntu@43.128.98.52`, skrip via base64
+  karena pipe PowerShell→ssh merusak newline; URL diambil dari env container
+  staging. Hasil: **staging SUDAH BERMIGRASI** — jurnal 12 baris berakhir `0011`,
+  objek ada semua; percobaan apply dibatalkan aman
+  (`relation "ba_pdf_archives" already exists` + rollback penuh (`-1`,
+  `ON_ERROR_STOP`).
+  Verifikasi LULUS (2 tabel, 2 kolom, 4 FK, 4 index) + smoke LULUS
+  (`GET /health → ok`, `computePpkTotals` di container ter-deploy →
+  `SMOKE_OK`, `grep 42P01` sejak deploy = 0, error 2 jam = 0).
+  Commit `b095d3e`, PR #125, merged `9e19cf9`.
+
+- **Sebab pasti** (bukti log CI run `35684837759` job `Deploy staging`):
+  deploy staging menjalankan `migrate-cli.js` dengan `SKIP_DB_MIGRATE=false`
+  (22 Sep 03:59:49Z) — **staging auto-migrate**, sehingga DB 0010/0011
+  selalu mengikuti kode. Bukti ini + koreksi dua alarm "staging 500" dicatat di
+  runbook. Commit `5339db6`, PR #127, merged `9262ffc`.
+
+- **Bukti timeline tambahan** (dump nightly): dump 21 Sep 01:30 = 0 hit
+  0010/0011; dump 22 Sep 01:30 memuat 0010 tapi belum 0011 → 0011 diterapkan
+  22 Sep setelah 01:30 WIB ↔ konsisten deploy T8 10:53 WIB.
+  Commit `788f9bb`, PR #126, merged `e515dc4`; runbook diperbarui
+  (`fd8a976`, PR #128, merged `875be49`).
+
+### 11.4 Tinjau ulang T8 — laporan MWC + agregat (`71a5820`, LULUS)
+
+- Objek: `feat(c1-t8): laporan MWC 2 kartu + agregat darurat + salin manual`;
+  21 file; H1 diperketat; 0008→0011 pending di prod (lihat §11.3).
+- Verifikasi sesi ini (live): `tsc` EXIT 0 keduanya; jest penuh **55/55,
+  480/480** (472+8) — cocok.
+- Catatan: `C1-TINJAUAN-ULANG-T8-2026-09-21.md` (**LULUS**, J1–J4 — J1 = H1
+  tanpa test regresi), commit `7d78dcd`.
+- Jejak PR: #123 `feat(c1-t8)…` → `staging`, merged `c6786b7` (22 Sep 03:53Z).
+
+### 11.5 Tinjau ulang T9 — mobile 1 APK peran (`356fa53`, LULUS)
+
+- Objek: `feat(c1-t9): mobile 1 APK peran + endpoint dukung (H3)`; 22 file
+  (`mobileRoles`, `roles/roleMap` murni, `c1Service`, 4 layar, `pdf-versions`
+  ×2, docs §4.16).
+- Verifikasi sesi ini (live): backend `tsc` 0 + jest **56/56, 485/485**;
+  mobile jest **32/32, 250/250** (243+7); mobile `tsc` = 13 error
+  **pre-existing** (drift tipe `Task` B2 — dibuktikan via `git show 7d78dcd`:
+  `api.ts` sudah impor `VisitTask` yang tak ada, file error tak tersentuh T9,
+  nama file T9 tak muncul di log); web `tsc` 0. Prettier tidak diverifikasi
+  ulang (diserahkan ke CI).
+- Catatan: `C1-TINJAUAN-ULANG-T9-2026-09-22.md` (**LULUS**, K1–K4 — K1 = klien
+  memalsukan countdown `99`), commit `73b7ae6`.
+- Jejak PR: #129 `feat(c1-t9)…` → `staging`, merged `622e75d` (22 Sep 06:27Z).
+
+### 11.6 Tinjau ulang T10 — web peran + TTD interaktif (`a5d460c`, LULUS)
+
+- Objek: `feat(c1-t10): web peran + TTD interaktif + K1`; 21 file
+  (menu/lib/3 halaman web + SignaturePad web; encoder PNG murni
+  `signaturePng.ts` + pad/sheet + layar mobile; K1 backend+mobile).
+- Verifikasi sesi ini (live): backend `tsc` 0 + jest **56/56, 485/485**; mobile
+  jest **34/34, 256/256** (250+6); web vitest **6/31** + `tsc` 0.
+- Dua klaim laporan yang **dikoreksi** sesi ini:
+  - mobile `tsc` ≠ 0 — sisa **1 error baru dari test T10 sendiri**
+    (`SignSheet.test.tsx:25` TS2367 banding `node.type === 'Text'`),
+    bukan 0. Perbaikannya diterbitkan sebagai PR terpisah (§11.7).
+  - K4 ("13 hilang tanpa ubah kode") benar sebabnya:
+    `packages/shared-types/dist` adalah artefak build tak-ter-commit
+    (`.gitignore`), sumber sudah lama memuat `condition?`/`is_visit_task?`/
+    `assignment_status?` — rebuild-lah yang menyembuhkan, tanpa sentuhan kode.
+- Catatan: `C1-TINJAUAN-ULANG-T10-2026-09-22.md` (**LULUS**, L1–L4 — L2 = rasio
+  DPR web, L3 = TTD web tanpa test), commit `c29e1bd`.
+- Jejak PR: #130 `feat(c1-t10)…` → `staging`, merged `893b97f` (22 Sep 07:22Z).
+
+### 11.7 CI merah pasca-merge T10 → 4 perbaikan hijau
+
+- Gejala (CI run `35699316089`, 22 Sep 07:23Z): job `Verify` gagal di
+  **Lint web** — `react-hooks/set-state-in-effect` pada 3 halaman T10
+  (`persetujuan:56`, `rekap-mwc:50`, `setoran:75`): `fetchData()` (yang
+  setState) dipanggil langsung di `useEffect`.
+- Perbaikan: `fix(c1-t10): lint web — react-hooks/set-state-in-effect`
+  (`ef3fa8a`, pola `void Promise.resolve().then(fetchData)`) — diverifikasi
+  lint lokal 0 error, 1 warning pre-existing (`wa-monitor`).
+  PR #131 → `staging`, merged `3454006` (07:30Z).
+- Temuan susulan dari run berikutnya: `typecheck mobile` gagal pada test L1
+  (`SignSheet.test` banding `node.type`) —
+  PR `fix/ci-typecheck-signsheet` (`a6ee133`, `findAllByType(Text)`), yang
+  sekaligus menerbitkan `docs/ci/tinjauan-ci-553-555-2026-09-22.md` (`d60622a`)
+  + 4 edit susulan (`5a2b9d2`, `b9d5471`, `a0263e1`, `05e8293`: frozen-lockfile,
+  countdown K1 terpisah, kenapa-fix-CI-saja-tak-cukup, verifikasi APK +
+  API_URL staging). PR #132 → `staging`, merged `93af841` (CI hijau
+  22 Sep 11:18Z — run `35720727752` 7m05s).
+- Konsekuensi yang dicatat saat itu (`b9d5471`): perbaikan CI **tidak**
+  memajukan kode T10 ke staging — hanya merge PR fitur yang men-deploy.
+
+### 11.8 Tinjau ulang T11 — notifikasi push/WA (`5810249`, LULUS)
+
+- Objek: `feat(c1-t11): notifikasi 7 event push-WA + sapu + K3/K2/L1-L3`
+  (17 file: `services/notifications.ts`, `whatsapp.ts`, worker, sapu scheduler,
+  test unit+integrasi, patch SignSheet/SignaturePad).
+- Catatan: `C1-TINJAUAN-ULANG-T11-2026-09-22.md` (**LULUS**, M1–M4),
+  commit `bd9b952`.
+- Jejak: branch di-merge langsung ke `staging` sebagai `03a5103`
+  ("Merge feat/c1-t11…", CI hijau 22 Sep 13:57Z — run `35736975936` 7m56s),
+  pola merge langsung yang dipakai sejak T11.
+
+### 11.9 Tinjau ulang T12 — tutup siklus + rollout (`55dffe2`, LULUS; C1 SELESAI)
+
+- Objek: `feat(c1-t12): tutup siklus - atribusi periode + 22 uji + rollout`
+  (10 file: guard periode `tasks.ts`/`scheduler.ts`/`collectionSubmission.ts`,
+  `c1Acceptance12.integration.test.ts` 224 baris, docs
+  `C1-T12-ROLLOUT-DUALRUN-2026-09-22.md`, checklist uji mobile + sprint
+  tercentang).
+- Catatan: `C1-TINJAUAN-ULANG-T12-2026-09-22.md` (**LULUS**, N1–N3 —
+  menutup rangkaian T0–T12), commit `7424555` (HEAD sesi ini).
+
+### 11.10 Ringkasan status akhir (per 22 Sep 2026, HEAD `7424555`)
+
+- **C1 T0–T12: selesai & hijau di `staging`.** CI `staging` terakhir hijau
+  (13:57Z). Baseline uji kini: backend 56/485+, mobile 34/256, web 6/31+.
+- Produksi belum tersentuh C1 (main pra-C1, DB 0007) — rollout 0008–0011
+  menunggu rilis (lihat §11.3).
+- Catatan berkas (mengikuti pola §9.5/§10.8): **seksi §11 ini disunting tanpa
+  commit — menunggu keputusan pemilik** apakah digabung ke commit docs
+  berikutnya, dibiarkan uncommitted, atau dipisah.
+- Backlog lintas-tiket yang masih tercatat dari review-review di atas:
+  F2, F7, J1, J3, K2, K3, L1–L4 → sebagian sudah ditutup di T11–T12
+  (K2, K3, L1–L3 menurut pesan commit `5810249`); verifikasi penutupan ada di
+  catatan review masing-masing, bukan di seksi ini.
