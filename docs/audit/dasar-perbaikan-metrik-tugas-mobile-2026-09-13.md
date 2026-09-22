@@ -846,3 +846,7 @@ REASSIGNED
 ```
 
 Dokumen ini adalah dasar perbaikan. Belum ada perubahan kode yang dilakukan saat dokumen ini dibuat.
+
+## Adendum C1-T12 (22 Sep 2026) — basis assignment dikunci
+
+Uang (dashboard monthStats, stats-range, scheduler calculate-summaries) kini diagregat per PERIODE ASSIGNMENT via helper bersama sumCollectionsByPeriod (collectionSubmission.ts) — collected_at 20 Sep–9 Okt milik assignment Sept = pemasukan Sept. Hari/Minggu Ini tetap wall-clock (aktivitas harian, bukan atribusi). Task counts memang sudah period-based (§7 terpenuhi). Bukti: c1Acceptance12 §2.2 (jemputan 5 Okt masuk Sept, bukan Okt).

@@ -139,3 +139,7 @@ B1 (filter periode pada alur scan) masih ditangguhkan atas keputusan pemilik pro
 |---|---|---|---|---|---|---|
 | 1 | | | | | | |
 | 2 | | | | | | |
+
+## Adendum C1-T12 (22 Sep 2026) — B1 DITUTUP
+
+Penangguhan B1 (baris 11/27/54/74/134) dicabut: scan toleran lintas periode + kode QR_WRONG_PERIOD/QR_PERIOD_CLOSED hidup (T2, scanClassification.ts); pesan tak-menyesatkan teruji (scan-qr.test.ts); antrean gagal permanen tak-spam teruji (§12 #13). Uji staging C1 mengikuti docs/implementation/C1-T12-ROLLOUT-DUALRUN-2026-09-22.md §4 (22 skenario).

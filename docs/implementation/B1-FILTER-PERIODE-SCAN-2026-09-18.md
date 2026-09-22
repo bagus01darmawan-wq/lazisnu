@@ -124,3 +124,7 @@ Catatan uji: rate limit scan = 30 req/menit (`tasks.ts:549-552`); setelah uji, *
 - Kontrak metrik: `docs/audit/dasar-perbaikan-metrik-tugas-mobile-2026-09-13.md`.
 - API: `docs/API_DOCUMENTATION.md:199, 229`.
 - KB hidup: `50-projects/projects/prj-lazisnu-website.md` baris 112.
+
+## 11. Penutup C1-T12 (22 Sep 2026) — SELESAI
+
+Direvisi C1 §5 + §14.1–14.4 lalu diimplementasikan T2 (lookup toleran, QR_WRONG_PERIOD/QR_PERIOD_CLOSED, collected_at divalidasi + serverTimestamp, sync non-spam) dan dibuktikan §12 #1/#2/#11–#14. Opsi A tidak dikerjakan (sesuai larangan). Dokumen ini arsip — acuan hidup: rencana induk C1 + C1-T12-ROLLOUT-DUALRUN-2026-09-22.md.

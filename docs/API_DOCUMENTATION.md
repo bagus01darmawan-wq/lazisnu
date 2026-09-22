@@ -1013,6 +1013,13 @@ bila ranting), selisih besar (→ Admin + MWC), BA ranting siap (→ Admin).
 — body `{ year, month }` (periode disapu; cron harian 07:00 WIB = T12) →
 `{ eskalasi_terkirim, pengingat_h3_terkirim, mendekati_kunci_terkirim }`.
 
+### 4.19 Tutup Siklus + Rollout (C1-T12)
+
+Atribusi uang = periode assignment (§2.2, lihat catatan §5.2). Cron: robot
+draft tgl 10 & 20 + sapu notifikasi harian 07:00 (detail +
+dual-run/go-no-go/saklar-balik/urutan migrasi 0008→0011: lihat
+`docs/implementation/C1-T12-ROLLOUT-DUALRUN-2026-09-22.md`).
+
 ---
 
 ## 5. Scheduler API (Internal)
@@ -1051,6 +1058,12 @@ bila ranting), selisih besar (→ Admin + MWC), BA ranting siap (→ Admin).
   "month": 4
 }
 ```
+
+> C1-T12 (§2.2): agregat per PERIODE ASSIGNMENT (`assignment.periodYear/Month`),
+> bukan bulan `collected_at`. Sama untuk `GET /mobile/dashboard` (uang bulan)
+> dan `GET /mobile/tasks/stats-range` (helper bersama
+> `sumCollectionsByPeriod`). Hari/Minggu Ini tetap wall-clock (aktivitas,
+> bukan atribusi).
 
 ### 5.3 Prepare Draft Penugasan (C1-T3, robot)
 
