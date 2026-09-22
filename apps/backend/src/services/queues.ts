@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Queue } from 'bullmq';
 import { redisConnection } from '../config/redis';
 
@@ -43,7 +44,16 @@ export async function addWhatsAppJob(data: {
  * C1-T11 — Antrekan teks staf (fallback push). jobId deterministik per
  * (template, entity, user) agar sapuan ganda tak mengantre duplikat selagi
  * job masih menunggu; dedup lintas-waktu tetap via tabel notifications.
+ *
+ * M1 (backlog T11): jobId ikut hash ISI pesan — kirim ulang yang identik
+ * tetap dedup (satu antrean), tetapi revisi alasan (isi berubah) menjadi
+ * job baru sehingga pesan terbaru tidak ditelan dedup BullMQ.
  */
+export function buildStaffJobId(data: { template: string; entityId: string; userId: string; body: string }): string {
+  const contentHash = createHash('sha1').update(data.body, 'utf8').digest('hex').slice(0, 8);
+  return `staff-${data.template}-${data.entityId}-${data.userId}-${contentHash}`;
+}
+
 export async function addStaffTextJob(data: {
   phone: string;
   body: string;
@@ -52,7 +62,7 @@ export async function addStaffTextJob(data: {
   userId: string;
 }) {
   return whatsappQueue.add('send-text', data, {
-    jobId: `staff-${data.template}-${data.entityId}-${data.userId}`,
+    jobId: buildStaffJobId(data),
   });
 }
 

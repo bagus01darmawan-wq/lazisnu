@@ -348,6 +348,33 @@ describe('C1-T7 reopen menular + arsip + jendela (DB, R2 mock)', () => {
     expect(await verifyBaRecord('branch', branchSubId, 2, hb2)).toBe(true);
   });
 
+  test('J1: extend basi pasca re-FINAL menyelinap → CONFLICT, tanpa jendela basi', async () => {
+    // Simulasi maling H1 (review-T7) secara deterministik, satu thread:
+    // T-baca: admin membaca DRAFT v3. T-selinap: re-FINAL commit (FINAL v4)
+    // di antara baca & tulis. T-tulis: perpanjangan basi dari bacaan T-baca
+    // wajib ditolak CONFLICT dan TIDAK boleh menulis jendela basi ke baris FINAL.
+    // (Varian tanpa expectedVersion ditahan statusGuard di UPDATE yang sama;
+    // varian basi ini ditahan cek versi — garansi akhirnya identik.)
+    const tRead = new Date(LATE.getTime() + 2 * 3_600_000);
+    const re = await reopenPpkSubmission(adminR1, { submissionId: ppkSubId, reason: 'koreksi susulan kasbon donatur' }, tRead);
+    expect(re.status).toBe('DRAFT');
+    expect(re.version).toBe(3);
+    // T-selinap: tiru finalize yang commit di tengah (direct update agar
+    // deterministik — jalur asli butuh upacara 2 TTD + jendela).
+    await db
+      .update(schema.ppkSubmissions)
+      .set({ status: 'FINAL', version: 4, reopenedUntil: null, updatedAt: new Date(tRead.getTime() + 1000) })
+      .where(eq(schema.ppkSubmissions.id, ppkSubId));
+    // T-tulis: perpanjangan basi → CONFLICT, bukan jendela basi.
+    await expect(
+      reopenPpkSubmission(adminKec, { submissionId: ppkSubId, reason: 'perpanjangan basi dari bacaan lama', expectedVersion: 3 }, new Date(tRead.getTime() + 2000)),
+    ).rejects.toMatchObject({ code: ErrorCode.CONFLICT });
+    const after = await db.query.ppkSubmissions.findFirst({ where: eq(schema.ppkSubmissions.id, ppkSubId) });
+    expect(after?.status).toBe('FINAL');
+    expect(after?.version).toBe(4);
+    expect(after?.reopenedUntil).toBeNull();
+  });
+
   test('reopen ranting langsung: FINAL_NOL massal-gaya → DRAFT v2', async () => {
     // R2: kunci NOL via upacara (total 0 + alasan) → FINAL_NOL.
     const sBr2 = await ensureBranchSubmission(bR2, 2026, 9);
