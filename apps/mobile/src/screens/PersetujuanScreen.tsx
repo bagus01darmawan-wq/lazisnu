@@ -77,9 +77,9 @@ export const PersetujuanScreen: React.FC = () => {
           {
             period: summary.period,
             period_status: summary.period_status,
-            days_to_due: 99,
-            days_to_lock: 99,
-            in_tolerance: summary.period_status === 'TOLERANCE',
+            days_to_due: summary.days_to_due,
+            days_to_lock: summary.days_to_lock,
+            in_tolerance: summary.in_tolerance,
           },
           summary.ppk.total_count - summary.ppk.final_count,
         )

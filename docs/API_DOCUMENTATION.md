@@ -983,6 +983,22 @@ PPK_SIGNED seranting / branch-signed sedistrik + `needs_force`.
 riwayat `{ version, status, pdf_hash, content_hash, verify_url, archived_at,
 is_current }` (tanpa `pdf_key`; `pdf_hash` NULL = belum diunduh, bukan rusak).
 
+### 4.17 Web Peran + TTD Interaktif (C1-T10, §14.7/13 + §14.6)
+
+Web: Staf = `/dashboard/persetujuan` (monitor scope + setujui draft, eskalasi
+terbaca; countdown nyata dari server — K1); Ranting =
+`/dashboard/setoran` (rincian + TTD kanvas + BA + unduh + riwayat versi);
+MWC = `/dashboard/rekap-mwc` (2 kartu FINAL + flag + tabel). Menu sidebar
+difilter peran (`menu-config`; Staf tak lagi kosong). Log Aktivitas melabeli
+aksi C1 (`PPK_SIGNED`, `*_FINALIZED`, `*_REOPENED`, `KUNCI_PERIODE_*`,
+`EMERGENCY_*`, `MANUAL_*`, `DRAFT_*`, `BA_DOWNLOADED`) + tone kunci/warning.
+
+Mobile TTD interaktif: kanvas coretan → raster → PNG grayscale 240×120 via
+encoder murni (blok stored, tanpa dep native) → `signature_png` (kontrak T5:
+PNG ≤ 50KB + consent). `POST /mobile/submissions/:id/sign` (PPK, DRAFT) +
+`countersign` (Keuangan) + `POST /mobile/branch-submissions/:id/countersign`
+(MWC) dipanggil dari HP; penjaga scope di server.
+
 ---
 
 ## 5. Scheduler API (Internal)

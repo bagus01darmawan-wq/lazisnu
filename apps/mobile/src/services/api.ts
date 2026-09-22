@@ -847,6 +847,10 @@ export interface PeriodDraftDto {
 export interface StafSummaryDto {
   period: string;
   period_status: string;
+  // K1 (review-T9): countdown nyata dari server (ganti konstanta klien).
+  days_to_due: number;
+  days_to_lock: number;
+  in_tolerance: boolean;
   scope: {kind: 'RANTING' | 'PROGRAM_MWC'; branch_id: string | null; district_id: string | null};
   drafts: {pending: number; escalated: number; approved: number};
   ppk: {final_count: number; total_count: number};
@@ -925,6 +929,24 @@ export const c1Service = {
     month?: number,
   ): Promise<ApiResponse<PpkSubmissionDto>> => {
     return apiRequest<PpkSubmissionDto>(`/mobile/submissions${periodQuery(year, month)}`);
+  },
+  signSubmission: async (
+    id: string,
+    data: {signature_png: string; consent: boolean; expected_version?: number},
+  ): Promise<ApiResponse<PpkSubmissionDto>> => {
+    return apiRequest<PpkSubmissionDto>(`/mobile/submissions/${id}/sign`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  countersignSubmission: async (
+    id: string,
+    data: {signature_png: string; consent: boolean; expected_version?: number},
+  ): Promise<ApiResponse<PpkSubmissionDto>> => {
+    return apiRequest<PpkSubmissionDto>(`/mobile/submissions/${id}/countersign`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   },
   getBeritaAcara: async (id: string): Promise<ApiResponse<BaTextDto>> => {
     return apiRequest<BaTextDto>(`/mobile/submissions/${id}/berita-acara`);

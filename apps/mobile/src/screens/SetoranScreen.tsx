@@ -11,15 +11,16 @@ import {AppCard} from '../components/ui/AppCard';
 import {AppHeader} from '../components/ui/AppHeader';
 import {StatusBadge, type StatusBadgeStatus} from '../components/ui/StatusBadge';
 import {PeriodChip} from '../components/PeriodChip';
+import {SignSheet} from '../components/SignSheet';
+import {useAuthStore} from '../stores';
+import {normalizeRole} from '../roles/roleMap';
 import {Colors, Spacing, Typography} from '../theme';
 import {formatCurrency} from '../utils/format';
 import {getErrorMessage} from '../utils/error';
 
 /**
  * C1-T9 — Layar Setoran PPK (tugas/scan/setor/TTD: baca).
- * Status setoran + angka + keadaan 2 TTD + BA teks + riwayat versi PDF.
- * Tanda tangan interaktif = T10 (perlu canvas→PNG + verifikasi perangkat);
- * klien sign/countersign sudah siap di c1Service (kontrak T5, teruji server).
+ * C1-T10 — tambah TTD interaktif PPK (kanvas → PNG murni, kontrak T5).
  */
 const statusTone = (status: string): StatusBadgeStatus => {
   switch (status) {
@@ -34,11 +35,16 @@ const statusTone = (status: string): StatusBadgeStatus => {
 
 export const SetoranScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
+  const role = normalizeRole(useAuthStore(state => state.user?.role));
   const [submission, setSubmission] = useState<PpkSubmissionDto | null>(null);
   const [periodInfo, setPeriodInfo] = useState<PeriodInfoDto | null>(null);
   const [versions, setVersions] = useState<BaVersionDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // C1-T10: TTD interaktif PPK (DRAFT → PPK_SIGNED) via kanvas + PNG murni.
+  const [signing, setSigning] = useState(false);
+  const [signBusy, setSignBusy] = useState(false);
+  const [signError, setSignError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -65,6 +71,28 @@ export const SetoranScreen: React.FC = () => {
   useEffect(() => {
     load();
   }, [load]);
+
+  const canSign = role === 'PETUGAS' && submission?.status === 'DRAFT';
+
+  const submitSign = async (signaturePngBase64: string) => {
+    if (!submission) return;
+    setSignBusy(true);
+    setSignError(null);
+    try {
+      const res = await c1Service.signSubmission(submission.id, {
+        signature_png: signaturePngBase64,
+        consent: true,
+        expected_version: submission.version,
+      });
+      if (!res.success || !res.data) throw new Error(res.error?.message || 'Gagal menandatangani');
+      setSigning(false);
+      await load();
+    } catch (e: unknown) {
+      setSignError(getErrorMessage(e, 'Gagal menandatangani'));
+    } finally {
+      setSignBusy(false);
+    }
+  };
 
   return (
     <View style={[styles.container, {paddingTop: insets.top}]}>
@@ -98,11 +126,30 @@ export const SetoranScreen: React.FC = () => {
                 PPK: {submission.ppk_signer_id ? 'sudah' : 'belum'} • Bendahara:{' '}
                 {submission.bendahara_signer_id ? 'sudah' : 'belum'}
               </Text>
-              <Text style={styles.hint}>
-                Penandatanganan dilakukan bersama bendahara (2 HP). Tanda tangan digital di HP ini
-                menyusul.
-              </Text>
+              {canSign && !signing ? (
+                <Text
+                  style={styles.signLink}
+                  onPress={() => {
+                    setSignError(null);
+                    setSigning(true);
+                  }}>
+                  Tanda tangani di HP ini →
+                </Text>
+              ) : null}
+              {!canSign ? (
+                <Text style={styles.hint}>Penandatanganan dilakukan bersama bendahara (2 HP).</Text>
+              ) : null}
             </AppCard>
+            {signing && submission ? (
+              <SignSheet
+                title="Tanda tangan PPK"
+                submitLabel="Tanda Tangani"
+                submitting={signBusy}
+                serverError={signError}
+                onSubmit={submitSign}
+                onClose={() => setSigning(false)}
+              />
+            ) : null}
             {versions.length > 0 ? (
               <AppCard>
                 <Text style={styles.cardTitle}>Riwayat Berita Acara ({versions.length})</Text>
@@ -131,6 +178,12 @@ const styles = StyleSheet.create({
   meta: {...Typography.body, color: Colors.text.muted, marginTop: Spacing.xs},
   cardTitle: {...Typography.heading3, fontWeight: '700', marginBottom: Spacing.xs},
   hint: {...Typography.caption, color: Colors.text.muted, marginTop: Spacing.sm},
+  signLink: {
+    ...Typography.body,
+    color: Colors.brand.emerald,
+    fontWeight: '700',
+    marginTop: Spacing.sm,
+  },
   error: {...Typography.body, color: Colors.status.error},
 });
 

@@ -244,13 +244,18 @@ describe('C1-T9 peran mobile server (DB, R2 mock)', () => {
     });
   });
 
-  test('staf ringkasan: scope ranting + eskalasi + progres; peran salah 403', async () => {
+  test('staf ringkasan: scope ranting + eskalasi + progres + countdown K1; peran salah 403', async () => {
     const res = await getStafSummary(stafActor, 2026, 9, T0);
     expect(res.period).toBe('2026-09');
     expect(res.scope).toMatchObject({ kind: 'RANTING', branch_id: bR1 });
     expect(res.drafts).toMatchObject({ pending: 0, escalated: 1, approved: 0 });
     expect(res.ppk.total_count).toBe(1);
     expect(res.ppk.final_count).toBe(0);
+    // K1: countdown nyata (T0 = 28 Sep → toleransi, due lewat, kunci 12 hari).
+    expect(res.period_status).toBe('TOLERANCE');
+    expect(res.in_tolerance).toBe(true);
+    expect(res.days_to_due).toBe(0);
+    expect(res.days_to_lock).toBe(12);
     await expect(getStafSummary(keuActor, 2026, 9, T0)).rejects.toMatchObject({ code: ErrorCode.FORBIDDEN });
     await expect(getStafSummary({ userId: 'x', role: 'STAF_PENGUMPULAN', branchId: null, districtId: null }, 2026, 9, T0)).rejects.toMatchObject({
       code: ErrorCode.FORBIDDEN_SCOPE,
