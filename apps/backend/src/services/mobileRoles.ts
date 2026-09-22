@@ -13,6 +13,7 @@ import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { and, eq, sql } from 'drizzle-orm';
 import { Errors } from '../utils/errorCatalog';
+import { insertActivityLog } from './auditLogService';
 import {
   buildPeriodBoundaries,
   periodKey,
@@ -72,6 +73,22 @@ export async function saveDeviceToken(userId: string, fcmToken: string): Promise
     .where(eq(schema.users.id, userId))
     .returning({ id: schema.users.id });
   if (updated.length === 0) throw Errors.VALIDATION_ERROR('Pengguna tidak ditemukan');
+  // K3 (review-T9): jejak audit agar T11 mudah menelusur token yang dipakai.
+  try {
+    await insertActivityLog({
+      userId,
+      officerId: null,
+      actionType: 'DEVICE_TOKEN_SAVED',
+      entityType: 'user',
+      entityId: userId,
+      oldData: null,
+      newData: { token_updated: true },
+      ipAddress: 'device-token',
+      userAgent: null,
+    });
+  } catch {
+    // Audit tak boleh menggagalkan simpan yang sah.
+  }
   return { saved: true };
 }
 

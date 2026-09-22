@@ -34,6 +34,7 @@ import { deleteFromR2 } from './r2';
 import { buildPeriodBoundaries, periodKey, reopenWindowUntil, resolvePeriodStatus } from './periodCalendar';
 import { baContentHash } from './beritaAcara';
 import { branchContentSnapshot, ppkContentSnapshot } from './baPdfService';
+import { notifyReopen } from './notifications';
 import {
   toBranchResponse,
   toPpkResponse,
@@ -354,6 +355,17 @@ export async function reopenPpkSubmission(actor: SubmissionActor, input: ReopenI
     },
   });
 
+  // C1-T11 (5): reopen → PPK + Admin Ranting terdampak.
+  await notifyReopen(
+    'ppk',
+    out.reopened.officerId,
+    out.reopened.branchId,
+    head.branch.districtId,
+    periodKey(out.reopened.periodYear, out.reopened.periodMonth),
+    reason,
+    actor.userId,
+  );
+
   return {
     ...toPpkResponse(out.reopened),
     reopened_until: until,
@@ -476,6 +488,17 @@ export async function reopenBranchSubmission(actor: SubmissionActor, input: Reop
       reason,
     },
   });
+
+  // C1-T11 (5): reopen ranting → Admin Ranting + MWC sedistrik.
+  await notifyReopen(
+    'branch',
+    null,
+    reopened.row.branchId,
+    reopened.row.districtId,
+    periodKey(reopened.row.periodYear, reopened.row.periodMonth),
+    reason,
+    actor.userId,
+  );
 
   return { ...toBranchResponse(reopened.row), reopened_until: until, extended: false as const, archived_version: reopened.archivedVersion };
 }

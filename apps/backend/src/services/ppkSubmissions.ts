@@ -32,6 +32,7 @@ import {
   SHARE_PCT,
 } from '../utils/c1Math';
 import { periodKey, REOPEN_WINDOW_HOURS } from './periodCalendar';
+import { notifyBaSiapBranch, notifyPpkFinal } from './notifications';
 
 export interface SubmissionActor {
   userId: string;
@@ -437,6 +438,15 @@ export async function finalizePpkSubmission(actor: SubmissionActor, input: PpkFi
     // Audit tidak boleh menggagalkan FINAL yang sah.
   }
 
+  // C1-T11 (4+7 PPK): FINAL → Admin Ranting; BA siap → PPK.
+  await notifyPpkFinal(
+    result.row.officerId,
+    result.row.branchId,
+    periodKey(result.row.periodYear, result.row.periodMonth),
+    result.totals.total,
+    actor.userId,
+  );
+
   return toPpkResponse(result.row);
 }
 
@@ -700,6 +710,14 @@ export async function finalizeBranchSubmission(actor: SubmissionActor, input: Br
   } catch {
     // Audit tidak boleh menggagalkan kunci yang sah.
   }
+
+  // C1-T11 (7): branch FINAL → Admin Ranting (BA siap unduh). Jalur legacy
+  // T4 ini jarang dipakai (upacara T5 via countersign) tapi tetap di-hook.
+  await notifyBaSiapBranch(
+    result.row.branchId,
+    periodKey(result.row.periodYear, result.row.periodMonth),
+    actor.userId,
+  );
 
   return toBranchResponse(result.row);
 }

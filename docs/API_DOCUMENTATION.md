@@ -999,6 +999,20 @@ PNG ≤ 50KB + consent). `POST /mobile/submissions/:id/sign` (PPK, DRAFT) +
 `countersign` (Keuangan) + `POST /mobile/branch-submissions/:id/countersign`
 (MWC) dipanggil dari HP; penjaga scope di server.
 
+### 4.18 Notifikasi 7 Event + WA Fallback (C1-T11, §14.15)
+
+Push dulu (FCM per token), gagal/tanpa-token + punya HP → antre WA
+(`send-text`, retry 10x + backoff + DLQ di worker). Tak pernah menggagalkan
+tugas (dispatcher tak melempar; audit best-effort). Template: tugas
+digenerate (approve → PPK+Staf), approve diminta (robot → Staf, dedup 20 jam),
+eskalasi (sapu harian → Keuangan), H-3 + mendekati kunci (sapu → PPK ACTIVE),
+PPK FINAL (→ Admin Ranting) + BA siap (→ PPK), reopen (→ PPK + Admin + MWC
+bila ranting), selisih besar (→ Admin + MWC), BA ranting siap (→ Admin).
+
+**Endpoint:** `POST /scheduler/notifikasi-sapu` (kunci internal)
+— body `{ year, month }` (periode disapu; cron harian 07:00 WIB = T12) →
+`{ eskalasi_terkirim, pengingat_h3_terkirim, mendekati_kunci_terkirim }`.
+
 ---
 
 ## 5. Scheduler API (Internal)

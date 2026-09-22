@@ -1,6 +1,6 @@
 import { Worker, Job } from 'bullmq';
 import { redisConnection } from '../config/redis';
-import { sendWhatsAppNotificationSync } from '../services/whatsapp';
+import { sendWhatsAppNotificationSync, sendStaffTextSync } from '../services/whatsapp';
 import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { logger } from '../config/logger';
@@ -11,6 +11,12 @@ import { logger } from '../config/logger';
 export const whatsappWorker = new Worker(
   'whatsapp-notifications',
   async (job: Job) => {
+    // C1-T11: job teks staf (fallback push) — rute per nama job.
+    if (job.name === 'send-text') {
+      const { phone, body } = job.data as { phone: string; body: string };
+      return sendStaffTextSync(phone, body);
+    }
+
     const { phone, ownerName, nominal, officerName, ...options } = job.data;
     
     logger.info({ jobId: job.id }, 'Processing WhatsApp job');
@@ -51,6 +57,20 @@ whatsappWorker.on('failed', (job, err) => {
  */
 export async function handleJobFailure(job: Job, err?: Error): Promise<void> {
   if (job.attemptsMade >= (job.opts.attempts || 1)) {
+    // C1-T11: job teks staf — catat ringkas dari body (tanpa nominal koleksi).
+    if (job.name === 'send-text') {
+      const { phone, body } = job.data as { phone: string; body: string };
+      await db.insert(schema.notifications).values({
+        collectionId: null,
+        recipientPhone: phone,
+        recipientName: null,
+        messageTemplate: 'staff_notice',
+        messageContent: typeof body === 'string' ? body.slice(0, 500) : 'staff text',
+        status: 'FAILED',
+        errorMessage: err?.message || 'Provider rejected or could not deliver the message',
+      }).catch(() => {});
+      return;
+    }
     const { phone, ownerName, nominal, collectionId } = job.data;
     const formattedPhone = phone;
     const formattedAmount = new Intl.NumberFormat('id-ID', {

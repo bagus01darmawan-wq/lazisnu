@@ -278,6 +278,82 @@ export async function sendTemplateMessage(
 }
 
 /**
+ * C1-T11 — Kirim teks bebas ke staf (jalur fallback push). Dipakai worker
+ * untuk job 'send-text' (lihat whatsapp.worker.ts + queues.addStaffTextJob).
+ * Dry-run bila provider tak dikonfigurasi (paritas koleksi); log DB selalu
+ * ditulis dengan template 'staff_notice' (koleksi vs staf terpisah jelas).
+ */
+export async function sendStaffTextSync(
+  phone: string,
+  body: string,
+): Promise<WhatsAppResponse> {
+  const formattedPhone = formatPhoneNumber(phone);
+
+  let result: WhatsAppResponse;
+  if ((WA_PROVIDER === 'fonnte' && !ACCESS_TOKEN) || (WA_PROVIDER !== 'fonnte' && (!PHONE_NUMBER_ID || !ACCESS_TOKEN))) {
+    logger.info('WhatsApp staff text queued in dry-run mode');
+    result = { message_id: `dev-${Date.now()}`, status: 'SENT' };
+  } else {
+    try {
+      let response: globalThis.Response;
+      if (WA_PROVIDER === 'fonnte') {
+        response = await fetch(`${WA_API_URL}/send`, {
+          method: 'POST',
+          headers: {
+            Authorization: ACCESS_TOKEN!,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({ target: formattedPhone, message: body, countryCode: '0' }),
+        });
+      } else {
+        response = await fetch(`${WA_API_URL}/${PHONE_NUMBER_ID}/messages`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            to: formattedPhone,
+            type: 'text',
+            text: { body },
+          }),
+        });
+      }
+      const data = (await response.json()) as any;
+      if (!response.ok || (WA_PROVIDER === 'fonnte' && (data.status === false || data.Status === false))) {
+        logger.error({ waResponse: data }, 'WhatsApp staff text API error');
+        throw Errors.WA_SEND_FAILED(data.error?.message || data.reason || 'WhatsApp API request failed');
+      }
+      result = {
+        message_id: WA_PROVIDER === 'fonnte' ? (data.id?.[0] || data.id || `fn-${Date.now()}`) : (data.messages?.[0]?.id || `wa-${Date.now()}`),
+        status: 'SENT',
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  try {
+    await db.insert(schema.notifications).values({
+      collectionId: null,
+      recipientPhone: formattedPhone,
+      recipientName: null,
+      messageTemplate: 'staff_notice',
+      messageContent: body,
+      status: result.status,
+      sentAt: result.status === 'SENT' ? new Date() : null,
+      waMessageId: result.status === 'SENT' ? result.message_id : null,
+      errorMessage: result.status === 'FAILED' ? 'Failed to send staff text' : null,
+    });
+  } catch (dbError) {
+    logger.error({ err: dbError }, 'Failed to log staff text notification to DB');
+  }
+
+  return result;
+}
+
+/**
  * Send bulk WhatsApp notifications with rate limiting (1 per second)
  */
 export function getWhatsAppQueue() {
