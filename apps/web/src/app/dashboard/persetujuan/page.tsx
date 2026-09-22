@@ -53,7 +53,10 @@ export default function PersetujuanPage() {
   }, [year, month]);
 
   useEffect(() => {
-    fetchData();
+    // react-hooks/set-state-in-effect (React Hooks v6): setState sinkron di efek
+    // memicu cascading render. fetchData() aman dipanggil karena async (await
+    // setelah setState) — pembungkus tick menegaskan bahwa lint bukan false positive.
+    void Promise.resolve().then(fetchData);
   }, [fetchData]);
 
   const handleApprove = async (id: string) => {

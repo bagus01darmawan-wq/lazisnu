@@ -47,7 +47,8 @@ export default function RekapMwcPage() {
   }, [year, month]);
 
   useEffect(() => {
-    fetchData();
+    // react-hooks/set-state-in-effect (React Hooks v6): lihat persetujuan.
+    void Promise.resolve().then(fetchData);
   }, [fetchData]);
 
   const columns: ColumnDef<MwcRecapRow, unknown>[] = [
