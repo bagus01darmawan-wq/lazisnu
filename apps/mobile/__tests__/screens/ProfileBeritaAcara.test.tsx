@@ -16,7 +16,7 @@ const mockGenerateBranchBaPdf = jest.fn();
 const mockGetBranchBaPdf = jest.fn();
 
 /** Diubah per-tes untuk menguji gerbang peran. */
-let currentRole = 'ADMIN_RANTING';
+let mockCurrentRole = 'ADMIN_RANTING';
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({top: 0, bottom: 0, left: 0, right: 0}),
@@ -47,7 +47,7 @@ jest.mock('../../src/stores', () => ({
         id: 'u-1',
         full_name: 'Bendahara Uji',
         phone: '081234567890',
-        role: currentRole,
+        role: mockCurrentRole,
         is_active: true,
       },
       logout: jest.fn(),
@@ -147,7 +147,7 @@ function pressByLabel(tree: renderer.ReactTestRenderer, label: string): void {
 
 describe('Halaman Profil — bagian Berita Acara', () => {
   beforeEach(() => {
-    currentRole = 'ADMIN_RANTING';
+    mockCurrentRole = 'ADMIN_RANTING';
     mockGetBranchSubmissions.mockReset();
     mockGenerateBranchBaPdf.mockReset();
     mockGetBranchBaPdf.mockReset();
@@ -224,7 +224,7 @@ describe('Halaman Profil — bagian Berita Acara', () => {
   });
 
   test('peran tanpa hak (PPK) tidak melihat bagian ini dan tidak memanggil API', async () => {
-    currentRole = 'PETUGAS';
+    mockCurrentRole = 'PETUGAS';
     mockGetBranchSubmissions.mockResolvedValue({success: true, data: [rowFinal]});
     const tree = await renderScreen();
     expect(labelsOf(tree)).not.toContain('Generate PDF');
