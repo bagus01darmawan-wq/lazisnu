@@ -304,6 +304,9 @@ export const ppkSubmissions = pgTable('ppk_submissions', {
   version: integer('version').default(1).notNull(),
   pdfUrl: varchar('pdf_url', { length: 500 }),
   pdfHash: varchar('pdf_hash', { length: 128 }),
+  // F7/D-14: nomor BA org (001/BA/IX/2026) — diisi saat FINAL pertama,
+  // stabil lintas versi/reopen; sekuens per ranting jalan terus.
+  baNumber: varchar('ba_number', { length: 40 }),
   // C1-T7 (§14.8): jendela koreksi pasca-reopen (NULL = DRAFT normal, selalu
   // boleh ditulis; terisi = DRAFT-dibuka-kembali, tulis ditolak bila lewat).
   reopenedUntil: timestamp('reopened_until'),
@@ -354,6 +357,9 @@ export const branchSubmissions = pgTable('branch_submissions', {
   version: integer('version').default(1).notNull(),
   pdfUrl: varchar('pdf_url', { length: 500 }),
   pdfHash: varchar('pdf_hash', { length: 128 }),
+  // F7/D-14: nomor BA org — diisi saat FINAL pertama, stabil lintas
+  // versi/reopen; sekuens per MWC (distrik) jalan terus.
+  baNumber: varchar('ba_number', { length: 40 }),
   // C1-T7 (§14.8): jendela koreksi pasca-reopen (NULL = DRAFT normal).
   reopenedUntil: timestamp('reopened_until'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -423,6 +429,22 @@ export const baPdfArchives = pgTable('ba_pdf_archives', {
 }, (t) => ({
   baArchiveTierSubmissionVersionUnq: uniqueIndex('ba_archive_tier_submission_version_unq').on(t.tier, t.submissionId, t.version),
   baArchiveSubmissionIdx: index('ba_archive_submission_idx').on(t.tier, t.submissionId),
+}));
+
+// ============================================================================
+// F7/D-14: counter nomor BA org — satu baris per scope, bump atomik
+// (INSERT .. ON CONFLICT DO UPDATE) di dalam tx finalize sehingga dua FINAL
+// berbarengan tak dapat nomor sama. scopeType: 'RANTING' (scopeId=branchId,
+// untuk BA PPK) atau 'MWC' (scopeId=districtId, untuk BA ranting).
+// Tanpa FK (scope divalidasi pemanggil; counter hidup mandiri).
+// ============================================================================
+export const baCounters = pgTable('ba_counters', {
+  scopeType: varchar('scope_type', { length: 10 }).notNull(),
+  scopeId: uuid('scope_id').notNull(),
+  lastSeq: integer('last_seq').default(0).notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  baCounterScopeUnq: uniqueIndex('ba_counter_scope_unq').on(t.scopeType, t.scopeId),
 }));
 
 // ============================================================================

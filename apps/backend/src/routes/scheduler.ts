@@ -136,20 +136,27 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
 
       // C1-T12 (§2.2): periode MILIK ASSIGNMENT, bukan collected_at.
       // collected_at 20 Sep–9 Okt dengan assignment Sept = pemasukan Sept.
-      const collections = await db.query.collections.findMany({
-        where: and(
-          eq(schema.collections.syncStatus, 'COMPLETED'),
-          latestCollectionCondition
-        ),
-        with: {
-          can: { with: { branch: true } },
-          officer: true,
-          assignment: { columns: { periodYear: true, periodMonth: true } },
-        },
-      });
-      const inPeriod = collections.filter(
-        (c) => c.assignment?.periodYear === year && c.assignment?.periodMonth === month,
-      );
+      // N1 (backlog T12): filter periode dikerjakan DB via JOIN assignments
+      // (dulu: ambil SEMUA koleksi + filter di memori). Hasil agregat identik.
+      const inPeriod = await db
+        .select({
+          nominal: schema.collections.nominal,
+          officerId: schema.collections.officerId,
+          branchId: schema.cans.branchId,
+          districtId: schema.branches.districtId,
+        })
+        .from(schema.collections)
+        .innerJoin(schema.assignments, eq(schema.collections.assignmentId, schema.assignments.id))
+        .innerJoin(schema.cans, eq(schema.collections.canId, schema.cans.id))
+        .innerJoin(schema.branches, eq(schema.cans.branchId, schema.branches.id))
+        .where(
+          and(
+            eq(schema.collections.syncStatus, 'COMPLETED'),
+            latestCollectionCondition,
+            eq(schema.assignments.periodYear, year),
+            eq(schema.assignments.periodMonth, month),
+          ),
+        );
 
       type SummaryAcc = { total: number; count: number };
       const byDistrict: Record<string, SummaryAcc> = {};
@@ -162,8 +169,8 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
 
       for (const col of inPeriod) {
         const nominal = Number(col.nominal);
-        const districtId = col.can.branch.districtId;
-        const branchId = col.can.branchId;
+        const districtId = col.districtId;
+        const branchId = col.branchId;
         const officerId = col.officerId;
 
         if (!byDistrict[districtId]) byDistrict[districtId] = initAcc();

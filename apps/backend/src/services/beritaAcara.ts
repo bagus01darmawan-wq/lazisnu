@@ -8,6 +8,7 @@
  */
 import { createHash } from 'node:crypto';
 import { periodKey } from './periodCalendar';
+import { terbilangRupiah } from './baTerbilang';
 
 /** SHA-256 hex (hash bytes PDF untuk arsip + hash konten untuk QR). */
 export function sha256Hex(data: Buffer | string): string {
@@ -69,6 +70,10 @@ export interface BaSignatureState {
 export interface PpkBaText {
   kind: 'ppk';
   title: string;
+  /** F-NUCARE/PYL-10 Rev. 0 (kop formulir org). */
+  form_code: string;
+  /** Nomor BA org (001/BA/IX/2026) — null sebelum FINAL pertama. */
+  ba_number: string | null;
   period: string;
   officer_name: string;
   branch_name: string;
@@ -82,6 +87,10 @@ export interface PpkBaText {
 export interface BranchBaText {
   kind: 'branch';
   title: string;
+  /** F-NUCARE/PYL-10 Rev. 0 (kop formulir org). */
+  form_code: string;
+  /** Nomor BA org (001/BA/IX/2026) — null sebelum FINAL pertama. */
+  ba_number: string | null;
   period: string;
   branch_name: string;
   district_name: string | null;
@@ -90,6 +99,28 @@ export interface BranchBaText {
   statements: string[];
   signatures: { ranting: BaSignatureState; mwc_bendahara: BaSignatureState };
   draft_warning: string | null;
+}
+
+export const BA_FORM_CODE = 'F-NUCARE/PYL-10 Rev. 0';
+
+const HARI_ID = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+const BULAN_ID = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
+/** WIB wall-clock dari Date (server boleh UTC — hasil tetap hari Jakarta). */
+export function wibParts(d: Date): { day: string; dd: string; month: string; mm: string; yyyy: string } {
+  const w = new Date(d.getTime() + 7 * 3_600_000);
+  return {
+    day: HARI_ID[w.getUTCDay()],
+    dd: String(w.getUTCDate()).padStart(2, '0'),
+    month: BULAN_ID[w.getUTCMonth() + 1],
+    mm: String(w.getUTCMonth() + 1).padStart(2, '0'),
+    yyyy: String(w.getUTCFullYear()),
+  };
+}
+
+/** "September 2026" dari periode assignment (waktu penghimpunan, D-14). */
+export function periodLong(year: number, month: number): string {
+  return `${BULAN_ID[month]} ${year}`;
 }
 
 export const DRAFT_WARNING = 'DRAFT — belum sah';
@@ -112,9 +143,18 @@ export function buildPpkBaText(params: {
   branchName: string;
   /** C1-T8: bila >0 tampil baris rincian agregat darurat (transparansi). */
   aggregateTotal?: number;
+  /** F7/D-14: nomor BA org — null = belum bernomor (pra-FINAL). */
+  baNumber?: string | null;
+  /** F7/D-14: tanggal kejadian/pengesahan (default: sekarang). */
+  eventAt?: Date;
+  /** F7/D-14: nama bendahara penandatangan (tampil di BA, bukan UUID). */
+  bendaharaName?: string | null;
 }): PpkBaText {
   const { sub, officerName, branchName, aggregateTotal = 0 } = params;
   const draft = sub.status !== 'FINAL';
+  const total = Number(sub.totalAmount);
+  const ev = wibParts(params.eventAt ?? new Date());
+  const baNumber = params.baNumber ?? null;
   const table = [
     { label: 'Total setoran', value: formatRupiah(Number(sub.totalAmount)) },
     { label: 'Bisyaroh (10%)', value: formatRupiah(Number(sub.bisyarohAmount)) },
@@ -126,13 +166,24 @@ export function buildPpkBaText(params: {
   }
   return {
     kind: 'ppk',
-    title: 'BERITA ACARA PENYETORAN KOIN — PPK',
+    title: 'BERITA ACARA SERAH TERIMA (BAST)',
+    form_code: BA_FORM_CODE,
+    ba_number: baNumber,
     period: periodKey(sub.periodYear, sub.periodMonth),
     officer_name: officerName,
     branch_name: branchName,
     table,
     statements: [
-      `Pada hari ini PPK ${officerName} (${branchName}) menyerahkan hasil penjemputan periode tersebut kepada Bendahara Ranting.`,
+      `Pada hari ini ${ev.day} tanggal ${ev.dd} bulan ${ev.month} tahun ${ev.yyyy} (${ev.dd}/${ev.mm}/${ev.yyyy}) diserah terimakan hasil penghimpunan infaq/sedekah Koin NU oleh :`,
+      `Nama Petugas Amil / Relawan : ${officerName}`,
+      `Alamat : ${branchName}`,
+      `No. SK / Surat Tugas : -`,
+      `Bertindak sebagai petugas amil atau relawan penghimpun koin NU Ranting ${branchName} yang selanjutnya disebut PIHAK PERTAMA`,
+      `Nama : ${params.bendaharaName ?? 'Bendahara Ranting'}`,
+      `Jabatan NU Care Lazisnu : Bendahara Ranting`,
+      `Alamat : ${branchName}`,
+      `Bertindak sebagai pengurus / manajemen NU Care Lazisnu Ranting ${branchName} yang selanjutnya disebut PIHAK KEDUA`,
+      `PIHAK PERTAMA telah menyerahkan uang hasil penghimpunan koin NU kepada PIHAK KEDUA sejumlah ${terbilangRupiah(total)} (${formatRupiah(total)}) yang telah dihimpun pada ${periodLong(sub.periodYear, sub.periodMonth)}.`,
       'Angka di atas dihitung otomatis oleh sistem dari per kaleng; tidak ada ketik manual.',
     ],
     signatures: {
@@ -164,12 +215,23 @@ export function buildBranchBaText(params: {
   branchName: string;
   districtName: string | null;
   ppkList: Array<{ officerName: string; total: number }>;
+  /** F7/D-14: nomor BA org — null = belum bernomor (pra-FINAL). */
+  baNumber?: string | null;
+  /** F7/D-14: tanggal kejadian/pengesahan (default: sekarang). */
+  eventAt?: Date;
+  /** F7/D-14: nama penandatangan (tampil di BA, bukan UUID). */
+  rantingName?: string | null;
+  mwcName?: string | null;
 }): BranchBaText {
   const { sub, branchName, districtName, ppkList } = params;
   const draft = sub.status !== 'FINAL' && sub.status !== 'FINAL_NOL';
+  const total = Number(sub.totalAmount);
+  const ev = wibParts(params.eventAt ?? new Date());
   return {
     kind: 'branch',
-    title: 'BERITA ACARA REKAPITULASI RANTING',
+    title: 'BERITA ACARA SERAH TERIMA (BAST)',
+    form_code: BA_FORM_CODE,
+    ba_number: params.baNumber ?? null,
     period: periodKey(sub.periodYear, sub.periodMonth),
     branch_name: branchName,
     district_name: districtName,
@@ -185,8 +247,17 @@ export function buildBranchBaText(params: {
     ],
     ppk_penyusun: ppkList.map((p) => ({ officer_name: p.officerName, total: formatRupiah(p.total) })),
     statements: [
-      `Ranting ${branchName} menyerahkan rekapitulasi periode tersebut kepada MWC.`,
-      'MWC hanya menarik data berstatus FINAL.',
+      `Pada hari ini ${ev.day} tanggal ${ev.dd} bulan ${ev.month} tahun ${ev.yyyy} (${ev.dd}/${ev.mm}/${ev.yyyy}) diserah terimakan hasil penghimpunan infaq/sedekah Koin NU oleh :`,
+      `Nama Petugas Amil / Relawan : ${params.rantingName ?? `Pengurus Ranting ${branchName}`}`,
+      `Alamat : ${branchName}`,
+      `No. SK / Surat Tugas : -`,
+      `Bertindak sebagai petugas amil atau relawan penghimpun koin NU Ranting ${branchName} yang selanjutnya disebut PIHAK PERTAMA`,
+      `Nama : ${params.mwcName ?? 'Bendahara MWC'}`,
+      `Jabatan NU Care Lazisnu : Bendahara MWC`,
+      `Alamat : ${branchName}`,
+      `Bertindak sebagai pengurus / manajemen NU Care Lazisnu Ranting ${branchName} yang selanjutnya disebut PIHAK KEDUA`,
+      `PIHAK PERTAMA telah menyerahkan uang hasil penghimpunan koin NU kepada PIHAK KEDUA sejumlah ${terbilangRupiah(total)} (${formatRupiah(total)}) yang telah dihimpun pada ${periodLong(sub.periodYear, sub.periodMonth)}.`,
+      'Angka di atas dihitung otomatis oleh sistem dari per kaleng; tidak ada ketik manual.',
     ],
     signatures: {
       ranting: { filled: !!sub.rantingSignerId, signer_id: sub.rantingSignerId, signed_at: sub.rantingSignedAt },

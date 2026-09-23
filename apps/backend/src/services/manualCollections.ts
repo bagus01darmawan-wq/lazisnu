@@ -17,7 +17,7 @@ import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { eq } from 'drizzle-orm';
 import { Errors } from '../utils/errorCatalog';
-import { insertActivityLog } from './auditLogService';
+import { sanitizeAuditData } from './auditLogService';
 import {
   validateAssignmentForSubmit,
   assertCollectedAtInWindow,
@@ -84,10 +84,15 @@ export async function recordManualCollection(
     throw Errors.FORBIDDEN('Hanya Admin Ranting / MWC yang menyalin manual');
   }
 
+  // J3 (backlog T8): provenance ditulis DALAM transaksi yang sama dengan
+  // submit — satu paket atomik: gagal satu = batal dua-duanya. Sengaja tanpa
+  // try/catch di sini agar kegagalan audit me-rollback baris collection juga
+  // (bukan "sukses tanpa jejak"). Evaluasi empty-streak tetap best-effort di
+  // luar tx (paritas B2: bukan bagian paket).
   const result = await db.transaction(async (tx) => {
     const assignment = await validateAssignmentForSubmit(tx, input.assignmentId, input.canId, input.officerId, now);
     assertCollectedAtInWindow(input.collectedAt, assignment.periodYear, assignment.periodMonth);
-    return submitCollection(
+    const res = await submitCollection(
       tx,
       {
         assignmentId: input.assignmentId,
@@ -98,34 +103,31 @@ export async function recordManualCollection(
       },
       now,
     );
+    await tx.insert(schema.activityLogs).values({
+      userId: actor.userId,
+      officerId: input.officerId,
+      actionType: 'MANUAL_COLLECTION',
+      entityType: 'collection',
+      entityId: res.id,
+      requestId: null,
+      oldData: null,
+      newData: sanitizeAuditData({
+        assignment_id: input.assignmentId,
+        can_id: input.canId,
+        nominal: input.nominal,
+        collected_at: input.collectedAt.toISOString(),
+        reason,
+      }),
+      ipAddress: 'manual-collection',
+      userAgent: null,
+    });
+    return res;
   });
 
   try {
     await evaluateEmptyStreakForCan(input.canId);
   } catch {
     // Paritas B2: kegagalan evaluasi tak menggagalkan catat yang sah.
-  }
-
-  try {
-    await insertActivityLog({
-      userId: actor.userId,
-      officerId: input.officerId,
-      actionType: 'MANUAL_COLLECTION',
-      entityType: 'collection',
-      entityId: result.id,
-      oldData: null,
-      newData: {
-        assignment_id: input.assignmentId,
-        can_id: input.canId,
-        nominal: input.nominal,
-        collected_at: input.collectedAt.toISOString(),
-        reason,
-      },
-      ipAddress: 'manual-collection',
-      userAgent: null,
-    });
-  } catch {
-    // Audit tidak boleh menggagalkan catat yang sah.
   }
 
   return { id: result.id, sync_status: 'COMPLETED' };
