@@ -506,7 +506,11 @@ export const useTasksStore = create<TasksState>((set, get) => ({
         }
         return {skipped, expiredClosed};
       }
-      return {skipped: 0, expiredClosed: 0, error: result.error?.message || 'Gagal menyelesaikan periode'};
+      return {
+        skipped: 0,
+        expiredClosed: 0,
+        error: result.error?.message || 'Gagal menyelesaikan periode',
+      };
     } catch {
       return {skipped: 0, expiredClosed: 0, error: 'Gagal menyelesaikan periode'};
     }

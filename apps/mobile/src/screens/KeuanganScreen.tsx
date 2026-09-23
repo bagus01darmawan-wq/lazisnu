@@ -207,8 +207,8 @@ export const KeuanganScreen: React.FC = () => {
             </Text>
             {item.kind === 'branch_sign' && item.ppk_belum_final > 0 ? (
               <Text style={styles.warn}>
-                Masih ada {item.ppk_belum_final} dari {item.ppk_total} setoran PPK yang belum FINAL —
-                selesaikan dulu sebelum serah terima ke MWC.
+                Masih ada {item.ppk_belum_final} dari {item.ppk_total} setoran PPK yang belum FINAL
+                — selesaikan dulu sebelum serah terima ke MWC.
               </Text>
             ) : item.needs_force ? (
               <Text style={styles.warn}>

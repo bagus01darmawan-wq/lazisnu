@@ -213,12 +213,24 @@ export const SyncIssuesSheet: React.FC<SyncIssuesSheetProps> = ({visible, onClos
               <Icon
                 name={a.danger ? 'trash-can-outline' : 'refresh'}
                 size={16}
-                color={a.danger ? Colors.status.error : item.tone === 'failed' ? Colors.status.error : Colors.brand.deepGreen}
+                color={
+                  a.danger
+                    ? Colors.status.error
+                    : item.tone === 'failed'
+                      ? Colors.status.error
+                      : Colors.brand.deepGreen
+                }
               />
               <Text
                 style={[
                   styles.cardActionText,
-                  {color: a.danger ? Colors.status.error : item.tone === 'failed' ? Colors.status.error : Colors.brand.deepGreen},
+                  {
+                    color: a.danger
+                      ? Colors.status.error
+                      : item.tone === 'failed'
+                        ? Colors.status.error
+                        : Colors.brand.deepGreen,
+                  },
                 ]}>
                 {a.label}
               </Text>

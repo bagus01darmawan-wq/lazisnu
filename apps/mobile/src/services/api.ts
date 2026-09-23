@@ -730,7 +730,12 @@ export const collectionService = {
   },
 
   completePeriod: async (): Promise<
-    ApiResponse<{period: string; skipped_count: number; expired_closed_count: number; message: string}>
+    ApiResponse<{
+      period: string;
+      skipped_count: number;
+      expired_closed_count: number;
+      message: string;
+    }>
   > => {
     return apiRequest('/mobile/periods/complete', {
       method: 'POST',

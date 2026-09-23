@@ -263,7 +263,9 @@ const ProfileScreen: React.FC = () => {
             ) : null}
             {baError ? <Text style={styles.baError}>{baError}</Text> : null}
             {!baLoading && !baError && baRows.length === 0 ? (
-              <Text style={styles.baStateRow}>Belum ada setoran ranting pada periode berjalan.</Text>
+              <Text style={styles.baStateRow}>
+                Belum ada setoran ranting pada periode berjalan.
+              </Text>
             ) : null}
             {baRows.map((row, index) => (
               <View

@@ -127,7 +127,10 @@ function textsOf(tree: renderer.ReactTestRenderer): string[] {
 
 function labelsOf(tree: renderer.ReactTestRenderer): string[] {
   return tree.root
-    .findAll(node => typeof (node.props as {accessibilityLabel?: unknown})?.accessibilityLabel === 'string')
+    .findAll(
+      node =>
+        typeof (node.props as {accessibilityLabel?: unknown})?.accessibilityLabel === 'string',
+    )
     .map(node => (node.props as {accessibilityLabel: string}).accessibilityLabel);
 }
 
@@ -169,7 +172,10 @@ describe('Halaman Profil — bagian Berita Acara', () => {
     // Muat pertama: belum ada berkas. Muat kedua: server sudah menyimpannya.
     mockGetBranchSubmissions
       .mockResolvedValueOnce({success: true, data: [rowFinal]})
-      .mockResolvedValue({success: true, data: [{...rowFinal, pdf_url: 'ba-pdfs/branch/sub-1-v1.pdf'}]});
+      .mockResolvedValue({
+        success: true,
+        data: [{...rowFinal, pdf_url: 'ba-pdfs/branch/sub-1-v1.pdf'}],
+      });
     mockGenerateBranchBaPdf.mockResolvedValue({
       success: true,
       data: {pdf_hash: 'a'.repeat(64), version: 1, reused: false},
