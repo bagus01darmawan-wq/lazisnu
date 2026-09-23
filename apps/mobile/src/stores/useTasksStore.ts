@@ -180,7 +180,7 @@ interface TasksState {
     proposalId?: string;
     reasonCode?: string;
   }>;
-  completePeriod: () => Promise<{skipped: number; error?: string}>;
+  completePeriod: () => Promise<{skipped: number; expiredClosed: number; error?: string}>;
   resolveTaskByQRCode: (qrCode: string) => Promise<{
     success: boolean;
     task?: Task;
@@ -487,26 +487,28 @@ export const useTasksStore = create<TasksState>((set, get) => ({
       const result = await collectionService.completePeriod();
       if (result.success && result.data) {
         const skipped = result.data.skipped_count;
-        if (skipped > 0) {
+        const expiredClosed = result.data.expired_closed_count ?? 0;
+        const closed = skipped + expiredClosed;
+        if (closed > 0) {
           const {completedCount, totalCount, completedNominal} = get();
           tasksStatsCache.set({
             active: 0,
-            completed: completedCount + skipped,
+            completed: completedCount + closed,
             total: totalCount,
             completedNominal,
           });
           set({
             activeCount: 0,
-            completedCount: completedCount + skipped,
+            completedCount: completedCount + closed,
           });
           get().fetchTasks('ACTIVE');
           get().fetchTasks('COMPLETED');
         }
-        return {skipped};
+        return {skipped, expiredClosed};
       }
-      return {skipped: 0, error: result.error?.message || 'Gagal menyelesaikan periode'};
+      return {skipped: 0, expiredClosed: 0, error: result.error?.message || 'Gagal menyelesaikan periode'};
     } catch {
-      return {skipped: 0, error: 'Gagal menyelesaikan periode'};
+      return {skipped: 0, expiredClosed: 0, error: 'Gagal menyelesaikan periode'};
     }
   },
 

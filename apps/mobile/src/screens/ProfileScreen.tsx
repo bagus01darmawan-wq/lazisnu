@@ -103,10 +103,12 @@ const ProfileScreen: React.FC = () => {
             const result = await completePeriod();
             if (result.error) {
               Alert.alert('Gagal', result.error);
-            } else if (result.skipped > 0) {
+            } else if (result.skipped + result.expiredClosed > 0) {
               Alert.alert(
                 'Berhasil',
-                `${result.skipped} kaleng ditandai tidak dijemput. Periode berjalan selesai.`,
+                result.expiredClosed > 0
+                  ? `${result.skipped} kaleng periode berjalan + ${result.expiredClosed} kaleng kedaluwarsa ditandai tidak dijemput.`
+                  : `${result.skipped} kaleng ditandai tidak dijemput. Periode berjalan selesai.`,
               );
             }
           },

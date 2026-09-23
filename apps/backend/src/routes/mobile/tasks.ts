@@ -18,6 +18,7 @@ import {
 import type { CanConditionValue } from '../../services/conditionRules';
 import { createProposalFromSkipReason, getLatestProposalForCan } from '../../services/conditionProposalService';
 import { assertCanAccess } from '../../services/canService';
+import { completeOfficerPeriod } from '../../services/periodComplete';
 import { ErrorCode } from '../../utils/errorCatalog';
 import {
   classifyScan,
@@ -129,7 +130,14 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           };
         }),
         db.query.assignments.findMany({
-          where: and(eq(schema.assignments.officerId, officerId), eq(schema.assignments.status, 'ACTIVE')),
+          where: and(
+            eq(schema.assignments.officerId, officerId),
+            eq(schema.assignments.status, 'ACTIVE'),
+            // Penjaga yang sama dengan /tasks: dasbor hanya menagih periode
+            // berjalan; tunggakan lama ditutup via Selesai Periode (total).
+            eq(schema.assignments.periodYear, periodYear),
+            eq(schema.assignments.periodMonth, periodMonth)
+          ),
           with: {
             can: {
               columns: { id: true, qrCode: true, ownerName: true, ownerAddress: true, latitude: true, longitude: true, condition: true, isActive: true },
@@ -151,7 +159,12 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         // Hitung jumlah AKTUAL tugas yang belum selesai (tidak dibatasi limit)
         db.$count(
           schema.assignments,
-          and(eq(schema.assignments.officerId, officerId), eq(schema.assignments.status, 'ACTIVE'))
+          and(
+            eq(schema.assignments.officerId, officerId),
+            eq(schema.assignments.status, 'ACTIVE'),
+            eq(schema.assignments.periodYear, periodYear),
+            eq(schema.assignments.periodMonth, periodMonth)
+          )
         ),
       ]);
 
@@ -391,7 +404,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
     try {
       const user = request.currentUser!;
       const officerId = user.officerId;
-      const query = request.query as { status?: string; page?: string; limit?: string };
+      const query = request.query as { status?: string; page?: string; limit?: string; year?: string; month?: string; all?: string };
 
       if (!officerId) {
         return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
@@ -409,6 +422,17 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         eq(schema.assignments.officerId, officerId!),
         eq(schema.assignments.status, status as any),
       ];
+      // Penjaga daftar fresh: ACTIVE default hanya periode berjalan agar
+      // assignment kedaluwarsa tak menumpuk di HP. Riwayat (COMPLETED/
+      // UNCOLLECTED) tetap lintas periode; `all=true` membuka semua.
+      const qYear = parseInt(query.year || '');
+      const qMonth = parseInt(query.month || '');
+      if (status === 'ACTIVE' && query.all !== 'true') {
+        const y = Number.isInteger(qYear) && qYear >= 2020 && qYear <= 2100 ? qYear : currentYear;
+        const m = Number.isInteger(qMonth) && qMonth >= 1 && qMonth <= 12 ? qMonth : currentMonth;
+        conditions.push(eq(schema.assignments.periodYear, y));
+        conditions.push(eq(schema.assignments.periodMonth, m));
+      }
       const whereClause = and(...conditions);
 
       const [assignments, total] = await Promise.all([
@@ -780,6 +804,10 @@ export async function tasksRoutes(fastify: FastifyInstance) {
   });
 
   // POST /mobile/periods/complete
+  // Menutup tugas periode berjalan + tugas ACTIVE kedaluwarsa (< periode
+  // berjalan) menjadi UNCOLLECTED. Tanpa ini assignment lama abadi:
+  // tampil di daftar (yang tak kenal periode) tapi semua aksi atasnya
+  // ditolak kunci periode — "mayat hidup".
   fastify.post('/periods/complete', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const user = request.currentUser!;
@@ -789,46 +817,16 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
       }
 
-      const now = new Date();
-      const periodYear = now.getFullYear();
-      const periodMonth = now.getMonth() + 1;
-
-      const activeCount = await db.$count(
-        schema.assignments,
-        and(
-          eq(schema.assignments.officerId, officerId),
-          eq(schema.assignments.periodYear, periodYear),
-          eq(schema.assignments.periodMonth, periodMonth),
-          eq(schema.assignments.status, 'ACTIVE')
-        )
+      const result = await completeOfficerPeriod(
+        {
+          officerId,
+          userId: user.userId,
+          ipAddress: request.ip,
+          userAgent: request.headers['user-agent'] || null,
+        },
+        new Date(),
       );
-
-      if (activeCount === 0) {
-        return sendSuccess(reply, {
-          period: `${periodYear}-${String(periodMonth).padStart(2, '0')}`,
-          skipped_count: 0,
-          message: 'Tidak ada kaleng yang perlu ditandai',
-        });
-      }
-
-      await db.update(schema.assignments)
-        .set({
-          status: 'UNCOLLECTED',
-          updatedAt: new Date(),
-          completedAt: new Date(),
-        })
-        .where(and(
-          eq(schema.assignments.officerId, officerId),
-          eq(schema.assignments.periodYear, periodYear),
-          eq(schema.assignments.periodMonth, periodMonth),
-          eq(schema.assignments.status, 'ACTIVE')
-        ));
-
-      return sendSuccess(reply, {
-        period: `${periodYear}-${String(periodMonth).padStart(2, '0')}`,
-        skipped_count: activeCount,
-        message: `${activeCount} kaleng ditandai tidak dijemput untuk periode berjalan`,
-      });
+      return sendSuccess(reply, result);
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
     }

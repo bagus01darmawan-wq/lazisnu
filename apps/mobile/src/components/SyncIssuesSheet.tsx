@@ -1,5 +1,5 @@
 import React, {useMemo, useState} from 'react';
-import {FlatList, Modal, StyleSheet, Text, View} from 'react-native';
+import {Alert, FlatList, Modal, StyleSheet, Text, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {AppButton, AppPressable} from './ui';
 import {Colors, Radius, Spacing, Typography} from '../theme';
@@ -15,13 +15,15 @@ export interface SyncIssuesSheetProps {
   onClose: () => void;
 }
 
+type IssueAction = {label: string; danger?: boolean; onPress: () => void};
+
 type IssueItem = {
   key: string;
   title: string;
   meta: string;
   body: string;
   tone: 'pending' | 'failed';
-  action?: {label: string; onPress: () => void};
+  actions?: IssueAction[];
 };
 
 /** Baris interleave untuk FlatList induk tunggal (judul → kartu → catatan sisa). */
@@ -66,13 +68,15 @@ export const SyncIssuesSheet: React.FC<SyncIssuesSheetProps> = ({visible, onClos
             ? `Belum terkirim — aman tersimpan di perangkat. Sudah dicoba ${attempts}×, percobaan berikutnya otomatis saat internet tersedia.`
             : 'Belum terkirim — aman tersimpan di perangkat. Terkirim otomatis saat internet tersedia, atau ketuk Kirim Sekarang.',
         tone: 'pending',
-        action: {
-          label: 'Kirim Sekarang',
-          onPress: () => {
-            useSyncStore.getState().triggerSync();
-            setRefreshKey(k => k + 1);
+        actions: [
+          {
+            label: 'Kirim Sekarang',
+            onPress: () => {
+              useSyncStore.getState().triggerSync();
+              setRefreshKey(k => k + 1);
+            },
           },
-        },
+        ],
       });
     }
 
@@ -89,22 +93,52 @@ export const SyncIssuesSheet: React.FC<SyncIssuesSheetProps> = ({visible, onClos
     }
 
     // ── Penjemputan gagal permanen (ditolak server / retry habis) ──
+    // Pesan jujur: bedakan "masih ada harapan" (retry habis karena jaringan
+    // — kirim ulang bermakna) vs "vonis server" (data ditolak permanen —
+    // kirim ulang hanya berguna bila admin mengubah keadaan, mis. reopen;
+    // bila tidak, buang agar tak menggantung selamanya).
     for (const item of offlineQueue.getFailedPermanent()) {
       const task = findTask(item.assignment_id);
       const reason = item.error_message || 'Server menolak data ini.';
+      const hopeful = /melebihi batas retry/i.test(reason);
       failed.push({
         key: `cf-${item.offline_id}`,
         title: task?.owner_name || 'Kaleng Masukan QR',
         meta: `${task?.qr_code || 'QR offline'} · ${formatCurrency(item.nominal)} · ${formatDate(item.collected_at)}`,
-        body: `${reason} Ketuk Kirim Ulang untuk mencoba lagi — bila tetap gagal, periksa data atau hubungi admin.`,
+        body: hopeful
+          ? `${reason} Jaringan sempat gagal 3× — data belum dinilai server. Ketuk Kirim Ulang; bila sudah terkirim, buang catatan ini.`
+          : `${reason} Kirim ulang data yang sama akan ditolak lagi, kecuali admin mengubah keadaan (mis. buka kembali periode). Bila uangnya sudah tercatat jalur lain, buang catatan ini.`,
         tone: 'failed',
-        action: {
-          label: 'Kirim Ulang',
-          onPress: () => {
-            useCollectionsStore.getState().retryFailedCollection(item.offline_id);
-            setRefreshKey(k => k + 1);
+        actions: [
+          {
+            label: 'Kirim Ulang',
+            onPress: () => {
+              useCollectionsStore.getState().retryFailedCollection(item.offline_id);
+              setRefreshKey(k => k + 1);
+            },
           },
-        },
+          {
+            label: 'Buang',
+            danger: true,
+            onPress: () => {
+              Alert.alert(
+                'Buang Catatan?',
+                'Catatan ini dihapus dari perangkat dan TIDAK akan dikirim ke server. Lakukan hanya bila uangnya sudah tercatat jalur lain (mis. dicatat admin).',
+                [
+                  {text: 'Batal', style: 'cancel'},
+                  {
+                    text: 'Ya, Buang',
+                    style: 'destructive',
+                    onPress: () => {
+                      offlineQueue.removeFromFailedPermanent([item.offline_id]);
+                      setRefreshKey(k => k + 1);
+                    },
+                  },
+                ],
+              );
+            },
+          },
+        ],
       });
     }
 
@@ -118,13 +152,16 @@ export const SyncIssuesSheet: React.FC<SyncIssuesSheetProps> = ({visible, onClos
         meta: `${col?.can?.qr_code || 'QR offline'} · ${formatCurrency(corr.nominal_lama)} → ${formatCurrency(corr.nominal_baru)} · ${formatDate(corr.created_at)}`,
         body: `${reason} Nominal kembali ke nilai server — koreksi ulang bila masih perlu, atau buang catatan ini.`,
         tone: 'failed',
-        action: {
-          label: 'Buang Catatan',
-          onPress: () => {
-            correctionQueue.removeFromFailedPermanent([corr.correction_id]);
-            setRefreshKey(k => k + 1);
+        actions: [
+          {
+            label: 'Buang Catatan',
+            danger: true,
+            onPress: () => {
+              correctionQueue.removeFromFailedPermanent([corr.correction_id]);
+              setRefreshKey(k => k + 1);
+            },
           },
-        },
+        ],
       });
     }
 
@@ -164,25 +201,30 @@ export const SyncIssuesSheet: React.FC<SyncIssuesSheetProps> = ({visible, onClos
         ]}>
         {item.body}
       </Text>
-      {item.action && (
-        <AppPressable
-          accessibilityRole={'button'}
-          accessibilityLabel={item.action.label}
-          onPress={item.action.onPress}
-          style={styles.cardAction}>
-          <Icon
-            name={'refresh'}
-            size={16}
-            color={item.tone === 'failed' ? Colors.status.error : Colors.brand.deepGreen}
-          />
-          <Text
-            style={[
-              styles.cardActionText,
-              {color: item.tone === 'failed' ? Colors.status.error : Colors.brand.deepGreen},
-            ]}>
-            {item.action.label}
-          </Text>
-        </AppPressable>
+      {item.actions && item.actions.length > 0 && (
+        <View style={styles.cardActions}>
+          {item.actions.map(a => (
+            <AppPressable
+              key={a.label}
+              accessibilityRole={'button'}
+              accessibilityLabel={a.label}
+              onPress={a.onPress}
+              style={styles.cardAction}>
+              <Icon
+                name={a.danger ? 'trash-can-outline' : 'refresh'}
+                size={16}
+                color={a.danger ? Colors.status.error : item.tone === 'failed' ? Colors.status.error : Colors.brand.deepGreen}
+              />
+              <Text
+                style={[
+                  styles.cardActionText,
+                  {color: a.danger ? Colors.status.error : item.tone === 'failed' ? Colors.status.error : Colors.brand.deepGreen},
+                ]}>
+                {a.label}
+              </Text>
+            </AppPressable>
+          ))}
+        </View>
       )}
     </View>
   );
@@ -375,6 +417,11 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
     minHeight: 44,
     paddingHorizontal: Spacing.sm,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
   },
   cardActionText: {...Typography.label},
   emptyWrap: {alignItems: 'center', paddingVertical: Spacing.xl},
