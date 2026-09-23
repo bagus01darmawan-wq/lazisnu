@@ -85,6 +85,13 @@
       "when": 1790016422612,
       "tag": "0011_lying_monster_badoon",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790107357066,
+      "tag": "0012_secret_harrier",
+      "breakpoints": true
     }
   ]
 }

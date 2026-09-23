@@ -25,7 +25,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { Errors } from '../utils/errorCatalog';
 import { insertActivityLog } from './auditLogService';
 import { deleteFromR2, getSignedDownloadUrl, uploadToR2 } from './r2';
-import { ensureBranchBaPdf, ensurePpkBaPdf } from './baPdfService';
+import { ensureBranchBaPdf, ensurePpkBaPdf, signerDisplayNames } from './baPdfService';
 import {
   buildBranchBaText,
   buildPpkBaText,
@@ -46,6 +46,7 @@ import {
   type SubmissionActor,
 } from './ppkSubmissions';
 import { periodKey, REOPEN_WINDOW_HOURS } from './periodCalendar';
+import { nextBaNumber } from './baNumbering';
 import { assertReopenWindowOpen } from './collectionSubmission';
 import { getAggregateTotal } from './emergencyAggregates';
 import { notifyBaSiapBranch, notifyPpkFinal, notifySelisih } from './notifications';
@@ -336,6 +337,8 @@ export async function countersignPpkSubmission(
 
     // Lengkap — kunci FINAL dalam transaksi yang sama (snapshot segar T4).
     const totals = await recomputePpkInTx(tx, signed[0]);
+    // F7/D-14: nomor BA org (stabil lintas versi; sekuens per ranting).
+    const baNumber = signed[0].baNumber ?? (await nextBaNumber(tx, { scopeType: 'RANTING', scopeId: sub.branchId }, now));
     const finalized = await tx
       .update(schema.ppkSubmissions)
       .set({
@@ -347,6 +350,7 @@ export async function countersignPpkSubmission(
         finalizedAt: now,
         finalizedBy: actor.userId,
         reopenedUntil: null,
+        baNumber,
         updatedAt: now,
       })
       .where(
@@ -628,6 +632,8 @@ export async function countersignBranchSubmission(
     // Niat NOL dikodekan sebagai (nol + alasan tersimpan): sign-time menolak
     // as_nol tanpa alasan, sehingga turunannya di sini deterministik.
     const asNol = computed.total === 0 && computed.shareMwc === 0 && storedReason !== null;
+    // F7/D-14: nomor BA org (stabil lintas versi; sekuens per MWC).
+    const baNumber = sub.baNumber ?? (await nextBaNumber(tx, { scopeType: 'MWC', scopeId: sub.districtId }, now));
 
     const finalized = await tx
       .update(schema.branchSubmissions)
@@ -653,6 +659,7 @@ export async function countersignBranchSubmission(
         mwcBendaharaSignedAt: now,
         mwcBendaharaSignatureUrl: key,
         reopenedUntil: null,
+        baNumber,
         updatedAt: now,
       })
       .where(
@@ -774,11 +781,15 @@ export async function getPpkBeritaAcara(actor: SubmissionActor, submissionId: st
     branchId: sub.branchId,
     districtId: sub.branch.districtId,
   });
+  const names = await signerDisplayNames([sub.ppkSignerId, sub.bendaharaSignerId]);
   return buildPpkBaText({
     sub,
     officerName: sub.officer.fullName,
     branchName: sub.branch.name,
     aggregateTotal: (await getAggregateTotal(db, sub.officerId, sub.periodYear, sub.periodMonth)).total,
+    baNumber: sub.baNumber,
+    eventAt: sub.finalizedAt ?? sub.ppkSignedAt ?? new Date(),
+    bendaharaName: (sub.bendaharaSignerId && names.get(sub.bendaharaSignerId)) || null,
   });
 }
 
@@ -797,11 +808,16 @@ export async function getBranchBeritaAcara(actor: SubmissionActor, submissionId:
     ),
     with: { officer: { columns: { fullName: true } } },
   });
+  const names = await signerDisplayNames([sub.rantingSignerId, sub.mwcBendaharaSignerId]);
   return buildBranchBaText({
     sub,
     branchName: sub.branch.name,
     districtName: sub.district?.name ?? null,
     ppkList: ppks.map((p) => ({ officerName: p.officer?.fullName ?? p.officerId, total: Number(p.totalAmount) })),
+    baNumber: sub.baNumber,
+    eventAt: sub.finalizedAt ?? sub.rantingSignedAt ?? new Date(),
+    rantingName: (sub.rantingSignerId && names.get(sub.rantingSignerId)) || null,
+    mwcName: (sub.mwcBendaharaSignerId && names.get(sub.mwcBendaharaSignerId)) || null,
   });
 }
 

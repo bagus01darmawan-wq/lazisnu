@@ -40,6 +40,7 @@ import {
   type KunciPeriodePhase,
 } from './periodCalendar';
 import { BRANCH_FORMULA_SNAPSHOT, type SubmissionActor } from './ppkSubmissions';
+import { nextBaNumber } from './baNumbering';
 
 export interface KunciPeriodeInput {
   year: number;
@@ -274,7 +275,7 @@ export async function kunciPeriode(
   // Fase KUNCI_KERAS: buat FINAL_NOL untuk yang diam + LOCKED kalender.
   const created: KunciPeriodeCreatedItem[] = [];
   for (const r of silentCandidates) {
-    // Snapshot kaleng saat kunci (5 keranjang §8c; ditarik tidak dihitung di total? tetap snapshot).
+    // Snapshot kaleng saat kunci (5 keranjang §8c).
     const canRows = await db
       .select({ condition: schema.cans.condition, n: sql<number>`count(*)::int` })
       .from(schema.cans)
@@ -284,6 +285,10 @@ export async function kunciPeriode(
     for (const row of canRows) cans[row.condition] = row.n;
     const canTotal = cans.AKTIF + cans.NON_AKTIF + cans.RUSAK + cans.HILANG + cans.DIKEMBALIKAN;
 
+    // F7/D-14: nomor BA org, sekuens MWC. Diambil sebelum insert sehingga
+    // retry idempoten (conflict) bisa menyisakan gap — wajar seperti
+    // nomor faktur batal (tercatat di audit, bukan duplikat).
+    const baNumber = await nextBaNumber(db, { scopeType: 'MWC', scopeId: districtId }, now);
     const [inserted] = await db
       .insert(schema.branchSubmissions)
       .values({
@@ -310,6 +315,7 @@ export async function kunciPeriode(
         status: 'FINAL_NOL',
         finalizedAt: now,
         finalizedBy: actor.userId,
+        baNumber,
         updatedAt: now,
       })
       .onConflictDoNothing({

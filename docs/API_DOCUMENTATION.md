@@ -857,6 +857,16 @@ pemilik / kecamatan sedistrik / keuangan se-scope) •
 `GET /admin/branch-submissions/{id}/pdf` (FINAL/FINAL_NOL saja) →
 `{ download_url, expires_in_seconds, pdf_hash, reused }`.
 
+**Format BAST org (F7/D-14):** teks + PDF mengikuti formulir
+`F-NUCARE/PYL-10 Rev. 0` — kop logo, `Nomor: 001/BA/IX/2026`, hari/tanggal
+pengesahan, identitas PIHAK PERTAMA (nama/alamat/SK dikosongkan) +
+PIHAK KEDUA (nama/jabatan/alamat), nominal angka + terbilang dari snapshot
+TERKUNCI, waktu penghimpunan = periode bulan, 2 kolom TTD (tanpa Mengetahui),
+QR verifikasi. Nomor diisi saat FINAL pertama (respons `ba_number`),
+stabil lintas versi/reopen; sekuens per ranting (BA PPK) / per MWC (BA
+ranting) jalan terus lintas bulan. Respons submission memuat `ba_number`
+(null pra-FINAL).
+
 **Endpoint publik:** `GET /v1/verify/ba?type=ppk|branch&id=&version=&hash=`
 → `{ valid: true|false }` saja (tanpa nominal/nama/pihak). `valid: true`
 berarti "BA SAH (FINAL/FINAL_NOL) + konten cocok hash" (C1-T6 F3).

@@ -32,6 +32,7 @@ import {
   SHARE_PCT,
 } from '../utils/c1Math';
 import { periodKey, REOPEN_WINDOW_HOURS } from './periodCalendar';
+import { nextBaNumber } from './baNumbering';
 import { notifyBaSiapBranch, notifyPpkFinal } from './notifications';
 
 export interface SubmissionActor {
@@ -368,6 +369,10 @@ export async function finalizePpkSubmission(actor: SubmissionActor, input: PpkFi
     // setoran (keuangan ranting/distrik lain ditolak — bukan sekadar peran).
     await assertPpkBendaharaScope(tx, input.bendaharaSignerId, sub.branchId);
 
+    // F7/D-14: nomor BA org — sekali per submission (stabil lintas
+    // versi/reopen); sekuens per ranting jalan terus.
+    const baNumber = sub.baNumber ?? (await nextBaNumber(tx, { scopeType: 'RANTING', scopeId: sub.branchId }, now));
+
     const updated = await tx
       .update(schema.ppkSubmissions)
       .set({
@@ -384,6 +389,7 @@ export async function finalizePpkSubmission(actor: SubmissionActor, input: PpkFi
         bendaharaSignerId: input.bendaharaSignerId,
         bendaharaSignedAt: sub.bendaharaSignedAt ?? now,
         reopenedUntil: null,
+        baNumber,
         updatedAt: now,
       })
       .where(
@@ -647,6 +653,10 @@ export async function finalizeBranchSubmission(actor: SubmissionActor, input: Br
     // (tanpa branchId) satu distrik dengan ranting itu.
     await assertMwcBendaharaScope(tx, input.mwcBendaharaSignerId, sub.districtId);
 
+    // F7/D-14: nomor BA org — sekali per submission; sekuens per MWC
+    // (distrik) jalan terus lintas bulan.
+    const baNumber = sub.baNumber ?? (await nextBaNumber(tx, { scopeType: 'MWC', scopeId: sub.districtId }, now));
+
     const updated = await tx
       .update(schema.branchSubmissions)
       .set({
@@ -674,6 +684,7 @@ export async function finalizeBranchSubmission(actor: SubmissionActor, input: Br
         mwcBendaharaSignerId: input.mwcBendaharaSignerId,
         mwcBendaharaSignedAt: sub.mwcBendaharaSignedAt ?? now,
         reopenedUntil: null,
+        baNumber,
         updatedAt: now,
       })
       .where(
@@ -748,6 +759,7 @@ export function toPpkResponse(r: PpkRow) {
     bendahara_signer_id: r.bendaharaSignerId,
     version: r.version,
     pdf_url: r.pdfUrl,
+    ba_number: r.baNumber,
   };
 }
 
@@ -780,5 +792,6 @@ export function toBranchResponse(r: BranchRow) {
     mwc_bendahara_signer_id: r.mwcBendaharaSignerId,
     version: r.version,
     pdf_url: r.pdfUrl,
+    ba_number: r.baNumber,
   };
 }

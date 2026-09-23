@@ -22,8 +22,9 @@ import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import QRCode from 'qrcode';
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { Errors } from '../utils/errorCatalog';
+import { BAST_LOGO_PNG_BASE64 } from './bastLogo';
 import { downloadFromR2, uploadToR2 } from './r2';
 import { getAggregateTotal } from './emergencyAggregates';
 import {
@@ -104,29 +105,58 @@ function drawTable(p: BaPage, rows: Array<{ label: string; value: string }>): vo
   p.y -= 6;
 }
 
+/** F7/D-14: format tanggal ID pendek untuk blok TTD ("12 Oktober 2026"). */
+function ttdDate(at: Date | null): string {
+  if (!at) return '-';
+  const w = new Date(at.getTime() + 7 * 3_600_000);
+  const bulan = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'][w.getUTCMonth() + 1];
+  return `${w.getUTCDate()} ${bulan} ${w.getUTCFullYear()}`;
+}
+
 async function drawSignatures(
   p: BaPage,
-  sigs: Array<{ label: string; filled: boolean; image: Buffer | null; signerId: string | null; at: Date | null }>,
+  sigs: Array<{ label: string; image: Buffer | null; signerId: string | null; name: string | null; at: Date | null }>,
 ): Promise<void> {
-  for (const s of sigs) {
-    ensureRoom(p, 110);
-    drawLine(p, s.label, { size: 10, bold: true, gap: 2 });
-    if (s.image) {
+  // BAST org: PIHAK KEDUA kiri, PIHAK PERTAMA kanan. Array = [Pertama, Kedua].
+  const [pertama, kedua] = sigs;
+  const cols = [
+    { title: 'PIHAK KEDUA', s: kedua },
+    { title: 'PIHAK PERTAMA', s: pertama },
+  ];
+  const colW = CONTENT_WIDTH / 2;
+  ensureRoom(p, 150);
+  const top = p.y;
+  for (let i = 0; i < cols.length; i++) {
+    const x = MARGIN + i * colW;
+    const cx = (text: string, size: number, bold: boolean, dy: number): number => {
+      const font = bold ? p.fontBold : p.font;
+      const t = asciiSafe(text);
+      const w = font.widthOfTextAtSize(t, size);
+      p.page.drawText(t, { x: x + Math.max(0, (colW - w) / 2), y: dy, size, font, color: rgb(0, 0, 0) });
+      return dy - size - 4;
+    };
+    let y = top;
+    y = cx(cols[i].title, 10, true, y - 12);
+    const s = cols[i].s;
+    if (s?.image) {
       try {
         const img = await p.doc.embedPng(s.image);
-        const w = 160;
-        const h = (img.height / img.width) * w;
-        p.page.drawImage(img, { x: MARGIN, y: p.y - Math.min(h, 70), width: w, height: Math.min(h, 70) });
+        const w = 130;
+        const h = Math.min((img.height / img.width) * w, 60);
+        p.page.drawImage(img, { x: x + (colW - w) / 2, y: y - h, width: w, height: h });
       } catch {
-        p.page.drawText(asciiSafe('(arsip coretan tidak terbaca)'), { x: MARGIN, y: p.y - 12, size: 9, font: p.font, color: rgb(0.4, 0.4, 0.4) });
+        p.page.drawText(asciiSafe('(arsip coretan tidak terbaca)'), { x, y: y - 12, size: 9, font: p.font, color: rgb(0.4, 0.4, 0.4) });
       }
-      p.y -= 78;
+      y -= 68;
     } else {
-      drawLine(p, '(belum ditandatangani)', { size: 9, gap: 2 });
+      y = cx('(belum ditandatangani)', 9, false, y - 2);
+      y -= 44;
     }
-    const meta = `${s.signerId ?? '-'}${s.at ? ` @ ${s.at.toISOString()}` : ''}`;
-    drawLine(p, asciiSafe(meta), { size: 8, gap: 8 });
+    y = cx(`( ${s?.name ?? '-'} )`, 10, false, y - 2);
+    y = cx(ttdDate(s?.at ?? null), 9, false, y);
+    void y;
   }
+  p.y = top - 160;
 }
 
 async function drawQr(p: BaPage, payload: string): Promise<void> {
@@ -142,44 +172,94 @@ async function drawQr(p: BaPage, payload: string): Promise<void> {
 export interface BaPdfInput {
   ba: PpkBaText | BranchBaText;
   qrPayload: string;
-  signatures: Array<{ label: string; image: Buffer | null; signerId: string | null; at: Date | null }>;
+  signatures: Array<{ label: string; image: Buffer | null; signerId: string | null; name: string | null; at: Date | null }>;
+}
+
+/** F7/D-14: bungkus kata (pengganti potong-95-huruf yang memenggal kalimat). */
+function wrapText(text: string, font: BaFont, size: number, maxWidth: number): string[] {
+  const words = asciiSafe(text).split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let cur = '';
+  for (const w of words) {
+    const t = cur ? `${cur} ${w}` : w;
+    if (!cur || font.widthOfTextAtSize(t, size) <= maxWidth) {
+      cur = t;
+    } else {
+      lines.push(cur);
+      cur = w;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+function drawParagraph(p: BaPage, text: string, opts: { size?: number; bold?: boolean; gap?: number } = {}): void {
+  const size = opts.size ?? 10;
+  const font = opts.bold ? p.fontBold : p.font;
+  for (const line of wrapText(text, font, size, CONTENT_WIDTH)) {
+    ensureRoom(p, size + 2);
+    p.page.drawText(line, { x: MARGIN, y: p.y - size, size, font, color: rgb(0, 0, 0) });
+    p.y -= size + 2;
+  }
+  p.y -= opts.gap ?? 4;
+}
+
+/** F7/D-14: kop formulir org — logo + judul + kode, dalam kotak. */
+async function drawKop(p: BaPage, title: string, formCode: string): Promise<void> {
+  const boxH = 66;
+  ensureRoom(p, boxH + 4);
+  const top = p.y;
+  p.page.drawRectangle({
+    x: MARGIN,
+    y: top - boxH,
+    width: CONTENT_WIDTH,
+    height: boxH,
+    borderColor: rgb(0, 0, 0),
+    borderWidth: 1,
+  });
+  try {
+    const logo = await p.doc.embedPng(Buffer.from(BAST_LOGO_PNG_BASE64, 'base64'));
+    const lh = 50;
+    const lw = (logo.width / logo.height) * lh;
+    p.page.drawImage(logo, { x: MARGIN + 8, y: top - boxH + 8, width: lw, height: lh });
+  } catch {
+    // Kop tetap sah tanpa logo (teks judul + kode cukup).
+  }
+  const cx = MARGIN + 130;
+  const cw = CONTENT_WIDTH - 130;
+  const t1 = asciiSafe(title);
+  const w1 = p.fontBold.widthOfTextAtSize(t1, 13);
+  p.page.drawText(t1, { x: cx + Math.max(0, (cw - w1) / 2), y: top - 28, size: 13, font: p.fontBold, color: rgb(0, 0, 0) });
+  const t2 = asciiSafe(formCode);
+  const w2 = p.font.widthOfTextAtSize(t2, 10);
+  p.page.drawText(t2, { x: cx + Math.max(0, (cw - w2) / 2), y: top - 46, size: 10, font: p.font, color: rgb(0, 0, 0) });
+  p.y = top - boxH - 10;
 }
 
 export async function renderBaPdf(input: BaPdfInput): Promise<Buffer> {
-  const { doc, pages: p } = await newBaDoc(input.ba.kind === 'ppk' ? 'BA PPK' : 'BA Ranting');
-  drawLine(p, 'LAZISNU', { size: 16, bold: true, gap: 2 });
-  drawLine(p, input.ba.title, { size: 12, bold: true, gap: 2 });
-  drawLine(p, `Periode: ${input.ba.period}`, { size: 10, gap: 10 });
-  if (input.ba.kind === 'ppk') {
-    drawLine(p, `PPK: ${input.ba.officer_name}`, { size: 10, gap: 2 });
-    drawLine(p, `Ranting: ${input.ba.branch_name}`, { size: 10, gap: 8 });
-  } else {
-    drawLine(p, `Ranting: ${input.ba.branch_name}`, { size: 10, gap: 2 });
-    if (input.ba.district_name) drawLine(p, `MWC: ${input.ba.district_name}`, { size: 10, gap: 2 });
-    p.y -= 6;
-  }
+  const { doc, pages: p } = await newBaDoc(input.ba.kind === 'ppk' ? 'BAST PPK' : 'BAST Ranting');
+  await drawKop(p, 'BERITA ACARA SERAH TERIMA', input.ba.form_code);
+  if (input.ba.ba_number) drawParagraph(p, `Nomor : ${input.ba.ba_number}`, { size: 11, bold: true, gap: 6 });
+  drawParagraph(p, `Periode: ${input.ba.period}`, { size: 10, gap: 8 });
   drawTable(p, input.ba.table);
   if (input.ba.kind === 'branch' && input.ba.ppk_penyusun.length > 0) {
     drawLine(p, 'PPK penyusun:', { size: 10, bold: true, gap: 2 });
     drawTable(p, input.ba.ppk_penyusun.map((x) => ({ label: x.officer_name, value: x.total })));
   }
   for (const s of input.ba.statements) {
-    ensureRoom(p, 26);
-    const wrapped = asciiSafe(s);
-    p.page.drawText(wrapped.substring(0, 95), { x: MARGIN, y: p.y - 11, size: 9, font: p.font, color: rgb(0, 0, 0), maxWidth: CONTENT_WIDTH });
-    p.y -= 20;
+    drawParagraph(p, s, { size: 10, gap: 4 });
   }
   if (input.ba.draft_warning) {
     drawLine(p, input.ba.draft_warning, { size: 12, bold: true, gap: 8 });
   }
   const ordered = input.ba.kind === 'ppk'
     ? [
-      { label: 'PPK', filled: input.ba.signatures.ppk.filled, image: input.signatures[0]?.image ?? null, signerId: input.ba.signatures.ppk.signer_id, at: input.ba.signatures.ppk.signed_at },
-      { label: 'Bendahara Ranting', filled: input.ba.signatures.bendahara.filled, image: input.signatures[1]?.image ?? null, signerId: input.ba.signatures.bendahara.signer_id, at: input.ba.signatures.bendahara.signed_at },
+      { label: 'PPK', image: input.signatures[0]?.image ?? null, signerId: input.ba.signatures.ppk.signer_id, name: input.signatures[0]?.name ?? null, at: input.ba.signatures.ppk.signed_at },
+      { label: 'Bendahara Ranting', image: input.signatures[1]?.image ?? null, signerId: input.ba.signatures.bendahara.signer_id, name: input.signatures[1]?.name ?? null, at: input.ba.signatures.bendahara.signed_at },
     ]
     : [
-      { label: 'Admin Ranting', filled: input.ba.signatures.ranting.filled, image: input.signatures[0]?.image ?? null, signerId: input.ba.signatures.ranting.signer_id, at: input.ba.signatures.ranting.signed_at },
-      { label: 'Bendahara MWC', filled: input.ba.signatures.mwc_bendahara.filled, image: input.signatures[1]?.image ?? null, signerId: input.ba.signatures.mwc_bendahara.signer_id, at: input.ba.signatures.mwc_bendahara.signed_at },
+      { label: 'Admin Ranting', image: input.signatures[0]?.image ?? null, signerId: input.ba.signatures.ranting.signer_id, name: input.signatures[0]?.name ?? null, at: input.ba.signatures.ranting.signed_at },
+      { label: 'Bendahara MWC', image: input.signatures[1]?.image ?? null, signerId: input.ba.signatures.mwc_bendahara.signer_id, name: input.signatures[1]?.name ?? null, at: input.ba.signatures.mwc_bendahara.signed_at },
     ];
   await drawSignatures(p, ordered);
   await drawQr(p, input.qrPayload);
@@ -203,6 +283,7 @@ export function ppkContentSnapshot(row: {
   ppkSignedAt: Date | null;
   bendaharaSignerId: string | null;
   bendaharaSignedAt: Date | null;
+  baNumber: string | null;
 }): Record<string, unknown> {
   return {
     id: row.id,
@@ -217,6 +298,7 @@ export function ppkContentSnapshot(row: {
     ppkAt: row.ppkSignedAt?.toISOString() ?? null,
     bendahara: row.bendaharaSignerId,
     bendaharaAt: row.bendaharaSignedAt?.toISOString() ?? null,
+    baNumber: row.baNumber,
   };
 }
 
@@ -233,6 +315,7 @@ export function branchContentSnapshot(row: {
   rantingSignedAt: Date | null;
   mwcBendaharaSignerId: string | null;
   mwcBendaharaSignedAt: Date | null;
+  baNumber: string | null;
 }): Record<string, unknown> {
   return {
     id: row.id,
@@ -247,7 +330,43 @@ export function branchContentSnapshot(row: {
     rantingAt: row.rantingSignedAt?.toISOString() ?? null,
     mwc: row.mwcBendaharaSignerId,
     mwcAt: row.mwcBendaharaSignedAt?.toISOString() ?? null,
+    baNumber: row.baNumber,
   };
+}
+
+/** Nama tampil penandatangan (ganti UUID di BA org). */
+export async function signerDisplayNames(userIds: Array<string | null>): Promise<Map<string, string>> {
+  const ids = [...new Set(userIds.filter((x): x is string => !!x))];
+  const out = new Map<string, string>();
+  if (ids.length === 0) return out;
+  const rows = await db.query.users.findMany({
+    where: inArray(schema.users.id, ids),
+    columns: { id: true, fullName: true },
+  });
+  for (const r of rows) out.set(r.id, r.fullName);
+  return out;
+}
+
+/**
+ * Nomor BA org: finalize mengisi duluan; baris FINAL lama (pra-F7) yang
+ * belum bernomor diberi nomor saat pertama diunduh (transisi satu kali).
+ */
+export async function ensureBaNumber(
+  tier: 'ppk' | 'branch',
+  sub: { id: string; version: number; baNumber: string | null; branchId: string; districtId?: string | null; finalizedAt: Date | null },
+  now: Date = new Date(),
+): Promise<string> {
+  if (sub.baNumber) return sub.baNumber;
+  const { nextBaNumber } = await import('./baNumbering.js');
+  const eventAt = sub.finalizedAt ?? now;
+  const scope = tier === 'ppk'
+    ? { scopeType: 'RANTING' as const, scopeId: sub.branchId }
+    : { scopeType: 'MWC' as const, scopeId: sub.districtId ?? sub.branchId };
+  const baNumber = await nextBaNumber(db, scope, eventAt);
+  const table = tier === 'ppk' ? schema.ppkSubmissions : schema.branchSubmissions;
+  await db.update(table).set({ baNumber, updatedAt: now })
+    .where(and(eq(table.id, sub.id), eq(table.version, sub.version)));
+  return baNumber;
 }
 
 // ---------------------------------------------------------------------------
@@ -322,23 +441,30 @@ export async function ensurePpkBaPdf(submissionId: string, opts: { force?: boole
   if (!opts.force && sub.pdfUrl && sub.pdfHash) {
     return { key: sub.pdfUrl, hash: sub.pdfHash, reused: true };
   }
-  const snapshot = ppkContentSnapshot(sub);
+  const baNumber = await ensureBaNumber('ppk', {
+    id: sub.id, version: sub.version, baNumber: sub.baNumber, branchId: sub.branchId, finalizedAt: sub.finalizedAt,
+  });
+  const snapshot = ppkContentSnapshot({ ...sub, baNumber });
   const contentHash = baContentHash('ppk', snapshot);
   const qrPayload = buildBaVerifyPayload({ type: 'ppk', id: sub.id, version: sub.version, hash: contentHash });
   const [ppkImg, bendaharaImg] = await fetchSignatureImages([sub.ppkSignatureUrl, sub.bendaharaSignatureUrl]);
+  const names = await signerDisplayNames([sub.ppkSignerId, sub.bendaharaSignerId]);
   const { total: aggregateTotal } = await getAggregateTotal(db, sub.officerId, sub.periodYear, sub.periodMonth);
   const ba = buildPpkBaText({
     sub,
     officerName: sub.officer?.fullName ?? sub.officerId,
     branchName: sub.branch?.name ?? '',
     aggregateTotal,
+    baNumber,
+    eventAt: sub.finalizedAt ?? sub.ppkSignedAt ?? new Date(),
+    bendaharaName: (sub.bendaharaSignerId && names.get(sub.bendaharaSignerId)) || null,
   });
   const pdf = await renderBaPdf({
     ba,
     qrPayload,
     signatures: [
-      { label: 'PPK', image: ppkImg, signerId: sub.ppkSignerId, at: sub.ppkSignedAt },
-      { label: 'Bendahara', image: bendaharaImg, signerId: sub.bendaharaSignerId, at: sub.bendaharaSignedAt },
+      { label: 'PPK', image: ppkImg, signerId: sub.ppkSignerId, name: (sub.ppkSignerId && (names.get(sub.ppkSignerId) ?? sub.officer?.fullName)) || null, at: sub.ppkSignedAt },
+      { label: 'Bendahara', image: bendaharaImg, signerId: sub.bendaharaSignerId, name: (sub.bendaharaSignerId && names.get(sub.bendaharaSignerId)) || null, at: sub.bendaharaSignedAt },
     ],
   });
   return storePdf('ppk', sub.id, sub.version, pdf);
@@ -367,22 +493,30 @@ export async function ensureBranchBaPdf(submissionId: string, opts: { force?: bo
     ),
     with: { officer: { columns: { fullName: true } } },
   });
-  const snapshot = branchContentSnapshot(sub);
+  const baNumber = await ensureBaNumber('branch', {
+    id: sub.id, version: sub.version, baNumber: sub.baNumber, branchId: sub.branchId, districtId: sub.districtId, finalizedAt: sub.finalizedAt,
+  });
+  const snapshot = branchContentSnapshot({ ...sub, baNumber });
   const contentHash = baContentHash('branch', snapshot);
   const qrPayload = buildBaVerifyPayload({ type: 'branch', id: sub.id, version: sub.version, hash: contentHash });
   const [rantingImg, mwcImg] = await fetchSignatureImages([sub.rantingSignatureUrl, sub.mwcBendaharaSignatureUrl]);
+  const names = await signerDisplayNames([sub.rantingSignerId, sub.mwcBendaharaSignerId]);
   const ba = buildBranchBaText({
     sub,
     branchName: sub.branch?.name ?? '',
     districtName: sub.district?.name ?? null,
     ppkList: ppks.map((p) => ({ officerName: p.officer?.fullName ?? p.officerId, total: Number(p.totalAmount) })),
+    baNumber,
+    eventAt: sub.finalizedAt ?? sub.rantingSignedAt ?? new Date(),
+    rantingName: (sub.rantingSignerId && names.get(sub.rantingSignerId)) || null,
+    mwcName: (sub.mwcBendaharaSignerId && names.get(sub.mwcBendaharaSignerId)) || null,
   });
   const pdf = await renderBaPdf({
     ba,
     qrPayload,
     signatures: [
-      { label: 'Admin Ranting', image: rantingImg, signerId: sub.rantingSignerId, at: sub.rantingSignedAt },
-      { label: 'Bendahara MWC', image: mwcImg, signerId: sub.mwcBendaharaSignerId, at: sub.mwcBendaharaSignedAt },
+      { label: 'Admin Ranting', image: rantingImg, signerId: sub.rantingSignerId, name: (sub.rantingSignerId && names.get(sub.rantingSignerId)) || null, at: sub.rantingSignedAt },
+      { label: 'Bendahara MWC', image: mwcImg, signerId: sub.mwcBendaharaSignerId, name: (sub.mwcBendaharaSignerId && names.get(sub.mwcBendaharaSignerId)) || null, at: sub.mwcBendaharaSignedAt },
     ],
   });
   return storePdf('branch', sub.id, sub.version, pdf);

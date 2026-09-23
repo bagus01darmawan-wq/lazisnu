@@ -140,4 +140,44 @@ describe('builder teks BA (§10)', () => {
     expect(ba.ppk_penyusun).toEqual([{ officer_name: 'Petugas Satu', total: 'Rp 175.000' }]);
     expect(ba.table[4].value).toContain('Aktif 0');
   });
+
+  test('F7 BAST PPK: nomor + terbilang + hari + pihak (tanpa potong kalimat)', () => {
+    const ba = buildPpkBaText({
+      sub: ppkSub, officerName: 'Petugas Satu', branchName: 'Ranting A',
+      baNumber: '001/BA/X/2026', eventAt: new Date('2026-10-12T02:00:00Z'), // 12 Okt 09:00 WIB = Senin
+      bendaharaName: 'Bendahara Rini',
+    });
+    expect(ba.form_code).toBe('F-NUCARE/PYL-10 Rev. 0');
+    expect(ba.ba_number).toBe('001/BA/X/2026');
+    expect(ba.statements[0]).toContain('Senin tanggal 12 bulan Oktober tahun 2026 (12/10/2026)');
+    expect(ba.statements.join('\n')).toContain('Seratus Tujuh Puluh Lima Ribu Rupiah (Rp 175.000)');
+    expect(ba.statements.join('\n')).toContain('September 2026');
+    expect(ba.statements.join('\n')).toContain('PIHAK PERTAMA');
+    expect(ba.statements.join('\n')).toContain('Bendahara Rini');
+    // F7: kalimat utuh — tidak ada lagi pemenggal 95 huruf di builder.
+    for (const s of ba.statements) expect(s.length).toBeGreaterThan(0);
+  });
+
+  test('F7 BAST ranting: nomor + pihak kedua MWC + tanpa Mengetahui', () => {
+    const sub = {
+      periodYear: 2026, periodMonth: 9,
+      totalAmount: BigInt(80000), bisyarohTotal: BigInt(8000), shareMwc: BigInt(21600), netAmount: BigInt(50400),
+      canAktif: 2, canNonaktif: 0, canRusak: 0, canHilang: 0,
+      status: 'FINAL',
+      rantingSignerId: 'u-adm', rantingSignedAt: new Date('2026-10-12T02:00:00Z'),
+      mwcBendaharaSignerId: 'u-mwc', mwcBendaharaSignedAt: new Date('2026-10-12T03:00:00Z'),
+    };
+    const ba = buildBranchBaText({
+      sub, branchName: 'Ranting A', districtName: 'MWC X',
+      ppkList: [],
+      baNumber: '001/BA/X/2026', eventAt: new Date('2026-10-12T02:00:00Z'),
+      rantingName: 'Admin Agus', mwcName: 'Bendahara MWC Budi',
+    });
+    expect(ba.ba_number).toBe('001/BA/X/2026');
+    const all = ba.statements.join('\n');
+    expect(all).toContain('Delapan Puluh Ribu Rupiah (Rp 80.000)');
+    expect(all).toContain('Admin Agus');
+    expect(all).toContain('Bendahara MWC Budi');
+    expect(all).not.toMatch(/mengetahui/i);
+  });
 });
