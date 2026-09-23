@@ -9,7 +9,8 @@
  * seranting) → FINAL bila tak ada ACTIVE tersisa, atau tetap PPK_SIGNED +
  * arahan force; force-finalize (Admin Ranting pemilik, butuh PPK_SIGNED +
  * kedua TTD + alasan).
- * Tingkat 2 (ranting): sign (Admin Ranting pemilik + angka T4) → tetap DRAFT;
+ * Tingkat 2 (ranting): sign (Bendahara Ranting + angka T4, hanya setelah semua
+ * PPK periode itu FINAL) → tetap DRAFT;
  * countersign (Keuangan MWC sedistrik) → FINAL/FINAL_NOL.
  * Penandatanganan ulang PPK sebelum FINAL → CONFLICT (koreksi = reopen T7);
  * sign ulang ranting selama DRAFT menimpa + audit (MWC belum terlibat).
@@ -472,9 +473,18 @@ export interface BranchSignInput {
 }
 
 /**
- * Admin Ranting menandatangani (angka T4 divalidasi + dibekukan ke baris,
+ * Bendahara Ranting menandatangani (angka T4 divalidasi + dibekukan ke baris,
  * status tetap DRAFT menunggu MWC). Sign ulang selama DRAFT menimpa coretan
  * sebelumnya + audit (MWC belum terlibat — beda dengan PPK yang sekali jalan).
+ *
+ * Koreksi Pion 23 Sep 2026: penandatangannya BUKAN Admin Ranting (yang hanya
+ * memantau lewat tab Rekap), melainkan Bendahara Ranting — peran
+ * `STAF_KEUANGAN` bercakupan ranting, orang yang sama yang meng-counter-sign
+ * BA PPK jadi FINAL. Bendahara MWC memakai peran sama dengan cakupan distrik.
+ *
+ * Prasyarat: semua setoran PPK periode ini harus sudah FINAL lebih dulu —
+ * serah terima ke MWC baru masuk akal setelah seluruh PPK menyerahkan ke
+ * Bendahara Ranting.
  */
 export async function signBranchSubmission(
   actor: SubmissionActor,
@@ -482,8 +492,8 @@ export async function signBranchSubmission(
   ctx: RequestContext,
   now: Date = new Date(),
 ) {
-  if (actor.role !== 'ADMIN_RANTING' || !actor.branchId) {
-    throw Errors.FORBIDDEN('Hanya Admin Ranting pemilik yang menandatangani');
+  if (actor.role !== 'STAF_KEUANGAN' || !actor.branchId) {
+    throw Errors.FORBIDDEN('Hanya Bendahara/Sekretaris ranting yang menandatangani BA ranting');
   }
   requireConsent(input.consent);
 
@@ -504,6 +514,24 @@ export async function signBranchSubmission(
     }
     if (sub.status !== 'DRAFT') {
       throw Errors.CONFLICT('Setoran ranting ini sudah dikunci.');
+    }
+    // Prasyarat (keputusan Pion 23 Sep 2026): Bendahara Ranting hanya boleh
+    // menandatangani setelah SEMUA PPK periode ini FINAL. Ranting yang belum
+    // punya baris PPK sama sekali (mis. PROGRAM_MWC) tidak dihalangi — tidak
+    // ada yang bisa dimintai serah terima.
+    const ppkRows = await tx.query.ppkSubmissions.findMany({
+      where: and(
+        eq(schema.ppkSubmissions.branchId, sub.branchId),
+        eq(schema.ppkSubmissions.periodYear, sub.periodYear),
+        eq(schema.ppkSubmissions.periodMonth, sub.periodMonth),
+      ),
+      columns: { id: true, status: true },
+    });
+    const belumFinal = ppkRows.filter((p) => p.status !== 'FINAL');
+    if (belumFinal.length > 0) {
+      throw Errors.CONFLICT(
+        `Masih ada ${belumFinal.length} dari ${ppkRows.length} setoran PPK yang belum FINAL — selesaikan dulu sebelum serah terima ke MWC.`,
+      );
     }
     if (input.expectedVersion !== undefined && input.expectedVersion !== sub.version) {
       throw Errors.CONFLICT('Setoran berubah — muat ulang lalu coba lagi.');
@@ -793,6 +821,38 @@ export async function getPpkBeritaAcara(actor: SubmissionActor, submissionId: st
   });
 }
 
+/**
+ * Angka BA untuk baris ranting yang **belum** dikunci (status DRAFT).
+ *
+ * `branch_submissions` menyimpan nominal sebagai *cache* yang hanya disegarkan
+ * `ensureBranchSubmission`, dan itu dipanggil dari halaman web admin. Baris yang
+ * lahir sebelum PPK punya nominal bisa tertinggal di 0 — padahal justru di
+ * dokumen inilah Bendahara Ranting membubuhkan tanda tangan, sehingga teksnya
+ * bisa berbunyi "sejumlah nol rupiah". Untuk DRAFT, angka dihitung ulang dari
+ * sumber otoritatif (`ppk_submissions` + `cans`) — murni baca, tanpa menulis.
+ *
+ * Baris FINAL/FINAL_NOL tidak disentuh: angkanya memang ditulis saat penguncian.
+ */
+async function liveDraftBranchNumbers(
+  branchId: string,
+  ppks: Array<{ totalAmount: unknown; bisyarohAmount: unknown }>,
+): Promise<{ total: number; bisyaroh: number; cans: Record<string, number> }> {
+  let total = 0;
+  let bisyaroh = 0;
+  for (const p of ppks) {
+    total += Number(p.totalAmount);
+    bisyaroh += Number(p.bisyarohAmount);
+  }
+  const rows = await db
+    .select({ condition: schema.cans.condition, n: sql<number>`count(*)::int` })
+    .from(schema.cans)
+    .where(eq(schema.cans.branchId, branchId))
+    .groupBy(schema.cans.condition);
+  const cans: Record<string, number> = { AKTIF: 0, NON_AKTIF: 0, RUSAK: 0, HILANG: 0, DIKEMBALIKAN: 0 };
+  for (const r of rows) cans[r.condition] = r.n;
+  return { total, bisyaroh, cans };
+}
+
 export async function getBranchBeritaAcara(actor: SubmissionActor, submissionId: string): Promise<BranchBaText> {
   const sub = await db.query.branchSubmissions.findFirst({
     where: eq(schema.branchSubmissions.id, submissionId),
@@ -809,8 +869,23 @@ export async function getBranchBeritaAcara(actor: SubmissionActor, submissionId:
     with: { officer: { columns: { fullName: true } } },
   });
   const names = await signerDisplayNames([sub.rantingSignerId, sub.mwcBendaharaSignerId]);
+  // DRAFT = belum dikunci → angka cache belum tentu benar; hitung dari sumber.
+  const live = sub.status === 'DRAFT' ? await liveDraftBranchNumbers(sub.branchId, ppks) : null;
+  const base = live
+    ? {
+        ...sub,
+        totalAmount: BigInt(live.total),
+        bisyarohTotal: BigInt(live.bisyaroh),
+        // shareMwc milik keputusan Bendahara Ranting — jangan dihitung ulang.
+        netAmount: BigInt(live.total - live.bisyaroh - Number(sub.shareMwc)),
+        canAktif: live.cans.AKTIF,
+        canNonaktif: live.cans.NON_AKTIF,
+        canRusak: live.cans.RUSAK,
+        canHilang: live.cans.HILANG,
+      }
+    : sub;
   return buildBranchBaText({
-    sub,
+    sub: base,
     branchName: sub.branch.name,
     districtName: sub.district?.name ?? null,
     ppkList: ppks.map((p) => ({ officerName: p.officer?.fullName ?? p.officerId, total: Number(p.totalAmount) })),
@@ -824,17 +899,23 @@ export async function getBranchBeritaAcara(actor: SubmissionActor, submissionId:
 /** Umur signed URL unduhan BA (§14.9: pendek). */
 export const BA_DOWNLOAD_URL_TTL_SECONDS = 600;
 
+interface BaTarget {
+  id: string;
+  version: number;
+  pdfUrl: string | null;
+  pdfHash: string | null;
+}
+
 /**
- * Unduh BA: gerbang akses + wajib FINAL/FINAL_NOL → lazy-PDF (idempoten) →
- * signed URL pendek + audit tiap unduhan (§14.9). R2 gagal = "belum siap",
- * tidak menggagalkan apa pun yang sudah sah.
+ * Gerbang akses + kelayakan BA — dipakai bersama oleh **generate, unduh, dan
+ * hapus** supaya ketiganya tidak mungkin berbeda aturan. (Pelajaran dari bug
+ * teks BA 23 Sep 2026: aturan yang disalin ke banyak tempat pasti melenceng.)
  */
-export async function getBaDownload(
+async function resolveBaTarget(
   actor: SubmissionActor,
   tier: 'ppk' | 'branch',
   submissionId: string,
-  ctx: RequestContext,
-): Promise<{ download_url: string; expires_in_seconds: number; pdf_hash: string; reused: boolean }> {
+): Promise<BaTarget> {
   if (tier === 'ppk') {
     const sub = await db.query.ppkSubmissions.findFirst({
       where: eq(schema.ppkSubmissions.id, submissionId),
@@ -852,11 +933,7 @@ export async function getBaDownload(
     if (sub.status !== 'FINAL') {
       throw Errors.VALIDATION_ERROR('BA belum sah — belum kedua TTD (FINAL).');
     }
-    const ensured = await ensurePpkBaPdf(submissionId);
-    const url = await getSignedDownloadUrl(ensured.key, BA_DOWNLOAD_URL_TTL_SECONDS);
-    if (!url) throw Errors.INTERNAL_ERROR('Berkas BA belum siap — coba unduh lagi.');
-    await auditDownload(actor, 'ppk_submission', submissionId, ensured, ctx);
-    return { download_url: url, expires_in_seconds: BA_DOWNLOAD_URL_TTL_SECONDS, pdf_hash: ensured.hash, reused: ensured.reused };
+    return { id: sub.id, version: sub.version, pdfUrl: sub.pdfUrl, pdfHash: sub.pdfHash };
   }
 
   const sub = await db.query.branchSubmissions.findFirst({
@@ -867,34 +944,148 @@ export async function getBaDownload(
   if (sub.status !== 'FINAL' && sub.status !== 'FINAL_NOL') {
     throw Errors.VALIDATION_ERROR('BA belum sah — belum kedua TTD (FINAL).');
   }
-  const ensured = await ensureBranchBaPdf(submissionId);
-  const url = await getSignedDownloadUrl(ensured.key, BA_DOWNLOAD_URL_TTL_SECONDS);
-  if (!url) throw Errors.INTERNAL_ERROR('Berkas BA belum siap — coba unduh lagi.');
-  await auditDownload(actor, 'branch_submission', submissionId, ensured, ctx);
-  return { download_url: url, expires_in_seconds: BA_DOWNLOAD_URL_TTL_SECONDS, pdf_hash: ensured.hash, reused: ensured.reused };
+  return { id: sub.id, version: sub.version, pdfUrl: sub.pdfUrl, pdfHash: sub.pdfHash };
 }
 
-async function auditDownload(
+/**
+ * Unduh BA: gerbang akses + wajib FINAL/FINAL_NOL → lazy-PDF (idempoten) →
+ * signed URL pendek + audit tiap unduhan (§14.9). R2 gagal = "belum siap",
+ * tidak menggagalkan apa pun yang sudah sah.
+ */
+export async function getBaDownload(
   actor: SubmissionActor,
-  entityType: string,
+  tier: 'ppk' | 'branch',
+  submissionId: string,
+  ctx: RequestContext,
+): Promise<{ download_url: string; expires_in_seconds: number; pdf_hash: string; reused: boolean }> {
+  const target = await resolveBaTarget(actor, tier, submissionId);
+
+  const ensured = tier === 'ppk'
+    ? await ensurePpkBaPdf(target.id)
+    : await ensureBranchBaPdf(target.id);
+
+  const url = await getSignedDownloadUrl(ensured.key, BA_DOWNLOAD_URL_TTL_SECONDS);
+  if (!url) throw Errors.INTERNAL_ERROR('Berkas BA belum siap — coba unduh lagi.');
+
+  await auditBaPdfAction(actor, tier, target.id, 'BA_DOWNLOADED', {
+    key: ensured.key,
+    hash: ensured.hash,
+    reused: ensured.reused,
+  }, ctx);
+
+  return {
+    download_url: url,
+    expires_in_seconds: BA_DOWNLOAD_URL_TTL_SECONDS,
+    pdf_hash: ensured.hash,
+    reused: ensured.reused,
+  };
+}
+
+/**
+ * Generate BA PDF **tanpa** mengunduh (§permintaan Pion 23 Sep 2026: tombol
+ * "Generate PDF" dulu, tombol "Unduh PDF" baru aktif setelahnya).
+ *
+ * Idempoten seperti unduh: kalau versi ini sudah punya PDF tersimpan, dipakai
+ * ulang. Tidak mengembalikan URL — hanya metadata, supaya klien cukup tahu
+ * "berkas siap" untuk mengaktifkan tombol unduh.
+ */
+export async function generateBaPdf(
+  actor: SubmissionActor,
+  tier: 'ppk' | 'branch',
+  submissionId: string,
+  ctx: RequestContext,
+): Promise<{ pdf_hash: string; version: number; reused: boolean }> {
+  const target = await resolveBaTarget(actor, tier, submissionId);
+
+  const ensured = tier === 'ppk'
+    ? await ensurePpkBaPdf(target.id)
+    : await ensureBranchBaPdf(target.id);
+
+  await auditBaPdfAction(actor, tier, target.id, 'BA_PDF_GENERATED', {
+    key: ensured.key,
+    hash: ensured.hash,
+    reused: ensured.reused,
+  }, ctx);
+
+  return { pdf_hash: ensured.hash, version: target.version, reused: ensured.reused };
+}
+
+/**
+ * Hapus PDF BA yang tersimpan (§permintaan Pion 23 Sep 2026: "pdf terhapus
+ * otomatis begitu modal ditutup").
+ *
+ * Menghapus objek R2 **dan** mengosongkan `pdf_url`/`pdf_hash` — persis pola
+ * reopen (`reopen.ts`). Kalau hanya objeknya yang dihapus tanpa mengosongkan
+ * kolom, kolomnya jadi *key hantu*: signed URL tetap terbentuk (R2 tidak
+ * memeriksa keberadaan saat menandatangani) padahal berkasnya sudah tidak ada.
+ *
+ * Aman: PDF selalu bisa dirender ulang dari snapshot beku, dan bukti permanen
+ * (isi + `baContentHash` + riwayat `ba_pdf_archives`) tidak ikut terhapus.
+ *
+ * Kalau penghapusan R2 gagal, kolom **tidak** dikosongkan — berkas yang masih
+ * ada harus tetap bisa ditemukan, bukan jadi yatim.
+ */
+export async function deleteBaPdf(
+  actor: SubmissionActor,
+  tier: 'ppk' | 'branch',
+  submissionId: string,
+  ctx: RequestContext,
+): Promise<{ deleted: boolean; had_pdf: boolean }> {
+  const target = await resolveBaTarget(actor, tier, submissionId);
+
+  if (!target.pdfUrl) return { deleted: false, had_pdf: false };
+
+  // Penjaga sejalan `purgeSignatureFile`: jalur ini tidak boleh menghapus apa
+  // pun di luar arsip BA.
+  if (!target.pdfUrl.startsWith('ba-pdfs/')) {
+    throw Errors.VALIDATION_ERROR('Key PDF tidak dikenali jalur ini.');
+  }
+
+  const deleted = await deleteFromR2(target.pdfUrl);
+  if (!deleted) return { deleted: false, had_pdf: true };
+
+  if (tier === 'ppk') {
+    await db
+      .update(schema.ppkSubmissions)
+      .set({ pdfUrl: null, pdfHash: null, updatedAt: new Date() })
+      .where(eq(schema.ppkSubmissions.id, target.id));
+  } else {
+    await db
+      .update(schema.branchSubmissions)
+      .set({ pdfUrl: null, pdfHash: null, updatedAt: new Date() })
+      .where(eq(schema.branchSubmissions.id, target.id));
+  }
+
+  await auditBaPdfAction(actor, tier, target.id, 'BA_PDF_DELETED', {
+    key: target.pdfUrl,
+    hash: target.pdfHash,
+  }, ctx);
+
+  return { deleted: true, had_pdf: true };
+}
+
+async function auditBaPdfAction(
+  actor: SubmissionActor,
+  tier: 'ppk' | 'branch',
   entityId: string,
-  ensured: { key: string; hash: string; reused: boolean },
+  actionType: string,
+  data: Record<string, unknown>,
   ctx: RequestContext,
 ): Promise<void> {
   try {
     await insertActivityLog({
       userId: actor.userId,
       officerId: actor.officerId ?? null,
-      actionType: 'BA_DOWNLOADED',
-      entityType,
+      actionType,
+      entityType: tier === 'ppk' ? 'ppk_submission' : 'branch_submission',
       entityId,
       oldData: null,
-      newData: { key: ensured.key, hash: ensured.hash, reused: ensured.reused },
+      newData: data,
       ipAddress: ctx.ipAddress,
       userAgent: ctx.userAgent,
     });
   } catch {
-    // Audit tidak boleh menggagalkan unduhan yang sah.
+    // Audit tidak boleh menggagalkan operasi yang sah.
   }
 }
 

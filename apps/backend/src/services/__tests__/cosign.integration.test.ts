@@ -413,7 +413,7 @@ describe('C1-T5 co-sign 2 HP + BA + PDF (DB, R2 mock)', () => {
     expect(await verifyBaRecord('branch', sub1Id, row!.version, good)).toBe(false);
   });
 
-  test('tingkat 2: admin ranting lain 403; MWC distrik lain 403; happy FINAL', async () => {
+  test('tingkat 2: bendahara ranting lain 403; MWC distrik lain 403; happy FINAL', async () => {
     await ensureBranchSubmission(branchR, 2026, 9);
     const sub = await db.query.branchSubmissions.findFirst({
       where: and(
@@ -422,17 +422,20 @@ describe('C1-T5 co-sign 2 HP + BA + PDF (DB, R2 mock)', () => {
         eq(schema.branchSubmissions.periodMonth, 9),
       ),
     });
+    // Penandatangan BA ranting = Bendahara Ranting (STAF_KEUANGAN bercakupan
+    // ranting), bukan Admin Ranting. Bendahara ranting LAIN tetap ditolak
+    // dengan FORBIDDEN_SCOPE (bukan FORBIDDEN) — cakupan, bukan peran.
     await expect(
-      signBranchSubmission({ ...adminR, branchId: branchR2 }, {
+      signBranchSubmission(keuR2, {
         submissionId: sub!.id, signaturePng: TINY_PNG_B64, consent: true, shareMwc: 40000,
       }, CTX, OCT5),
     ).rejects.toMatchObject({ code: ErrorCode.FORBIDDEN_SCOPE });
 
-    const signed = await signBranchSubmission(adminR, {
+    const signed = await signBranchSubmission(keuR, {
       submissionId: sub!.id, signaturePng: TINY_PNG_B64, consent: true, shareMwc: 40000,
     }, CTX, OCT5);
     expect(signed.status).toBe('DRAFT');
-    expect(signed.ranting_signer_id).toBe(adminR.userId);
+    expect(signed.ranting_signer_id).toBe(keuR.userId);
 
     await expect(
       countersignBranchSubmission(keuDTB, {

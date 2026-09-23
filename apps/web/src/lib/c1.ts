@@ -110,6 +110,26 @@ export interface BaVersion {
   is_current: boolean;
 }
 
+/** Cerminan `BranchBaText` di backend (`services/beritaAcara.ts`). */
+export interface BranchBaText {
+  kind: 'branch';
+  title: string;
+  form_code: string;
+  ba_number: string | null;
+  period: string;
+  branch_name: string;
+  district_name: string | null;
+  table: Array<{ label: string; value: string }>;
+  ppk_penyusun: Array<{ officer_name: string; total: string }>;
+  statements: string[];
+  signatures: {
+    ranting: { filled: boolean; signer_id: string | null; signed_at: string | null };
+    mwc_bendahara: { filled: boolean; signer_id: string | null; signed_at: string | null };
+  };
+  /** Non-null = belum sah (tampilkan sebagai cap). */
+  draft_warning: string | null;
+}
+
 function periodQuery(year?: number, month?: number): string {
   const q = new URLSearchParams();
   if (year !== undefined) q.append('year', String(year));
@@ -126,15 +146,14 @@ export const c1Api = {
   getStafSummary: (year?: number, month?: number) =>
     api.get<C1Envelope<StafSummary>>(`/mobile/staf/ringkasan${periodQuery(year, month)}`),
 
-  // Ranting — kunci (sign + countersign MWC) + BA + unduh.
+  // Ranting — laporan BA (baca saja) + berkas.
+  // Catatan koreksi Pion 23 Sep 2026: **tidak ada tanda tangan di web**. Admin
+  // Ranting/MWC hanya membaca; Bendahara Ranting menandatangani BA ranting di
+  // aplikasi mobile (tab Keuangan, `signBranch` di `apps/mobile/src/services/api.ts`).
   getBranchSubmissions: (year?: number, month?: number) =>
     api.get<C1Envelope<BranchSubmissionDetail[]>>(`/admin/branch-submissions${periodQuery(year, month)}`),
   getBranchSubmission: (id: string) =>
     api.get<C1Envelope<BranchSubmissionDetail>>(`/admin/branch-submissions/${id}`),
-  signBranch: (
-    id: string,
-    body: { signature_png: string; consent: boolean; expected_version?: number; share_mwc: number; variance_reason?: string; linked_periods?: string[]; as_nol?: boolean },
-  ) => api.post<C1Envelope<BranchSubmissionDetail>>(`/admin/branch-submissions/${id}/sign`, body),
 
   // MWC — tarik rekap FINAL.
   getLaporanMwc: (year?: number, month?: number) =>
@@ -142,7 +161,7 @@ export const c1Api = {
 
   // BA — teks + unduh (signed URL pendek) + riwayat versi.
   getBranchBeritaAcara: (id: string) =>
-    api.get<C1Envelope<unknown>>(`/admin/branch-submissions/${id}/berita-acara`),
+    api.get<C1Envelope<BranchBaText>>(`/admin/branch-submissions/${id}/berita-acara`),
   getBranchPdfVersions: (id: string) =>
     api.get<C1Envelope<BaVersion[]>>(`/admin/branch-submissions/${id}/pdf-versions`),
 
@@ -163,4 +182,25 @@ export const c1Api = {
     a.click();
     a.remove();
   },
+
+  /**
+   * Generate PDF BA tanpa mengunduh (permintaan Pion 23 Sep 2026): di halaman
+   * laporan, tombol **Unduh** nonaktif sampai tombol **Generate** ditekan.
+   * Idempoten — aman ditekan berulang, tidak menumpuk berkas di R2.
+   */
+  generateBranchPdf: (id: string) =>
+    api.post<C1Envelope<{ pdf_hash: string; version: number; reused: boolean }>>(
+      `/admin/branch-submissions/${id}/pdf/generate`,
+      {},
+    ),
+
+  /**
+   * Hapus PDF BA yang tersimpan (permintaan Pion: berkas terhapus begitu modal
+   * ditutup). Dipanggil best-effort — kegagalan tidak boleh menghalangi user
+   * menutup modal.
+   */
+  deleteBranchPdf: (id: string) =>
+    api.delete<C1Envelope<{ deleted: boolean; had_pdf: boolean }>>(
+      `/admin/branch-submissions/${id}/pdf`,
+    ),
 };

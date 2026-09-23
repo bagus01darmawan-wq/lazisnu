@@ -11,6 +11,7 @@ import { findCansWithoutAssignment, buildFirstOfficerAssignments, insertAssignme
 import { periodKey } from '../services/periodCalendar';
 import { preparePeriodDraft } from '../services/periodDrafts';
 import { sweepNotifs } from '../services/notifications';
+import { sweepQrPdfs, DEFAULT_QR_RETENTION_DAYS } from '../services/r2Cleanup';
 import { sendSuccess, sendError, sendInternalError } from '../utils/response';
 import { insertActivityLog } from '../services/auditLogService';
 import { isAppError } from '../utils/AppError';
@@ -18,6 +19,13 @@ import { isAppError } from '../utils/AppError';
 const generateTasksSchema = z.object({
   year: z.number().min(2020).max(2100),
   month: z.number().min(1).max(12),
+});
+
+const cleanupQrPdfsSchema = z.object({
+  /** Umur minimum sebelum dihapus. Bawaan 7 hari; lantai 1 hari (dijaga service). */
+  retention_days: z.number().int().min(1).max(365).optional(),
+  /** true = hanya laporkan, jangan hapus. Berguna untuk uji coba pertama. */
+  dry_run: z.boolean().optional(),
 });
 
 export async function schedulerRoutes(fastify: FastifyInstance) {
@@ -284,6 +292,86 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
         eskalasi_terkirim: result.escalated,
         pengingat_h3_terkirim: result.h3,
         mendekati_kunci_terkirim: result.near_lock,
+      });
+    } catch (error: unknown) {
+      if (error instanceof z.ZodError) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+      }
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  // POST /scheduler/cleanup-qr-pdfs
+  // Penyapu berkas sementara R2 (temuan 23 Sep 2026): label QR dulu diunggah
+  // dengan key bertimestamp dan tidak pernah dihapus → menumpuk selamanya.
+  // Akar masalahnya sudah diperbaiki (key deterministik di qrPdfKeys.ts), endpoint
+  // ini membereskan sisa lama + berkas yatim bila ada.
+  //
+  // ⚠️ Hanya menyentuh prefix `qr-pdfs/`. `ba-pdfs/` = arsip hukum, tidak pernah disentuh.
+  //
+  // JADWAL CRON (zona WIB) — harian 03:30, sepi trafik:
+  //   30 3 * * * curl -s -X POST $BASE/v1/scheduler/cleanup-qr-pdfs \
+  //     -H "x-internal-api-key: $KEY" -H 'Content-Type: application/json' -d '{}'
+  // Uji coba pertama (tidak menghapus apa pun):
+  //   ... -d '{"dry_run":true}'
+  fastify.post('/cleanup-qr-pdfs', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const body = cleanupQrPdfsSchema.parse(request.body ?? {});
+
+      const result = await sweepQrPdfs({
+        retentionDays: body.retention_days,
+        dryRun: body.dry_run,
+      });
+
+      // Audit hanya bila benar-benar ada yang terhapus — jangan banjiri log
+      // dengan catatan "0 berkas" setiap hari.
+      if (!result.dry_run && result.deleted > 0) {
+        try {
+          await insertActivityLog({
+            userId: null,
+            officerId: null,
+            actionType: 'SCHEDULER_R2_CLEANUP',
+            entityType: 'system',
+            entityId: null,
+            oldData: null,
+            newData: {
+              prefix: result.prefix,
+              retention_days: result.retention_days,
+              cutoff: result.cutoff,
+              deleted: result.deleted,
+              failed: result.failed,
+              bytes_freed_estimate: result.bytes_freed_estimate,
+            },
+            ipAddress: request.ip,
+            userAgent: request.headers['user-agent'] || null,
+          });
+        } catch (err) {
+          request.log.error({ err }, 'SCHEDULER_R2_CLEANUP audit log failed');
+        }
+      }
+
+      if (result.failed > 0) {
+        request.log.warn({ result }, 'Sebagian berkas QR gagal dihapus dari R2');
+      }
+      if (result.capped) {
+        request.log.warn(
+          { scanned: result.scanned },
+          'Sapuan QR berhenti di batas per jalan — jalankan lagi untuk menyelesaikan sisa',
+        );
+      }
+
+      return sendSuccess(reply, {
+        prefix: result.prefix,
+        retention_days: result.retention_days,
+        cutoff: result.cutoff,
+        scanned: result.scanned,
+        expired: result.expired,
+        deleted: result.deleted,
+        failed: result.failed,
+        bytes_freed_estimate: result.bytes_freed_estimate,
+        capped: result.capped,
+        dry_run: result.dry_run,
+        default_retention_days: DEFAULT_QR_RETENTION_DAYS,
       });
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {

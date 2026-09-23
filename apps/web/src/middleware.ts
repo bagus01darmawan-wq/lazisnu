@@ -61,6 +61,14 @@ export async function middleware(request: NextRequest) {
           userRole !== 'ADMIN_KECAMATAN' && userRole !== 'ADMIN_RANTING') {
         return NextResponse.redirect(new URL('/dashboard/overview', request.url));
       }
+
+      // Laporan Berita Acara — baca saja untuk Ranting & MWC.
+      // Bendahara Ranting menandatangani di aplikasi mobile (tab Keuangan),
+      // jadi role staf tidak perlu halaman ini.
+      if (path.includes('/setoran') &&
+          userRole !== 'ADMIN_KECAMATAN' && userRole !== 'ADMIN_RANTING') {
+        return NextResponse.redirect(new URL('/dashboard/overview', request.url));
+      }
     } catch {
       // Access token expire/invalid — JANGAN langsung logout bila refresh token
       // masih ada. Client akan memulihkan sesi via POST /api/auth/refresh

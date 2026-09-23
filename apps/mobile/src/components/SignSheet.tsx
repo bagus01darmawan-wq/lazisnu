@@ -5,7 +5,7 @@ import {AppButton} from './ui/AppButton';
 import {AppPressable} from './ui/AppPressable';
 import {SignaturePad} from './SignaturePad';
 import {strokesToSignaturePng, type Stroke} from '../signature/signaturePng';
-import {Colors, Spacing, Typography} from '../theme';
+import {Colors, Radius, Spacing, Typography} from '../theme';
 
 type SignSheetProps = {
   title: string;
@@ -14,11 +14,29 @@ type SignSheetProps = {
   serverError: string | null;
   onSubmit: (signaturePngBase64: string) => void;
   onClose: () => void;
+  /**
+   * Isi berita acara yang akan ditandatangani.
+   *
+   * Menutup celah kepatuhan yang ditemukan 23 Sep 2026: sheet ini meminta
+   * centang "Saya menyetujui berita acara ini" **tanpa pernah menampilkan**
+   * teksnya. Opsional supaya pemanggil lama tidak wajib berubah.
+   */
+  baText?: string[] | null;
+  /** Nomor BA (001/BA/IX/2026) — ditampilkan di atas isi. */
+  baNumber?: string | null;
+  /** true = isi BA sedang dimuat. */
+  baLoading?: boolean;
+  /**
+   * Kolom tambahan yang dibutuhkan sebagian alur (mis. isian Share MWC untuk
+   * tanda tangan BA ranting), dirender **di atas kanvas**. State-nya milik
+   * pemanggil; sheet hanya menyediakan tempat.
+   */
+  children?: React.ReactNode;
 };
 
 /**
- * C1-T10 — Lembar tanda tangan: kanvas coretan + persetujuan eksplisit +
- * kirim. Raster PNG dikerjakan di sini (encoder murni); coretan kosong atau
+ * C1-T10 — Lembar tanda tangan: isi BA + kanvas coretan + persetujuan eksplisit
+ * + kirim. Raster PNG dikerjakan di sini (encoder murni); coretan kosong atau
  * tanpa consent tak bisa dikirim (gerbang ganda klien + server T5).
  */
 export const SignSheet: React.FC<SignSheetProps> = ({
@@ -28,6 +46,10 @@ export const SignSheet: React.FC<SignSheetProps> = ({
   serverError,
   onSubmit,
   onClose,
+  baText,
+  baNumber,
+  baLoading,
+  children,
 }) => {
   const strokes = useRef<Stroke[]>([]);
   const [hasContent, setHasContent] = useState(false);
@@ -52,6 +74,18 @@ export const SignSheet: React.FC<SignSheetProps> = ({
   return (
     <AppCard>
       <Text style={styles.title}>{title}</Text>
+      {baLoading ? <Text style={styles.hint}>Memuat isi berita acara…</Text> : null}
+      {baText && baText.length > 0 ? (
+        <View style={styles.baBox}>
+          {baNumber ? <Text style={styles.baNumber}>Nomor: {baNumber}</Text> : null}
+          {baText.map((line, i) => (
+            <Text key={`${i}-${line.slice(0, 12)}`} style={styles.baLine}>
+              {line}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+      {children}
       <View
         onLayout={e => {
           viewSize.current = {w: e.nativeEvent.layout.width, h: 150};
@@ -92,6 +126,18 @@ export const SignSheet: React.FC<SignSheetProps> = ({
 
 const styles = StyleSheet.create({
   title: {...Typography.heading3, marginBottom: Spacing.sm},
+  hint: {...Typography.caption, color: Colors.text.muted, marginBottom: Spacing.sm},
+  baBox: {
+    borderRadius: Radius.card,
+    borderWidth: 1,
+    borderColor: Colors.border.warm,
+    backgroundColor: Colors.surface.sunken,
+    padding: Spacing.sm,
+    gap: Spacing.xs,
+    marginBottom: Spacing.sm,
+  },
+  baNumber: {...Typography.caption, fontWeight: '700'},
+  baLine: {...Typography.body, color: Colors.text.primary},
   consentRow: {flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.md},
   box: {
     width: 22,

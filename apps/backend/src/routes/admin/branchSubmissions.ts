@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { authorize } from '../../middleware/auth';
 import { assertBranchAccess } from '../../middleware/ownership';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
@@ -13,6 +13,8 @@ import {
   toBranchResponse,
 } from '../../services/ppkSubmissions';
 import {
+  deleteBaPdf,
+  generateBaPdf,
   getBaDownload,
   getBranchBeritaAcara,
   signBranchSubmission,
@@ -71,10 +73,20 @@ export async function branchSubmissionsRoutes(fastify: FastifyInstance) {
         return sendError(reply, 403, 'FORBIDDEN', 'Tidak punya akses');
       }
 
-      const out: ReturnType<typeof toBranchResponse>[] = [];
+      // Nama ranting diambil sekali untuk semua baris. Tanpa ini MWC melihat
+      // beberapa baris periode yang sama tanpa pembeda — `toBranchResponse`
+      // hanya memuat `branch_id`, bukan nama.
+      const branchRows = await db
+        .select({ id: schema.branches.id, name: schema.branches.name })
+        .from(schema.branches)
+        .where(inArray(schema.branches.id, branchIds));
+      const nameOf = new Map<string, string>();
+      for (const b of branchRows) nameOf.set(b.id, b.name);
+
+      const out: (ReturnType<typeof toBranchResponse> & { branch_name: string | null })[] = [];
       for (const branchId of branchIds) {
         const sub = await ensureBranchSubmission(branchId, year, month);
-        out.push(toBranchResponse(sub));
+        out.push({ ...toBranchResponse(sub), branch_name: nameOf.get(branchId) ?? null });
       }
       return sendSuccess(reply, out);
     } catch (error: unknown) {
@@ -125,12 +137,15 @@ export async function branchSubmissionsRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // POST /v1/admin/branch-submissions/:id/sign — Admin Ranting pemilik
+  // POST /v1/admin/branch-submissions/:id/sign — Bendahara Ranting pemilik
   // menandatangani di sesinya (+ angka T4); status tetap DRAFT menunggu MWC.
   // signer_id = pemilik sesi (bukan body).
+  // Koreksi Pion 23 Sep 2026: BUKAN Admin Ranting. Bendahara Ranting =
+  // STAF_KEUANGAN bercakupan ranting (sama dengan peng-counter-sign BA PPK).
+  // Prasyarat semua PPK FINAL ditegakkan di service.
   fastify.post(
     '/branch-submissions/:id/sign',
-    { preHandler: [authorize('ADMIN_RANTING')] },
+    { preHandler: [authorize('STAF_KEUANGAN')] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const { id } = request.params as { id: string };
@@ -214,6 +229,51 @@ export async function branchSubmissionsRoutes(fastify: FastifyInstance) {
         const { id } = request.params as { id: string };
         await getBranchBeritaAcara(actorOf(request), id);
         return sendSuccess(reply, await listBranchBaVersions(id));
+      } catch (error: unknown) {
+        return sendAppError(reply, error, fastify.log);
+      }
+    },
+  );
+
+  // POST /v1/admin/branch-submissions/:id/pdf/generate
+  // Permintaan Pion 23 Sep 2026: pisahkan Generate dari Unduh. Web hanya
+  // menampilkan laporan BA yang sudah terbit; tombol Unduh **nonaktif** sampai
+  // Generate ditekan. Idempoten — generate ulang tidak menumpuk berkas.
+  fastify.post(
+    '/branch-submissions/:id/pdf/generate',
+    {
+      ...baReadRoles,
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = request.params as { id: string };
+        return sendSuccess(reply, await generateBaPdf(actorOf(request), 'branch', id, ctxOf(request)));
+      } catch (error: unknown) {
+        return sendAppError(reply, error, fastify.log);
+      }
+    },
+  );
+
+  // DELETE /v1/admin/branch-submissions/:id/pdf
+  // Permintaan Pion 23 Sep 2026: "pdf terhapus otomatis begitu modal ditutup".
+  // Mengosongkan `pdf_url`/`pdf_hash` sekalian (pola reopen) supaya tidak
+  // meninggalkan key hantu. `deleted:false` bukan error — berkas mungkin sudah
+  // tidak ada / belum pernah di-generate.
+  fastify.delete(
+    '/branch-submissions/:id/pdf',
+    {
+      ...baReadRoles,
+      config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = request.params as { id: string };
+        const result = await deleteBaPdf(actorOf(request), 'branch', id, ctxOf(request));
+        if (result.had_pdf && !result.deleted) {
+          request.log.warn({ submissionId: id }, 'PDF BA gagal dihapus dari R2 — berkas masih tersimpan');
+        }
+        return sendSuccess(reply, result);
       } catch (error: unknown) {
         return sendAppError(reply, error, fastify.log);
       }

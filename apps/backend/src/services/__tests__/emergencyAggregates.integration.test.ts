@@ -224,7 +224,7 @@ describe('C1-T8 agregat darurat + salin manual (DB, R2 mock)', () => {
 
     const sBr = await ensureBranchSubmission(bR1, 2026, 9);
     // total 80000 → bis 8000 → sisa 72000 → ekspektasi 21600; setor pas.
-    await signBranchSubmission(adminR1, { submissionId: sBr.id, signaturePng: TINY_PNG_B64, consent: true, shareMwc: 21600 }, CTX, T0);
+    await signBranchSubmission(keuR1, { submissionId: sBr.id, signaturePng: TINY_PNG_B64, consent: true, shareMwc: 21600 }, CTX, T0);
     const finBr = await countersignBranchSubmission(keuMwc, { submissionId: sBr.id, signaturePng: TINY_PNG_B64, consent: true }, CTX, T0);
     expect(finBr.status).toBe('FINAL');
     expect(finBr.total_amount).toBe(80000);

@@ -254,20 +254,25 @@ describe('C1-T11 dispatcher + hook + sapu (DB, fcm/WA mock)', () => {
     await signPpkSubmission(ppkActor, { submissionId: ppkSubId, signaturePng: TINY_PNG_B64, consent: true }, CTX, T0);
     await countersignPpkSubmission(keuR1, { submissionId: ppkSubId, signaturePng: TINY_PNG_B64, consent: true }, CTX, T0);
 
-    const finAudit = await db.query.activityLogs.findFirst({
+    const finAudits = await db.query.activityLogs.findMany({
       where: and(eq(schema.activityLogs.actionType, 'NOTIF_DISPATCHED'), eq(schema.activityLogs.userId, keuR1.userId)),
     });
-    expect(finAudit).toBeDefined();
-    expect(finAudit?.newData).toMatchObject({ template: 'PPK_FINAL' });
+    // findFirst tak deterministik (satu countersign menulis >1 dispatch:
+    // PPK_FINAL + BA_SIAP) — cocokkan himpunan seperti asersi selisih/reopen.
+    expect(finAudits.some((a) => (a.newData as { template?: string })?.template === 'PPK_FINAL')).toBe(true);
 
     // Selisih besar saat sign ranting (variance 60000-? → wajib alasan).
+    // Penandatangan BA ranting = Bendahara Ranting (STAF_KEUANGAN bercakupan
+    // ranting), bukan Admin Ranting (koreksi Pion 23 Sep 2026). Audit
+    // NOTIF_DISPATCHED dicatat atas nama PELAKU (actor), jadi filternya ikut
+    // pindah ke keuR1 — penerima push-nya tetap Admin Ranting + MWC.
     const sBr = await ensureBranchSubmission(bR1, 2026, 9);
-    await signBranchSubmission(adminR1, {
+    await signBranchSubmission(keuR1, {
       submissionId: sBr.id, signaturePng: TINY_PNG_B64, consent: true,
       shareMwc: 0, varianceReason: 'KURANG_BAYAR',
     }, CTX, T0);
     const selAudit = await db.query.activityLogs.findMany({
-      where: and(eq(schema.activityLogs.actionType, 'NOTIF_DISPATCHED'), eq(schema.activityLogs.userId, adminR1.userId)),
+      where: and(eq(schema.activityLogs.actionType, 'NOTIF_DISPATCHED'), eq(schema.activityLogs.userId, keuR1.userId)),
     });
     expect(selAudit.some((a) => (a.newData as { template?: string })?.template === 'SELISIH_BESAR')).toBe(true);
 
