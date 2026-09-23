@@ -805,6 +805,10 @@ export interface PpkSubmissionDto {
 export interface BaTextDto {
   kind: 'ppk' | 'branch';
   title: string;
+  /** Kode formulir org (mis. F-NUCARE/PYL-10 Rev. 0). */
+  form_code?: string;
+  /** Nomor BA (001/BA/IX/2026) — null sebelum FINAL pertama. */
+  ba_number?: string | null;
   period: string;
   table: Array<{label: string; value: string}>;
   statements: string[];
@@ -826,6 +830,31 @@ export interface BaVersionDto {
   verify_url: string;
   archived_at: string | null;
   is_current: boolean;
+}
+
+/**
+ * Satu baris setoran ranting — bentuk `toBranchResponse` di backend.
+ *
+ * Dipakai halaman Profil untuk daftar Berita Acara. `pdf_url` **non-null
+ * berarti berkas sudah pernah diterbitkan**, dan itulah satu-satunya penanda
+ * yang dipakai UI untuk memutuskan tombol Unduh muncul atau belum (server tidak
+ * mengirim `pdf_hash` di daftar ini).
+ */
+export interface BranchSubmissionRowDto {
+  id: string;
+  branch_id: string;
+  /** Ditambahkan di route daftar — `toBranchResponse` sendiri hanya punya id. */
+  branch_name: string | null;
+  period: string;
+  total_amount: number;
+  bisyaroh_total: number;
+  share_mwc: number;
+  net_amount: number;
+  /** DRAFT belum sah — Generate/Unduh ditolak server sampai FINAL/FINAL_NOL. */
+  status: string;
+  version: number;
+  pdf_url: string | null;
+  ba_number: string | null;
 }
 
 export interface PeriodDraftDto {
@@ -858,7 +887,13 @@ export interface StafSummaryDto {
 }
 
 export interface KeuanganInboxItemDto {
-  kind: 'ppk' | 'branch';
+  /**
+   * - `ppk` — setoran PPK menunggu counter-sign Bendahara Ranting.
+   * - `branch_sign` — BA ranting menunggu **tanda tangan Bendahara Ranting**
+   *   (tahap 1, serah terima ke MWC). Koreksi Pion 23 Sep 2026.
+   * - `branch` — BA ranting menunggu counter-sign Bendahara MWC.
+   */
+  kind: 'ppk' | 'branch_sign' | 'branch';
   submission_id: string;
   branch_id: string;
   branch_name: string;
@@ -867,6 +902,14 @@ export interface KeuanganInboxItemDto {
   status: string;
   version: number;
   needs_force: boolean;
+  /** Hanya berarti untuk `branch_sign`: setoran PPK yang belum FINAL. */
+  ppk_belum_final: number;
+  /** Hanya berarti untuk `branch_sign`: jumlah setoran PPK periode ini. */
+  ppk_total: number;
+  /** Hanya berarti untuk `branch_sign`: total bisyaroh PPK. */
+  bisyaroh_total: number;
+  /** Hanya berarti untuk `branch_sign`: 30% × (total − bisyaroh), dari server. */
+  expected_share: number;
 }
 
 export interface MwcRecapDto {
@@ -988,8 +1031,61 @@ export const c1Service = {
       body: JSON.stringify(data),
     });
   },
+  /**
+   * Tahap 1 BA ranting — **Bendahara Ranting** menandatangani (koreksi Pion
+   * 23 Sep 2026). Status tetap DRAFT sampai Bendahara MWC meng-counter-sign.
+   * Server menolak bila masih ada setoran PPK periode itu yang belum FINAL.
+   */
+  signBranch: async (
+    id: string,
+    data: {
+      signature_png: string;
+      consent: boolean;
+      expected_version?: number;
+      share_mwc: number;
+      variance_reason?: string;
+      linked_periods?: string[];
+      as_nol?: boolean;
+    },
+  ): Promise<ApiResponse<unknown>> => {
+    return apiRequest(`/admin/branch-submissions/${id}/sign`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  /** Teks BA ranting (baca-saja) — dipakai untuk menampilkan isi sebelum TTD. */
+  getBranchBeritaAcara: async (id: string): Promise<ApiResponse<BaTextDto>> => {
+    return apiRequest<BaTextDto>(`/admin/branch-submissions/${id}/berita-acara`);
+  },
   getBranchPdfVersions: async (id: string): Promise<ApiResponse<BaVersionDto[]>> => {
     return apiRequest<BaVersionDto[]>(`/admin/branch-submissions/${id}/pdf-versions`);
+  },
+  /**
+   * Daftar setoran ranting dalam cakupan akun (halaman Profil → Berita Acara).
+   * Gerbang server `rantingOnly` = ADMIN_RANTING (rantingnya) / ADMIN_KECAMATAN
+   * (sedistrik). Side effect yang disengaja server: daftar ini juga menyegarkan
+   * angka cache baris ranting.
+   */
+  getBranchSubmissions: async (
+    year?: number,
+    month?: number,
+  ): Promise<ApiResponse<BranchSubmissionRowDto[]>> => {
+    return apiRequest<BranchSubmissionRowDto[]>(
+      `/admin/branch-submissions${periodQuery(year, month)}`,
+    );
+  },
+  /**
+   * Terbitkan PDF BA ranting (idempoten). Server menolak bila status belum
+   * FINAL/FINAL_NOL — "BA belum sah — belum kedua TTD".
+   */
+  generateBranchBaPdf: async (
+    id: string,
+  ): Promise<ApiResponse<{pdf_hash: string; version: number; reused: boolean}>> => {
+    return apiRequest(`/admin/branch-submissions/${id}/pdf/generate`, {method: 'POST'});
+  },
+  /** Tautan unduh berumur pendek (600 detik) — ambil tepat saat mau dibuka. */
+  getBranchBaPdf: async (id: string): Promise<ApiResponse<BaPdfDto>> => {
+    return apiRequest<BaPdfDto>(`/admin/branch-submissions/${id}/pdf`);
   },
 
   // Manager — baca rekap MWC (FINAL saja, 2 kartu).

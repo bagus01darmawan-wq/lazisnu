@@ -6,6 +6,8 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
+  ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { config } from '../config/env';
@@ -135,30 +137,98 @@ export async function deleteFromR2(key: string): Promise<boolean> {
   }
 }
 
+export interface R2ObjectInfo {
+  key: string;
+  size: number;
+  lastModified: Date | null;
+}
+
 /**
- * Upload QR Code PDF untuk sebuah kaleng
- * Key format: qr-pdfs/{branchCode}/{qrCode}.pdf
+ * Daftar objek di bawah sebuah prefix (paginated).
+ *
+ * Dipakai pembersih QR PDF (retensi) — sebelumnya tidak ada cara melihat isi
+ * bucket sama sekali, jadi berkas yang menumpuk tak pernah bisa ditemukan.
+ * R2/S3 membatasi 1000 key per halaman; `limit` memotong total yang dikembalikan
+ * dan `truncated` menandai masih ada sisa di luar `limit`.
  */
-export async function uploadQRCodePDF(params: {
-  qrCode: string;
-  branchCode: string;
-  pdfBuffer: Buffer;
-}): Promise<{ success: boolean; key?: string; signedUrl?: string; error?: string }> {
-  const key = `qr-pdfs/${params.branchCode}/${params.qrCode}.pdf`;
+export async function listObjectsFromR2(
+  prefix: string,
+  opts: { limit?: number } = {},
+): Promise<{ objects: R2ObjectInfo[]; truncated: boolean }> {
+  const client = getR2Client();
+  if (!client) return { objects: [], truncated: false };
 
-  const result = await uploadToR2({
-    key,
-    body: params.pdfBuffer,
-    contentType: 'application/pdf',
-    metadata: {
-      qrCode: params.qrCode,
-      branchCode: params.branchCode,
-      generatedAt: new Date().toISOString(),
-    },
-  });
+  const limit = opts.limit ?? 1000;
+  const objects: R2ObjectInfo[] = [];
+  let continuationToken: string | undefined;
+  let truncated = false;
 
-  if (!result.success) return result;
+  try {
+    do {
+      const remaining = limit - objects.length;
+      if (remaining <= 0) {
+        truncated = true;
+        break;
+      }
 
-  const signedUrl = await getSignedDownloadUrl(key);
-  return { success: true, key, signedUrl: signedUrl || undefined };
+      const out = await client.send(new ListObjectsV2Command({
+        Bucket: config.R2_BUCKET_NAME,
+        Prefix: prefix,
+        MaxKeys: Math.min(1000, remaining),
+        ...(continuationToken ? { ContinuationToken: continuationToken } : {}),
+      }));
+
+      for (const o of out.Contents ?? []) {
+        if (!o.Key) continue;
+        objects.push({
+          key: o.Key,
+          size: o.Size ?? 0,
+          lastModified: o.LastModified ?? null,
+        });
+      }
+
+      continuationToken = out.IsTruncated ? out.NextContinuationToken : undefined;
+      truncated = Boolean(out.IsTruncated);
+    } while (continuationToken && objects.length < limit);
+
+    return { objects, truncated };
+  } catch (err: unknown) {
+    const message = getErrorMessage(err, 'Gagal list objek');
+    console.error('[R2] Gagal list objek:', message);
+    return { objects: [], truncated: false };
+  }
+}
+
+/**
+ * Hapus banyak objek sekaligus (DeleteObjects, maks 1000 key per panggilan).
+ *
+ * Penting: R2/S3 membalas HTTP 200 walau sebagian key gagal dihapus — kegagalan
+ * per key dilaporkan di `Errors`. Jadi yang dihitung adalah `Errors`, bukan
+ * status HTTP, supaya pemanggil tidak mengira "sukses" padahal berkas masih ada.
+ */
+export async function deleteManyFromR2(keys: string[]): Promise<{ deleted: number; failed: number }> {
+  const client = getR2Client();
+  if (!client || keys.length === 0) return { deleted: 0, failed: 0 };
+
+  let deleted = 0;
+  let failed = 0;
+
+  for (let i = 0; i < keys.length; i += 1000) {
+    const batch = keys.slice(i, i + 1000);
+    try {
+      const out = await client.send(new DeleteObjectsCommand({
+        Bucket: config.R2_BUCKET_NAME,
+        Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: false },
+      }));
+      const errCount = out.Errors?.length ?? 0;
+      failed += errCount;
+      deleted += batch.length - errCount;
+    } catch (err: unknown) {
+      const message = getErrorMessage(err, 'Gagal hapus batch');
+      console.error('[R2] Gagal hapus batch:', message);
+      failed += batch.length;
+    }
+  }
+
+  return { deleted, failed };
 }

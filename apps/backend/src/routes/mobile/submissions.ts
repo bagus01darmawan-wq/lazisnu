@@ -14,7 +14,9 @@ import {
 import {
   countersignBranchSubmission,
   countersignPpkSubmission,
+  deleteBaPdf,
   forceFinalizePpkSubmission,
+  generateBaPdf,
   getBaDownload,
   getBranchBeritaAcara,
   getPpkBeritaAcara,
@@ -214,6 +216,49 @@ export async function submissionsRoutes(fastify: FastifyInstance) {
       try {
         const { id } = request.params as { id: string };
         return sendSuccess(reply, await getBaDownload(actorOf(request), 'ppk', id, ctxOf(request)));
+      } catch (error: unknown) {
+        return sendAppError(reply, error, fastify.log);
+      }
+    },
+  );
+
+  // POST /mobile/submissions/:id/pdf/generate
+  // Permintaan Pion 23 Sep 2026: halaman Profil punya tombol **Generate PDF**;
+  // tombol **Unduh PDF** baru muncul setelah proses ini selesai. Idempoten.
+  fastify.post(
+    '/submissions/:id/pdf/generate',
+    {
+      preHandler: [authorize('PETUGAS', 'STAF_KEUANGAN', 'ADMIN_RANTING', 'ADMIN_KECAMATAN')],
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = request.params as { id: string };
+        return sendSuccess(reply, await generateBaPdf(actorOf(request), 'ppk', id, ctxOf(request)));
+      } catch (error: unknown) {
+        return sendAppError(reply, error, fastify.log);
+      }
+    },
+  );
+
+  // DELETE /mobile/submissions/:id/pdf
+  // Permintaan Pion 23 Sep 2026: berkas dihapus begitu selesai dipakai (di web
+  // saat modal ditutup, di mobile setelah unduhan selesai). Kolom
+  // `pdf_url`/`pdf_hash` ikut dikosongkan supaya tidak ada key hantu.
+  fastify.delete(
+    '/submissions/:id/pdf',
+    {
+      preHandler: [authorize('PETUGAS', 'STAF_KEUANGAN', 'ADMIN_RANTING', 'ADMIN_KECAMATAN')],
+      config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = request.params as { id: string };
+        const result = await deleteBaPdf(actorOf(request), 'ppk', id, ctxOf(request));
+        if (result.had_pdf && !result.deleted) {
+          request.log.warn({ submissionId: id }, 'PDF BA gagal dihapus dari R2 — berkas masih tersimpan');
+        }
+        return sendSuccess(reply, result);
       } catch (error: unknown) {
         return sendAppError(reply, error, fastify.log);
       }

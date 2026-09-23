@@ -82,18 +82,22 @@ export const MENU_ITEMS: MenuItem[] = [
     roles: ['ADMIN_KECAMATAN'],
   },
   // C1-T10 (§15): menu peran siklus periode — Staf (monitor/setuju),
-  // Ranting (kunci), MWC (tarik). Penjaga tetap di server.
+  // Bendahara Ranting (kunci, lewat aplikasi mobile), MWC (tarik).
+  // Penjaga tetap di server.
   {
     title: 'Persetujuan',
     path: '/dashboard/persetujuan',
     icon: ClipboardCheck,
     roles: ['STAF_PENGUMPULAN', 'STAF_KEUANGAN'],
   },
+  // Koreksi Pion 23 Sep 2026: halaman ini **laporan baca-saja**. Yang
+  // menandatangani BA ranting adalah Bendahara Ranting (STAF_KEUANGAN) di
+  // aplikasi mobile — Admin Ranting & MWC hanya melihat BA yang sudah terbit.
   {
-    title: 'Setoran Ranting',
+    title: 'Berita Acara',
     path: '/dashboard/setoran',
     icon: FileSignature,
-    roles: ['ADMIN_RANTING'],
+    roles: ['ADMIN_RANTING', 'ADMIN_KECAMATAN'],
   },
   {
     title: 'Rekap MWC',

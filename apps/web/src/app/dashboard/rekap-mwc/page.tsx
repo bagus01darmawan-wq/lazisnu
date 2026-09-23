@@ -143,7 +143,7 @@ export default function RekapMwcPage() {
         </div>
       </div>
       <p className="text-xs text-slate-500 flex items-center gap-1">
-        <Download size={12} /> Unduh BA per ranting tersedia di halaman Setoran / aplikasi mobile.
+        <Download size={12} /> Berkas BA per ranting dapat diambil di halaman Berita Acara.
       </p>
     </div>
   );

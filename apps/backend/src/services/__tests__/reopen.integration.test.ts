@@ -39,7 +39,7 @@ const T0 = new Date(2026, 9, 12, 10, 0, 0);
 const LATE = new Date(T0.getTime() + REOPEN_WINDOW_HOURS * 3_600_000 + 3_600_000);
 
 const T7_EMAILS = [
-  'ppk-t7@test.com', 'keur-t7@test.com', 'adminr-t7@test.com',
+  'ppk-t7@test.com', 'keur-t7@test.com', 'keur2-t7@test.com', 'adminr-t7@test.com',
   'keumwc-t7@test.com', 'adminkec-t7@test.com', 'adminkecb-t7@test.com',
   'adminr3-t7@test.com',
 ];
@@ -128,6 +128,8 @@ describe('C1-T7 reopen menular + arsip + jendela (DB, R2 mock)', () => {
 
   let ppk1: { userId: string; role: string; branchId: string; districtId: string; officerId: string };
   let keuR1: { userId: string; role: string; branchId: string; districtId: string };
+  /** Bendahara Ranting bR2 — penandatangan BA ranting (bukan Admin Ranting). */
+  let keuR2like: { userId: string; role: string; branchId: string; districtId: string };
   let adminR1: { userId: string; role: string; branchId: string; districtId: string };
   let adminR3: { userId: string; role: string; branchId: string; districtId: string };
   let keuMwc: { userId: string; role: string; branchId: null; districtId: string };
@@ -166,6 +168,7 @@ describe('C1-T7 reopen menular + arsip + jendela (DB, R2 mock)', () => {
     }).returning();
     off1 = off.id;
     const uKeu = await mkUser('keur-t7@test.com', '084000000702', 'STAF_KEUANGAN', bR1, null);
+    const uKeu2 = await mkUser('keur2-t7@test.com', '084000000708', 'STAF_KEUANGAN', bR2, null);
     const uAdm = await mkUser('adminr-t7@test.com', '084000000703', 'ADMIN_RANTING', bR1, null);
     const uAdm3 = await mkUser('adminr3-t7@test.com', '084000000707', 'ADMIN_RANTING', bR3, null);
     const uKeuMwc = await mkUser('keumwc-t7@test.com', '084000000704', 'STAF_KEUANGAN', null, dt7);
@@ -174,6 +177,7 @@ describe('C1-T7 reopen menular + arsip + jendela (DB, R2 mock)', () => {
 
     ppk1 = { userId: uPpk1, role: 'PETUGAS', branchId: bR1, districtId: dt7, officerId: off1 };
     keuR1 = { userId: uKeu, role: 'STAF_KEUANGAN', branchId: bR1, districtId: dt7 };
+    keuR2like = { userId: uKeu2, role: 'STAF_KEUANGAN', branchId: bR2, districtId: dt7 };
     adminR1 = { userId: uAdm, role: 'ADMIN_RANTING', branchId: bR1, districtId: dt7 };
     adminR3 = { userId: uAdm3, role: 'ADMIN_RANTING', branchId: bR3, districtId: dt7 };
     keuMwc = { userId: uKeuMwc, role: 'STAF_KEUANGAN', branchId: null, districtId: dt7 };
@@ -196,7 +200,7 @@ describe('C1-T7 reopen menular + arsip + jendela (DB, R2 mock)', () => {
     await countersignPpkSubmission(keuR1, { submissionId: ppkSubId, signaturePng: TINY_PNG_B64, consent: true }, CTX, T0);
     const sBr = await ensureBranchSubmission(bR1, 2026, 9);
     branchSubId = sBr.id;
-    await signBranchSubmission(adminR1, { submissionId: branchSubId, signaturePng: TINY_PNG_B64, consent: true, shareMwc: 13500 }, CTX, T0);
+    await signBranchSubmission(keuR1, { submissionId: branchSubId, signaturePng: TINY_PNG_B64, consent: true, shareMwc: 13500 }, CTX, T0);
     await countersignBranchSubmission(keuMwc, { submissionId: branchSubId, signaturePng: TINY_PNG_B64, consent: true }, CTX, T0);
 
     // Unduh PDF pra-reopen agar arsip berisi key+hash nyata (F1b).
@@ -328,7 +332,7 @@ describe('C1-T7 reopen menular + arsip + jendela (DB, R2 mock)', () => {
 
     const reBr = await ensureBranchSubmission(bR1, 2026, 9);
     expect(Number(reBr.totalAmount)).toBe(60000);
-    await signBranchSubmission(adminR1, { submissionId: branchSubId, signaturePng: TINY_PNG_B64, consent: true, shareMwc: 13500, expectedVersion: 2 }, CTX, now2);
+    await signBranchSubmission(keuR1, { submissionId: branchSubId, signaturePng: TINY_PNG_B64, consent: true, shareMwc: 13500, expectedVersion: 2 }, CTX, now2);
     const finBr = await countersignBranchSubmission(keuMwc, { submissionId: branchSubId, signaturePng: TINY_PNG_B64, consent: true, expectedVersion: 2 }, CTX, now2);
     expect(finBr.status).toBe('FINAL');
     expect(finBr.version).toBe(2);
@@ -379,8 +383,9 @@ describe('C1-T7 reopen menular + arsip + jendela (DB, R2 mock)', () => {
     // R2: kunci NOL via upacara (total 0 + alasan) → FINAL_NOL.
     const sBr2 = await ensureBranchSubmission(bR2, 2026, 9);
     const adminR2like = { ...adminR1, branchId: bR2 };
+    void adminR2like;
     const keuMwcLike = keuMwc;
-    await signBranchSubmission(adminR2like, { submissionId: sBr2.id, signaturePng: TINY_PNG_B64, consent: true, shareMwc: 0, varianceReason: 'KOREKSI_ADMIN', asNol: true }, CTX, T0);
+    await signBranchSubmission(keuR2like, { submissionId: sBr2.id, signaturePng: TINY_PNG_B64, consent: true, shareMwc: 0, varianceReason: 'KOREKSI_ADMIN', asNol: true }, CTX, T0);
     const finNol = await countersignBranchSubmission(keuMwcLike, { submissionId: sBr2.id, signaturePng: TINY_PNG_B64, consent: true }, CTX, T0);
     expect(finNol.status).toBe('FINAL_NOL');
 

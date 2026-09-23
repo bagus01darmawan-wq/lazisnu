@@ -452,7 +452,10 @@ export async function ensurePpkBaPdf(submissionId: string, opts: { force?: boole
   const { total: aggregateTotal } = await getAggregateTotal(db, sub.officerId, sub.periodYear, sub.periodMonth);
   const ba = buildPpkBaText({
     sub,
-    officerName: sub.officer?.fullName ?? sub.officerId,
+    // Nama PIHAK PERTAMA = data akun yang benar-benar menandatangani
+    // (koreksi Pion 23 Sep 2026), bukan diketik. Fallback berlapis supaya
+    // baris lama tanpa ppkSignerId tetap tercetak.
+    officerName: (sub.ppkSignerId && names.get(sub.ppkSignerId)) || sub.officer?.fullName || sub.officerId,
     branchName: sub.branch?.name ?? '',
     aggregateTotal,
     baNumber,
@@ -515,7 +518,7 @@ export async function ensureBranchBaPdf(submissionId: string, opts: { force?: bo
     ba,
     qrPayload,
     signatures: [
-      { label: 'Admin Ranting', image: rantingImg, signerId: sub.rantingSignerId, name: (sub.rantingSignerId && names.get(sub.rantingSignerId)) || null, at: sub.rantingSignedAt },
+      { label: 'Bendahara Ranting', image: rantingImg, signerId: sub.rantingSignerId, name: (sub.rantingSignerId && names.get(sub.rantingSignerId)) || null, at: sub.rantingSignedAt },
       { label: 'Bendahara MWC', image: mwcImg, signerId: sub.mwcBendaharaSignerId, name: (sub.mwcBendaharaSignerId && names.get(sub.mwcBendaharaSignerId)) || null, at: sub.mwcBendaharaSignedAt },
     ],
   });

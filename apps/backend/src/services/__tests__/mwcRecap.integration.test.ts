@@ -30,6 +30,7 @@ const T0 = new Date(2026, 8, 28, 10, 0, 0);
 
 const T8R_EMAILS = [
   'ppk-t8r@test.com', 'ppkp-t8r@test.com', 'keur-t8r@test.com', 'keup-t8r@test.com',
+  'keur2-t8r@test.com',
   'adminr-t8r@test.com', 'adminr2-t8r@test.com', 'adminp-t8r@test.com', 'keumwc-t8r@test.com', 'adminkec-t8r@test.com',
 ];
 const T8R_BRANCH_CODES = ['BT8R-R1', 'BT8R-R2', 'BT8R-R3', 'BT8R-PROG'];
@@ -175,14 +176,18 @@ describe('C1-T8 rekap MWC 2 kartu (DB, R2 mock)', () => {
     await countersignPpkSubmission(keuActor1, { submissionId: sPpk1.id, signaturePng: TINY_PNG_B64, consent: true }, CTX, T0);
     const sBr1 = await ensureBranchSubmission(r1.id, 2026, 9);
     // 75000 → bis 8000 → sisa 67000 → ekspektasi 20100 → setor pas.
-    await signBranchSubmission(adminR1, { submissionId: sBr1.id, signaturePng: TINY_PNG_B64, consent: true, shareMwc: 20100 }, CTX, T0);
+    await signBranchSubmission(keuActor1, { submissionId: sBr1.id, signaturePng: TINY_PNG_B64, consent: true, shareMwc: 20100 }, CTX, T0);
     await countersignBranchSubmission(keuMwcActor, { submissionId: sBr1.id, signaturePng: TINY_PNG_B64, consent: true }, CTX, T0);
 
     // R2 FINAL_NOL (gaya massal: 0 + alasan).
+    // Penandatangan BA ranting = Bendahara Ranting (STAF_KEUANGAN bercakupan
+    // ranting), bukan Admin Ranting (koreksi Pion 23 Sep 2026).
     const uAdm2 = await mkUser('adminr2-t8r@test.com', '084000000816', 'ADMIN_RANTING', r2.id, null);
-    const adminR2 = { userId: uAdm2, role: 'ADMIN_RANTING', branchId: r2.id, districtId: dt8 };
+    void uAdm2;
+    const uKeu2 = await mkUser('keur2-t8r@test.com', '084000000820', 'STAF_KEUANGAN', r2.id, null);
+    const keuActor2 = { userId: uKeu2, role: 'STAF_KEUANGAN', branchId: r2.id, districtId: dt8 };
     const sBr2 = await ensureBranchSubmission(r2.id, 2026, 9);
-    await signBranchSubmission(adminR2, { submissionId: sBr2.id, signaturePng: TINY_PNG_B64, consent: true, shareMwc: 0, varianceReason: 'KOREKSI_ADMIN', asNol: true }, CTX, T0);
+    await signBranchSubmission(keuActor2, { submissionId: sBr2.id, signaturePng: TINY_PNG_B64, consent: true, shareMwc: 0, varianceReason: 'KOREKSI_ADMIN', asNol: true }, CTX, T0);
     await countersignBranchSubmission(keuMwcActor, { submissionId: sBr2.id, signaturePng: TINY_PNG_B64, consent: true }, CTX, T0);
 
     // R3: DRAFT saja (belum lapor).
@@ -193,11 +198,12 @@ describe('C1-T8 rekap MWC 2 kartu (DB, R2 mock)', () => {
     const pp = await mkPpk('ppkp-t8r@test.com', '084000000817', 'EMP-T8R-P', pg.id);
     const uKeuP = await mkUser('keup-t8r@test.com', '084000000818', 'STAF_KEUANGAN', pg.id, null);
     const uAdmP = await mkUser('adminp-t8r@test.com', '084000000819', 'ADMIN_RANTING', pg.id, null);
-    const adminP = { userId: uAdmP, role: 'ADMIN_RANTING', branchId: pg.id, districtId: dt8 };
+    void uAdmP;
+    const keuPActor = { userId: uKeuP, role: 'STAF_KEUANGAN', branchId: pg.id, districtId: dt8 };
     const cp = await mkCan(pg.id, 'TEST-QR-T8R-CP');
     await lockPpk(pp.officerId, pg.id, cp, 30000, pp.userId, uKeuP);
     const sBrP = await ensureBranchSubmission(pg.id, 2026, 9);
-    await signBranchSubmission(adminP, { submissionId: sBrP.id, signaturePng: TINY_PNG_B64, consent: true, shareMwc: 0 }, CTX, T0);
+    await signBranchSubmission(keuPActor, { submissionId: sBrP.id, signaturePng: TINY_PNG_B64, consent: true, shareMwc: 0 }, CTX, T0);
     await countersignBranchSubmission(keuMwcActor, { submissionId: sBrP.id, signaturePng: TINY_PNG_B64, consent: true }, CTX, T0);
   });
 

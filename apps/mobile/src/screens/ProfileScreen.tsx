@@ -1,18 +1,33 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View} from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useAuthStore, useTasksStore, useUpdateStore} from '../stores';
 import {getBiometryType, isBiometricAvailable} from '../services/biometric';
+import {c1Service, type BranchSubmissionRowDto} from '../services/api';
+import {isManager, normalizeRole} from '../roles/roleMap';
 import {APP_VERSION} from '../config/appConfig';
 import {AppButton, AppCard, StatusBadge} from '../components/ui';
 import {Colors, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
+import {formatCurrency} from '../utils/format';
 import {getErrorMessage} from '../utils/error';
 import {getInitials} from '../utils';
 
 const roleLabels: Record<string, string> = {
   PETUGAS: 'Petugas Penjemputan',
+  STAF_PENGUMPULAN: 'Staf Pengumpulan',
+  STAF_KEUANGAN: 'Bendahara (Keuangan)',
   ADMIN_RANTING: 'Admin Ranting',
   ADMIN_KECAMATAN: 'Admin Kecamatan',
 };
@@ -30,6 +45,17 @@ const ProfileScreen: React.FC = () => {
   const [biometryType, setBiometryType] = useState<string | null>(null);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [advancedVisible, setAdvancedVisible] = useState(false);
+
+  // Berita Acara (halaman Profil). Hanya manager: daftarnya bersumber dari
+  // `GET /admin/branch-submissions`, yang bergerbang ADMIN_RANTING /
+  // ADMIN_KECAMATAN. Bendahara (STAF_KEUANGAN) belum punya endpoint daftar
+  // sendiri — inbox keuangannya adalah antrean pekerjaan, bukan arsip, jadi
+  // bagian ini tidak ditampilkan untuknya.
+  const canManageBa = isManager(normalizeRole(user?.role));
+  const [baRows, setBaRows] = useState<BranchSubmissionRowDto[]>([]);
+  const [baLoading, setBaLoading] = useState(false);
+  const [baError, setBaError] = useState<string | null>(null);
+  const [baBusyId, setBaBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -117,6 +143,80 @@ const ProfileScreen: React.FC = () => {
     );
   }, [activeCount, completePeriod]);
 
+  /** BA sah = sudah kedua tanda tangan; di luar itu server menolak terbitkan. */
+  const baIsFinal = (status: string): boolean => status === 'FINAL' || status === 'FINAL_NOL';
+
+  const loadBa = useCallback(async () => {
+    if (!canManageBa) {
+      return;
+    }
+    setBaLoading(true);
+    setBaError(null);
+    try {
+      /* Periode SENGAJA tidak dikirim: server memakai periode berjalan, dan
+         itulah sumber kebenaran yang sama dipakai penjaga-fresh
+         (`periodComplete`). Mengirim year/month dari jam HP akan memisahkan
+         keduanya di batas bulan — HP di WIB, server kemungkinan UTC — sehingga
+         daftar bisa menunjuk periode yang berbeda dari yang dijaga server.
+         Konsekuensi yang diterima: saat rollover bulan daftar ini menampilkan
+         periode baru (bisa kosong). Itu bukan data hilang — arsip tetap ada di
+         periode masing-masing, dan server yang menentukan periode mana. */
+      const res = await c1Service.getBranchSubmissions();
+      if (!res.success || !res.data) {
+        throw new Error(res.error?.message || 'Gagal memuat daftar berita acara');
+      }
+      setBaRows(res.data);
+    } catch (error) {
+      setBaError(getErrorMessage(error, 'Gagal memuat daftar berita acara'));
+    } finally {
+      setBaLoading(false);
+    }
+  }, [canManageBa]);
+
+  useEffect(() => {
+    loadBa();
+  }, [loadBa]);
+
+  const handleGenerateBa = useCallback(
+    async (row: BranchSubmissionRowDto) => {
+      setBaBusyId(row.id);
+      try {
+        const res = await c1Service.generateBranchBaPdf(row.id);
+        if (!res.success) {
+          throw new Error(res.error?.message || 'Gagal menerbitkan PDF');
+        }
+        // Muat ulang daftar: `pdf_url` baru terisi setelah server menyimpan
+        // berkas, dan itulah penanda yang memunculkan tombol Unduh.
+        await loadBa();
+        Alert.alert('PDF Siap', `Berita acara ${row.period} sudah diterbitkan.`);
+      } catch (error) {
+        Alert.alert('Gagal Menerbitkan', getErrorMessage(error, 'Tidak dapat menerbitkan PDF'));
+      } finally {
+        setBaBusyId(null);
+      }
+    },
+    [loadBa],
+  );
+
+  const handleDownloadBa = useCallback(async (row: BranchSubmissionRowDto) => {
+    setBaBusyId(row.id);
+    try {
+      // Tautan diambil tepat sebelum dibuka — umurnya hanya 600 detik.
+      const res = await c1Service.getBranchBaPdf(row.id);
+      if (!res.success || !res.data) {
+        throw new Error(res.error?.message || 'Gagal menyiapkan unduhan');
+      }
+      // Sengaja TANPA `Linking.canOpenURL`: di Android 11+ ia mengembalikan
+      // false untuk https bila `<queries>` tak dideklarasikan di manifes,
+      // sehingga unduhan yang sebenarnya bisa dilaporkan "tidak ada aplikasi".
+      await Linking.openURL(res.data.download_url);
+    } catch (error) {
+      Alert.alert('Gagal Mengunduh', getErrorMessage(error, 'Tidak dapat mengunduh PDF'));
+    } finally {
+      setBaBusyId(null);
+    }
+  }, []);
+
   return (
     <ScrollView
       style={styles.container}
@@ -151,6 +251,67 @@ const ProfileScreen: React.FC = () => {
         />
         <InfoRow icon={'badge-account-outline'} label={'Peran akun'} value={role} last />
       </AppCard>
+
+      {canManageBa && (
+        <>
+          <Text style={styles.sectionTitle}>Berita Acara</Text>
+          <AppCard variant={'elevated'} style={styles.infoCard}>
+            {baLoading && baRows.length === 0 ? (
+              <View style={styles.baStateRow}>
+                <ActivityIndicator />
+              </View>
+            ) : null}
+            {baError ? <Text style={styles.baError}>{baError}</Text> : null}
+            {!baLoading && !baError && baRows.length === 0 ? (
+              <Text style={styles.baStateRow}>Belum ada setoran ranting pada periode berjalan.</Text>
+            ) : null}
+            {baRows.map((row, index) => (
+              <View
+                key={row.id}
+                style={[styles.baRow, index === baRows.length - 1 && styles.infoRowLast]}>
+                <Text style={styles.baBranch} numberOfLines={1}>
+                  {row.branch_name || row.period}
+                </Text>
+                <View style={styles.baHead}>
+                  <Text style={styles.baMeta}>
+                    {row.period} • {formatCurrency(row.total_amount)}
+                  </Text>
+                  <StatusBadge
+                    status={baIsFinal(row.status) ? 'success' : 'pending'}
+                    label={baIsFinal(row.status) ? 'Sudah diterbitkan' : 'Belum diterbitkan'}
+                  />
+                </View>
+                {row.ba_number ? <Text style={styles.baMeta}>Nomor {row.ba_number}</Text> : null}
+                {!baIsFinal(row.status) ? (
+                  <Text style={styles.baWarn}>
+                    Belum sah — masih menunggu kedua tanda tangan, jadi belum bisa diterbitkan.
+                  </Text>
+                ) : (
+                  <View style={styles.baActions}>
+                    <AppButton
+                      label={baBusyId === row.id ? 'Memproses…' : 'Generate PDF'}
+                      onPress={() => handleGenerateBa(row)}
+                      disabled={baBusyId !== null}
+                      loading={baBusyId === row.id}
+                    />
+                    {/* Muncul hanya setelah server benar-benar menyimpan berkas
+                        (`pdf_url` terisi) — itulah "proses selesai" yang diminta. */}
+                    {row.pdf_url ? (
+                      <AppButton
+                        label={'Unduh PDF'}
+                        icon={'download'}
+                        variant={'outline'}
+                        onPress={() => handleDownloadBa(row)}
+                        disabled={baBusyId !== null}
+                      />
+                    ) : null}
+                  </View>
+                )}
+              </View>
+            ))}
+          </AppCard>
+        </>
+      )}
 
       {biometricAvailable && (
         <>
@@ -340,6 +501,29 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border.warm,
   },
   infoRowLast: {borderBottomWidth: 0},
+  baStateRow: {padding: Spacing.md},
+  baError: {...Typography.body, color: Colors.status.error, padding: Spacing.md},
+  baRow: {
+    padding: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border.warm,
+  },
+  baBranch: {...Typography.body, color: Colors.text.primary, fontWeight: '700'},
+  baHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    marginTop: 2,
+  },
+  baMeta: {...Typography.caption, color: Colors.text.secondary, flex: 1},
+  baWarn: {...Typography.caption, color: Colors.status.warning, marginTop: Spacing.xs},
+  baActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
   infoIcon: {
     width: 42,
     height: 42,

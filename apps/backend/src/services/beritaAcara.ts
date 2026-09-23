@@ -125,6 +125,14 @@ export function periodLong(year: number, month: number): string {
 
 export const DRAFT_WARNING = 'DRAFT — belum sah';
 
+/**
+ * BA PPK → ranting. Para pihak (diluruskan Pion, 23 Sep 2026):
+ *   PIHAK PERTAMA = PPK (petugas amil / relawan penghimpun koin)
+ *   PIHAK KEDUA   = Bendahara Ranting
+ *
+ * Nama tiap pihak diambil dari data AKUN penandatangan (bukan diketik),
+ * lihat `signerDisplayNames` di baPdfService.
+ */
 export function buildPpkBaText(params: {
   sub: {
     periodYear: number;
@@ -194,6 +202,15 @@ export function buildPpkBaText(params: {
   };
 }
 
+/**
+ * BA ranting → MWC. Para pihak (diluruskan Pion, 23 Sep 2026):
+ *   PIHAK PERTAMA = Bendahara Ranting (penyerah)
+ *   PIHAK KEDUA   = Bendahara MWC (penerima)
+ *
+ * Sebelumnya blok PIHAK PERTAMA memakai kata-kata milik BA PPK
+ * ("Nama Petugas Amil / Relawan", "petugas amil atau relawan penghimpun koin")
+ * — itu deskripsi PPK, bukan bendahara. Sudah diperbaiki; jangan dikembalikan.
+ */
 export function buildBranchBaText(params: {
   sub: {
     periodYear: number;
@@ -248,10 +265,10 @@ export function buildBranchBaText(params: {
     ppk_penyusun: ppkList.map((p) => ({ officer_name: p.officerName, total: formatRupiah(p.total) })),
     statements: [
       `Pada hari ini ${ev.day} tanggal ${ev.dd} bulan ${ev.month} tahun ${ev.yyyy} (${ev.dd}/${ev.mm}/${ev.yyyy}) diserah terimakan hasil penghimpunan infaq/sedekah Koin NU oleh :`,
-      `Nama Petugas Amil / Relawan : ${params.rantingName ?? `Pengurus Ranting ${branchName}`}`,
+      `Nama : ${params.rantingName ?? `Bendahara Ranting ${branchName}`}`,
+      `Jabatan NU Care Lazisnu : Bendahara Ranting`,
       `Alamat : ${branchName}`,
-      `No. SK / Surat Tugas : -`,
-      `Bertindak sebagai petugas amil atau relawan penghimpun koin NU Ranting ${branchName} yang selanjutnya disebut PIHAK PERTAMA`,
+      `Bertindak sebagai pengurus / manajemen NU Care Lazisnu Ranting ${branchName} yang selanjutnya disebut PIHAK PERTAMA`,
       `Nama : ${params.mwcName ?? 'Bendahara MWC'}`,
       `Jabatan NU Care Lazisnu : Bendahara MWC`,
       `Alamat : ${branchName}`,

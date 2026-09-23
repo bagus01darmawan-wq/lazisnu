@@ -130,6 +130,9 @@ jest.mock('../../src/services/api', () => ({
   // C1-T9: Dashboard memuat info periode (chip toleransi + countdown).
   c1Service: {
     getPeriodInfo: jest.fn().mockResolvedValue({success: true, data: null}),
+    // Halaman Profil hanya memanggil ini untuk peran manager; mock ini menjaga
+    // tes tetap utuh bila perannya kelak diubah dari PETUGAS.
+    getBranchSubmissions: jest.fn().mockResolvedValue({success: true, data: []}),
   },
 }));
 

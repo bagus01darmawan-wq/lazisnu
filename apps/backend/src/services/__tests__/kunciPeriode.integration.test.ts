@@ -201,7 +201,7 @@ describe('C1-T6 kunci berlapis MWC (DB, R2 mock)', () => {
     const sBr2 = await ensureBranchSubmission(bR2, 2026, 9);
     r2BranchSubId = sBr2.id;
     // total 50000 → bisyaroh 5000 → ekspektasi 13500 → setor pas agar tanpa alasan.
-    await signBranchSubmission(adminR2Actor, {
+    await signBranchSubmission(keuR2Actor, {
       submissionId: r2BranchSubId, signaturePng: TINY_PNG_B64, consent: true, shareMwc: 13500,
     }, CTX, NOW_REKAP);
     const csBr2 = await countersignBranchSubmission(keuMwcActor, { submissionId: r2BranchSubId, signaturePng: TINY_PNG_B64, consent: true }, CTX, NOW_REKAP);

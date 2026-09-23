@@ -9,6 +9,7 @@ import { eq } from 'drizzle-orm';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import QRCode from 'qrcode';
 import { uploadToR2, getSignedDownloadUrl } from './r2';
+import { qrPdfKey, qrBatchPdfKey } from './qrPdfKeys';
 import { Errors } from '../utils/errorCatalog';
 
 const A4_WIDTH = 595.28;
@@ -107,9 +108,10 @@ export async function generateSingleQRPDF(canId: string): Promise<{
   try {
     const branchCode = can.branch?.code || 'XX';
     const r2Result = await uploadToR2({
-      key: `qr-pdfs/${branchCode}/qr-${qrCode}-${Date.now()}.pdf`,
+      key: qrPdfKey(branchCode, qrCode),
       body: pdfBuffer,
       contentType: 'application/pdf',
+      metadata: { qrCode, branchCode, generatedAt: new Date().toISOString() },
     });
     if (r2Result.success && r2Result.key) {
       r2SignedUrl = await getSignedDownloadUrl(r2Result.key) || undefined;
@@ -192,8 +194,10 @@ export async function generateBatchQRPDF(
   const pdfBytes = await pdfDoc.save();
   const pdfBuffer = Buffer.from(pdfBytes);
 
-  const timestamp = Date.now();
-  const r2Key = `qr-pdfs/batch/${branchCode}/batch-${timestamp}.pdf`;
+  const r2Key = qrBatchPdfKey(
+    branchCode,
+    cans.map((c) => c.qrCode).filter((q): q is string => Boolean(q)),
+  );
 
   await uploadToR2({
     key: r2Key,
