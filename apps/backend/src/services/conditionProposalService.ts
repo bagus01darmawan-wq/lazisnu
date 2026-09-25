@@ -23,7 +23,6 @@ import {
   countTrailingEmptyCollections,
   isTrackedForCondition,
   isTransitionAllowed,
-  proposalForSkipReason,
   shouldProposeInactive,
   shouldRestoreActive,
 } from './conditionRules';
@@ -100,26 +99,6 @@ export async function createConditionProposal(input: CreateProposalInput) {
   }).returning();
 
   return created;
-}
-
-/**
- * Usulan dari kode alasan tidak terjemput (CAN_LOST → HILANG, CAN_DAMAGED → RUSAK).
- * Dipanggil setelah assignment berhasil ditutup sebagai UNCOLLECTED.
- */
-export async function createProposalFromSkipReason(
-  canId: string,
-  reasonCode: string,
-  reasonNote?: string | null,
-) {
-  const toCondition = proposalForSkipReason(reasonCode);
-  if (!toCondition) return null;
-  return createConditionProposal({
-    canId,
-    toCondition,
-    triggerSource: 'SKIP_REASON',
-    reasonCode,
-    reasonNote,
-  });
 }
 
 /**
@@ -238,8 +217,8 @@ export async function rejectConditionProposal(
  * Hanya baris `sync_status = COMPLETED` versi submit terbaru (`getLatestCollectionCondition`),
  * sehingga resubmit tidak dihitung dua kali dan kunjungan verifikasi tidak ikut terhitung.
  */
-export async function getValidCollectionNominals(canId: string, limit = 24) {
-  const rows = await db
+export async function getValidCollectionNominals(canId: string, limit = 24, client: any = db) {
+  const rows = await client
     .select({ nominal: schema.collections.nominal, collectedAt: schema.collections.collectedAt })
     .from(schema.collections)
     .where(and(
@@ -263,20 +242,20 @@ export type EmptyStreakAction = 'NONE' | 'AUTO_NON_AKTIF' | 'RESTORED_ACTIVE';
  *
  * Hitungan tidak disimpan; selalu dihitung ulang dari riwayat agar tidak bisa melenceng.
  */
-export async function evaluateEmptyStreakForCan(canId: string) {
-  const can = await db.query.cans.findFirst({
+export async function evaluateEmptyStreakForCan(canId: string, client: any = db) {
+  const can = await client.query.cans.findFirst({
     where: eq(schema.cans.id, canId),
     columns: { id: true, condition: true, isActive: true },
   });
   if (!can) throw new AppError('NOT_FOUND', 'Kaleng tidak ditemukan', 404);
 
   const condition = can.condition as CanConditionValue;
-  const nominals = await getValidCollectionNominals(canId);
+  const nominals = await getValidCollectionNominals(canId, 24, client);
   const emptyStreak = countTrailingEmptyCollections(nominals);
   const latestNominal = nominals[0] ?? 0;
 
   if (shouldRestoreActive(condition, latestNominal)) {
-    await db.update(schema.cans)
+    await client.update(schema.cans)
       .set({ condition: 'AKTIF', isActive: true, updatedAt: new Date() })
       .where(eq(schema.cans.id, canId));
     return { can_id: canId, empty_streak: emptyStreak, action: 'RESTORED_ACTIVE' as EmptyStreakAction };
@@ -288,7 +267,7 @@ export async function evaluateEmptyStreakForCan(canId: string) {
     // jejaknya tetap ditulis sebagai proposal APPROVED supaya audit "kapan dan
     // kenapa kaleng ini jadi nonaktif" tidak hilang.
     const now = new Date();
-    await db.transaction(async (tx) => {
+    const applyAutoNonActive = async (tx: any) => {
       await tx.update(schema.cans)
         .set({ condition: 'NON_AKTIF', isActive: true, updatedAt: now })
         .where(eq(schema.cans.id, canId));
@@ -318,7 +297,12 @@ export async function evaluateEmptyStreakForCan(canId: string) {
           eq(schema.canConditionProposals.canId, canId),
           eq(schema.canConditionProposals.status, 'PENDING'),
         ));
-    });
+    };
+    if (typeof client.transaction === 'function') {
+      await client.transaction(applyAutoNonActive);
+    } else {
+      await applyAutoNonActive(client);
+    }
     return {
       can_id: canId,
       empty_streak: emptyStreak,

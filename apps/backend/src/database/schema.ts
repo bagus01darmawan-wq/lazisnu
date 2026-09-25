@@ -235,6 +235,12 @@ export const canVisits = pgTable('can_visits', {
   /** 'VERIFIKASI' | 'PENGGANTIAN' */
   purpose: varchar('purpose', { length: 20 }).notNull(),
   visitedAt: timestamp('visited_at').notNull(),
+  /** Tindakan NON_AKTIF; untuk subset lama purpose tetap disimpan. */
+  outcome: varchar('outcome', { length: 20 }).notNull().default('TIDAK_DIKUNJUNGI'),
+  /** Kondisi fisik pada saat visit; nullable untuk outcome tanpa kondisi. */
+  condition: varchar('condition', { length: 20 }),
+  receivedAt: timestamp('received_at'),
+  receivedBy: uuid('received_by').references(() => users.id),
   notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => ({

@@ -30,18 +30,16 @@ describe('SkipReasonSheet — pemilih alasan "tidak terjemput"', () => {
     return tree!;
   };
 
-  it('menampilkan 6 alasan baku saat dibuka', () => {
+  it('menampilkan 4 alasan baku saat dibuka', () => {
     const tree = renderSheet();
     const allText = tree.root
       .findAllByType(require('react-native').Text)
       .map(n => String(n.props.children))
       .join(' ');
 
-    expect(SKIP_REASON_OPTIONS).toHaveLength(6);
+    expect(SKIP_REASON_OPTIONS).toHaveLength(4);
     expect(allText).toContain('Pemilik tidak di tempat');
     expect(allText).toContain('Pemilik menolak dijemput');
-    expect(allText).toContain('Kaleng rusak');
-    expect(allText).toContain('Kaleng hilang');
     expect(allText).toContain('Akses ke lokasi sulit');
     expect(allText).toContain('Lainnya');
   });
@@ -57,8 +55,8 @@ describe('SkipReasonSheet — pemilih alasan "tidak terjemput"', () => {
     });
     expect(baseProps.onConfirm).not.toHaveBeenCalled();
 
-    // Setelah pilih "Kaleng hilang" → Simpan terbuka.
-    const opsi = pressableWithLabel(tree, 'Kaleng hilang');
+    // Setelah pilih "Akses ke lokasi sulit" → Simpan terbuka.
+    const opsi = pressableWithLabel(tree, 'Akses ke lokasi sulit');
     act(() => {
       opsi?.props?.onPress?.();
     });
@@ -70,14 +68,14 @@ describe('SkipReasonSheet — pemilih alasan "tidak terjemput"', () => {
     });
 
     expect(baseProps.onConfirm).toHaveBeenCalledTimes(1);
-    expect(baseProps.onConfirm).toHaveBeenCalledWith('CAN_LOST', '');
+    expect(baseProps.onConfirm).toHaveBeenCalledWith('ACCESS_DIFFICULT', '');
   });
 
   it('mengirim catatan teks opsional bila diisi', () => {
     const tree = renderSheet();
 
     act(() => {
-      pressableWithLabel(tree, 'Kaleng rusak')?.props?.onPress?.();
+      pressableWithLabel(tree, 'Lainnya')?.props?.onPress?.();
     });
 
     const input = tree.root.findByType(require('react-native').TextInput);
@@ -89,14 +87,14 @@ describe('SkipReasonSheet — pemilih alasan "tidak terjemput"', () => {
       pressableWithLabel(tree, 'Simpan')?.props?.onPress?.();
     });
 
-    expect(baseProps.onConfirm).toHaveBeenCalledWith('CAN_DAMAGED', 'Unit penyok parah');
+    expect(baseProps.onConfirm).toHaveBeenCalledWith('OTHER', 'Unit penyok parah');
   });
 
   it('Batal menutup tanpa mengirim', () => {
     const tree = renderSheet();
 
     act(() => {
-      pressableWithLabel(tree, 'Kaleng rusak')?.props?.onPress?.();
+      pressableWithLabel(tree, 'Lainnya')?.props?.onPress?.();
     });
     act(() => {
       pressableWithLabel(tree, 'Batal')?.props?.onPress?.();
@@ -110,7 +108,7 @@ describe('SkipReasonSheet — pemilih alasan "tidak terjemput"', () => {
     const tree = renderSheet();
 
     act(() => {
-      pressableWithLabel(tree, 'Kaleng hilang')?.props?.onPress?.();
+      pressableWithLabel(tree, 'Akses ke lokasi sulit')?.props?.onPress?.();
     });
     act(() => {
       pressableWithLabel(tree, 'Pemilik tidak di tempat')?.props?.onPress?.();

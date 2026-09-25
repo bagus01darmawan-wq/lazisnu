@@ -176,7 +176,7 @@ interface TasksState {
     success: boolean;
     code?: string;
     error?: string;
-    /** Diisi bila server membentuk usulan kondisi (CAN_LOST/CAN_DAMAGED). */
+    /** Diisi bila server membentuk usulan kondisi berdasarkan aturan legacy. */
     proposalId?: string;
     reasonCode?: string;
   }>;

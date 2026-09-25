@@ -1,4 +1,5 @@
 import NetInfo from '@react-native-community/netinfo';
+import {CanCondition} from '@lazisnu/shared-types';
 import {syncService} from '../../src/services/offline/sync';
 import {offlineQueue, QueuedCollection} from '../../src/services/offline/queue';
 import {collectionService} from '../../src/services/api';
@@ -31,6 +32,7 @@ describe('B2 — visit-task assignment resolution (sync.ts)', () => {
     assignment_id: `visit-${CAN_ID}`,
     can_id: CAN_ID,
     nominal: 50000,
+    condition: CanCondition.AKTIF,
     collected_at: new Date().toISOString(),
     retry_attempts: 0,
   });

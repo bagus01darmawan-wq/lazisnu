@@ -153,13 +153,13 @@ describe('TaskDetailScreen — detail penjemputan dari kartu tugas', () => {
       .join(' ');
     expect(allText).toContain('Kenapa tidak terjemput?');
 
-    // Pilih alasan "Kaleng hilang", lalu Simpan.
+    // Pilih alasan "Lainnya", lalu Simpan.
     const option = tree.root
       .findAllByType(require('react-native').TouchableOpacity)
       .find(t =>
         t
           .findAllByType(require('react-native').Text)
-          .some(n => collectText(n.props.children) === 'Kaleng hilang'),
+          .some(n => collectText(n.props.children) === 'Lainnya'),
       );
     expect(option).toBeDefined();
 
@@ -178,7 +178,7 @@ describe('TaskDetailScreen — detail penjemputan dari kartu tugas', () => {
       simpan?.props?.onPress?.();
     });
 
-    expect(skipSpy).toHaveBeenCalledWith('task-1', 'CAN_LOST', '');
+    expect(skipSpy).toHaveBeenCalledWith('task-1', 'OTHER', '');
     expect(fetchSpy).toHaveBeenCalledWith('ACTIVE');
     expect(mockGoBack).toHaveBeenCalled();
   });
@@ -232,7 +232,7 @@ describe('TaskDetailScreen — detail penjemputan dari kartu tugas', () => {
       .find(t =>
         t
           .findAllByType(require('react-native').Text)
-          .some(n => collectText(n.props.children) === 'Kaleng rusak'),
+          .some(n => collectText(n.props.children) === 'Lainnya'),
       );
     await act(async () => {
       option?.props?.onPress?.();

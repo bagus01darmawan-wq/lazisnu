@@ -306,6 +306,7 @@ antrean gagal permanen); `collected_at` di luar jendela periode ditolak
   "assignment_id": "uuid",
   "can_id": "uuid",
   "amount": 75000,
+  "condition": "AKTIF",
   "payment_method": "CASH",
   "transfer_receipt_url": null,
   "collected_at": "2026-04-09T10:30:00Z",
@@ -358,6 +359,7 @@ antrean gagal permanen); `collected_at` di luar jendela periode ditolak
       "assignment_id": "uuid",
       "can_id": "uuid",
       "amount": 50000,
+      "condition": "AKTIF",
       "collected_at": "2026-04-09T10:30:00Z",
       "latitude": -6.200000,
       "longitude": 106.820000
@@ -367,6 +369,7 @@ antrean gagal permanen); `collected_at` di luar jendela periode ditolak
       "assignment_id": "uuid",
       "can_id": "uuid",
       "amount": 75000,
+      "condition": "HILANG",
       "collected_at": "2026-04-09T10:45:00Z",
       "latitude": -6.201000,
       "longitude": 106.821000
@@ -374,6 +377,15 @@ antrean gagal permanen); `collected_at` di luar jendela periode ditolak
   ]
 }
 ```
+
+**Kontrak kondisi dan nominal:** `condition` wajib pada setiap ordinary submit
+dan tetap hanya menerima `AKTIF`, `RUSAK`, atau `HILANG`. Nominal negatif
+ditolak; nominal `0` valid dan tetap disimpan. `NON_AKTIF` bukan kondisi
+ordinary: officer memprosesnya melalui kunjungan dengan outcome
+`ISI`/`KOSONG`/`TIDAK_DIKUNJUNJI`, sedangkan `DIKEMBALIKAN` hanya melalui
+jalur pengembalian dan persetujuan admin. Pada batch, `visit_outcome: "ISI"`
+adalah penanda satu-satunya untuk kaleng nonaktif dan tetap memerlukan
+`condition` fisik eksplisit.
 
 **Response (200):**
 ```json

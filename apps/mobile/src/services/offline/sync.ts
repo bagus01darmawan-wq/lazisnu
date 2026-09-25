@@ -13,6 +13,8 @@ function toBatchPayload(item: QueuedCollection): BatchCollectionRequestItem {
     collected_at: item.collected_at,
     latitude: item.latitude,
     longitude: item.longitude,
+    condition: item.condition,
+    visit_outcome: item.visit_outcome,
     device_info: item.device_info as DeviceInfo | undefined,
   };
 }

@@ -20,6 +20,7 @@ export interface TaskItemProps {
 
 export const TaskItem = memo(({item, index, onCopy, onPress, onLongPressDrag}: TaskItemProps) => {
   const active = item.status === 'ACTIVE';
+  const nonActiveLifecycle = item.condition === CanCondition.NON_AKTIF || item.condition === CanCondition.DIKEMBALIKAN;
 
   const card = (
     <Animated.View
@@ -40,7 +41,7 @@ export const TaskItem = memo(({item, index, onCopy, onPress, onLongPressDrag}: T
           </View>
           <StatusBadge
             status={
-              item.condition === CanCondition.NON_AKTIF
+              nonActiveLifecycle
                 ? 'warning'
                 : active
                   ? 'pending'
@@ -49,13 +50,15 @@ export const TaskItem = memo(({item, index, onCopy, onPress, onLongPressDrag}: T
                     : 'success'
             }
             label={
-              item.condition === CanCondition.NON_AKTIF
-                ? 'Nonaktif'
-                : active
-                  ? 'Belum'
-                  : item.status === 'UNCOLLECTED'
-                    ? 'Terlewat'
-                    : 'Selesai'
+              item.condition === CanCondition.DIKEMBALIKAN
+                ? 'Dikembalikan'
+                : nonActiveLifecycle
+                  ? 'Nonaktif'
+                  : active
+                    ? 'Belum'
+                    : item.status === 'UNCOLLECTED'
+                      ? 'Terlewat'
+                      : 'Selesai'
             }
           />
         </View>

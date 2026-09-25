@@ -10,6 +10,8 @@ import {
   shiftPeriod,
 } from './periodCalendar';
 import { scanClosedMessage } from './scanClassification';
+import { isOrdinaryBatchCondition, isTrackedForCondition, isTransitionAllowed, type CanConditionValue } from './conditionRules';
+import { insertActivityLog } from './auditLogService';
 
 /**
  * C1-T2 (§14.3): toleransi selisih jam HP vs server. `collected_at` adalah
@@ -256,15 +258,52 @@ export async function submitCollection(
     assignmentId: string;
     canId: string;
     officerId: string;
+    /** User login yang melakukan aksi; diutamakan dari officer.userId. */
+    actorUserId?: string | null;
+    /** Khusus kunjungan NON_AKTIF dengan nominal; ordinary submit tetap menolak lifecycle boundary. */
+    allowNonActiveRestore?: boolean;
+    visitOutcome?: 'ISI';
     nominal: number;
     collectedAt: Date;
     latitude?: string | null;
     longitude?: string | null;
     offlineId?: string | null;
     deviceInfo?: any;
+    /**
+     * Kondisi kaleng menurut PPK saat menjemput (halaman submit:
+     * baik/rusak/hilang). FINAL langsung: ditulis ke kaleng + audit.
+     * Sama dengan kini = no-op. Transisi tak valid ditolak DI DEPAN
+     * (sebelum uang tersimpan) — setelah lolos, uang dan kondisi
+     * tersimpan satu paket (tanpa konsep "laporan gagal").
+     */
+    condition?: CanConditionValue | null;
   },
   now: Date = new Date(),
 ) {
+  // Validasi kondisi di depan: ngawur ditolak sebelum uang tersentuh.
+  let conditionChange: { from: CanConditionValue; to: CanConditionValue } | null = null;
+  if (data.condition) {
+    if (!isOrdinaryBatchCondition(data.condition)) {
+      throw Errors.VALIDATION_ERROR('Batch biasa hanya menerima kondisi AKTIF, RUSAK, atau HILANG');
+    }
+    const can = await tx.query.cans.findFirst({
+      where: eq(schema.cans.id, data.canId),
+      columns: { id: true, condition: true },
+    });
+    if (!can) throw Errors.VALIDATION_ERROR('Kaleng tidak ditemukan');
+    const from = can.condition as CanConditionValue;
+    if (data.visitOutcome && from !== 'NON_AKTIF') {
+      throw Errors.VALIDATION_ERROR('Kunjungan ISI hanya dapat dilakukan pada kaleng NON_AKTIF');
+    }
+    if ((from === 'NON_AKTIF' || from === 'DIKEMBALIKAN') && !data.allowNonActiveRestore) {
+      throw Errors.VALIDATION_ERROR('Kaleng NON_AKTIF/DIKEMBALIKAN harus memakai tindakan kunjungan khusus');
+    }
+    if (from !== data.condition && !isTransitionAllowed(from, data.condition)) {
+      throw Errors.VALIDATION_ERROR(`Transisi kondisi ${from} → ${data.condition} tidak diizinkan`);
+    }
+    conditionChange = { from, to: data.condition };
+  }
+
   await assertNoExistingFirstSubmit(tx, data.assignmentId, data.canId);
 
   // C1-T4 (§7.5): setoran periode yang sudah FINAL terkunci penuh.
@@ -303,6 +342,41 @@ export async function submitCollection(
     totalCollected: sql`${schema.cans.totalCollected} + ${BigInt(data.nominal)}`,
     collectionCount: sql`${schema.cans.collectionCount} + 1`
   }).where(eq(schema.cans.id, data.canId));
+
+  if (conditionChange) {
+    await tx.update(schema.cans).set({
+      condition: conditionChange.to,
+      isActive: data.visitOutcome === 'ISI' || isTrackedForCondition(conditionChange.to),
+      updatedAt: new Date(),
+    }).where(eq(schema.cans.id, data.canId));
+
+    const officer = await tx.query.officers.findFirst({
+      where: eq(schema.officers.id, data.officerId),
+      columns: { userId: true },
+    });
+    const auditUserId = data.actorUserId ?? officer?.userId ?? null;
+    if (!auditUserId) {
+      throw Errors.VALIDATION_ERROR('Identitas login petugas tidak tersedia untuk audit');
+    }
+    // Audit memakai client transaksi yang sama. Jika insert audit gagal,
+    // seluruh submit rollback; tidak ada kondisi bisnis tanpa jejak audit.
+    await insertActivityLog({
+      userId: auditUserId,
+      officerId: data.officerId,
+      actionType: 'CAN_CONDITION_RECORDED',
+      entityType: 'can',
+      entityId: data.canId,
+      oldData: { from: conditionChange.from },
+      newData: {
+        to: conditionChange.to,
+        collection_nominal: data.nominal,
+        collected_at: data.collectedAt.toISOString(),
+        changed: conditionChange.from !== conditionChange.to,
+      },
+      ipAddress: 'collection-submit',
+      userAgent: null,
+    }, tx);
+  }
 
   return collection;
 }
