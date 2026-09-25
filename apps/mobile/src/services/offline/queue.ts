@@ -72,11 +72,17 @@ type LegacyQueuedCollection = Omit<QueuedCollection, 'condition'> & {
 
 function sanitizeQueue(items: LegacyQueuedCollection[]): QueuedCollection[] {
   return items.map(
-    ({payment_method: _paymentMethod, transfer_receipt_url: _transferReceiptUrl, condition, ...item}) => ({
+    ({
+      payment_method: _paymentMethod,
+      transfer_receipt_url: _transferReceiptUrl,
+      condition,
+      ...item
+    }) => ({
       ...item,
-      condition: condition === CanCondition.RUSAK || condition === CanCondition.HILANG
-        ? (condition as CanCondition.RUSAK | CanCondition.HILANG)
-        : CanCondition.AKTIF,
+      condition:
+        condition === CanCondition.RUSAK || condition === CanCondition.HILANG
+          ? (condition as CanCondition.RUSAK | CanCondition.HILANG)
+          : CanCondition.AKTIF,
     }),
   );
 }

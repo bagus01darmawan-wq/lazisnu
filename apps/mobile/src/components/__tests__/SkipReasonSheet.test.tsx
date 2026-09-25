@@ -21,13 +21,22 @@ describe('SkipReasonSheet — pemilih alasan "tidak terjemput"', () => {
     onDismiss: jest.fn(),
     onConfirm: jest.fn(),
   };
+  let mountedTree: renderer.ReactTestRenderer | undefined;
+
+  afterEach(() => {
+    if (mountedTree) {
+      act(() => mountedTree?.unmount());
+      mountedTree = undefined;
+    }
+  });
 
   const renderSheet = () => {
-    let tree: renderer.ReactTestRenderer;
+    let tree!: renderer.ReactTestRenderer;
     act(() => {
       tree = renderer.create(<SkipReasonSheet {...baseProps} />);
     });
-    return tree!;
+    mountedTree = tree!;
+    return tree;
   };
 
   it('menampilkan 4 alasan baku saat dibuka', () => {

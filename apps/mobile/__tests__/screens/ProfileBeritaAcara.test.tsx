@@ -91,13 +91,15 @@ const rowFinal = {
 };
 
 const rowDraft = {...rowFinal, status: 'DRAFT'};
+let mountedTree: renderer.ReactTestRenderer | undefined;
 
 async function renderScreen() {
-  let tree: renderer.ReactTestRenderer;
+  let tree!: renderer.ReactTestRenderer;
   await act(async () => {
     tree = renderer.create(<ProfileScreen />);
   });
-  return tree!;
+  mountedTree = tree;
+  return tree;
 }
 
 function collectText(node: unknown): string {
@@ -156,6 +158,10 @@ describe('Halaman Profil — bagian Berita Acara', () => {
   });
 
   afterEach(() => {
+    if (mountedTree) {
+      act(() => mountedTree?.unmount());
+      mountedTree = undefined;
+    }
     jest.restoreAllMocks();
   });
 

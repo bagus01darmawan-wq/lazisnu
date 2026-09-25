@@ -160,13 +160,14 @@ const ScanScreen: React.FC = () => {
         Alert.alert('Gagal Mencatat', result.error?.message || 'Gagal menyimpan tindakan kaleng.');
         return;
       }
-      Alert.alert(
-        'Tindakan Tercatat',
-        result.data?.message || 'Tindakan kaleng tersimpan.',
-        [{text: 'OK', onPress: handleReset}],
-      );
+      Alert.alert('Tindakan Tercatat', result.data?.message || 'Tindakan kaleng tersimpan.', [
+        {text: 'OK', onPress: handleReset},
+      ]);
     } catch (error) {
-      Alert.alert('Gagal Mencatat', error instanceof Error ? error.message : 'Gagal menyimpan tindakan kaleng.');
+      Alert.alert(
+        'Gagal Mencatat',
+        error instanceof Error ? error.message : 'Gagal menyimpan tindakan kaleng.',
+      );
     } finally {
       setVisiting(false);
     }

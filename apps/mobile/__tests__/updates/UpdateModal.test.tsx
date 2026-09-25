@@ -16,12 +16,15 @@ const baseRelease = {
   minimum_version_code: 0,
 };
 
+let mountedTree: renderer.ReactTestRenderer | undefined;
+
 const renderModal = async () => {
-  let tree: renderer.ReactTestRenderer;
+  let tree!: renderer.ReactTestRenderer;
   await act(async () => {
     tree = renderer.create(<UpdateModal />);
   });
-  return tree!;
+  mountedTree = tree;
+  return tree;
 };
 
 /** Ratakan children bersarang (array/string/angka) menjadi satu string. */
@@ -45,6 +48,11 @@ const allText = (tree: renderer.ReactTestRenderer): string =>
     .join(' ');
 
 describe('UpdateModal', () => {
+  afterEach(() => {
+    act(() => mountedTree?.unmount());
+    mountedTree = undefined;
+  });
+
   beforeEach(() => {
     useUpdateStore.setState({
       releaseInfo: baseRelease,

@@ -20,7 +20,8 @@ export interface TaskItemProps {
 
 export const TaskItem = memo(({item, index, onCopy, onPress, onLongPressDrag}: TaskItemProps) => {
   const active = item.status === 'ACTIVE';
-  const nonActiveLifecycle = item.condition === CanCondition.NON_AKTIF || item.condition === CanCondition.DIKEMBALIKAN;
+  const nonActiveLifecycle =
+    item.condition === CanCondition.NON_AKTIF || item.condition === CanCondition.DIKEMBALIKAN;
 
   const card = (
     <Animated.View

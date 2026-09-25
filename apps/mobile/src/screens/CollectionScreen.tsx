@@ -24,7 +24,9 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
   const {task} = route.params;
   const {submitCollection, isSubmitting, reset} = useCollectionStore();
   const [nominal, setNominal] = useState('');
-  const [condition, setCondition] = useState<CanCondition.AKTIF | CanCondition.RUSAK | CanCondition.HILANG>(
+  const [condition, setCondition] = useState<
+    CanCondition.AKTIF | CanCondition.RUSAK | CanCondition.HILANG
+  >(
     task.condition === CanCondition.RUSAK || task.condition === CanCondition.HILANG
       ? task.condition
       : CanCondition.AKTIF,

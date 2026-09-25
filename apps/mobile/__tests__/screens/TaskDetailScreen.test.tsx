@@ -69,6 +69,7 @@ describe('TaskDetailScreen — detail penjemputan dari kartu tugas', () => {
   let skipSpy: jest.SpyInstance;
   let fetchSpy: jest.SpyInstance;
   let alertSpy: jest.SpyInstance;
+  let mountedTree: renderer.ReactTestRenderer | undefined;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -82,17 +83,22 @@ describe('TaskDetailScreen — detail penjemputan dari kartu tugas', () => {
   });
 
   afterEach(() => {
+    if (mountedTree) {
+      act(() => mountedTree?.unmount());
+      mountedTree = undefined;
+    }
     skipSpy.mockRestore();
     fetchSpy.mockRestore();
     alertSpy.mockRestore();
   });
 
   const renderScreen = async () => {
-    let tree: renderer.ReactTestRenderer;
+    let tree!: renderer.ReactTestRenderer;
     await act(async () => {
       tree = renderer.create(<TaskDetailScreen />);
     });
-    return tree!;
+    mountedTree = tree!;
+    return tree;
   };
 
   it('menampilkan judul Detail Penjemputan + baris info lengkap (termasuk Periode)', async () => {

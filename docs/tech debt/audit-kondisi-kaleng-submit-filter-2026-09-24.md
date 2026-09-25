@@ -4,8 +4,8 @@
 **Pembaruan kalibrasi:** 25 September 2026
 **Repository:** `C:\Users\user\Documents\lazisnu`
 **Branch:** `feat/kondisi-submit-filter-2026-09-24`
-**HEAD:** `80a4434`
-**Sinkronisasi remote:** `HEAD...origin/staging = 0/0`
+**HEAD:** `ace38b3`
+**Sinkronisasi remote:** branch lokal `ahead 1` terhadap `origin/staging`; belum dipush.
 
 ## 1. Kesimpulan Eksekutif
 
@@ -175,16 +175,21 @@ Filter assignment `COMPLETED` dan count berbasis item yang ditampilkan sudah dik
 | `pnpm --filter @lazisnu/shared-types build` | Lulus |
 | `pnpm --filter lazisnu-backend typecheck` | Lulus |
 | `pnpm --filter lazisnu-collector-app typecheck` | Lulus |
-| Backend targeted tests | 6 suite / 83 test lulus |
-| Backend `collectionSubmission.integration.test.ts` | 1 suite / 3 test lulus |
-| Mobile targeted tests | 2 suite / 11 test lulus; masih ada warning async/`act(...)` |
+| `pnpm --filter lazisnu-backend lint` | Lulus; script lint backend menjalankan typecheck |
+| `pnpm --filter lazisnu-collector-app lint` | Lulus |
+| `pnpm build:all` | Lulus: shared, backend, dan web |
+| Backend full Jest | **Lulus**: 68 suite / 568 test; notification integration sudah hijau setelah isolasi state notifikasi test |
+| Mobile full Jest | **Lulus**: 35 suite / 262 test tanpa `--forceExit`; async teardown/Jest environment dan warning `act(...)` sudah bersih. Console warning domain lain tetap non-fatal dan tidak menggagalkan test. |
+| Mobile `format:check` | **Lulus**; enam file yang sebelumnya gagal sudah diformat |
+| Android local build | **Tidak diulang** sesuai larangan; build lokal sebelumnya gagal karena resource Material dan `react-native-mmkv` `Permission denied`. `com.google.android.material:material:1.12.0` sudah ditambahkan sebagai kandidat perbaikan, tetapi belum diverifikasi |
 | `git diff --check` | Lulus; hanya warning normalisasi CRLF |
+| Repeat migration lokal | Lulus; `REPEAT_MIGRATE_OK` dan schema tetap utuh |
 
-Targeted tests belum menjadi pengganti full CI, device E2E, race/idempotensi receipt, atau offline replay database penuh.
+Full gate lokal yang boleh dijalankan di laptop sekarang hijau untuk shared build, typecheck, lint, `build:all`, backend full Jest, mobile full Jest, dan format check. Android **belum boleh dinyatakan hijau**: verifikasi hanya dapat dilakukan melalui GitHub Actions/remote runner, tanpa build Android lokal. Device E2E, race/idempotensi receipt, dan offline replay database penuh juga belum terverifikasi.
 
 ### 7.3 Deployment dan artifact
 
-Belum ada bukti yang dapat diverifikasi untuk smoke staging, build APK, install APK, atau deployment ke staging/production. Tidak ada commit otomatis.
+`pnpm build:all` lulus, tetapi belum ada APK yang dapat diverifikasi. Android build lokal sebelumnya gagal dan **tidak diulang** karena larangan eksplisit; kandidat perbaikan dependency Android sudah masuk working tree, tetapi harus diverifikasi melalui GitHub Actions/remote runner. Belum ada smoke staging atau deployment. Commit lokal `ace38b3` sudah dibuat dan belum dipush.
 
 ### 7.4 Migration
 
@@ -212,6 +217,13 @@ Modified files yang terkait audit dan implementasi terbaru:
 - `packages/shared-types/src/index.ts`
 - `docs/API_DOCUMENTATION.md`
 - `apps/backend/src/database/migrations/0013_can_visit_outcome.sql`
+- `apps/mobile/android/app/build.gradle`
+- `apps/mobile/__tests__/screens/ProfileBeritaAcara.test.tsx`
+- `apps/mobile/__tests__/screens/TaskDetailScreen.test.tsx`
+- `apps/mobile/__tests__/screens/AuthenticatedScreens.test.tsx`
+- `apps/mobile/__tests__/screens/VisualStateAudit.test.tsx`
+- `apps/mobile/__tests__/updates/UpdateModal.test.tsx`
+- `apps/mobile/src/components/__tests__/SkipReasonSheet.test.tsx`
 - regression tests backend dan mobile yang relevan
 
 Audit ini tidak mengubah, menghapus, atau memindahkan file working tree lain. Working tree masih memiliki banyak untracked/WIP yang tidak disentuh.
