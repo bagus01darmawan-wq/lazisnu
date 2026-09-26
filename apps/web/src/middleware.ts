@@ -6,8 +6,17 @@ export async function middleware(request: NextRequest) {
   const token = request.cookies.get('lazisnu_token')?.value;
   const isAuthPage = request.nextUrl.pathname.startsWith('/login');
 
-  // 1. Redirect to login if no token and trying to access dashboard
+  // 1. Redirect to login if no token and trying to access dashboard.
+  // Lubang logout-spontan yang ditutup: cookie access (15 mnt) bisa kedaluwarsa
+  // saat tab hidden (session-keeper pause) — tapi refresh cookie (365 hari)
+  // biasanya masih hidup. Jangan redirect membabi-buta; beri kesempatan
+  // pulih via client (session-keeper mount-refresh + interceptor /auth/me).
+  // Backend tetap menegakkan auth+RBAC per request API, jadi shell tanpa
+  // data yang sempat ter-render tidak membocorkan apa pun.
   if (!token && !isAuthPage) {
+    if (request.cookies.get('lazisnu_refresh_token')?.value) {
+      return NextResponse.next();
+    }
     return NextResponse.redirect(new URL('/login', request.url));
   }
 

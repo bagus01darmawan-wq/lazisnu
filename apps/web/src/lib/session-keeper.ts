@@ -25,9 +25,13 @@ const REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 menit (access token 15 menit)
 
 let keeperStarted = false;
 
-async function refreshNow(): Promise<void> {
-  // Tanpa access cookie = belum login / sudah logout → jangan berisik
-  if (!authHelper.isAuthenticated()) return;
+async function refreshNow(force = false): Promise<void> {
+  // Tanpa access cookie = belum login / sudah logout → jangan berisik,
+  // KECUALI pemulihan paksa (mount & tab kembali aktif): cookie access bisa
+  // saja kedaluwarsa saat tab hidden sementara refresh cookie (HttpOnly,
+  // tidak terbaca JS) masih hidup. Percobaan paksa aman: gagal 401 tidak
+  // me-logout (interceptor tidak terlibat di sini), berhasil = sesi pulih.
+  if (!force && !authHelper.isAuthenticated()) return;
   try {
     const res = await axios.post('/api/auth/refresh', null, { withCredentials: true });
     const accessToken = res.data?.data?.access_token;
@@ -67,12 +71,12 @@ export function startSessionKeeper(): void {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       start();
-      void refreshNow(); // pulihkan sesi begitu tab kembali aktif
+      void refreshNow(true); // pulihkan sesi begitu tab kembali aktif
     } else {
       stop();
     }
   });
 
   start();
-  void refreshNow(); // refresh sekali saat mount — pulihkan sesi idle lama
+  void refreshNow(true); // refresh sekali saat mount — pulihkan sesi idle lama
 }
