@@ -26,7 +26,9 @@ const IDS = {
   officerUnmapped: randomUUID(),
   officerFallback: randomUUID(),
   canInDukuh: randomUUID(),
+  canInDukuh2: randomUUID(),
   canInBranchNoDukuh: randomUUID(),
+  assignment: randomUUID(),
 };
 
 // Prefix unik supaya tidak bentrok dengan sisa data test lain di DB ini.
@@ -166,13 +168,40 @@ describe('regionCardService', () => {
         ownerWhatsapp: `6282202${TAG}`,
         isActive: true,
       },
+      {
+        id: IDS.canInDukuh2,
+        branchId: IDS.branchWithDukuh,
+        dukuhId: IDS.dukuhA,
+        rt: '003',
+        rw: '003',
+        ownerName: 'Warga Gamma',
+        ownerWhatsapp: `6282203${TAG}`,
+        isActive: true,
+      },
     ]);
+
+    // Hanya SATU dari dua kaleng di dukuh A yang punya penugasan. Ini yang
+    // membuat `assignmentTotal` (1) harusnya berbeda dari `total` (2), dan
+    // mengunci agar keduanya tidak diam-diam menimpa satu sama lain.
+    await db.insert(schema.assignments).values({
+      id: IDS.assignment,
+      canId: IDS.canInDukuh,
+      officerId: IDS.officerMapped,
+      periodYear: 2026,
+      periodMonth: 9,
+      status: 'ACTIVE',
+    });
   });
 
   afterAll(async () => {
     await db
+      .delete(schema.assignments)
+      .where(inArray(schema.assignments.id, [IDS.assignment]));
+    await db
       .delete(schema.cans)
-      .where(inArray(schema.cans.id, [IDS.canInDukuh, IDS.canInBranchNoDukuh]));
+      .where(
+        inArray(schema.cans.id, [IDS.canInDukuh, IDS.canInDukuh2, IDS.canInBranchNoDukuh])
+      );
     await db
       .delete(schema.officers)
       .where(
@@ -201,12 +230,46 @@ describe('regionCardService', () => {
     expect(res.regions.every((r) => r.kind === 'branch')).toBe(true);
 
     const withDukuh = res.regions.find((r) => r.id === IDS.branchWithDukuh)!;
-    expect(withDukuh.total).toBe(1);
+    // Dua kaleng di ranting ini: satu di dukuh A, satu lagi juga di dukuh A.
+    expect(withDukuh.total).toBe(2);
     expect(withDukuh.nonActive).toBe(0);
     expect(withDukuh.officerCount).toBe(2);
     expect(withDukuh.activeOfficerCount).toBe(2);
     // Scope branch: semua petugas sudah tercakup filter ranting.
     expect(res.unmappedOfficerCount).toBe(0);
+  });
+
+  it('angka utama tiap halaman memakai sumbernya sendiri', async () => {
+    const cans = await getCanRegionCards(rantingCtx(IDS.branchWithDukuh), {
+      year: '2026',
+      month: '9',
+    });
+    const assignments = await getAssignmentRegionCards(rantingCtx(IDS.branchWithDukuh), {
+      year: '2026',
+      month: '9',
+    });
+
+    // Dua kaleng, tapi hanya satu yang punya penugasan. Kalau kedua angka
+    // ini ditimpa diam-diam, test inilah yang pertama gagal.
+    expect(cans.regions[0].total).toBe(2);
+    expect(cans.regions[0].assignmentTotal).toBe(1);
+    expect(assignments.regions[0].total).toBe(2);
+    expect(assignments.regions[0].assignmentTotal).toBe(1);
+
+    // `assigned`/`unassigned` tetap berbasis kaleng untuk bar progres.
+    expect(cans.regions[0].assigned).toBe(1);
+    expect(cans.regions[0].unassigned).toBe(1);
+  });
+
+  it('penugasan di luar periode tidak ikut dihitung', async () => {
+    const des = await getAssignmentRegionCards(rantingCtx(IDS.branchWithDukuh), {
+      year: '2026',
+      month: '12',
+    });
+    // Kaleng tidak ikut berubah, tapi penugasan kosong karena beda periode.
+    expect(des.regions[0].total).toBe(2);
+    expect(des.regions[0].assignmentTotal).toBe(0);
+    expect(des.regions[0].unassigned).toBe(2);
   });
 
   it('admin ranting melihat layer DUKUH', async () => {
@@ -221,7 +284,8 @@ describe('regionCardService', () => {
     expect(card.kind).toBe('dukuh');
     expect(card.id).toBe(IDS.dukuhA);
     expect(card.branchId).toBe(IDS.branchWithDukuh);
-    expect(card.total).toBe(1);
+    expect(card.total).toBe(2);
+    expect(card.assignmentTotal).toBe(1);
     expect(card.isFallback).toBe(false);
   });
 
