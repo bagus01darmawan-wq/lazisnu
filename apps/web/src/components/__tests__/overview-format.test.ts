@@ -13,6 +13,7 @@ import {
   formatPeriod,
   formatPeriodRange,
   formatRupiah,
+  splitRupiah,
   taskClosedRate,
   taskProgressLabel,
   taskSupportLabel,
@@ -69,6 +70,11 @@ describe('periode dan bulan', () => {
   it('formatAveragePerCan membagi dan aman dari nol', () => {
     expect(formatAveragePerCan(1250000, 40)).toBe('Rp 31.250');
     expect(formatAveragePerCan(100000, 0)).toBe('Rp 0');
+  });
+
+  it('splitRupiah memisah mata uang dan angka', () => {
+    expect(splitRupiah(1250000)).toEqual({ currency: 'Rp', amount: '1.250.000' });
+    expect(splitRupiah(0)).toEqual({ currency: 'Rp', amount: '0' });
   });
 });
 

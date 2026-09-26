@@ -37,6 +37,11 @@ export function formatRupiah(value: number): string {
   return `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
 }
 
+/** Pecah 'Rp' dan angka agar ukurannya bisa berbeda (judul hero). */
+export function splitRupiah(value: number): { currency: string; amount: string } {
+  return { currency: 'Rp', amount: Number(value || 0).toLocaleString('id-ID') };
+}
+
 export function formatPeriod(year: number, month: number): string {
   const name = MONTH_NAMES_ID[month - 1] ?? String(month);
   return `${name} ${year}`;

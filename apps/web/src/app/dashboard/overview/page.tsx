@@ -12,7 +12,6 @@ import ActionRequiredList from '@/components/overview/ActionRequiredList';
 import CollectionTrendChart from '@/components/overview/CollectionTrendChart';
 import ConditionBreakdown from '@/components/overview/ConditionBreakdown';
 import BranchComparisonList from '@/components/overview/BranchComparisonList';
-import { formatPeriodRange, formatUpdatedAt } from '@/components/overview/format';
 
 interface ApiError {
   message?: string;
@@ -238,9 +237,6 @@ export default function OverviewPage() {
       <PerolehanHero
         nominal={data.summary.collection_nominal}
         collected={data.summary.successful_collections}
-        periodLabel={formatPeriodRange(data.period.year, data.period.months?.length ? data.period.months : [data.period.month])}
-        scopeLabel={data.scope.branch_name ? `Ranting ${data.scope.branch_name}` : 'Seluruh ranting kecamatan'}
-        updatedLabel={`Zona ${data.period.timezone} • Diperbarui ${formatUpdatedAt(data.period.generated_at)}`}
       />
 
       {periodEmpty && (
