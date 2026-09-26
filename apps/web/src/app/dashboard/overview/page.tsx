@@ -1,14 +1,12 @@
 'use client';
 
 import React from 'react';
-import { AlertTriangle, ChevronLeft, Loader2, Power } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, Loader2 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
 import { ApiResponse, OverviewResponse } from '@lazisnu/shared-types';
-import { Card } from '@/components/ui/Card';
 import OverviewHeader from '@/components/overview/OverviewHeader';
 import PerolehanHero from '@/components/overview/PerolehanHero';
-import ActionRequiredList from '@/components/overview/ActionRequiredList';
 import CollectionTrendChart from '@/components/overview/CollectionTrendChart';
 import ConditionBreakdown from '@/components/overview/ConditionBreakdown';
 import BranchComparisonList from '@/components/overview/BranchComparisonList';
@@ -41,30 +39,6 @@ export default function OverviewPage() {
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-
-  // Fitur backup yang sudah ada — dipertahankan untuk admin kecamatan.
-  const [backupActive, setBackupActive] = React.useState(false);
-  const [backupLoading, setBackupLoading] = React.useState(false);
-  const [backupMessage, setBackupMessage] = React.useState<string | null>(null);
-
-  const handleToggleBackup = async () => {
-    try {
-      setBackupLoading(true);
-      setBackupMessage(null);
-      const endpoint = backupActive ? '/admin/backup/stop' : '/admin/backup/start';
-      const res = await api.post(endpoint) as unknown as ApiResponse<{ active: boolean; message?: string }>;
-      if (res.success && res.data) {
-        setBackupActive(res.data.active);
-        setBackupMessage(res.data.message ?? (res.data.active ? 'Backup diaktifkan' : 'Backup dinonaktifkan'));
-      }
-    } catch (err) {
-      console.error('Backup toggle error:', err);
-      setBackupMessage('Gagal mengubah status backup. Coba lagi.');
-    } finally {
-      setBackupLoading(false);
-      setTimeout(() => setBackupMessage(null), 4000);
-    }
-  };
 
   const fetchOverview = React.useCallback(async (
     nextBranchId: string,
@@ -140,15 +114,6 @@ export default function OverviewPage() {
     void fetchOverview(branchId, filter.year, filter.months, 'refresh');
   }, [branchId, filter.year, filter.months, fetchOverview]);
 
-  // Status backup (infra opsional, gagal senyap).
-  React.useEffect(() => {
-    api.get('/admin/backup/status')
-      .then((res: unknown) => {
-        const r = res as ApiResponse<{ active: boolean }>;
-        if (r.success && r.data) setBackupActive(r.data.active);
-      })
-      .catch(() => { /* optional infra, silent fail */ });
-  }, []);
   if (loading && !data) {
     // Skeleton mengikuti struktur akhir agar layout tidak meloncat saat data datang.
     return (
@@ -243,44 +208,6 @@ export default function OverviewPage() {
         <p className="rounded-2xl border border-white/10 bg-[#F4F1EA]/5 p-4 text-xs text-[#F4F1EA]/70">
           Belum ada penjemputan dan tugas pada periode ini. Angka di atas menampilkan nol sampai data periode berjalan masuk.
         </p>
-      )}
-
-      <ActionRequiredList items={data.action_items} branchId={branchId || undefined} loading={refreshing} />
-
-      {isDistrictAdmin && (
-        <Card className="border-white/5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
-              <div className={`p-3 rounded-xl ${backupActive ? 'bg-[#1F8243]/10 text-[#1F8243]' : 'bg-[#F4F1EA]/5 text-[#F4F1EA]/40'}`}>
-                <Power size={20} aria-hidden="true" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-[#F4F1EA]">Backup Database</p>
-                <p className="text-xs text-[#F4F1EA]/50 mt-0.5">
-                  {backupActive ? 'Backup otomatis berjalan tiap hari jam 02:00' : 'Backup otomatis sedang dinonaktifkan'}
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleToggleBackup}
-              disabled={backupLoading}
-              className={`inline-flex min-h-11 items-center gap-2 rounded-xl px-4 text-sm font-bold transition-[opacity,transform] duration-200 active:scale-[.96] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#EAD19B] disabled:opacity-60 ${
-                backupActive
-                  ? 'border border-[#D97A76]/30 bg-[#D97A76]/10 text-[#D97A76]'
-                  : 'bg-[#1F8243] text-white'
-              }`}
-            >
-              {backupLoading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Power size={16} aria-hidden="true" />}
-              {backupActive ? 'Nonaktifkan' : 'Aktifkan'}
-            </button>
-          </div>
-          {backupMessage && (
-            <p className={`mt-2 px-1 text-xs ${backupMessage.includes('Gagal') ? 'text-[#D97A76]' : 'text-[#1F8243]'}`}>
-              {backupMessage}
-            </p>
-          )}
-        </Card>
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

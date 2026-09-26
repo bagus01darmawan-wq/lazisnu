@@ -11,14 +11,13 @@
  */
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { and, eq, gte, lt, inArray, or, sql, desc } from 'drizzle-orm';
+import { and, eq, gte, lt, inArray, or, sql } from 'drizzle-orm';
 import { getLatestCollectionCondition } from './collectionSubmission';
 import { computeTaskMetrics } from './taskMetrics';
 import {
   ACTION_REQUIRED_CONDITIONS,
   ASSIGNABLE_CONDITIONS,
   PLACEMENT_CONDITIONS,
-  actionLabel,
 } from './conditionRules';
 import type { CanConditionValue } from './conditionRules';
 import { OPERATIONAL_TIMEZONE } from '../utils/operationalTimeZone';
@@ -115,8 +114,6 @@ export function inAssignmentPeriod(year: number, months: number[]) {
 
 /** Jumlah bulan yang dikembalikan pada tren operasional. */
 export const TREND_MONTHS = 6;
-/** Batas default daftar "perlu tindakan" pada overview. */
-export const ACTION_ITEM_LIMIT = 10;
 
 function sqlConditionList(conditions: CanConditionValue[]) {
   return sql`(${sql.join(conditions.map((c) => sql`${c}`), sql`, `)})`;
@@ -400,82 +397,6 @@ export async function getMonthlyOperationalTrend(
 }
 
 /**
- * Daftar "perlu tindakan": NON_AKTIF + RUSAK + HILANG yang masih dilacak.
- * Terbatas dan berurutan deterministik (HILANG → RUSAK → NON_AKTIF, lalu kasus terlama).
- * Alasan & waktu kasus diambil dari usulan pending/approved bila ada.
- */
-export async function getActionItems(
-  scope: OverviewScopeInput,
-  limit: number = ACTION_ITEM_LIMIT,
-) {
-  const rows = await db
-    .select({
-      can_id: schema.cans.id,
-      owner_name: schema.cans.ownerName,
-      branch_id: schema.cans.branchId,
-      branch_name: schema.branches.name,
-      condition: schema.cans.condition,
-      changed_at: schema.cans.updatedAt,
-    })
-    .from(schema.cans)
-    .innerJoin(schema.branches, eq(schema.cans.branchId, schema.branches.id))
-    .where(and(
-      scopeCondition(scope),
-      eq(schema.cans.isActive, true),
-      inArray(schema.cans.condition, ACTION_REQUIRED_CONDITIONS),
-    ))
-    .orderBy(
-      sql`case ${schema.cans.condition} when 'HILANG' then 0 when 'RUSAK' then 1 else 2 end`,
-      sql`${schema.cans.updatedAt} asc`,
-      sql`${schema.cans.id} asc`,
-    )
-    .limit(limit);
-
-  if (rows.length === 0) return [];
-
-  const canIds = rows.map((r) => r.can_id);
-  const proposals = await db
-    .select({
-      id: schema.canConditionProposals.id,
-      canId: schema.canConditionProposals.canId,
-      status: schema.canConditionProposals.status,
-      reasonCode: schema.canConditionProposals.reasonCode,
-      approvedAt: schema.canConditionProposals.approvedAt,
-      createdAt: schema.canConditionProposals.createdAt,
-    })
-    .from(schema.canConditionProposals)
-    .where(and(
-      inArray(schema.canConditionProposals.canId, canIds),
-      inArray(schema.canConditionProposals.status, ['PENDING', 'APPROVED']),
-    ))
-    .orderBy(desc(schema.canConditionProposals.createdAt));
-
-  const pendingByCan = new Map<string, (typeof proposals)[number]>();
-  const approvedByCan = new Map<string, (typeof proposals)[number]>();
-  for (const p of proposals) {
-    if (p.status === 'PENDING' && !pendingByCan.has(p.canId)) pendingByCan.set(p.canId, p);
-    if (p.status === 'APPROVED' && !approvedByCan.has(p.canId)) approvedByCan.set(p.canId, p);
-  }
-
-  return rows.map((r) => {
-    const pending = pendingByCan.get(r.can_id);
-    const approved = approvedByCan.get(r.can_id);
-    const since = approved?.approvedAt ?? r.changed_at;
-    return {
-      can_id: r.can_id,
-      owner_name: r.owner_name,
-      branch_id: r.branch_id,
-      branch_name: r.branch_name ?? '',
-      condition: r.condition,
-      proposal_id: pending?.id,
-      reason_code: pending?.reasonCode ?? approved?.reasonCode,
-      since: since instanceof Date ? since.toISOString() : String(since),
-      action_label: actionLabel(r.condition),
-    };
-  });
-}
-
-/**
  * Perbandingan per ranting untuk admin kecamatan.
  * Scope & pengelompokan memakai `cans.branch_id`, bukan `officer.branch_id`
  * (memperbaiki bug lama di routes/admin/district.ts).
@@ -554,7 +475,6 @@ export interface GetOverviewOptions {
   /** 'branch' bila admin ranting atau admin kecamatan menyaring satu ranting. */
   scopeType?: 'branch' | 'district';
   branchName?: string;
-  actionItemLimit?: number;
   trendMonths?: number;
   /** Perbandingan ranting hanya bermakna untuk agregat kecamatan. */
   includeBranchComparison?: boolean;
@@ -578,8 +498,7 @@ export async function getOverview(
     getTaskSummary(scope, period),
   ]);
 
-  const [actionItems, trend, comparison] = await Promise.all([
-    getActionItems(scope, options.actionItemLimit ?? ACTION_ITEM_LIMIT),
+  const [trend, comparison] = await Promise.all([
     getMonthlyOperationalTrend(scope, period, options.trendMonths ?? TREND_MONTHS),
     options.includeBranchComparison
       ? getBranchComparison(scope.districtId, period)
@@ -630,7 +549,6 @@ export async function getOverview(
       task_total: tasks.task_total,
     },
     condition_breakdown: breakdown,
-    action_items: actionItems,
     monthly_trend: trend,
     ...(comparison ? { branch_comparison: comparison } : {}),
   };
