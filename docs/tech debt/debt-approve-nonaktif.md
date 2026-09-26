@@ -1,6 +1,6 @@
 # Tech Debt — Persetujuan (approve) kaleng NON_AKTIF di web
 
-> Dicatat: 27 September 2026 (akun: TODO — isi tanggal saat dibaca ulang)
+> Dicatat: 27 September 2026
 > Status: TERBUKA
 > Konteks penghapusan: kartu "Perlu tindakan" overview dihapus total
 > (`ActionRequiredList`, `getActionItems`, `action_items`) karena link-nya mati
@@ -29,8 +29,28 @@ aktifkan kembali) tidak punya alur persetujuan di dashboard web:
    mengusulkan dan ADMIN_KECAMATAN menyetujui (saat ini backend mengizinkan
    keduanya, hanya cek scope).
 
+## Peringatan: jalur cepat mem-bypass approval (temuan 27 Sep 2026)
+
+`PUT /admin/cans/:id` (`updateCanSchema`, `routes/admin/schemas.ts:20-26`)
+menerima `condition` + `condition_reason_code` dan `canService.updateCan`
+(`services/canService.ts:324-342`) langsung mengubah kondisi — validasi hanya
+`isTransitionAllowed`, **tanpa proposal, tanpa approval, tanpa alasan wajib**
+(`condition_reason_code` opsional). Berlaku untuk SEMUA transisi matriks dan
+kedua role admin.
+
+Form Edit di web tidak mengekspos field itu (hanya nama/WA/wilayah/RT/RW),
+tetapi pintunya terbuka di API. Artinya: UI Setujui/Tolak yang dibangun nanti
+hanya prosedural kecuali jalur cepat ikut dibatasi. Opsi saat implementasi:
+
+- a. Batasi `condition` di PUT hanya untuk reaktivasi (`→ AKTIF`) dan penarikan
+  (`→ DIKEMBALIKAN` via DELETE); perubahan HILANG/RUSAK/NON_AKTIF lain wajib
+  via proposal.
+- b. Biarkan keduanya dan terima approval sebagai prosedural (cepat, lemah).
+
 ## Referensi kode
 
 - `apps/backend/src/routes/admin/canProposals.ts`
 - `apps/backend/src/services/conditionProposalService.ts`
 - `apps/backend/src/services/conditionRules.ts` (`ACTION_LABELS`)
+- `apps/backend/src/routes/admin/schemas.ts` (`updateCanSchema`)
+- `apps/backend/src/services/canService.ts` (`updateCan`, blok transisi kondisi)
