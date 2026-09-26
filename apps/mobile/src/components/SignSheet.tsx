@@ -1,11 +1,17 @@
 import React, {useRef, useState} from 'react';
 import {View, Text, StyleSheet} from 'react-native';
-import {AppCard} from './ui/AppCard';
 import {AppButton} from './ui/AppButton';
 import {AppPressable} from './ui/AppPressable';
 import {SignaturePad} from './SignaturePad';
-import {strokesToSignaturePng, type Stroke} from '../signature/signaturePng';
-import {Colors, Radius, Spacing, Typography} from '../theme';
+import {Colors, Spacing, Typography} from '../theme';
+
+/** Batas backend: PNG coretan ≤ 50KB (`cosign.ts` SIGNATURE_MAX_BYTES). */
+const SIGNATURE_MAX_BYTES = 50 * 1024;
+
+/** Estimasi byte dari base64 tanpa decode penuh. */
+export function base64ByteLength(base64: string): number {
+  return Math.ceil(base64.length * 3 * 0.25);
+}
 
 type SignSheetProps = {
   title: string;
@@ -35,9 +41,10 @@ type SignSheetProps = {
 };
 
 /**
- * C1-T10 — Lembar tanda tangan: isi BA + kanvas coretan + persetujuan eksplisit
- * + kirim. Raster PNG dikerjakan di sini (encoder murni); coretan kosong atau
- * tanpa consent tak bisa dikirim (gerbang ganda klien + server T5).
+ * C1-T10 — Lembar tanda tangan: isi BA + kanvas coretan WebView + persetujuan
+ * eksplisit + kirim. PNG diekspor kanvas per goresan (base64 murni); coretan
+ * kosong, melebihi 50KB, atau tanpa consent tak bisa dikirim (gerbang ganda
+ * klien + server T5).
  */
 export const SignSheet: React.FC<SignSheetProps> = ({
   title,
@@ -51,16 +58,19 @@ export const SignSheet: React.FC<SignSheetProps> = ({
   baLoading,
   children,
 }) => {
-  const strokes = useRef<Stroke[]>([]);
+  const signature = useRef('');
   const [hasContent, setHasContent] = useState(false);
   const [consent, setConsent] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const viewSize = useRef({w: 300, h: 150});
 
   const submit = () => {
-    const b64 = strokesToSignaturePng(strokes.current, viewSize.current.w, viewSize.current.h);
+    const b64 = signature.current;
     if (!b64) {
       setLocalError('Coret tanda tangan dulu');
+      return;
+    }
+    if (base64ByteLength(b64) > SIGNATURE_MAX_BYTES) {
+      setLocalError('Coretan maksimal 50KB — coret lebih ringkas.');
       return;
     }
     if (!consent) {
@@ -72,11 +82,11 @@ export const SignSheet: React.FC<SignSheetProps> = ({
   };
 
   return (
-    <AppCard>
+    <View style={styles.sheet}>
       <Text style={styles.title}>{title}</Text>
       {baLoading ? <Text style={styles.hint}>Memuat isi berita acara…</Text> : null}
       {baText && baText.length > 0 ? (
-        <View style={styles.baBox}>
+        <View style={styles.baText}>
           {baNumber ? <Text style={styles.baNumber}>Nomor: {baNumber}</Text> : null}
           {baText.map((line, i) => (
             <Text key={`${i}-${line.slice(0, 12)}`} style={styles.baLine}>
@@ -86,18 +96,13 @@ export const SignSheet: React.FC<SignSheetProps> = ({
         </View>
       ) : null}
       {children}
-      <View
-        onLayout={e => {
-          viewSize.current = {w: e.nativeEvent.layout.width, h: 150};
-        }}>
-        <SignaturePad
-          onChange={(next, content) => {
-            strokes.current = next;
-            setHasContent(content);
-            if (content) setLocalError(null);
-          }}
-        />
-      </View>
+      <SignaturePad
+        onChange={(base64, content) => {
+          signature.current = base64;
+          setHasContent(content && base64.length > 0);
+          if (content) setLocalError(null);
+        }}
+      />
       <AppPressable
         accessibilityRole="checkbox"
         accessibilityState={{checked: consent}}
@@ -120,25 +125,18 @@ export const SignSheet: React.FC<SignSheetProps> = ({
           loading={submitting}
         />
       </View>
-    </AppCard>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  title: {...Typography.heading3, marginBottom: Spacing.sm},
-  hint: {...Typography.caption, color: Colors.text.muted, marginBottom: Spacing.sm},
-  baBox: {
-    borderRadius: Radius.card,
-    borderWidth: 1,
-    borderColor: Colors.border.warm,
-    backgroundColor: Colors.surface.sunken,
-    padding: Spacing.sm,
-    gap: Spacing.xs,
-    marginBottom: Spacing.sm,
-  },
+  sheet: {gap: Spacing.md},
+  title: {...Typography.heading3},
+  hint: {...Typography.caption, color: Colors.text.muted},
+  baText: {gap: Spacing.xs},
   baNumber: {...Typography.caption, fontWeight: '700'},
   baLine: {...Typography.body, color: Colors.text.primary},
-  consentRow: {flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.md},
+  consentRow: {flexDirection: 'row', alignItems: 'center', gap: Spacing.sm},
   box: {
     width: 22,
     height: 22,
@@ -151,6 +149,6 @@ const styles = StyleSheet.create({
   boxOn: {backgroundColor: Colors.brand.emerald, borderColor: Colors.brand.emerald},
   check: {color: '#FFFFFF', fontWeight: '800', fontSize: 14},
   consentText: {...Typography.body, flex: 1},
-  error: {...Typography.body, color: Colors.status.error, marginTop: Spacing.sm},
-  actions: {flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.md},
+  error: {...Typography.body, color: Colors.status.error},
+  actions: {flexDirection: 'row', gap: Spacing.sm},
 });

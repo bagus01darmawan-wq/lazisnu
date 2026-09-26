@@ -1,86 +1,69 @@
-import React, {useRef, useState} from 'react';
-import {View, Text, StyleSheet, PanResponder, type GestureResponderEvent} from 'react-native';
-import Svg, {Polyline} from 'react-native-svg';
+import React, {useRef} from 'react';
+import {View, Text, StyleSheet, useWindowDimensions} from 'react-native';
+import SignatureScreen, {type SignatureViewRef} from 'react-native-signature-canvas';
 import {Colors, Radius, Spacing, Typography} from '../theme';
-import {hasInk, rasterizeStrokes, type Stroke} from '../signature/signaturePng';
 import {AppPressable} from './ui/AppPressable';
 
 type SignaturePadProps = {
-  onChange: (strokes: Stroke[], hasContent: boolean) => void;
+  /** base64 PNG murni (tanpa prefix data-URI) + ada isi. */
+  onChange: (base64: string, hasContent: boolean) => void;
 };
 
 /**
- * C1-T10 — Kanvas coretan TTD (jari/stylus).
- * Pratinjau via Polyline SVG; raster PNG dikerjakan pemanggil lewat
- * `strokesToSignaturePng` (encoder murni, tanpa dep native) agar komponen
- * tetap bodoh dan teruji. Ukuran view dilaporkan via onLayout oleh pemanggil
- * (lihat SignSheet).
+ * Kolom tanda tangan standalone — tanpa kartu pembungkus, langsung di atas
+ * background halaman. Tampil abu-abu (`surface.sunken`) dengan outline;
+ * kanvas ekspornya transparan agar PNG yang masuk PDF bersih tanpa kotak
+ * abu-abu menutupi dokumen (backend hanya validasi magic bytes + ≤50KB).
+ *
+ * Tinggi proporsional layar (30%, jepit 180–320) sehingga adaptif tiap HP.
+ * WebView offline-first (`react-native-signature-canvas` → signature_pad:
+ * kurva Bézier kubik, smoothing kecepatan pena; render di dalam WebView
+ * sehingga JS thread bebas lag). HTML/JS dibundel lokal di APK.
+ *
+ * Kontrak: tiap goresan selesai (`onEnd`) diekspor via `readSignature()`;
+ * `onOK` membersihkan prefix data-URI dan meneruskan base64 murni.
  */
-export const SignaturePad = React.forwardRef<View, SignaturePadProps>(function SignaturePad(
-  {onChange},
-  ref,
-) {
-  const [strokes, setStrokes] = useState<Stroke[]>([]);
-  const current = useRef<Stroke>([]);
-  const size = useRef({w: 300, h: 150});
-  const strokesRef = useRef<Stroke[]>([]);
-  strokesRef.current = strokes;
+const WEB_STYLE = `.m-signature-pad {box-shadow: none; border: none; background-color: transparent;}
+.m-signature-pad--body {border: none;}
+.m-signature-pad--footer {display: none; margin: 0px;}
+body, html {width: 100%; height: 100%; background-color: transparent;}`;
 
-  const push = (next: Stroke[]) => {
-    setStrokes(next);
-    const px = rasterizeStrokes(next, size.current.w, size.current.h);
-    onChange(next, hasInk(px));
-  };
-
-  const responder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (e: GestureResponderEvent) => {
-        current.current = [{x: e.nativeEvent.locationX, y: e.nativeEvent.locationY}];
-      },
-      onPanResponderMove: (e: GestureResponderEvent) => {
-        current.current = [
-          ...current.current,
-          {x: e.nativeEvent.locationX, y: e.nativeEvent.locationY},
-        ];
-        push([...strokesRef.current, current.current]);
-      },
-      onPanResponderRelease: () => {
-        push([...strokesRef.current, current.current]);
-        current.current = [];
-      },
-    }),
-  ).current;
+export const SignaturePad: React.FC<SignaturePadProps> = function SignaturePad({onChange}) {
+  const ref = useRef<SignatureViewRef>(null);
+  const {height: windowHeight} = useWindowDimensions();
+  const padHeight = Math.min(320, Math.max(180, Math.round(windowHeight * 0.3)));
 
   const clear = () => {
-    current.current = [];
-    push([]);
+    ref.current?.clearSignature();
   };
 
   return (
     <View>
-      <View
-        ref={ref}
-        style={styles.pad}
-        onLayout={e => {
-          size.current = {w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height};
-        }}
-        {...responder.panHandlers}>
-        <Svg width="100%" height="100%">
-          {strokes.map((s, i) => (
-            <Polyline
-              key={i}
-              points={s.map(p => `${p.x},${p.y}`).join(' ')}
-              fill="none"
-              stroke={Colors.text.primary}
-              strokeWidth={2.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          ))}
-        </Svg>
-        {strokes.length === 0 ? <Text style={styles.hint}>Coret di sini (jari/stylus)</Text> : null}
+      <View style={[styles.pad, {height: padHeight}]}>
+        <SignatureScreen
+          ref={ref}
+          onOK={(signature: string) => {
+            const base64 = signature.replace('data:image/png;base64,', '');
+            onChange(base64, base64.length > 0);
+          }}
+          onEmpty={() => onChange('', false)}
+          onClear={() => onChange('', false)}
+          onBegin={() => {
+            // Goresan pertama = ada isi (tombol kirim aktif lebih awal);
+            // base64 definitif menyusul lewat onOK saat goresan selesai.
+          }}
+          onEnd={() => {
+            ref.current?.readSignature();
+          }}
+          autoClear={false}
+          imageType="image/png"
+          minWidth={1.5}
+          maxWidth={3.5}
+          dotSize={2.0}
+          penColor="#1a1a1a"
+          backgroundColor="transparent"
+          webStyle={WEB_STYLE}
+        />
       </View>
       <AppPressable
         accessibilityRole="button"
@@ -91,21 +74,19 @@ export const SignaturePad = React.forwardRef<View, SignaturePadProps>(function S
       </AppPressable>
     </View>
   );
-});
+};
 
 const styles = StyleSheet.create({
   pad: {
-    height: 150,
     borderRadius: Radius.card,
     borderWidth: 1,
     borderStyle: 'dashed',
     borderColor: Colors.border.warm,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Colors.surface.sunken,
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  hint: {...Typography.caption},
   clearBtn: {alignSelf: 'flex-end', padding: Spacing.sm},
   clearText: {...Typography.caption, fontWeight: '700'},
 });
