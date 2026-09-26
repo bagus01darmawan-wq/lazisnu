@@ -53,10 +53,8 @@ const TasksScreen: React.FC = () => {
   const dragEnabled = !searchQuery.trim();
   const [issuesVisible, setIssuesVisible] = useState(false);
   const [visitRequired, setVisitRequired] = useState<VisitTask[]>([]);
-  const [visitLoading, setVisitLoading] = useState(false);
 
   const fetchVisitRequired = useCallback(async () => {
-    setVisitLoading(true);
     try {
       const res = await collectionService.getVisitRequired();
       if (res.success && res.data) {
@@ -64,8 +62,6 @@ const TasksScreen: React.FC = () => {
       }
     } catch {
       // Bukan halangan utama — daftar penjemputan tetap tampil.
-    } finally {
-      setVisitLoading(false);
     }
   }, []);
 
@@ -136,7 +132,7 @@ const TasksScreen: React.FC = () => {
             <Text style={styles.headerSubtitle}>
               {isLoading && page === 1
                 ? 'Memuat penugasan...'
-                : `${tasks.length} tugas ditampilkan`}
+                : `${filteredTasks.length} tugas ditampilkan`}
             </Text>
           </View>
           <TouchableOpacity
@@ -182,6 +178,14 @@ const TasksScreen: React.FC = () => {
           onChangeText={setSearchQuery}
           onClear={() => setSearchQuery('')}
         />
+        <View style={styles.conditionSummary}>
+          <View style={[styles.conditionChip, styles.activeChip]}>
+            <Text style={styles.activeChipText}>Aktif ({filteredTasks.length})</Text>
+          </View>
+          <View style={[styles.conditionChip, styles.nonActiveChip]}>
+            <Text style={styles.nonActiveChipText}>Non-Aktif ({visitRequired.length})</Text>
+          </View>
+        </View>
       </LinearGradient>
 
       <Text style={[styles.sectionTitle, styles.sectionTitleFirst]}>Perlu Dijemput</Text>
@@ -206,7 +210,7 @@ const TasksScreen: React.FC = () => {
           latitude: v.latitude,
           longitude: v.longitude,
           condition: CanCondition.NON_AKTIF,
-          is_active: true,
+          is_active: v.is_active,
           status: AssignmentStatus.ACTIVE,
           assigned_at: v.last_visit ?? new Date().toISOString(),
           period: '',
@@ -343,6 +347,20 @@ const styles = StyleSheet.create({
     opacity: 0.86,
     marginTop: Spacing.xs,
   },
+  conditionSummary: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  conditionChip: {
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  activeChip: {backgroundColor: Colors.surface.successSubtle},
+  nonActiveChip: {backgroundColor: Colors.surface.warningSoft},
+  activeChipText: {...Typography.caption, color: Colors.brand.deepGreen, fontWeight: '700'},
+  nonActiveChipText: {...Typography.caption, color: Colors.status.warning, fontWeight: '700'},
   listContainer: {
     paddingHorizontal: Layout.screenPadding,
     paddingBottom: Spacing.xl,

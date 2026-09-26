@@ -13,7 +13,8 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useCollectionStore} from '../stores';
 import type {RootStackParamList} from '../navigation/types';
 import {collectionService} from '../services/api';
-import {AppButton, AppCard, AppHeader, AppTextInput} from '../components/ui';
+import {AppButton, AppCard, AppHeader, AppTextInput, SegmentedControl} from '../components/ui';
+import {CanCondition} from '@lazisnu/shared-types';
 import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
 import {formatCurrency, formatInputCurrency} from '../utils';
 
@@ -23,6 +24,13 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
   const {task} = route.params;
   const {submitCollection, isSubmitting, reset} = useCollectionStore();
   const [nominal, setNominal] = useState('');
+  const [condition, setCondition] = useState<
+    CanCondition.AKTIF | CanCondition.RUSAK | CanCondition.HILANG
+  >(
+    task.condition === CanCondition.RUSAK || task.condition === CanCondition.HILANG
+      ? task.condition
+      : CanCondition.AKTIF,
+  );
   const [showSuccess, setShowSuccess] = useState(false);
 
   const handleSubmit = async () => {
@@ -92,6 +100,8 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
       can_id: task.can_id,
       nominal: numericNominal,
       collected_at: new Date().toISOString(),
+      condition,
+      visit_outcome: task.condition === CanCondition.NON_AKTIF ? 'ISI' : undefined,
     });
 
     if (!result.success) {
@@ -185,6 +195,23 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
           <Text style={styles.helperText}>
             Pastikan nominal sesuai dengan uang yang diterima. Nominal akan dicantumkan pada pesan
             konfirmasi donatur.
+          </Text>
+        </AppCard>
+
+        <Text style={styles.sectionTitle}>Kondisi Fisik Kaleng</Text>
+        <AppCard variant={'default'} style={styles.formCard}>
+          <Text style={styles.label}>Pilih kondisi yang dilihat PPK</Text>
+          <SegmentedControl
+            options={[
+              {label: 'Aktif', value: CanCondition.AKTIF},
+              {label: 'Rusak', value: CanCondition.RUSAK},
+              {label: 'Hilang', value: CanCondition.HILANG},
+            ]}
+            value={condition}
+            onChange={setCondition}
+          />
+          <Text style={styles.helperText}>
+            Kondisi ini adalah fakta lapangan, bukan persetujuan admin.
           </Text>
         </AppCard>
 

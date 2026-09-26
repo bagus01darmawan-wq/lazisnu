@@ -2,7 +2,7 @@ import React, {memo} from 'react';
 import {StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Animated, {FadeInUp, Layout as AnimatedLayout} from 'react-native-reanimated';
-import type {Collection} from '@lazisnu/shared-types';
+import type {CanCondition, Collection} from '@lazisnu/shared-types';
 import {AppCard} from '../../components/ui';
 import {Colors, Radius, Spacing, Typography} from '../../theme';
 import {formatCurrency, formatDate} from '../../utils';
@@ -14,11 +14,18 @@ export interface HistoryItemProps {
   onViewFailureDetail?: (item: Collection) => void;
 }
 
-/**
- * Status kartu ditampilkan sebagai ikon (sejajar nama pemilik, kanan) agar
- * kartu ramping. Warna ikon mengikuti warna teks badge lama; label status
- * tetap dibacakan screen reader via accessibilityLabel.
- */
+const CONDITION_LABELS: Record<CanCondition, string> = {
+  AKTIF: 'Aktif',
+  NON_AKTIF: 'Non-Aktif',
+  RUSAK: 'Rusak',
+  HILANG: 'Hilang',
+  DIKEMBALIKAN: 'Dikembalikan',
+};
+
+const getConditionLabel = (condition?: CanCondition): string =>
+  condition ? CONDITION_LABELS[condition] : 'Aktif';
+
+/** Ikon status sinkronisasi tetap terpisah dari kondisi bisnis kaleng. */
 const getStatusIcon = (item: Collection): {name: string; color: string; label: string} => {
   if (item.sync_status === 'PENDING') {
     return {name: 'cloud-upload-outline', color: Colors.status.warning, label: 'Belum Terkirim'};
@@ -78,7 +85,7 @@ export const HistoryItem = memo(
           </View>
 
           <View style={styles.valueRow}>
-            <View>
+            <View style={styles.valueCopy}>
               <Text style={styles.valueLabel}>Nominal diterima</Text>
               <Text
                 style={styles.nominalValue}
@@ -86,6 +93,9 @@ export const HistoryItem = memo(
                 adjustsFontSizeToFit
                 minimumFontScale={0.8}>
                 {formatCurrency(Number(item.nominal))}
+              </Text>
+              <Text style={styles.conditionLabel}>
+                Kondisi saat ini: {getConditionLabel(item.condition)}
               </Text>
             </View>
             {item.sync_status === 'FAILED' ? (
@@ -168,8 +178,10 @@ const styles = StyleSheet.create({
     padding: Spacing.sm,
     marginTop: Spacing.md,
   },
+  valueCopy: {flex: 1, paddingRight: Spacing.sm},
   valueLabel: {...Typography.caption, color: Colors.text.secondary},
   nominalValue: {...Typography.heading3, color: Colors.brand.emerald, marginTop: 2},
+  conditionLabel: {...Typography.caption, color: Colors.text.secondary, marginTop: 2},
   correctButton: {
     minHeight: 48,
     flexDirection: 'row',

@@ -142,12 +142,16 @@ import HistoryScreen from '../../src/screens/HistoryScreen';
 import ProfileScreen from '../../src/screens/ProfileScreen';
 import CollectionScreen from '../../src/screens/CollectionScreen';
 
-const render = (element: React.ReactElement) => {
-  let tree: renderer.ReactTestRenderer;
-  act(() => {
+const mountedTrees = new Set<renderer.ReactTestRenderer>();
+
+const render = async (element: React.ReactElement) => {
+  let tree!: renderer.ReactTestRenderer;
+  await act(async () => {
     tree = renderer.create(element);
+    await Promise.resolve();
   });
-  return tree!;
+  mountedTrees.add(tree);
+  return tree;
 };
 
 describe('authenticated screen render smoke tests', () => {
@@ -155,37 +159,41 @@ describe('authenticated screen render smoke tests', () => {
     jest.clearAllMocks();
   });
 
-  it('renders DashboardScreen with representative data', () => {
-    const tree = render(<DashboardScreen />);
+  afterEach(() => {
+    act(() => {
+      mountedTrees.forEach(tree => tree.unmount());
+    });
+    mountedTrees.clear();
+  });
+
+  it('renders DashboardScreen with representative data', async () => {
+    const tree = await render(<DashboardScreen />);
     expect(tree.toJSON()).not.toBeNull();
     expect(mockFetchDashboard).toHaveBeenCalled();
   });
 
-  it('renders TasksScreen with an active task', () => {
-    const tree = render(<TasksScreen />);
+  it('renders TasksScreen with an active task', async () => {
+    const tree = await render(<TasksScreen />);
     expect(tree.toJSON()).not.toBeNull();
     expect(mockFetchTasks).toHaveBeenCalled();
   });
 
-  it('renders HistoryScreen with a completed collection', () => {
-    const tree = render(<HistoryScreen />);
+  it('renders HistoryScreen with a completed collection', async () => {
+    const tree = await render(<HistoryScreen />);
     expect(tree.toJSON()).not.toBeNull();
     expect(mockFetchCollections).toHaveBeenCalled();
   });
 
   it('renders ProfileScreen using authenticated user data', async () => {
-    let tree: renderer.ReactTestRenderer;
-    await act(async () => {
-      tree = renderer.create(<ProfileScreen />);
-    });
-    expect(tree!.toJSON()).not.toBeNull();
+    const tree = await render(<ProfileScreen />);
+    expect(tree.toJSON()).not.toBeNull();
   });
 
-  it('renders CollectionScreen with a scanned task', () => {
+  it('renders CollectionScreen with a scanned task', async () => {
     const navigation = {navigate: mockNavigate, goBack: mockGoBack} as any;
     const route = {params: {task: mockTask}} as any;
     expect(
-      render(<CollectionScreen navigation={navigation} route={route} />).toJSON(),
+      (await render(<CollectionScreen navigation={navigation} route={route} />)).toJSON(),
     ).not.toBeNull();
   });
 });

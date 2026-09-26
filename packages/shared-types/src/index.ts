@@ -109,8 +109,6 @@ export const ACTION_REQUIRED_CONDITIONS: CanCondition[] = [
 export type SkipReasonCode =
   | "OWNER_ABSENT"
   | "OWNER_REFUSED"
-  | "CAN_LOST"
-  | "CAN_DAMAGED"
   | "ACCESS_DIFFICULT"
   | "OTHER";
 
@@ -120,7 +118,11 @@ export type InactiveReasonCode =
   | "OWNER_REFUSED_CONTINUE"
   | "OTHER";
 
-export type ReturnedReasonCode = "OWNER_REQUEST" | "CAN_INACTIVE" | "CAN_DAMAGED";
+export type ReturnedReasonCode = "OWNER_REQUEST" | "CAN_INACTIVE";
+
+/** Hasil tindakan petugas terhadap kaleng NON_AKTIF. */
+export type CanVisitOutcome = "ISI" | "KOSONG" | "DIKEMBALIKAN" | "TIDAK_DIKUNJUNGI";
+
 
 /** Pemicu usulan perubahan kondisi. */
 export type CanProposalTriggerSource = "EMPTY_THRESHOLD" | "SKIP_REASON" | "MANUAL";
@@ -357,6 +359,8 @@ export interface Collection {
   submitted_at?: string;
   synced_at?: string;
   sync_status: SyncStatus;
+  /** Kondisi bisnis kaleng saat riwayat dibaca; mengikuti kondisi kaleng saat ini. */
+  condition?: CanCondition;
   whatsapp_status?: string;
   submit_sequence?: number;
   alasan_resubmit?: string | null;
@@ -460,6 +464,8 @@ export interface VisitTask {
   latitude?: number;
   longitude?: number;
   condition: CanCondition;
+  /** Status pelacakan aktual; jangan diasumsikan true hanya dari label NON_AKTIF. */
+  is_active?: boolean;
   /**
    * B2: assignment periode berjalan untuk kaleng NON_AKTIF, bila ada.
    * Kaleng NON_AKTIF tidak diberi assignment saat dibuat (ASSIGNABLE_CONDITIONS),
@@ -470,6 +476,9 @@ export interface VisitTask {
   assignment_status?: string | null;
   last_visit: string | null;
   last_visit_purpose: CanVisitPurpose | null;
+  last_visit_outcome: CanVisitOutcome | null;
+  /** Visit pengembalian yang masih menunggu tombol Terima admin. */
+  pending_return_visit_id?: string | null;
 }
 
 // ─── Dashboard Stats ─────────────────────────────────────────────────────────
@@ -531,6 +540,9 @@ export interface OfflineCollection {
   collected_at: string;
   latitude?: number;
   longitude?: number;
+  condition: Extract<CanCondition, 'AKTIF' | 'RUSAK' | 'HILANG'>;
+  /** ISI berarti kunjungan NON_AKTIF, bukan ordinary batch. */
+  visit_outcome?: 'ISI';
   device_info?: DeviceInfo;
   submit_sequence?: number;
   is_latest?: boolean;
@@ -704,8 +716,11 @@ export interface CanVisitHistoryItem {
   qr_code: string;
   owner_name: string;
   purpose: 'VERIFIKASI' | 'PENGGANTIAN';
+  outcome: CanVisitOutcome;
+  condition: CanCondition;
   visited_at: string;
   notes?: string | null;
+  received_at?: string | null;
 }
 
 // GET /mobile/collections (history) — paginated
@@ -719,6 +734,7 @@ export interface HistoryItem {
   owner_address: string;
   nominal: number;
   collected_at: string;
+  condition: CanCondition;
   sync_status: SyncStatus;
   submit_sequence?: number;
 }
@@ -741,6 +757,9 @@ export interface BatchCollectionRequestItem {
   collected_at: string;
   latitude?: number;
   longitude?: number;
+  condition: Extract<CanCondition, 'AKTIF' | 'RUSAK' | 'HILANG'>;
+  /** ISI berarti kunjungan NON_AKTIF, bukan ordinary batch. */
+  visit_outcome?: 'ISI';
   device_info?: DeviceInfo;
 }
 

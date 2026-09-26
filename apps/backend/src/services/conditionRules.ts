@@ -11,11 +11,21 @@
 import type { SkipReasonCode, CanVisitPurpose } from '@lazisnu/shared-types';
 
 /**
- * Kondisi kaleng pada sisi backend sebagai literal union — sengaja TIDAK memakai enum
- * dari @lazisnu/shared-types agar backend tidak bergantung pada impor runtime paket itu.
- * Nilai stringnya identik dengan enum CanCondition pada kontrak API.
- */
-export type CanConditionValue = 'AKTIF' | 'NON_AKTIF' | 'RUSAK' | 'HILANG' | 'DIKEMBALIKAN';
+ /** Kondisi kaleng pada sisi backend sebagai literal union — sengaja TIDAK memakai enum
+  * dari @lazisnu/shared-types agar backend tidak bergantung pada impor runtime paket itu.
+  * Nilai stringnya identik dengan enum CanCondition pada kontrak API.
+  */
+ export type CanConditionValue = 'AKTIF' | 'NON_AKTIF' | 'RUSAK' | 'HILANG' | 'DIKEMBALIKAN';
+
+ /**
+  * Hasil tindakan petugas pada kaleng NON_AKTIF. Ini bukan kondisi kaleng:
+  * ISI/KOSONG/TIDAK_DIKUNJUNGI tetap NON_AKTIF, sedangkan DIKEMBALIKAN
+  * mengubah lifecycle menjadi DIKEMBALIKAN.
+  */
+ export type CanVisitOutcomeValue = 'ISI' | 'KOSONG' | 'DIKEMBALIKAN' | 'TIDAK_DIKUNJUNGI';
+
+ /** Kondisi yang boleh dikirim pada batch penjemputan biasa. */
+ export const ORDINARY_BATCH_CONDITIONS: CanConditionValue[] = ['AKTIF', 'RUSAK', 'HILANG'];
 
 /** Kondisi yang masuk cakupan penempatan. HILANG punya cakupan sendiri. */
 export const PLACEMENT_CONDITIONS: CanConditionValue[] = ['AKTIF', 'NON_AKTIF', 'RUSAK'];
@@ -51,24 +61,17 @@ export const ACTION_LABELS: Record<CanConditionValue, string> = {
 export const SKIP_REASON_LABELS: Record<SkipReasonCode, string> = {
   OWNER_ABSENT: 'Pemilik tidak di tempat',
   OWNER_REFUSED: 'Pemilik menolak dijemput',
-  CAN_LOST: 'Kaleng hilang',
-  CAN_DAMAGED: 'Kaleng rusak',
   ACCESS_DIFFICULT: 'Akses ke lokasi sulit',
   OTHER: 'Lainnya',
 };
 
-/** Kode alasan tidak terjemput yang wajib diikuti usulan perubahan kondisi. */
-export const SKIP_REASON_PROPOSALS: Partial<Record<SkipReasonCode, CanConditionValue>> = {
-  CAN_LOST: 'HILANG',
-  CAN_DAMAGED: 'RUSAK',
-};
+/** Tidak ada alasan skip yang otomatis mengusulkan kondisi. */
+export const SKIP_REASON_PROPOSALS: Partial<Record<SkipReasonCode, CanConditionValue>> = {};
 
 /** Kode alasan tidak terjemput (dipakai validasi payload mobile). */
 export const SKIP_REASON_CODES: SkipReasonCode[] = [
   'OWNER_ABSENT',
   'OWNER_REFUSED',
-  'CAN_LOST',
-  'CAN_DAMAGED',
   'ACCESS_DIFFICULT',
   'OTHER',
 ];
@@ -179,9 +182,48 @@ export function isTransitionAllowed(from: CanConditionValue, to: CanConditionVal
   return (ALLOWED_TRANSITIONS[from] ?? []).includes(to);
 }
 
+export function isOrdinaryBatchCondition(condition: string): condition is Extract<CanConditionValue, 'AKTIF' | 'RUSAK' | 'HILANG'> {
+  return (ORDINARY_BATCH_CONDITIONS as string[]).includes(condition);
+}
+
+export type NonActiveVisitResolution = {
+  outcome: CanVisitOutcomeValue;
+  condition: CanConditionValue;
+  isActive: boolean;
+  requiresCollection: boolean;
+};
+
 /**
- * Tentukan kondisi tujuan dari kode alasan tidak terjemput.
- * CAN_LOST → HILANG, CAN_DAMAGED → RUSAK; kode lain tidak mengusulkan apa pun.
+ * Tentukan efek tindakan NON_AKTIF tanpa menyentuh boundary batch biasa.
+ * `ISI` mengembalikan kondisi fisik yang dipilih PPK (AKTIF/RUSAK/HILANG),
+ * sedangkan tiga outcome lain memakai lifecycle non-aktif.
+ */
+export function resolveNonActiveVisit(
+  outcome: CanVisitOutcomeValue,
+  physicalCondition?: string,
+): NonActiveVisitResolution {
+  if (outcome === 'DIKEMBALIKAN') {
+    return { outcome, condition: 'DIKEMBALIKAN', isActive: false, requiresCollection: false };
+  }
+  if (outcome === 'ISI') {
+    if (physicalCondition === undefined || !isOrdinaryBatchCondition(physicalCondition)) {
+      throw new Error('Kaleng isi wajib memilih kondisi fisik AKTIF, RUSAK, atau HILANG');
+    }
+    return { outcome, condition: physicalCondition, isActive: true, requiresCollection: true };
+  }
+  if (physicalCondition !== undefined && physicalCondition !== 'AKTIF') {
+    throw new Error('Kondisi fisik hanya boleh dipilih untuk outcome ISI');
+  }
+  return { outcome, condition: 'NON_AKTIF', isActive: true, requiresCollection: false };
+}
+
+export function canReceiveReturnedVisit(outcome: CanVisitOutcomeValue): boolean {
+  return outcome === 'DIKEMBALIKAN';
+}
+
+/**
+ * Tidak ada kode alasan skip yang memengaruhi kondisi.
+ * Perubahan kondisi hanya melalui tindakan NON_AKTIF atau keputusan admin.
  */
 export function proposalForSkipReason(reasonCode: string): CanConditionValue | null {
   return SKIP_REASON_PROPOSALS[reasonCode as SkipReasonCode] ?? null;

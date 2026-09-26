@@ -139,13 +139,33 @@ import HistoryScreen from '../../src/screens/HistoryScreen';
 
 const makeNav = () => ({navigate: mockNavigate, goBack: mockGoBack}) as any;
 
+const mountedTrees = new Set<renderer.ReactTestRenderer>();
+
 const render = (element: React.ReactElement) => {
   let tree!: renderer.ReactTestRenderer;
   act(() => {
     tree = renderer.create(element);
   });
+  mountedTrees.add(tree);
   return tree;
 };
+
+const renderAsync = async (element: React.ReactElement) => {
+  let tree!: renderer.ReactTestRenderer;
+  await act(async () => {
+    tree = renderer.create(element);
+    await Promise.resolve();
+  });
+  mountedTrees.add(tree);
+  return tree;
+};
+
+afterEach(() => {
+  act(() => {
+    mountedTrees.forEach(tree => tree.unmount());
+  });
+  mountedTrees.clear();
+});
 
 /**
  * Traverses the react-test-renderer tree safely without JSON.stringify,
@@ -331,35 +351,35 @@ describe('HistoryScreen — modal Koreksi', () => {
     },
   };
 
-  it('merender HistoryScreen dalam state kosong (empty) tanpa crash', () => {
+  it('merender HistoryScreen dalam state kosong (empty) tanpa crash', async () => {
     // default mock: collections = []
-    const tree = render(<HistoryScreen />);
+    const tree = await renderAsync(<HistoryScreen />);
     expect(tree.toJSON()).not.toBeNull();
     expect(findTextInTree(tree, 'Belum ada riwayat')).toBe(true);
   });
 
-  it('merender HistoryScreen dalam state loading tanpa crash', () => {
+  it('merender HistoryScreen dalam state loading tanpa crash', async () => {
     const storesMock = jest.requireMock('../../src/stores');
     storesMock.useCollectionsStore = () =>
       makeCollectionsStore({isLoading: true, collections: [], page: 1});
-    const tree = render(<HistoryScreen />);
+    const tree = await renderAsync(<HistoryScreen />);
     expect(tree.toJSON()).not.toBeNull();
     // restore
     storesMock.useCollectionsStore = makeCollectionsStore;
   });
 
-  it('merender HistoryScreen dengan koleksi dan tombol Koreksi tersedia di kode sumber', () => {
+  it('merender HistoryScreen dengan koleksi dan tombol Koreksi tersedia di kode sumber', async () => {
     const storesMock = jest.requireMock('../../src/stores');
     storesMock.useCollectionsStore = () =>
       makeCollectionsStore({collections: [collectionWithAddress], total: 1});
-    const tree = render(<HistoryScreen />);
+    const tree = await renderAsync(<HistoryScreen />);
     expect(tree.toJSON()).not.toBeNull();
     expect(findTextInTree(tree, 'Koreksi')).toBe(true);
     // restore
     storesMock.useCollectionsStore = makeCollectionsStore;
   });
 
-  it('menampilkan fallback "Alamat tidak tersedia" saat koleksi tanpa alamat dirender', () => {
+  it('menampilkan fallback "Alamat tidak tersedia" saat koleksi tanpa alamat dirender', async () => {
     const collectionWithoutAddress = {
       ...collectionWithAddress,
       can: {
@@ -371,18 +391,18 @@ describe('HistoryScreen — modal Koreksi', () => {
     const storesMock = jest.requireMock('../../src/stores');
     storesMock.useCollectionsStore = () =>
       makeCollectionsStore({collections: [collectionWithoutAddress], total: 1});
-    const tree = render(<HistoryScreen />);
+    const tree = await renderAsync(<HistoryScreen />);
     expect(tree.toJSON()).not.toBeNull();
     expect(findTextInTree(tree, 'Alamat tidak tersedia')).toBe(true);
     // restore
     storesMock.useCollectionsStore = makeCollectionsStore;
   });
 
-  it('merender HistoryScreen dalam state error dan banner error tampil', () => {
+  it('merender HistoryScreen dalam state error dan banner error tampil', async () => {
     const storesMock = jest.requireMock('../../src/stores');
     storesMock.useCollectionsStore = () =>
       makeCollectionsStore({error: 'Gagal memuat riwayat', isLoading: false});
-    const tree = render(<HistoryScreen />);
+    const tree = await renderAsync(<HistoryScreen />);
     expect(tree.toJSON()).not.toBeNull();
     expect(findTextInTree(tree, 'Gagal memuat riwayat')).toBe(true);
     // restore

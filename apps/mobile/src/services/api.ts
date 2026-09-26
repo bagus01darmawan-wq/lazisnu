@@ -14,6 +14,8 @@ import {
   HistoryResponse,
   BatchSyncResponse,
   BatchCollectionRequestItem,
+  CanCondition,
+  CanVisitOutcome,
   RangeStatsResponse,
   ProposalStatusResponse,
   CanVisitHistoryItem,
@@ -592,6 +594,9 @@ export const collectionService = {
     collected_at: string;
     latitude?: number;
     longitude?: number;
+    /** Kondisi fisik wajib; untuk NON_AKTIF, visit_outcome menandai jalur khusus. */
+    condition: CanCondition.AKTIF | CanCondition.RUSAK | CanCondition.HILANG;
+    visit_outcome?: 'ISI';
     device_info?: {
       model: string;
       os_version: string;
@@ -671,7 +676,7 @@ export const collectionService = {
       status: string;
       message: string;
       reason_code?: string;
-      /** Diisi server bila alasan memicu usulan kondisi (CAN_LOST/CAN_DAMAGED). */
+      /** Diisi server bila alasan memicu usulan kondisi legacy. */
       proposal_id?: string;
     }>
   > => {
@@ -689,20 +694,23 @@ export const collectionService = {
     });
   },
 
-  /**
-   * Catat kunjungan non-penjemputan (verifikasi kaleng non-aktif / penggantian unit).
-   * Bukan collection: tidak ada nominal dan tidak menambah hitungan kosong.
-   */
+  /** Catat tindakan NON_AKTIF tanpa nominal. */
   recordCanVisit: async (
     canId: string,
-    purpose: 'VERIFIKASI' | 'PENGGANTIAN' | 'PENCABUTAN',
+    outcome: CanVisitOutcome,
     notes?: string,
   ): Promise<
-    ApiResponse<{id: string; can_id: string; purpose: string; condition: string; message: string}>
+    ApiResponse<{
+      id: string;
+      can_id: string;
+      outcome: CanVisitOutcome;
+      condition: string;
+      message: string;
+    }>
   > => {
     return apiRequest(`/mobile/cans/${canId}/visits`, {
       method: 'POST',
-      body: JSON.stringify(notes ? {purpose, notes} : {purpose}),
+      body: JSON.stringify(notes ? {outcome, notes} : {outcome}),
     });
   },
 

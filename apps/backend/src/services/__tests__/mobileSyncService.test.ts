@@ -27,6 +27,14 @@ const { assertCollectedAtInWindow } = jest.requireMock('../collectionSubmission'
   assertCollectedAtInWindow: jest.Mock;
 };
 
+jest.mock('../conditionProposalService', () => ({
+  evaluateEmptyStreakForCan: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../auditLogService', () => ({
+  insertActivityLog: jest.fn().mockResolvedValue(undefined),
+}));
+
 jest.mock('../whatsapp', () => ({
   sendWhatsAppNotification: jest.fn(),
 }));
@@ -38,6 +46,7 @@ describe('mobileSyncService syncCollectionsBatch', () => {
     assignment_id: '00000000-0000-0000-0000-000000000001',
     can_id: '00000000-0000-0000-0000-000000000002',
     nominal: 50000,
+    condition: 'AKTIF' as const,
     collected_at: '2026-05-17T10:00:00.000Z',
   };
 
@@ -51,7 +60,7 @@ describe('mobileSyncService syncCollectionsBatch', () => {
     (validateAssignmentForSubmit as jest.Mock).mockResolvedValue({ periodYear: 2026, periodMonth: 5 });
     (submitCollection as jest.Mock).mockResolvedValue({ id: 'srv-1' });
 
-    const result = await syncCollectionsBatch([validItem], officerId);
+    const result = await syncCollectionsBatch([validItem], officerId, 'user-123');
 
     expect(result.total).toBe(1);
     expect(result.succeeded).toBe(1);
@@ -63,10 +72,69 @@ describe('mobileSyncService syncCollectionsBatch', () => {
     });
   });
 
+  it('memakai assignment kunjungan on-demand untuk visit_outcome ISI', async () => {
+    const visitAssignment = {
+      id: 'visit-assignment-1',
+      periodYear: 2026,
+      periodMonth: 9,
+    };
+    const tx = {
+      query: {
+        cans: {
+          findFirst: jest.fn().mockResolvedValue({
+            id: validItem.can_id,
+            branchId: 'branch-1',
+            condition: 'NON_AKTIF',
+          }),
+        },
+        officers: {
+          findFirst: jest.fn().mockResolvedValue({ branchId: 'branch-1' }),
+        },
+        assignments: {
+          findFirst: jest.fn().mockResolvedValue(visitAssignment),
+        },
+      },
+      insert: jest.fn(() => ({
+        values: jest.fn().mockResolvedValue(undefined),
+      })),
+    };
+
+    (db.query.collections.findFirst as jest.Mock).mockResolvedValue(null);
+    (db.query.cans.findFirst as jest.Mock).mockResolvedValue(null);
+    (db.query.officers.findFirst as jest.Mock).mockResolvedValue(null);
+    (db.transaction as jest.Mock).mockImplementation(async (cb) => cb(tx));
+    (validateAssignmentForSubmit as jest.Mock).mockResolvedValue({
+      periodYear: 2026,
+      periodMonth: 9,
+    });
+    (submitCollection as jest.Mock).mockResolvedValue({ id: 'srv-visit-1' });
+
+    const result = await syncCollectionsBatch(
+      [{ ...validItem, assignment_id: 'ordinary-assignment-1', visit_outcome: 'ISI' }],
+      officerId,
+      'user-123',
+    );
+
+    expect(result.succeeded).toBe(1);
+    expect(validateAssignmentForSubmit).toHaveBeenCalledWith(
+      tx,
+      'visit-assignment-1',
+      validItem.can_id,
+      officerId,
+    );
+    expect(submitCollection).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        assignmentId: 'visit-assignment-1',
+        visitOutcome: 'ISI',
+      }),
+    );
+  });
+
   it('mengembalian status ALREADY_SYNCED jika offline_id sudah ada di DB', async () => {
     (db.query.collections.findFirst as jest.Mock).mockResolvedValue({ id: 'srv-1' });
 
-    const result = await syncCollectionsBatch([validItem], officerId);
+    const result = await syncCollectionsBatch([validItem], officerId, 'user-123');
 
     expect(result.total).toBe(1);
     expect(result.succeeded).toBe(1);
@@ -84,7 +152,7 @@ describe('mobileSyncService syncCollectionsBatch', () => {
       throw new AppError('QR_INVALID', 'Kaleng tidak valid', 400, false);
     });
 
-    const result = await syncCollectionsBatch([validItem], officerId);
+    const result = await syncCollectionsBatch([validItem], officerId, 'user-123');
 
     expect(result.total).toBe(1);
     expect(result.succeeded).toBe(0);
@@ -105,7 +173,7 @@ describe('mobileSyncService syncCollectionsBatch', () => {
       throw new AppError('INTERNAL_ERROR', 'Koneksi database terputus', 500, true);
     });
 
-    const result = await syncCollectionsBatch([validItem], officerId);
+    const result = await syncCollectionsBatch([validItem], officerId, 'user-123');
 
     expect(result.total).toBe(1);
     expect(result.succeeded).toBe(0);
@@ -131,6 +199,7 @@ describe('mobileSyncService syncCollectionsBatch', () => {
     const result = await syncCollectionsBatch(
       [{ ...validItem, collected_at: '2026-08-20T12:00:00.000Z' }],
       officerId,
+      'user-123',
     );
 
     expect(result.total).toBe(1);
@@ -153,7 +222,7 @@ describe('mobileSyncService syncCollectionsBatch', () => {
       throw new Error('Database down connection error');
     });
 
-    const result = await syncCollectionsBatch([validItem], officerId);
+    const result = await syncCollectionsBatch([validItem], officerId, 'user-123');
 
     expect(result.total).toBe(1);
     expect(result.succeeded).toBe(0);

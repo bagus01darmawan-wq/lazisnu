@@ -38,6 +38,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
+import { RegionCards, type RegionSummary } from '@/components/region/RegionCards';
 import { GlassSelect } from '@/components/ui/GlassSelect';
 import { Card } from '@/components/ui/Card';
 import { Can as BaseCan, Branch, ApiResponse, PaginatedResponse } from '@lazisnu/shared-types';
@@ -119,11 +120,24 @@ export default function CansPage() {
 
   // Pagination & Filter states
   const [search, setSearch] = useState('');
-  const [branchFilter, setBranchFilter] = useState('');
+  // Wilayah yang dipilih di layer kartu. Sheet(is) mengarahkan query tabel:
+  // kartu ranting menyaring branch_id, kartu dukuh menyaring dukuh_id.
+  const [region, setRegion] = useState<RegionSummary | null>(null);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [totalItems, setTotalItems] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  // Header tabel menampilkan wilayah aktif; sheet(is) disembunyikan bila admin
+  // punya tepat satu wilayah agar tidak ada langkah yang tidak perlu.
+  const hasSingleBranch = Boolean(user?.branch_id);
+  const showRegionCards = !hasSingleBranch;
+
+  const regionQuery = region
+    ? region.kind === 'dukuh'
+      ? { dukuh_id: region.id }
+      : { branch_id: region.id }
+    : {};
 
   // Import states
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -152,7 +166,7 @@ export default function CansPage() {
       const response = await api.get('/admin/cans', {
         params: {
           search,
-          branch_id: branchFilter,
+          ...regionQuery,
           status: statusFilter,
           page: currentPage,
           limit: pageSize
@@ -199,7 +213,7 @@ export default function CansPage() {
 
   useEffect(() => {
     fetchData();
-  }, [search, branchFilter, statusFilter, currentPage, pageSize]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, region?.id, statusFilter, currentPage, pageSize]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchBranches();
@@ -234,10 +248,10 @@ export default function CansPage() {
             : null;
           setIsModalOpen(false);
           setEditingCan(null);
-          if (isBranchMove && branchFilter) {
-            // Datanya sudah pindah ranting, filter lama tidak akan menampilkannya.
-            // Reset filter agar hasilnya terlihat, useEffect akan refetch otomatis.
-            setBranchFilter('');
+          if (isBranchMove && region?.kind === 'branch') {
+            // Datanya sudah pindah ranting, kartu yang sedang aktif tidak akan
+            // menampilkannya. Kembali ke layer kartu agar hasilnya terlihat.
+            setRegion(null);
             setCurrentPage(1);
           } else {
             await fetchData();
@@ -774,6 +788,58 @@ export default function CansPage() {
         </div>
       </div>
 
+      {/* Layer 1 — kartu wilayah. Keterangan periode ikut diperbarui agar kartu
+          mencerminkan bulan yang sedang dipilih (keputusan 3). */}
+      <RegionCards
+        page="cans"
+        year={new Date().getFullYear()}
+        month={new Date().getMonth() + 1}
+        selectedId={region?.id ?? null}
+        hidden={!showRegionCards}
+        onSelect={(r) => {
+          setRegion(r);
+          setCurrentPage(1);
+          setSelectedIds([]);
+        }}
+      />
+
+      {/* Layer 2 — isi tabel wilayah terpilih. Saat belum ada kartu yang
+          ditekan, tabel disembunyikan supaya admin tidak kembali menebak
+          dari ratusan baris. */}
+      {(!showRegionCards || region) && (
+      <div className="flex flex-col gap-4">
+      {(region || !showRegionCards) && (
+        <div className="flex items-center gap-3 px-1">
+          {region && (
+            <button
+              type="button"
+              onClick={() => {
+                setRegion(null);
+                setCurrentPage(1);
+                setSelectedIds([]);
+              }}
+              className="flex items-center gap-1.5 h-[30px] px-3 rounded-xl bg-white/5 border border-white/15 text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/70 hover:bg-white/10 transition-all active:scale-95"
+            >
+              <ChevronLeft size={13} strokeWidth={3} className="text-[#EAD19B]" />
+              Semua Wilayah
+            </button>
+          )}
+          {region && (
+            <div className="flex items-center gap-2 min-w-0">
+              <MapPin size={13} className="text-[#EAD19B] shrink-0" />
+              <span className="text-xs font-black tracking-tight text-[#F4F1EA] truncate">
+                {cleanBranchName(region.name).toUpperCase()}
+              </span>
+              {region.branchName && region.kind === 'dukuh' && (
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/30 truncate">
+                  {cleanBranchName(region.branchName).toUpperCase()}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Transparent Toolbar Section */}
       <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center justify-between bg-transparent p-4 md:p-5 border-none shadow-none">
         <div className="relative w-full lg:w-80 group">
@@ -814,26 +880,7 @@ export default function CansPage() {
             className="h-[36px]"
           />
 
-          {user?.role === 'ADMIN_KECAMATAN' && (
-            <DropdownFilter
-              label="Pilih Ranting"
-              placeholder="Cari ranting..."
-              options={[
-                { label: 'SEMUA RANTING', value: '' },
-                ...branches.map((b: Branch) => ({
-                  label: cleanBranchName(b.name).toUpperCase(),
-                  value: b.id
-                }))
-              ]}
-              value={branchFilter}
-              onChange={(val) => {
-                setBranchFilter(val);
-                setCurrentPage(1);
-              }}
-              className="h-[36px]"
-            />
-          )}
-
+          {/* Filter ranting dihapus: layer kartu sudah menyaring otomatis. */}
           <DropdownFilter
             options={[
               { label: '10', value: '10' },
@@ -854,7 +901,6 @@ export default function CansPage() {
           <button
             onClick={() => {
               setSearch('');
-              setBranchFilter('');
               setStatusFilter('ACTIVE');
               setCurrentPage(1);
               setPageSize(10);
@@ -930,6 +976,8 @@ export default function CansPage() {
           </div>
         )}
       </Card>
+      </div>
+      )}
 
       {/* Modal Impor */}
       <Modal

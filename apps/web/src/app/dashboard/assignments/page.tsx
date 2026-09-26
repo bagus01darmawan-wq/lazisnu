@@ -23,7 +23,8 @@ import {
   RotateCcw,
   UserCheck,
   CheckSquare,
-  Square
+  Square,
+  ChevronLeft
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -32,6 +33,7 @@ import * as z from 'zod';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
 import { GlassSelect } from '@/components/ui/GlassSelect';
 import { PeriodPicker } from '@/components/ui/PeriodPicker';
+import { RegionCards, type RegionSummary } from '@/components/region/RegionCards';
 import { ConfirmToast } from '@/components/ui/ConfirmToast';
 
 const assignmentSchema = z.object({
@@ -139,10 +141,21 @@ export default function AssignmentsPage() {
     months: [currentMonth],
   });
   const [search, setSearch] = useState('');
-  const [branchFilter, setBranchFilter] = useState('');
+  // Wilayah yang dipilih di layer kartu: kartu ranting menyaring branch_id,
+  // kartu dukuh menyaring dukuh_id.
+  const [region, setRegion] = useState<RegionSummary | null>(null);
   const [totalItems, setTotalItems] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  // Admin ranting hanya punya satu wilayah, jadi layer kartu dilewati.
+  const showRegionCards = !user?.branch_id;
+
+  const regionQuery = region
+    ? region.kind === 'dukuh'
+      ? { dukuh_id: region.id }
+      : { branch_id: region.id }
+    : {};
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<AssignmentFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -162,7 +175,7 @@ export default function AssignmentsPage() {
         params: {
           ...filter,
           search,
-          branch_id: branchFilter,
+          ...regionQuery,
           page: currentPage,
           limit: pageSize
         }
@@ -222,7 +235,7 @@ export default function AssignmentsPage() {
   useEffect(() => {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, search, branchFilter, currentPage, pageSize]);
+  }, [filter, search, region?.id, currentPage, pageSize]);
 
   useEffect(() => {
     fetchDropdowns();
@@ -608,6 +621,56 @@ export default function AssignmentsPage() {
         </div>
       </div>
 
+      {/* Layer 1 — kartu wilayah. Kartu penugasan memuat daftar petugas di
+          wilayah tersebut (keputusan 8), dan ikut mengikuti periode aktif. */}
+      <RegionCards
+        page="assignments"
+        year={filter.year}
+        month={filter.month}
+        selectedId={region?.id ?? null}
+        hidden={!showRegionCards}
+        onSelect={(r) => {
+          setRegion(r);
+          setCurrentPage(1);
+          setSelectedIds([]);
+        }}
+      />
+
+      {/* Layer 2 — isi tabel wilayah terpilih. */}
+      {(!showRegionCards || region) && (
+      <div className="flex flex-col gap-4">
+      {(region || !showRegionCards) && (
+        <div className="flex items-center gap-3 px-1">
+          {region && (
+            <button
+              type="button"
+              onClick={() => {
+                setRegion(null);
+                setCurrentPage(1);
+                setSelectedIds([]);
+              }}
+              className="flex items-center gap-1.5 h-[30px] px-3 rounded-xl bg-white/5 border border-white/15 text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/70 hover:bg-white/10 transition-all active:scale-95"
+            >
+              <ChevronLeft size={13} strokeWidth={3} className="text-[#EAD19B]" />
+              Semua Wilayah
+            </button>
+          )}
+          {region && (
+            <div className="flex items-center gap-2 min-w-0">
+              <MapPin size={13} className="text-[#EAD19B] shrink-0" />
+              <span className="text-xs font-black tracking-tight text-[#F4F1EA] truncate">
+                {region.name.replace(/ranting|dukuh/gi, '').trim().toUpperCase()}
+              </span>
+              {region.branchName && region.kind === 'dukuh' && (
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/30 truncate">
+                  {region.branchName.replace(/ranting/gi, '').trim().toUpperCase()}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Transparent Filter Toolbar */}
       <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center justify-between bg-transparent p-4 md:p-5 border-none shadow-none">
         <div className="relative w-full lg:w-80 group">
@@ -638,26 +701,7 @@ export default function AssignmentsPage() {
             }}
           />
 
-          {user?.role === 'ADMIN_KECAMATAN' && (
-            <DropdownFilter
-              label="Pilih Ranting"
-              placeholder="Cari ranting..."
-              options={[
-                { label: 'SEMUA RANTING', value: '' },
-                ...branches.map((b: Branch) => ({
-                  label: b.name.replace(/ranting/gi, '').trim().toUpperCase(),
-                  value: b.id
-                }))
-              ]}
-              value={branchFilter}
-              onChange={(val) => {
-                setBranchFilter(val);
-                setCurrentPage(1);
-              }}
-              className="h-[36px]"
-            />
-          )}
-
+          {/* Filter ranting dihapus: layer kartu sudah menyaring otomatis. */}
           <DropdownFilter
             options={[
               { label: '10', value: '10' },
@@ -678,7 +722,7 @@ export default function AssignmentsPage() {
           <button
             onClick={() => {
               setSearch('');
-              setBranchFilter('');
+              setRegion(null);
               setFilter({ year: currentYear, month: currentMonth, months: [currentMonth] });
               setCurrentPage(1);
               setPageSize(10);
@@ -756,6 +800,8 @@ export default function AssignmentsPage() {
           </div>
         )}
       </Card>
+      </div>
+      )}
 
       {/* Modal Penugasan */}
       <Modal

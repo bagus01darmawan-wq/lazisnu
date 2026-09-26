@@ -6,11 +6,13 @@ import { createCanSchema, updateCanSchema } from './schemas';
 import { z } from 'zod';
 import { AppError } from '../../utils/AppError';
 import * as canService from '../../services/canService';
+import * as regionCardService from '../../services/regionCardService';
 import { generateSingleQRPDF, generateBatchQRPDF, generateQrPreviewDataUrl } from '../../services/qrPdfService';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { getSignedDownloadUrl } from '../../services/r2';
+import { insertActivityLog } from '../../services/auditLogService';
 
 const rantingOrKec = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
 
@@ -18,14 +20,27 @@ export async function cansRoutes(fastify: FastifyInstance) {
   fastify.get('/cans', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const user = request.currentUser!;
-      const query = request.query as { page?: string; limit?: string; search?: string; status?: string; branch_id?: string };
+      const query = request.query as { page?: string; limit?: string; search?: string; status?: string; branch_id?: string; dukuh_id?: string };
       const { page, limit, offset } = getPaginationParams(query);
 
       const { cans, total } = await canService.getCans({
-        page, limit, offset, search: query.search, status: query.status, branch_id: query.branch_id
+        page, limit, offset, search: query.search, status: query.status, branch_id: query.branch_id, dukuh_id: query.dukuh_id
       }, user);
 
       return sendSuccess(reply, formatPaginatedResponse(cans, total, page, limit, 'cans'));
+    } catch (error) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  // Ringkasan per wilayah untuk layer kartu. Static segment didahulukan atas
+  // `/cans/:id` oleh router Fastify, jadi path ini tidak tertangkap param.
+  fastify.get('/cans/region-cards', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = request.currentUser!;
+      const query = request.query as { year?: string; month?: string };
+      const cards = await regionCardService.getCanRegionCards(user, query);
+      return sendSuccess(reply, cards);
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
     }
@@ -251,6 +266,55 @@ export async function cansRoutes(fastify: FastifyInstance) {
        if (error instanceof AppError) {
         return sendError(reply, error.statusCode, error.code, error.message);
       }
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  /** POST /admin/cans/:id/return-receipt — konfirmasi penerimaan oleh admin. */
+  fastify.post('/cans/:id/return-receipt', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const user = request.currentUser!;
+      const can = await canService.getCanDetail(id, user);
+      const [pending] = await db.query.canVisits.findMany({
+        where: and(
+          eq(schema.canVisits.canId, id),
+          eq(schema.canVisits.outcome, 'DIKEMBALIKAN'),
+          isNull(schema.canVisits.receivedAt),
+        ),
+        orderBy: [desc(schema.canVisits.visitedAt)],
+        limit: 1,
+      });
+      if (!pending) return sendError(reply, 409, 'RETURN_NOT_PENDING', 'Tidak ada pengembalian yang menunggu penerimaan');
+
+      const receivedAt = new Date();
+      await db.transaction(async (tx) => {
+        const updated = await tx.update(schema.canVisits).set({
+          receivedAt,
+          receivedBy: user.userId,
+        }).where(and(
+          eq(schema.canVisits.id, pending.id),
+          isNull(schema.canVisits.receivedAt),
+        )).returning({ id: schema.canVisits.id });
+        if (updated.length !== 1) {
+          throw new AppError('RETURN_NOT_PENDING', 'Tidak ada pengembalian yang menunggu penerimaan', 409);
+        }
+        await insertActivityLog({
+          userId: user.userId,
+          officerId: null,
+          actionType: 'CAN_RETURN_RECEIVED',
+          entityType: 'can',
+          entityId: id,
+          oldData: { visit_id: pending.id, received_at: null },
+          newData: { visit_id: pending.id, received_at: receivedAt.toISOString() },
+          ipAddress: 'admin-return-receipt',
+          userAgent: null,
+        }, tx);
+      });
+
+      return sendSuccess(reply, { can_id: id, visit_id: pending.id, received_at: receivedAt.toISOString() });
+    } catch (error: unknown) {
+      if (error instanceof AppError) return sendError(reply, error.statusCode, error.code, error.message);
       return sendInternalError(reply, error, fastify.log);
     }
   });

@@ -298,6 +298,8 @@ describe('C1-T11 dispatcher + hook + sapu (DB, fcm/WA mock)', () => {
     // ACTIVE tersisa untuk off1 (semua sudah COMPLETED — kaleng + assignment baru).
     const [canS] = await db.insert(schema.cans).values({ branchId: bR1, ownerName: 'Owner T11-S', ownerWhatsapp: '084000000900', qrCode: 'TEST-QR-T11-CS' }).returning();
     await db.insert(schema.assignments).values({ officerId: off1, canId: canS.id, periodYear: 2026, periodMonth: 9, status: 'ACTIVE' });
+    // Isolasi sapuan dari dispatch test sebelumnya agar H-3 menguji sweep, bukan dedup sisa.
+    await db.delete(schema.notifications).where(and(eq(schema.notifications.recipientPhone, ppkPhone), eq(schema.notifications.messageTemplate, 'PENGINGAT_H3')));
 
     const r1 = await sweepNotifs(2026, 9, h3now);
     expect(r1.escalated).toBeGreaterThanOrEqual(1);

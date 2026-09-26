@@ -28,6 +28,7 @@ type MobileHistoryCollection = {
     qrCode: string | null;
     ownerName: string;
     ownerAddress: string | null;
+    condition?: string;
   };
 };
 
@@ -42,6 +43,7 @@ export function toMobileHistoryItem(collection: MobileHistoryCollection) {
     owner_address: collection.can.ownerAddress || '',
     nominal: Number(collection.nominal),
     collected_at: collection.collectedAt,
+    condition: collection.can.condition ?? 'AKTIF',
     sync_status: collection.syncStatus,
     submit_sequence: collection.submitSequence,
   };
@@ -90,55 +92,41 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
           assertCollectedAtInWindow(new Date(body.collected_at), assignment.periodYear, assignment.periodMonth);
         } catch (err: unknown) {
           const appErr = AppError.fromUnknown(err, 'collected_at di luar jendela periode');
-          try {
-            await insertActivityLog({
-              userId: user.userId,
-              officerId,
-              actionType: 'COLLECTED_AT_REJECTED',
-              entityType: 'assignment',
-              entityId: body.assignment_id,
-              oldData: null,
-              newData: {
-                collected_at: body.collected_at,
-                periodYear: assignment.periodYear,
-                periodMonth: assignment.periodMonth,
-                reason: (appErr.details as any)?.reason ?? null,
-              },
-              ipAddress: request.ip,
-              userAgent: request.headers['user-agent'] || null,
-            });
-          } catch {
-            // Audit tidak boleh menggagalkan penolakan yang sah.
-          }
+          await insertActivityLog({
+            userId: user.userId,
+            officerId,
+            actionType: 'COLLECTED_AT_REJECTED',
+            entityType: 'assignment',
+            entityId: body.assignment_id,
+            oldData: null,
+            newData: {
+              collected_at: body.collected_at,
+              periodYear: assignment.periodYear,
+              periodMonth: assignment.periodMonth,
+              reason: (appErr.details as any)?.reason ?? null,
+            },
+            ipAddress: request.ip,
+            userAgent: request.headers['user-agent'] || null,
+          }, tx);
           throw appErr;
         }
 
-        return await submitCollection(tx, {
+        const result = await submitCollection(tx, {
           assignmentId: body.assignment_id,
           canId: body.can_id,
           officerId,
+          actorUserId: user.userId,
           nominal: body.nominal,
           collectedAt: new Date(body.collected_at),
           latitude: body.latitude?.toString(),
           longitude: body.longitude?.toString(),
           offlineId: body.offline_id,
           deviceInfo: body.device_info as any,
+          condition: body.condition,
         });
+        await evaluateEmptyStreakForCan(body.can_id, tx);
+        return result;
       });
-
-      // B2: kaleng NON_AKTIF yang ternyata berisi harus kembali AKTIF, dan ini
-      // harus berlaku juga pada jalur submit ONLINE (bukan hanya batch sync).
-      // Tanpa ini, kaleng tetap NON_AKTIF sampai ada sinkronisasi berikutnya —
-      // muncul lagi di daftar "Perlu Dikunjungi" padahal sudah dijemput.
-      // Kegagalan evaluasi tidak boleh menggagalkan penjemputan yang tercatat.
-      try {
-        await evaluateEmptyStreakForCan(body.can_id);
-      } catch (conditionError) {
-        fastify.log.warn(
-          { err: conditionError },
-          `evaluasi kondisi kaleng gagal setelah submit online: ${getErrorMessage(conditionError)}`,
-        );
-      }
 
       const insertedCan = await db.query.cans.findFirst({ 
         where: eq(schema.cans.id, body.can_id),
@@ -208,7 +196,7 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
             eq(schema.collections.syncStatus, 'COMPLETED'),
             latestCollectionCondition
           ),
-          with: { can: { columns: { qrCode: true, ownerName: true, ownerAddress: true } } },
+          with: { can: { columns: { qrCode: true, ownerName: true, ownerAddress: true, condition: true } } },
           orderBy: [desc(schema.collections.collectedAt)],
           offset: skip,
           limit,
