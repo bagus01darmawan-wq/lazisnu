@@ -11,7 +11,7 @@
  */
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { and, eq, gte, lt, inArray, sql, desc } from 'drizzle-orm';
+import { and, eq, gte, lt, inArray, or, sql, desc } from 'drizzle-orm';
 import { getLatestCollectionCondition } from './collectionSubmission';
 import { computeTaskMetrics } from './taskMetrics';
 import {
@@ -33,6 +33,84 @@ export interface OverviewScopeInput {
 export interface OverviewPeriodInput {
   year: number;
   month: number;
+  /**
+   * Bulan-bulan terpilih (filter PeriodPicker multi-bulan). Kosong/tidak ada =
+   * hanya `month` (perilaku lama, kompatibel dengan pemanggil & test lama).
+   */
+  months?: number[];
+}
+
+/** Bulan efektif: normalisasi months bila ada, jika tidak [month]. */
+export function effectiveMonths(period: OverviewPeriodInput): number[] {
+  const clean = normalizePeriodMonths(period.months);
+  if (clean.length > 0) return clean;
+  return Number.isInteger(period.month) && period.month >= 1 && period.month <= 12
+    ? [period.month]
+    : [];
+}
+
+/**
+ * Parse query periode overview (`?year=2026&months=7,8,9`).
+ * Null = 400 VALIDATION_ERROR. Tanpa param = bulan berjalan (perilaku lama,
+ * kompatibel dengan pemanggil yang belum mengirim periode).
+ */
+export function parseOverviewPeriod(yearRaw: unknown, monthsRaw: unknown): OverviewPeriodInput | null {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  let year = currentYear;
+  if (yearRaw !== undefined && yearRaw !== '') {
+    const y = Number(yearRaw);
+    if (!Number.isInteger(y) || y < 2000 || y > currentYear + 1) return null;
+    year = y;
+  }
+
+  let months: number[] | undefined;
+  if (monthsRaw !== undefined && monthsRaw !== '') {
+    const parsed = String(monthsRaw).split(',').map((s) => Number(s.trim()));
+    if (parsed.length === 0 || parsed.length > 12) return null;
+    if (parsed.some((m) => !Number.isInteger(m) || m < 1 || m > 12)) return null;
+    months = [...new Set(parsed)].sort((a, b) => a - b);
+  }
+
+  const eff = months ?? [now.getMonth() + 1];
+  return { year, month: Math.max(...eff), months: eff };
+}
+
+/** Normalisasi input periode: buang di luar 1-12, unik, terurut. */
+export function normalizePeriodMonths(months: unknown): number[] {
+  const list = Array.isArray(months) ? months : [];
+  const clean = list
+    .map((m) => Number(m))
+    .filter((m) => Number.isInteger(m) && m >= 1 && m <= 12);
+  return [...new Set(clean)].sort((a, b) => a - b);
+}
+
+/** Rentang [start, end) untuk tiap bulan terpilih (diskrit, bukan min-max). */
+export function periodRanges(year: number, months: number[]): Array<{ start: Date; end: Date }> {
+  const list = months.length > 0 ? months : Array.from({ length: 12 }, (_, i) => i + 1);
+  return list.map((m) => ({
+    start: new Date(year, m - 1, 1),
+    end: new Date(year, m, 1),
+  }));
+}
+
+/** Kondisi tanggal-masuk-periode untuk kolom timestamp (collections.collectedAt, cans.updatedAt). */
+export function inSelectedMonths(column: Parameters<typeof gte>[0], year: number, months: number[]) {
+  const ranges = periodRanges(year, months);
+  if (ranges.length === 1) {
+    return and(gte(column, ranges[0].start), lt(column, ranges[0].end));
+  }
+  return or(...ranges.map(({ start, end }) => and(gte(column, start), lt(column, end))));
+}
+
+/** Kondisi periode untuk assignments (kolom periodYear/periodMonth diskrit). */
+export function inAssignmentPeriod(year: number, months: number[]) {
+  const list = months.length > 0 ? months : Array.from({ length: 12 }, (_, i) => i + 1);
+  return and(
+    eq(schema.assignments.periodYear, year),
+    list.length === 1 ? eq(schema.assignments.periodMonth, list[0]) : inArray(schema.assignments.periodMonth, list),
+  );
 }
 
 /** Jumlah bulan yang dikembalikan pada tren operasional. */
@@ -128,7 +206,7 @@ export async function getOfficerCount(scope: OverviewScopeInput) {
 
 /** Nominal & jumlah penjemputan berhasil pada periode (versi submit terbaru saja). */
 export async function getCollectionSummary(scope: OverviewScopeInput, period: OverviewPeriodInput) {
-  const { start, end } = monthBounds(period);
+  const months = effectiveMonths(period);
 
   const [row] = await db
     .select({
@@ -141,8 +219,7 @@ export async function getCollectionSummary(scope: OverviewScopeInput, period: Ov
       scopeCondition(scope),
       eq(schema.collections.syncStatus, 'COMPLETED'),
       getLatestCollectionCondition(),
-      gte(schema.collections.collectedAt, start),
-      lt(schema.collections.collectedAt, end),
+      inSelectedMonths(schema.collections.collectedAt, period.year, months),
     ));
 
   return {
@@ -159,11 +236,11 @@ export async function getCollectionSummary(scope: OverviewScopeInput, period: Ov
  * usulan) menulis `updated_at` pada saat transisi terjadi.
  */
 export async function getReturnedCounts(scope: OverviewScopeInput, period: OverviewPeriodInput) {
-  const { start, end } = monthBounds(period);
+  const months = effectiveMonths(period);
 
   // Dua query terpisah, bukan satu `count(*) filter (...)`:
   //  - total: seluruh kaleng DIKEMBALIKAN (tanpa batas waktu)
-  //  - thisMonth: hanya yang updated_at di bulan periode
+  //  - thisMonth: yang updated_at masuk bulan-bulan periode terpilih
   //
   // Filter tanggal HARUS memakai operator Drizzle (gte/lt) agar di-bind
   // sebagai parameter. Interpolasi `${start}` mentah di template sql`...`
@@ -181,8 +258,7 @@ export async function getReturnedCounts(scope: OverviewScopeInput, period: Overv
       .where(and(
         scopeCondition(scope),
         eq(schema.cans.condition, 'DIKEMBALIKAN'),
-        gte(schema.cans.updatedAt, start),
-        lt(schema.cans.updatedAt, end),
+        inSelectedMonths(schema.cans.updatedAt, period.year, months),
       )),
   ]);
 
@@ -223,8 +299,7 @@ export async function getTaskSummary(
     .innerJoin(schema.cans, eq(schema.assignments.canId, schema.cans.id))
     .where(and(
       scopeCondition(scope),
-      eq(schema.assignments.periodYear, period.year),
-      eq(schema.assignments.periodMonth, period.month),
+      inAssignmentPeriod(period.year, effectiveMonths(period)),
     ))
     .groupBy(schema.assignments.status);
 
@@ -263,8 +338,11 @@ export async function getMonthlyOperationalTrend(
   months: number = TREND_MONTHS,
 ) {
   const buckets: Array<{ year: number; month: number; key: string }> = [];
+  // Jangkar tren = bulan terpilih paling akhir (multi-bulan), bukan month tunggal.
+  const effMonths = effectiveMonths(period);
+  const anchorMonth = effMonths.length > 0 ? Math.max(...effMonths) : period.month;
   for (let i = months - 1; i >= 0; i -= 1) {
-    const d = new Date(period.year, period.month - 1 - i, 1);
+    const d = new Date(period.year, anchorMonth - 1 - i, 1);
     buckets.push({ year: d.getFullYear(), month: d.getMonth() + 1, key: monthKey(d.getFullYear(), d.getMonth() + 1) });
   }
 
@@ -406,7 +484,7 @@ export async function getBranchComparison(
   districtId: string,
   period: OverviewPeriodInput,
 ) {
-  const { start, end } = monthBounds(period);
+  const months = effectiveMonths(period);
 
   const [branchList, coverageRows, taskRows, collectionRows] = await Promise.all([
     db.select({ id: schema.branches.id, name: schema.branches.name })
@@ -435,8 +513,7 @@ export async function getBranchComparison(
       .innerJoin(schema.branches, eq(schema.cans.branchId, schema.branches.id))
       .where(and(
         eq(schema.branches.districtId, districtId),
-        eq(schema.assignments.periodYear, period.year),
-        eq(schema.assignments.periodMonth, period.month),
+        inAssignmentPeriod(period.year, months),
       ))
       .groupBy(schema.cans.branchId),
 
@@ -451,8 +528,7 @@ export async function getBranchComparison(
         eq(schema.branches.districtId, districtId),
         eq(schema.collections.syncStatus, 'COMPLETED'),
         getLatestCollectionCondition(),
-        gte(schema.collections.collectedAt, start),
-        lt(schema.collections.collectedAt, end),
+        inSelectedMonths(schema.collections.collectedAt, period.year, months),
       ))
       .groupBy(schema.cans.branchId),
   ]);
@@ -513,6 +589,13 @@ export async function getOverview(
   const countOf = (condition: CanConditionValue) =>
     Number(breakdown.find((b) => b.condition === condition)?.count ?? 0);
 
+  // `month` = bulan terpilih paling akhir (kompatibel pemanggil lama);
+  // `months` = seluruh bulan terpilih untuk label rentang.
+  const selectedMonths = effectiveMonths(period);
+  const latestMonth = selectedMonths.length > 0
+    ? Math.max(...selectedMonths)
+    : period.month;
+
   return {
     scope: {
       type: options.scopeType ?? (scope.branchId ? 'branch' : 'district'),
@@ -522,7 +605,8 @@ export async function getOverview(
     },
     period: {
       year: period.year,
-      month: period.month,
+      month: latestMonth,
+      months: selectedMonths,
       timezone: OPERATIONAL_TIMEZONE,
       generated_at: new Date().toISOString(),
     },

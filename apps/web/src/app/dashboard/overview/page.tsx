@@ -1,17 +1,18 @@
 'use client';
 
 import React from 'react';
-import { AlertTriangle, Loader2, Power } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, Loader2, Power } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
-import { ApiResponse, Branch, OverviewResponse } from '@lazisnu/shared-types';
+import { ApiResponse, OverviewResponse } from '@lazisnu/shared-types';
 import { Card } from '@/components/ui/Card';
 import OverviewHeader from '@/components/overview/OverviewHeader';
-import OperationalSummary from '@/components/overview/OperationalSummary';
+import PerolehanHero from '@/components/overview/PerolehanHero';
 import ActionRequiredList from '@/components/overview/ActionRequiredList';
 import CollectionTrendChart from '@/components/overview/CollectionTrendChart';
 import ConditionBreakdown from '@/components/overview/ConditionBreakdown';
 import BranchComparisonList from '@/components/overview/BranchComparisonList';
+import { formatPeriodRange, formatUpdatedAt } from '@/components/overview/format';
 
 interface ApiError {
   message?: string;
@@ -31,7 +32,12 @@ export default function OverviewPage() {
   const isDistrictAdmin = user?.role === 'ADMIN_KECAMATAN';
 
   const [data, setData] = React.useState<OverviewResponse | null>(null);
-  const [branches, setBranches] = React.useState<Branch[]>([]);
+  // Filter periode multi-bulan ala assignments; default bulan berjalan.
+  const [filter, setFilter] = React.useState<{ year: number; months: number[] }>(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), months: [now.getMonth() + 1] };
+  });
+  // Scope ranting hanya via drill-down daftar perbandingan (dropdown dihapus).
   const [branchId, setBranchId] = React.useState('');
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -61,17 +67,26 @@ export default function OverviewPage() {
     }
   };
 
-  const fetchOverview = React.useCallback(async (nextBranchId: string, mode: 'first' | 'refresh') => {
+  const fetchOverview = React.useCallback(async (
+    nextBranchId: string,
+    nextYear: number,
+    nextMonths: number[],
+    mode: 'first' | 'refresh',
+  ) => {
     if (mode === 'first') setLoading(true);
     else setRefreshing(true);
     setError(null);
 
     try {
-      // Admin ranting tidak mengirim scope pengganti; admin kecamatan boleh memilih
-      // branch_id dan server memvalidasi kepemilikannya.
+      // Admin ranting tidak mengirim scope pengganti; admin kecamatan boleh
+      // drill-down branch_id via daftar perbandingan dan server memvalidasi
+      // kepemilikannya. Periode selalu dikirim eksplisit (default bulan berjalan).
+      const params = new URLSearchParams({ year: String(nextYear) });
+      if (nextMonths.length > 0) params.set('months', nextMonths.join(','));
+      if (nextBranchId) params.set('branch_id', nextBranchId);
       const endpoint = isDistrictAdmin
-        ? `/admin/district/dashboard${nextBranchId ? `?branch_id=${nextBranchId}` : ''}`
-        : '/admin/branch/dashboard';
+        ? `/admin/district/dashboard?${params.toString()}`
+        : `/admin/branch/dashboard?${params.toString()}`;
 
       const response = await api.get(endpoint) as unknown as ApiResponse<OverviewResponse>;
       if (response.success && response.data) {
@@ -98,32 +113,33 @@ export default function OverviewPage() {
   // ganda oleh react-hooks v7.
   React.useEffect(() => {
     if (!user) return;
-    void Promise.resolve().then(() => fetchOverview('', 'first'));
+    void Promise.resolve().then(() => fetchOverview('', filter.year, filter.months, 'first'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, isDistrictAdmin]);
 
-  // Daftar ranting hanya untuk admin kecamatan. Guard (!isDistrictAdmin)
-  // ditangani saat render (filter perbandingan hanya muncul untuk admin
-  // kecamatan), jadi tidak perlu setState di effect.
-  React.useEffect(() => {
-    if (!isDistrictAdmin) return;
-    api.get('/admin/branches')
-      .then((res: unknown) => {
-        const r = res as ApiResponse<Branch[]>;
-        if (r.success && r.data) setBranches(r.data);
-      })
-      .catch(() => { /* opsional: filter juga tersedia dari daftar perbandingan */ });
-  }, [isDistrictAdmin]);
+  // Ganti periode: data lama dipertahankan dengan indikator kecil.
+  const handlePeriodChange = React.useCallback((months: number[], year: number) => {
+    // PeriodPicker bisa melepas semua bulan — jangan kirim months kosong
+    // (backend menolak); pertahankan pilihan terakhir hingga ada yang dicentang.
+    if (months.length === 0) return;
+    setFilter({ year, months: [...months].sort((a, b) => a - b) });
+    void fetchOverview(branchId, year, [...months].sort((a, b) => a - b), 'refresh');
+  }, [branchId, fetchOverview]);
 
-  // Ganti filter ranting: data lama dipertahankan dengan indikator kecil.
+  // Drill-down ranting via daftar perbandingan (dropdown ranting dihapus).
   const handleBranchChange = React.useCallback((nextBranchId: string) => {
     setBranchId(nextBranchId);
-    void fetchOverview(nextBranchId, 'refresh');
-  }, [fetchOverview]);
+    void fetchOverview(nextBranchId, filter.year, filter.months, 'refresh');
+  }, [fetchOverview, filter.year, filter.months]);
+
+  const handleBackToDistrict = React.useCallback(() => {
+    setBranchId('');
+    void fetchOverview('', filter.year, filter.months, 'refresh');
+  }, [fetchOverview, filter.year, filter.months]);
 
   const handleRefresh = React.useCallback(() => {
-    void fetchOverview(branchId, 'refresh');
-  }, [branchId, fetchOverview]);
+    void fetchOverview(branchId, filter.year, filter.months, 'refresh');
+  }, [branchId, filter.year, filter.months, fetchOverview]);
 
   // Status backup (infra opsional, gagal senyap).
   React.useEffect(() => {
@@ -140,10 +156,12 @@ export default function OverviewPage() {
       <div className="flex flex-col gap-6" role="status" aria-live="polite" aria-busy="true">
         <span className="sr-only">Memuat overview kaleng</span>
         <div className="h-24 animate-pulse rounded-2xl bg-[#F4F1EA]/5" />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-40 animate-pulse rounded-2xl bg-[#F4F1EA]/5" />
-          ))}
+        <div className="flex flex-col gap-4 px-1">
+          <div className="h-10 w-2/3 animate-pulse rounded-xl bg-[#F4F1EA]/5" />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="h-14 animate-pulse rounded-xl bg-[#F4F1EA]/5" />
+            <div className="h-14 animate-pulse rounded-xl bg-[#F4F1EA]/5" />
+          </div>
         </div>
         <div className="h-64 animate-pulse rounded-2xl bg-[#F4F1EA]/5" />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -190,9 +208,9 @@ export default function OverviewPage() {
     <div className="flex flex-col gap-6">
       <OverviewHeader
         data={data}
-        branches={isDistrictAdmin ? branches : undefined}
-        selectedBranchId={branchId}
-        onBranchChange={isDistrictAdmin ? handleBranchChange : undefined}
+        months={filter.months}
+        year={filter.year}
+        onPeriodChange={handlePeriodChange}
         onRefresh={handleRefresh}
         refreshing={refreshing}
       />
@@ -200,11 +218,30 @@ export default function OverviewPage() {
       {refreshing && (
         <p className="flex items-center gap-2 text-xs font-semibold text-[#EAD19B]" role="status">
           <Loader2 size={12} className="animate-spin" aria-hidden="true" />
-          Memperbarui data untuk scope yang dipilih…
+          Memperbarui data untuk periode yang dipilih…
         </p>
       )}
 
-      <OperationalSummary summary={data.summary} branchId={branchId || undefined} />
+      {branchId && (
+        <div>
+          <button
+            type="button"
+            onClick={handleBackToDistrict}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 text-[11px] font-bold uppercase tracking-widest text-[#F4F1EA]/70 transition-all hover:bg-white/10 active:scale-95"
+          >
+            <ChevronLeft size={13} strokeWidth={3} className="text-[#EAD19B]" aria-hidden="true" />
+            Seluruh ranting kecamatan
+          </button>
+        </div>
+      )}
+
+      <PerolehanHero
+        nominal={data.summary.collection_nominal}
+        collected={data.summary.successful_collections}
+        periodLabel={formatPeriodRange(data.period.year, data.period.months?.length ? data.period.months : [data.period.month])}
+        scopeLabel={data.scope.branch_name ? `Ranting ${data.scope.branch_name}` : 'Seluruh ranting kecamatan'}
+        updatedLabel={`Zona ${data.period.timezone} • Diperbarui ${formatUpdatedAt(data.period.generated_at)}`}
+      />
 
       {periodEmpty && (
         <p className="rounded-2xl border border-white/10 bg-[#F4F1EA]/5 p-4 text-xs text-[#F4F1EA]/70">

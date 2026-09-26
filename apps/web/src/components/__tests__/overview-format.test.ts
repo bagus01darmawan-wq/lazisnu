@@ -7,9 +7,11 @@ import { describe, expect, it } from 'vitest';
 import type { OverviewSummary } from '@lazisnu/shared-types';
 import {
   CONDITION_LABEL,
+  formatAveragePerCan,
   formatCaseAge,
   formatMonthKey,
   formatPeriod,
+  formatPeriodRange,
   formatRupiah,
   taskClosedRate,
   taskProgressLabel,
@@ -55,6 +57,18 @@ describe('periode dan bulan', () => {
   it('formatMonthKey mengubah kunci YYYY-MM', () => {
     expect(formatMonthKey('2026-01')).toBe('Jan 2026');
     expect(formatMonthKey('2026-12')).toBe('Des 2026');
+  });
+
+  it('formatPeriodRange: tunggal, kontigu, tersebar, kosong', () => {
+    expect(formatPeriodRange(2026, [9])).toBe('September 2026');
+    expect(formatPeriodRange(2026, [9, 7, 8])).toBe('Juli–September 2026');
+    expect(formatPeriodRange(2026, [1, 9])).toBe('2 bulan pilihan 2026');
+    expect(formatPeriodRange(2026, [])).toBe('Tahun 2026');
+  });
+
+  it('formatAveragePerCan membagi dan aman dari nol', () => {
+    expect(formatAveragePerCan(1250000, 40)).toBe('Rp 31.250');
+    expect(formatAveragePerCan(100000, 0)).toBe('Rp 0');
   });
 });
 
