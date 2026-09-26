@@ -18,7 +18,10 @@
  *     diverifikasi endpoint tanpa bocor nominal/pihak.
  */
 import { randomUUID } from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import * as fontkit from '@pdf-lib/fontkit';
 import QRCode from 'qrcode';
 import { db } from '../config/database';
 import * as schema from '../database/schema';
@@ -42,6 +45,12 @@ const A4_WIDTH = 595.28;
 const A4_HEIGHT = 841.89;
 const MARGIN = 48;
 const CONTENT_WIDTH = A4_WIDTH - MARGIN * 2;
+/**
+ * Awal konten saat halaman memakai kop template resmi. Diukur dari isi
+ * template `ba-template-mwc.pdf` (logo 136.5×89.45 pt di y≈729–818):
+ * konten mulai di y=700 agar tidak menabrak logo.
+ */
+const TEMPLATE_CONTENT_TOP = 700;
 
 /** Key R2 acak berversi (§14.9). */
 export function baPdfKey(tier: 'ppk' | 'branch', submissionId: string, version: number): string {
@@ -58,7 +67,51 @@ interface BaPage {
   y: number;
 }
 
-async function newBaDoc(title: string): Promise<{ doc: PDFDocument; pages: BaPage; font: BaFont; fontBold: BaFont }> {
+/**
+ * Aset visual BAST (font Calibri + template kop resmi), dibaca sekali dan
+ * di-cache di memori. Graceful fallback: null bila berkas tak ada (mis.
+ * environment terisolasi) — renderer memakai Helvetica + kop sintetis
+ * sehingga test/CI tidak terputus.
+ */
+interface BaAssets {
+  calibri: Buffer | null;
+  calibriBold: Buffer | null;
+  template: Buffer | null;
+}
+
+let assetsCache: BaAssets | null = null;
+
+function assetCandidates(...parts: string[]): string[] {
+  return [
+    path.join(__dirname, '..', 'assets', ...parts),
+    path.join(process.cwd(), 'apps', 'backend', 'src', 'assets', ...parts),
+    path.join(process.cwd(), 'src', 'assets', ...parts),
+  ];
+}
+
+function readAsset(...parts: string[]): Buffer | null {
+  for (const p of assetCandidates(...parts)) {
+    try {
+      return fs.readFileSync(p);
+    } catch {
+      // coba kandidat berikutnya
+    }
+  }
+  return null;
+}
+
+function loadBaAssets(): BaAssets {
+  if (!assetsCache) {
+    assetsCache = {
+      calibri: readAsset('fonts', 'calibri.ttf'),
+      calibriBold: readAsset('fonts', 'calibrib.ttf'),
+      template: readAsset('templates', 'ba-template-mwc.pdf'),
+    };
+  }
+  return assetsCache;
+}
+
+async function newBaDoc(title: string): Promise<{ doc: PDFDocument; pages: BaPage; font: BaFont; fontBold: BaFont; templated: boolean }> {
   const doc = await PDFDocument.create();
   // Metadata difiksasi demi determinisme bytes (tanggal benar tampil sbg teks).
   const fixed = new Date('2026-01-01T00:00:00Z');
@@ -66,10 +119,47 @@ async function newBaDoc(title: string): Promise<{ doc: PDFDocument; pages: BaPag
   doc.setModificationDate(fixed);
   doc.setTitle(asciiSafe(title));
   doc.setProducer(asciiSafe('LAZISNU BA Service'));
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const page = doc.addPage([A4_WIDTH, A4_HEIGHT]);
-  return { doc, pages: { page, doc, font, fontBold, y: A4_HEIGHT - MARGIN }, font, fontBold };
+
+  // Font resmi Calibri (subset otomatis oleh pdf-lib); fallback Helvetica
+  // bila aset tak terbaca agar render tidak pernah gagal total.
+  let font: BaFont;
+  let fontBold: BaFont;
+  const assets = loadBaAssets();
+  if (assets.calibri && assets.calibriBold) {
+    try {
+      doc.registerFontkit(fontkit);
+      // subset:true — hanya glyph terpakai yang disematkan (±20–50KB),
+      // bukan TTF penuh 1.6MB (output tetap ringan untuk diunduh mobile).
+      font = await doc.embedFont(assets.calibri, { subset: true });
+      fontBold = await doc.embedFont(assets.calibriBold, { subset: true });
+    } catch {
+      font = await doc.embedFont(StandardFonts.Helvetica);
+      fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
+    }
+  } else {
+    font = await doc.embedFont(StandardFonts.Helvetica);
+    fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
+  }
+
+  // Halaman pertama mewarisi kop template resmi (vektor); fallback halaman
+  // kosong bila template tak ada — kop sintetis digambar pemanggil.
+  let templated = false;
+  let page: ReturnType<PDFDocument['addPage']>;
+  let startY = A4_HEIGHT - MARGIN;
+  if (assets.template) {
+    try {
+      const templateDoc = await PDFDocument.load(assets.template);
+      const [templatePage] = await doc.copyPages(templateDoc, [0]);
+      page = doc.addPage(templatePage);
+      templated = true;
+      startY = TEMPLATE_CONTENT_TOP;
+    } catch {
+      page = doc.addPage([A4_WIDTH, A4_HEIGHT]);
+    }
+  } else {
+    page = doc.addPage([A4_WIDTH, A4_HEIGHT]);
+  }
+  return { doc, pages: { page, doc, font, fontBold, y: startY }, font, fontBold, templated };
 }
 
 function ensureRoom(p: BaPage, needed: number): void {
@@ -80,8 +170,8 @@ function ensureRoom(p: BaPage, needed: number): void {
 }
 
 function drawLine(p: BaPage, text: string, opts: { size?: number; bold?: boolean; gap?: number } = {}): void {
-  const size = opts.size ?? 10;
-  ensureRoom(p, size + (opts.gap ?? 6));
+  const size = opts.size ?? 12;
+  ensureRoom(p, size + (opts.gap ?? 8));
   p.page.drawText(asciiSafe(text), {
     x: MARGIN,
     y: p.y - size,
@@ -90,17 +180,35 @@ function drawLine(p: BaPage, text: string, opts: { size?: number; bold?: boolean
     color: rgb(0, 0, 0),
     maxWidth: CONTENT_WIDTH,
   });
+  p.y -= size + (opts.gap ?? 8);
+}
+
+/** Baris rata tengah (judul BAST, nomor surat) — standar template resmi MWC. */
+function drawCentered(p: BaPage, text: string, opts: { size?: number; bold?: boolean; gap?: number } = {}): void {
+  const size = opts.size ?? 12;
+  const font = opts.bold ? p.fontBold : p.font;
+  const t = asciiSafe(text);
+  ensureRoom(p, size + (opts.gap ?? 6));
+  const w = font.widthOfTextAtSize(t, size);
+  p.page.drawText(t, {
+    x: MARGIN + Math.max(0, (CONTENT_WIDTH - w) / 2),
+    y: p.y - size,
+    size,
+    font,
+    color: rgb(0, 0, 0),
+    maxWidth: CONTENT_WIDTH,
+  });
   p.y -= size + (opts.gap ?? 6);
 }
 
 function drawTable(p: BaPage, rows: Array<{ label: string; value: string }>): void {
   for (const r of rows) {
-    ensureRoom(p, 18);
-    p.page.drawText(asciiSafe(r.label), { x: MARGIN, y: p.y - 11, size: 10, font: p.font, color: rgb(0, 0, 0) });
+    ensureRoom(p, 20);
+    p.page.drawText(asciiSafe(r.label), { x: MARGIN, y: p.y - 13, size: 12, font: p.font, color: rgb(0, 0, 0) });
     const v = asciiSafe(r.value);
-    const w = p.fontBold.widthOfTextAtSize(v, 10);
-    p.page.drawText(v, { x: MARGIN + CONTENT_WIDTH - w, y: p.y - 11, size: 10, font: p.fontBold, color: rgb(0, 0, 0) });
-    p.y -= 18;
+    const w = p.fontBold.widthOfTextAtSize(v, 12);
+    p.page.drawText(v, { x: MARGIN + CONTENT_WIDTH - w, y: p.y - 13, size: 12, font: p.fontBold, color: rgb(0, 0, 0) });
+    p.y -= 20;
   }
   p.y -= 6;
 }
@@ -141,9 +249,17 @@ async function drawSignatures(
     if (s?.image) {
       try {
         const img = await p.doc.embedPng(s.image);
-        const w = 130;
-        const h = Math.min((img.height / img.width) * w, 60);
-        p.page.drawImage(img, { x: x + (colW - w) / 2, y: y - h, width: w, height: h });
+        // Bounding-box contain 130×60 pt: skala = min agar aspek rasio utuh
+        // dari rasio apa pun (persegi/memanjang/standar), rata tengah kolom
+        // dan slot vertikal sehingga tak menabrak nama di bawahnya.
+        const boxW = 130;
+        const boxH = 60;
+        const scale = Math.min(boxW / img.width, boxH / img.height);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        const imgX = x + (colW - w) / 2;
+        const imgY = y - (boxH + h) / 2;
+        p.page.drawImage(img, { x: imgX, y: imgY, width: w, height: h });
       } catch {
         p.page.drawText(asciiSafe('(arsip coretan tidak terbaca)'), { x, y: y - 12, size: 9, font: p.font, color: rgb(0.4, 0.4, 0.4) });
       }
@@ -194,14 +310,14 @@ function wrapText(text: string, font: BaFont, size: number, maxWidth: number): s
 }
 
 function drawParagraph(p: BaPage, text: string, opts: { size?: number; bold?: boolean; gap?: number } = {}): void {
-  const size = opts.size ?? 10;
+  const size = opts.size ?? 12;
   const font = opts.bold ? p.fontBold : p.font;
   for (const line of wrapText(text, font, size, CONTENT_WIDTH)) {
-    ensureRoom(p, size + 2);
+    ensureRoom(p, size + 4);
     p.page.drawText(line, { x: MARGIN, y: p.y - size, size, font, color: rgb(0, 0, 0) });
-    p.y -= size + 2;
+    p.y -= size + 4;
   }
-  p.y -= opts.gap ?? 4;
+  p.y -= opts.gap ?? 6;
 }
 
 /** F7/D-14: kop formulir org — logo + judul + kode, dalam kotak. */
@@ -237,17 +353,23 @@ async function drawKop(p: BaPage, title: string, formCode: string): Promise<void
 }
 
 export async function renderBaPdf(input: BaPdfInput): Promise<Buffer> {
-  const { doc, pages: p } = await newBaDoc(input.ba.kind === 'ppk' ? 'BAST PPK' : 'BAST Ranting');
-  await drawKop(p, 'BERITA ACARA SERAH TERIMA', input.ba.form_code);
-  if (input.ba.ba_number) drawParagraph(p, `Nomor : ${input.ba.ba_number}`, { size: 11, bold: true, gap: 6 });
-  drawParagraph(p, `Periode: ${input.ba.period}`, { size: 10, gap: 8 });
+  const { doc, pages: p, templated } = await newBaDoc(input.ba.kind === 'ppk' ? 'BAST PPK' : 'BAST Ranting');
+  if (templated) {
+    // Kop resmi sudah ada di template — cetak judul + kode form rata tengah.
+    drawCentered(p, 'BERITA ACARA SERAH TERIMA', { size: 13, bold: true, gap: 2 });
+    drawCentered(p, input.ba.form_code, { size: 10, gap: 10 });
+  } else {
+    await drawKop(p, 'BERITA ACARA SERAH TERIMA', input.ba.form_code);
+  }
+  if (input.ba.ba_number) drawCentered(p, `Nomor : ${input.ba.ba_number}`, { size: 12, bold: true, gap: 6 });
+  drawParagraph(p, `Periode: ${input.ba.period}`, { size: 12, gap: 8 });
   drawTable(p, input.ba.table);
   if (input.ba.kind === 'branch' && input.ba.ppk_penyusun.length > 0) {
-    drawLine(p, 'PPK penyusun:', { size: 10, bold: true, gap: 2 });
+    drawLine(p, 'PPK penyusun:', { size: 12, bold: true, gap: 2 });
     drawTable(p, input.ba.ppk_penyusun.map((x) => ({ label: x.officer_name, value: x.total })));
   }
   for (const s of input.ba.statements) {
-    drawParagraph(p, s, { size: 10, gap: 4 });
+    drawParagraph(p, s, { size: 12, gap: 6 });
   }
   if (input.ba.draft_warning) {
     drawLine(p, input.ba.draft_warning, { size: 12, bold: true, gap: 8 });
