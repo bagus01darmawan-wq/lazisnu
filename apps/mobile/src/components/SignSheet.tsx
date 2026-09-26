@@ -1,10 +1,9 @@
 import React, {useRef, useState} from 'react';
 import {View, Text, StyleSheet} from 'react-native';
-import {AppCard} from './ui/AppCard';
 import {AppButton} from './ui/AppButton';
 import {AppPressable} from './ui/AppPressable';
 import {SignaturePad} from './SignaturePad';
-import {Colors, Radius, Spacing, Typography} from '../theme';
+import {Colors, Spacing, Typography} from '../theme';
 
 /** Batas backend: PNG coretan ≤ 50KB (`cosign.ts` SIGNATURE_MAX_BYTES). */
 const SIGNATURE_MAX_BYTES = 50 * 1024;
@@ -83,11 +82,11 @@ export const SignSheet: React.FC<SignSheetProps> = ({
   };
 
   return (
-    <AppCard>
+    <View style={styles.sheet}>
       <Text style={styles.title}>{title}</Text>
       {baLoading ? <Text style={styles.hint}>Memuat isi berita acara…</Text> : null}
       {baText && baText.length > 0 ? (
-        <View style={styles.baBox}>
+        <View style={styles.baText}>
           {baNumber ? <Text style={styles.baNumber}>Nomor: {baNumber}</Text> : null}
           {baText.map((line, i) => (
             <Text key={`${i}-${line.slice(0, 12)}`} style={styles.baLine}>
@@ -126,25 +125,18 @@ export const SignSheet: React.FC<SignSheetProps> = ({
           loading={submitting}
         />
       </View>
-    </AppCard>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  title: {...Typography.heading3, marginBottom: Spacing.sm},
-  hint: {...Typography.caption, color: Colors.text.muted, marginBottom: Spacing.sm},
-  baBox: {
-    borderRadius: Radius.card,
-    borderWidth: 1,
-    borderColor: Colors.border.warm,
-    backgroundColor: Colors.surface.sunken,
-    padding: Spacing.sm,
-    gap: Spacing.xs,
-    marginBottom: Spacing.sm,
-  },
+  sheet: {gap: Spacing.md},
+  title: {...Typography.heading3},
+  hint: {...Typography.caption, color: Colors.text.muted},
+  baText: {gap: Spacing.xs},
   baNumber: {...Typography.caption, fontWeight: '700'},
   baLine: {...Typography.body, color: Colors.text.primary},
-  consentRow: {flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.md},
+  consentRow: {flexDirection: 'row', alignItems: 'center', gap: Spacing.sm},
   box: {
     width: 22,
     height: 22,
@@ -157,6 +149,6 @@ const styles = StyleSheet.create({
   boxOn: {backgroundColor: Colors.brand.emerald, borderColor: Colors.brand.emerald},
   check: {color: '#FFFFFF', fontWeight: '800', fontSize: 14},
   consentText: {...Typography.body, flex: 1},
-  error: {...Typography.body, color: Colors.status.error, marginTop: Spacing.sm},
-  actions: {flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.md},
+  error: {...Typography.body, color: Colors.status.error},
+  actions: {flexDirection: 'row', gap: Spacing.sm},
 });
