@@ -36,6 +36,14 @@ export interface RegionSummary {
   /** Hanya terisi untuk kartu ranting. */
   branchCode: string | null;
   total: number;
+  /**
+   * Jumlah baris penugasan pada periode ini untuk wilayah tersebut.
+   *
+   * Ini yang jadi angka utama di halaman Assignments. `total` tetap angka
+   * kaleng dan tidak pernah berubah artinya, supaya kedua halaman bisa
+   * menampilkan dua angka berbeda tanpa saling menimpa.
+   */
+  assignmentTotal: number;
   breakdown: Record<string, number>;
   nonActive: number;
   assigned: number;
@@ -133,6 +141,7 @@ function emptyRegion(over: Partial<RegionSummary>): RegionSummary {
     branchName: null,
     branchCode: null,
     total: 0,
+    assignmentTotal: 0,
     breakdown: emptyBreakdown(),
     nonActive: 0,
     assigned: 0,
@@ -184,7 +193,10 @@ async function aggregate(
   const assignmentRows = await db
     .select({
       regionId: schema.cans[regionColumn],
-      assigned: sql<number>`count(*)`,
+      // `count(*)` di sini adalah JUMLAH PENUGASAN pada periode ini, bukan
+      // "jumlah yang sudah ditugaskan". Rasio alokasi terhadap kaleng
+      // dihitung di service dari dua aggregate terpisah, bukan dari sini.
+      assignmentTotal: sql<number>`count(*)`,
       completed: sql<number>`count(*) FILTER (WHERE ${schema.assignments.status} = 'COMPLETED')`,
       uncollected: sql<number>`count(*) FILTER (WHERE ${schema.assignments.status} = 'UNCOLLECTED')`,
     })
@@ -268,7 +280,7 @@ async function buildBranchCards(
             DIKEMBALIKAN: Number(c.dikembalikan),
           }
         : emptyBreakdown();
-      const assigned = a ? Number(a.assigned) : 0;
+      const assignmentTotal = a ? Number(a.assignmentTotal) : 0;
       const completed = a ? Number(a.completed) : 0;
       return emptyRegion({
         kind: 'branch',
@@ -279,10 +291,14 @@ async function buildBranchCards(
         branchName: b.name,
         branchCode: b.code,
         total,
+        assignmentTotal,
         breakdown,
         nonActive: breakdown.NON_AKTIF,
-        assigned,
-        unassigned: Math.max(total - assigned, 0),
+        // `assigned` = kaleng yang sudah punya baris penugasan. Di staging
+        // setiap kaleng aktif punya tepat satu penugasan, tapi tidak
+        // dijamin begitu di data lain, jadi tidak boleh disamakan buta.
+        assigned: Math.min(assignmentTotal, total),
+        unassigned: Math.max(total - assignmentTotal, 0),
         completed,
         uncollected: a ? Number(a.uncollected) : 0,
         officerCount: o ? Number(o.officerCount) : 0,
@@ -353,7 +369,7 @@ async function buildDukuhCards(
           DIKEMBALIKAN: Number(c.dikembalikan),
         }
       : emptyBreakdown();
-    const assigned = a ? Number(a.assigned) : 0;
+    const assignmentTotal = a ? Number(a.assignmentTotal) : 0;
     return emptyRegion({
       kind: 'dukuh',
       isFallback: false,
@@ -363,10 +379,11 @@ async function buildDukuhCards(
       branchName: branch.name,
       branchCode: branch.code,
       total,
+      assignmentTotal,
       breakdown,
       nonActive: breakdown.NON_AKTIF,
-      assigned,
-      unassigned: Math.max(total - assigned, 0),
+      assigned: Math.min(assignmentTotal, total),
+      unassigned: Math.max(total - assignmentTotal, 0),
       completed: a ? Number(a.completed) : 0,
       uncollected: a ? Number(a.uncollected) : 0,
       officerCount: o ? Number(o.officerCount) : 0,

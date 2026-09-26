@@ -21,7 +21,13 @@ export interface RegionSummary {
   branchId: string | null;
   branchName: string | null;
   branchCode: string | null;
+  /** Jumlah kaleng di wilayah ini. Angka utama di halaman Kelola Kaleng. */
   total: number;
+  /**
+   * Jumlah baris penugasan pada periode ini. Angka utama di halaman
+   * Assignments, ditampilkan sebagai baris kedua di halaman Kaleng.
+   */
+  assignmentTotal: number;
   breakdown: Record<string, number>;
   nonActive: number;
   assigned: number;
@@ -163,6 +169,7 @@ export function RegionCards({
           <RegionCard
             key={r.id}
             region={r}
+            page={page}
             active={r.id === selectedId}
             showOfficers={page === 'assignments'}
             onSelect={onSelect}
@@ -186,16 +193,33 @@ export function RegionCards({
 
 function RegionCard({
   region,
+  page,
   active,
   showOfficers,
   onSelect,
 }: {
   region: RegionSummary;
+  page: 'cans' | 'assignments';
   active: boolean;
   showOfficers: boolean;
   onSelect: (r: RegionSummary) => void;
 }) {
-  const pct = region.total === 0 ? 0 : Math.round((region.assigned / region.total) * 100);
+  // Angka utama mengikuti halaman: penugasan di Assignments, kaleng di Kaleng.
+  // Bar progres ikut halaman yang sama supaya tidak ada dua angka "64" yang
+  // berarti berbeda dalam satu kartu.
+  const isAssignments = page === 'assignments';
+  const headline = isAssignments ? region.assignmentTotal : region.total;
+  const barPct = isAssignments
+    ? region.assignmentTotal === 0
+      ? 0
+      : Math.round((region.completed / region.assignmentTotal) * 100)
+    : region.total === 0
+      ? 0
+      : Math.round((region.assigned / region.total) * 100);
+  const barLabel = isAssignments ? 'penugasan selesai' : 'ter-alokasi';
+  const barValue = isAssignments
+    ? `${region.completed}/${region.assignmentTotal}`
+    : `${region.assigned}/${region.total}`;
 
   return (
     <button
@@ -226,7 +250,7 @@ function RegionCard({
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <div className="px-2.5 h-7 flex items-center bg-[#EAD19B]/10 rounded-lg">
-            <span className="text-[11px] font-black text-[#EAD19B]">{region.total}</span>
+            <span className="text-[11px] font-black text-[#EAD19B]">{headline}</span>
           </div>
           <ChevronRight
             size={16}
@@ -237,20 +261,27 @@ function RegionCard({
 
       <div>
         <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-tight text-[#F4F1EA]/40 mb-1.5">
-          <span>ter-alokasi</span>
-          <span>{region.assigned}/{region.total}</span>
+          <span>{barLabel}</span>
+          <span>{barValue}</span>
         </div>
         <div className="h-1.5 w-full rounded-full bg-white/5 overflow-hidden">
           <div
             className="h-full rounded-full bg-[#1F8243] transition-all duration-500"
-            style={{ width: `${pct}%` }}
+            style={{ width: `${barPct}%` }}
           />
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-bold uppercase tracking-tight">
         <span className="text-[#F4F1EA]/40">
-          belum <span className="text-[#F4F1EA]/80">{region.unassigned}</span>
+          {isAssignments ? 'kaleng' : 'penugasan'}{' '}
+          <span className="text-[#F4F1EA]/80">
+            {isAssignments ? region.total : region.assignmentTotal}
+          </span>
+        </span>
+        <span className="text-[#F4F1EA]/40">
+          {isAssignments ? 'belum ditugaskan' : 'belum'}{' '}
+          <span className="text-[#F4F1EA]/80">{region.unassigned}</span>
         </span>
         {region.nonActive > 0 && (
           <span className="text-[#F4F1EA]/40">
