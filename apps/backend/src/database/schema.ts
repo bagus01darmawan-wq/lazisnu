@@ -102,6 +102,18 @@ export const officers = pgTable('officers', {
   photoUrl: varchar('photo_url', { length: 500 }),
   districtId: uuid('district_id').references(() => districts.id).notNull(),
   branchId: uuid('branch_id').references(() => branches.id).notNull(),
+  /**
+   * Relasi ke dukuh untuk layer kartu di halaman Penugasan.
+   *
+   * Sebelumnya tidak ada: `assignedZone` berisi nama dusun ('kajen'/'krajan')
+   * yang TIDAK cocok dengan nama dukuh di tabel `dukuhs`, jadi tidak bisa
+   * dipakai sebagai sumber pengelompokan.
+   *
+   * Nullable: petugas yang belum dipetakan tetap valid — kartu wilayah
+   * tanpa petugas adalah informasi yang dicari admin, bukan kondisi yang
+   * harus diblokir.
+   */
+  dukuhId: uuid('dukuh_id').references(() => dukuhs.id),
   assignedZone: varchar('assigned_zone', { length: 100 }),
   isActive: boolean('is_active').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -555,6 +567,7 @@ export const officersRelations = relations(officers, ({ one, many }) => ({
   user: one(users, { fields: [officers.userId], references: [users.id] }),
   district: one(districts, { fields: [officers.districtId], references: [districts.id] }),
   branch: one(branches, { fields: [officers.branchId], references: [branches.id] }),
+  dukuh: one(dukuhs, { fields: [officers.dukuhId], references: [dukuhs.id] }),
   assignments: many(assignments, { relationName: 'PrimaryOfficer' }),
   backupAssignments: many(assignments, { relationName: 'BackupOfficer' }),
   collections: many(collections),
@@ -583,6 +596,7 @@ export const canVisitsRelations = relations(canVisits, ({ one }) => ({
 export const dukuhsRelations = relations(dukuhs, ({ one, many }) => ({
   branch: one(branches, { fields: [dukuhs.branchId], references: [branches.id] }),
   cans: many(cans),
+  officers: many(officers),
 }));
 
 export const assignmentsRelations = relations(assignments, ({ one, many }) => ({

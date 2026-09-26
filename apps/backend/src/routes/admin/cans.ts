@@ -6,6 +6,7 @@ import { createCanSchema, updateCanSchema } from './schemas';
 import { z } from 'zod';
 import { AppError } from '../../utils/AppError';
 import * as canService from '../../services/canService';
+import * as regionCardService from '../../services/regionCardService';
 import { generateSingleQRPDF, generateBatchQRPDF, generateQrPreviewDataUrl } from '../../services/qrPdfService';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
@@ -19,14 +20,27 @@ export async function cansRoutes(fastify: FastifyInstance) {
   fastify.get('/cans', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const user = request.currentUser!;
-      const query = request.query as { page?: string; limit?: string; search?: string; status?: string; branch_id?: string };
+      const query = request.query as { page?: string; limit?: string; search?: string; status?: string; branch_id?: string; dukuh_id?: string };
       const { page, limit, offset } = getPaginationParams(query);
 
       const { cans, total } = await canService.getCans({
-        page, limit, offset, search: query.search, status: query.status, branch_id: query.branch_id
+        page, limit, offset, search: query.search, status: query.status, branch_id: query.branch_id, dukuh_id: query.dukuh_id
       }, user);
 
       return sendSuccess(reply, formatPaginatedResponse(cans, total, page, limit, 'cans'));
+    } catch (error) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  // Ringkasan per wilayah untuk layer kartu. Static segment didahulukan atas
+  // `/cans/:id` oleh router Fastify, jadi path ini tidak tertangkap param.
+  fastify.get('/cans/region-cards', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = request.currentUser!;
+      const query = request.query as { year?: string; month?: string };
+      const cards = await regionCardService.getCanRegionCards(user, query);
+      return sendSuccess(reply, cards);
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
     }

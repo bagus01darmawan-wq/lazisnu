@@ -10,11 +10,25 @@ import { getRoleScope } from '../../utils/role-scope';
 import { createAssignmentSchema } from './schemas';
 import { z } from 'zod';
 import { insertAssignments } from '../../services/assignmentGenerator';
+import * as regionCardService from '../../services/regionCardService';
 import { ASSIGNABLE_CONDITIONS } from '../../services/conditionRules';
 
 const rantingOrKec = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
 
 export async function assignmentsRoutes(fastify: FastifyInstance) {
+  // Ringkasan per wilayah untuk layer kartu. Static segment didahulukan atas
+  // route ber-param oleh router Fastify.
+  fastify.get('/assignments/region-cards', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = request.currentUser!;
+      const query = request.query as { year?: string; month?: string };
+      const cards = await regionCardService.getAssignmentRegionCards(user, query);
+      return sendSuccess(reply, cards);
+    } catch (error) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
   fastify.get('/assignments', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const query = request.query as { 
@@ -22,6 +36,7 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
         month?: string; 
         officer_id?: string; 
         branch_id?: string;
+        dukuh_id?: string;
         search?: string;
         page?: string; 
         limit?: string 
@@ -41,6 +56,13 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       // Filter by specific branch
       if (query.branch_id) {
         conditions.push(eq(schema.cans.branchId, query.branch_id));
+      }
+
+      // Layer kartu admin ranting menyaring per dukuh. Sengaja memakai
+      // `cans.dukuh_id`, bukan `dukuhs.name`, karena query count di bawah tidak
+      // melakukan join ke tabel dukuhs.
+      if (query.dukuh_id) {
+        conditions.push(eq(schema.cans.dukuhId, query.dukuh_id));
       }
 
       // Advanced Search (Can QR, Owner Name, or Officer Name)
