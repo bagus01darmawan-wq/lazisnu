@@ -56,9 +56,9 @@ export function OverviewHeader({
           type="button"
           onClick={onRefresh}
           disabled={refreshing}
-          className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/10 bg-[#F4F1EA]/5 px-4 text-sm font-bold text-[#F4F1EA] transition-[opacity,transform] duration-200 active:scale-[.96] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#EAD19B] disabled:opacity-60"
+          className="h-[36px] bg-[#F4F1EA]/10 backdrop-blur-md border border-[#F4F1EA]/20 rounded-2xl px-5 flex items-center gap-2 text-xs font-bold text-white/90 hover:bg-[#F4F1EA]/20 transition-all duration-300 active:scale-95 shadow-lg shadow-black/5 disabled:opacity-60"
         >
-          <RefreshCw size={16} className={refreshing ? 'animate-spin' : undefined} aria-hidden="true" />
+          <RefreshCw size={14} strokeWidth={3} className={`text-[#EAD19B]${refreshing ? ' animate-spin' : ''}`} aria-hidden="true" />
           {refreshing ? 'Memperbarui…' : 'Perbarui'}
         </button>
       </div>

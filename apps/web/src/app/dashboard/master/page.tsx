@@ -11,7 +11,9 @@ import {
   MapPin,
   Trash2,
   Hash,
-  Building2
+  Building2,
+  Power,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Table } from '@/components/ui/Table';
@@ -70,6 +72,29 @@ export default function MasterDataPage() {
   const [editingItem, setEditingItem] = useState<Branch | Dukuh | null>(null);
   const [formData, setFormData] = useState({ name: '', code: '' });
 
+  // Backup database — pindahan dari overview (halaman ini khusus ADMIN_KECAMATAN).
+  const [backupActive, setBackupActive] = useState(false);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [backupMessage, setBackupMessage] = useState<string | null>(null);
+
+  const handleToggleBackup = async () => {
+    try {
+      setBackupLoading(true);
+      setBackupMessage(null);
+      const endpoint = backupActive ? '/admin/backup/stop' : '/admin/backup/start';
+      const res = await api.post(endpoint) as unknown as ApiResponse<{ active: boolean; message?: string }>;
+      if (res.success && res.data) {
+        setBackupActive(res.data.active);
+        setBackupMessage(res.data.message ?? (res.data.active ? 'Backup diaktifkan' : 'Backup dinonaktifkan'));
+      }
+    } catch {
+      setBackupMessage('Gagal mengubah status backup. Coba lagi.');
+    } finally {
+      setBackupLoading(false);
+      setTimeout(() => setBackupMessage(null), 4000);
+    }
+  };
+
   const fetchBranches = async () => {
     try {
       setLoading(true);
@@ -113,6 +138,13 @@ export default function MasterDataPage() {
       }
     };
     loadBranches();
+    // Status backup (infra opsional, gagal senyap).
+    api.get('/admin/backup/status')
+      .then((res: unknown) => {
+        const r = res as ApiResponse<{ active: boolean }>;
+        if (r.success && r.data) setBackupActive(r.data.active);
+      })
+      .catch(() => { /* optional infra, silent fail */ });
   }, []);
 
   const handleBranchSubmit = async (e: React.FormEvent) => {
@@ -520,6 +552,41 @@ export default function MasterDataPage() {
             <MapPin size={48} className="mb-4 opacity-20" />
             <p className="text-sm font-medium tracking-tight">Tidak ada data ditemukan</p>
           </div>
+        )}
+      </Card>
+
+      {/* Backup Database — pindahan dari overview */}
+      <Card className="border-white/5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <div className={`p-3 rounded-xl ${backupActive ? 'bg-[#1F8243]/10 text-[#1F8243]' : 'bg-[#F4F1EA]/5 text-[#F4F1EA]/40'}`}>
+              <Power size={20} aria-hidden="true" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-[#F4F1EA]">Backup Database</p>
+              <p className="text-xs text-[#F4F1EA]/50 mt-0.5">
+                {backupActive ? 'Backup otomatis berjalan tiap hari jam 02:00' : 'Backup otomatis sedang dinonaktifkan'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleToggleBackup}
+            disabled={backupLoading}
+            className={`inline-flex min-h-11 items-center gap-2 rounded-xl px-4 text-sm font-bold transition-[opacity,transform] duration-200 active:scale-[.96] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#EAD19B] disabled:opacity-60 ${
+              backupActive
+                ? 'border border-[#D97A76]/30 bg-[#D97A76]/10 text-[#D97A76]'
+                : 'bg-[#1F8243] text-white'
+            }`}
+          >
+            {backupLoading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Power size={16} aria-hidden="true" />}
+            {backupActive ? 'Nonaktifkan' : 'Aktifkan'}
+          </button>
+        </div>
+        {backupMessage && (
+          <p className={`mt-2 px-1 text-xs ${backupMessage.includes('Gagal') ? 'text-[#D97A76]' : 'text-[#1F8243]'}`}>
+            {backupMessage}
+          </p>
         )}
       </Card>
 

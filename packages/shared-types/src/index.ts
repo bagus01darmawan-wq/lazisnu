@@ -853,18 +853,6 @@ export interface OverviewConditionBreakdownItem {
   count: number;
 }
 
-export interface OverviewActionItem {
-  can_id: string;
-  owner_name: string;
-  branch_id: string;
-  branch_name: string;
-  condition: CanCondition;
-  proposal_id?: string;
-  reason_code?: string;
-  since: string;
-  action_label: string;
-}
-
 export interface OverviewMonthlyTrendItem {
   /** Format "YYYY-MM". */
   month: string;
@@ -892,7 +880,6 @@ export interface OverviewResponse {
   period: OverviewPeriod;
   summary: OverviewSummary;
   condition_breakdown: OverviewConditionBreakdownItem[];
-  action_items: OverviewActionItem[];
   monthly_trend: OverviewMonthlyTrendItem[];
   branch_comparison?: OverviewBranchComparisonItem[];
 }
