@@ -1,36 +1,39 @@
 'use client';
 
 import React from 'react';
-import { Building2, RefreshCw } from 'lucide-react';
-import type { Branch, OverviewResponse } from '@lazisnu/shared-types';
-import { formatPeriod, formatUpdatedAt } from './format';
+import { RefreshCw } from 'lucide-react';
+import type { OverviewResponse } from '@lazisnu/shared-types';
+import { formatPeriodRange, formatUpdatedAt } from './format';
+import { PeriodPicker } from '@/components/ui/PeriodPicker';
 
 interface OverviewHeaderProps {
   data: OverviewResponse | null;
-  /** Daftar ranting hanya diberikan untuk admin kecamatan. */
-  branches?: Branch[];
-  selectedBranchId: string;
-  onBranchChange?: (branchId: string) => void;
+  /** Periode terpilih (filter multi-bulan ala assignments). */
+  months: number[];
+  year: number;
+  onPeriodChange: (months: number[], year: number) => void;
   onRefresh: () => void;
   refreshing?: boolean;
 }
 
 /**
- * Header overview: judul tugas, scope aktif, periode, dan (khusus admin kecamatan)
- * pemilih ranting. Admin ranting TIDAK menerima pemilih ini sama sekali — scope-nya
- * sudah ditentukan server dari token.
+ * Header overview: judul, scope aktif, periode, filter bulan, dan tombol
+ * perbarui. Filter ranting dihapus — scope selalu kecamatan (admin kecamatan)
+ * atau ranting akun (admin ranting); drill-down ranting lewat daftar
+ * perbandingan.
  */
 export function OverviewHeader({
   data,
-  branches,
-  selectedBranchId,
-  onBranchChange,
+  months,
+  year,
+  onPeriodChange,
   onRefresh,
   refreshing = false,
 }: OverviewHeaderProps) {
   const scopeLabel = data?.scope.branch_name
     ? `Ranting ${data.scope.branch_name}`
     : 'Seluruh ranting kecamatan';
+  const periodMonths = data?.period.months?.length ? data.period.months : months;
 
   return (
     <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -41,32 +44,13 @@ export function OverviewHeader({
         </p>
         <p className="mt-1 text-xs text-[#F4F1EA]/45">
           {data
-            ? `Periode ${formatPeriod(data.period.year, data.period.month)} • Zona ${data.period.timezone} • Diperbarui ${formatUpdatedAt(data.period.generated_at)}`
+            ? `Periode ${formatPeriodRange(data.period.year, periodMonths)} • Zona ${data.period.timezone} • Diperbarui ${formatUpdatedAt(data.period.generated_at)}`
             : 'Memuat periode dan scope…'}
         </p>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
-        {branches && branches.length > 0 && onBranchChange && (
-          <label className="flex flex-col gap-1 text-xs font-semibold text-[#F4F1EA]/60">
-            <span className="flex items-center gap-1">
-              <Building2 size={14} aria-hidden="true" /> Ranting
-            </span>
-            <select
-              value={selectedBranchId}
-              onChange={(event) => onBranchChange(event.target.value)}
-              className="min-h-11 rounded-xl border border-white/10 bg-[#2C473E] px-3 text-sm font-semibold text-[#F4F1EA] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#EAD19B]"
-              aria-label="Pilih ranting yang ditampilkan"
-            >
-              <option value="">Semua ranting</option>
-              {branches.map((branch) => (
-                <option key={branch.id} value={branch.id}>
-                  {branch.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+        <PeriodPicker months={months} year={year} onChange={onPeriodChange} />
 
         <button
           type="button"

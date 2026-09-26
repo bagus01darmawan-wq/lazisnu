@@ -4,7 +4,7 @@ import * as schema from '../../database/schema';
 import { eq } from 'drizzle-orm';
 import { authorize } from '../../middleware/auth';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
-import { getOverview } from '../../services/overviewService';
+import { getOverview, parseOverviewPeriod } from '../../services/overviewService';
 
 const ranting = { preHandler: [authorize('ADMIN_RANTING')] };
 
@@ -27,8 +27,11 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
         return sendError(reply, 403, 'FORBIDDEN', 'Bukan admin ranting');
       }
 
-      const now = new Date();
-      const period = { year: now.getFullYear(), month: now.getMonth() + 1 };
+      const query = request.query as { year?: string; months?: string };
+      const period = parseOverviewPeriod(query.year, query.months);
+      if (!period) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Parameter year/months tidak valid');
+      }
 
       const branch = await db.query.branches.findFirst({
         where: eq(schema.branches.id, branchId),

@@ -42,6 +42,27 @@ export function formatPeriod(year: number, month: number): string {
   return `${name} ${year}`;
 }
 
+/**
+ * Label rentang multi-bulan: 'September 2026' (1 bulan),
+ * 'Juli–September 2026' (kontigu), '3 bulan pilihan 2026' (tersebar).
+ */
+export function formatPeriodRange(year: number, months: number[]): string {
+  const clean = [...new Set(months.filter((m) => Number.isInteger(m) && m >= 1 && m <= 12))].sort((a, b) => a - b);
+  if (clean.length === 0) return `Tahun ${year}`;
+  if (clean.length === 1) return formatPeriod(year, clean[0]);
+  const contiguous = clean.every((m, i) => i === 0 || m === clean[i - 1] + 1);
+  if (contiguous) {
+    return `${MONTH_NAMES_ID[clean[0] - 1]}–${MONTH_NAMES_ID[clean[clean.length - 1] - 1]} ${year}`;
+  }
+  return `${clean.length} bulan pilihan ${year}`;
+}
+
+/** Rata-rata isi per kaleng (tampilan): nominal / jumlah dijemput, Rp0 bila nol. */
+export function formatAveragePerCan(nominal: number, collected: number): string {
+  if (!collected) return 'Rp 0';
+  return formatRupiah(Math.round(Number(nominal || 0) / collected));
+}
+
 /** '2026-05' → 'Mei 2026' */
 export function formatMonthKey(key: string): string {
   const [year, month] = key.split('-');

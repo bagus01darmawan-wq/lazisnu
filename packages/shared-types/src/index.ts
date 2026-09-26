@@ -821,7 +821,10 @@ export interface OverviewScope {
 
 export interface OverviewPeriod {
   year: number;
+  /** Bulan terpilih paling akhir (kompatibel). */
   month: number;
+  /** Seluruh bulan terpilih (filter multi-bulan). */
+  months: number[];
   timezone: string;
   generated_at: string;
 }
