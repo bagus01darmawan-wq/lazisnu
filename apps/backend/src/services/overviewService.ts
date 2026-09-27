@@ -498,6 +498,16 @@ export async function getOverview(
     getTaskSummary(scope, period),
   ]);
 
+  // Arus produktivitas (dipakai section Kondisi + Produktivitas). Diambil
+  // terpisah dari productivityService agar fungsi agregasi inti tetap ramping.
+  const { getCollectionOutcome, getNewCansCount, getReactivatedCount, getWithdrawnCount } = await import('./productivityService.js');
+  const [reactivated, newCans, withdrawn, outcome] = await Promise.all([
+    getReactivatedCount(scope, period.year, effectiveMonths(period)),
+    getNewCansCount(scope, period.year, effectiveMonths(period)),
+    getWithdrawnCount(scope, period.year, effectiveMonths(period)),
+    getCollectionOutcome(scope, period.year, effectiveMonths(period)),
+  ]);
+
   const [trend, comparison] = await Promise.all([
     getMonthlyOperationalTrend(scope, period, options.trendMonths ?? TREND_MONTHS),
     options.includeBranchComparison
@@ -542,6 +552,11 @@ export async function getOverview(
       total_officers: officers,
       collection_nominal: collections.nominal,
       successful_collections: collections.successful_collections,
+      // Arus periode (section Produktivitas + Kondisi): reaktivasi dihitung
+      // dari proposal APPROVED → AKTIF (batasan: jalur cepat tak tercakup).
+      reactivated: reactivated,
+      new_cans: newCans,
+      withdrawn: withdrawn,
       task_active: tasks.task_active,
       task_closed: tasks.task_closed,
       task_completed: tasks.task_completed,
@@ -550,6 +565,15 @@ export async function getOverview(
     },
     condition_breakdown: breakdown,
     monthly_trend: trend,
+    // Total hasil kunjungan periode terpilih (eksak, tak tergantung jendela
+    // 6 bulan tren): donat produktivitas menutup genap total ditugaskan.
+    productivity: {
+      task_total: tasks.task_total,
+      filled: Math.max(0, outcome.collected - outcome.empty),
+      empty: outcome.empty,
+      uncollected: tasks.task_uncollected,
+      active: Math.max(0, tasks.task_total - tasks.task_closed),
+    },
     ...(comparison ? { branch_comparison: comparison } : {}),
   };
 }

@@ -9,6 +9,9 @@ import { CONDITION_BADGE_CLASS, CONDITION_LABEL } from './format';
 
 interface ConditionBreakdownProps {
   breakdown: OverviewConditionBreakdownItem[];
+  /** Arus periode berjalan (stok di atas timeless, arus ikut filter bulan). */
+  newCans: number;
+  withdrawn: number;
 }
 
 /** Warna isi segmen — sepasang dengan badge tiap kondisi. */
@@ -24,7 +27,7 @@ const SEGMENT_FILL: Record<CanCondition, string> = {
  * Kondisi kaleng dalam bentuk donat. Setiap segmen tetap didampingi legenda
  * berlabel teks + angka (kondisi tidak dibedakan warna saja).
  */
-export function ConditionBreakdown({ breakdown }: ConditionBreakdownProps) {
+export function ConditionBreakdown({ breakdown, newCans, withdrawn }: ConditionBreakdownProps) {
   const total = breakdown.reduce((sum, item) => sum + item.count, 0);
   const data = breakdown.map((item) => ({
     name: CONDITION_LABEL[item.condition as CanCondition],
@@ -86,6 +89,14 @@ export function ConditionBreakdown({ breakdown }: ConditionBreakdownProps) {
                 </li>
               );
             })}
+            <li className="flex items-center justify-between gap-3 border-t border-white/10 pt-2">
+              <span className="text-xs font-semibold text-[#F4F1EA]/60">Baru disebar periode ini</span>
+              <span className="text-xs font-black text-[#1F8243]">{Number(newCans || 0).toLocaleString('id-ID')}</span>
+            </li>
+            <li className="flex items-center justify-between gap-3">
+              <span className="text-xs font-semibold text-[#F4F1EA]/60">Ditarik periode ini</span>
+              <span className="text-xs font-black text-[#D97A76]">{Number(withdrawn || 0).toLocaleString('id-ID')}</span>
+            </li>
           </ul>
         </>
       )}

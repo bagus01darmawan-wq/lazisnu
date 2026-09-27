@@ -7,6 +7,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { ApiResponse, OverviewResponse } from '@lazisnu/shared-types';
 import OverviewHeader from '@/components/overview/OverviewHeader';
 import PerolehanHero from '@/components/overview/PerolehanHero';
+import ProductivitySection from '@/components/overview/ProductivitySection';
 import CollectionTrendChart from '@/components/overview/CollectionTrendChart';
 import ConditionBreakdown from '@/components/overview/ConditionBreakdown';
 import BranchComparisonList from '@/components/overview/BranchComparisonList';
@@ -204,6 +205,16 @@ export default function OverviewPage() {
         collected={data.summary.successful_collections}
       />
 
+      <ProductivitySection
+        productivity={data.productivity}
+        activeCans={data.summary.active_cans}
+        reactivated={data.summary.reactivated}
+        months={filter.months}
+        year={filter.year}
+        branchId={branchId || undefined}
+        scopeLabel={data.scope.branch_name ? `Ranting ${data.scope.branch_name}` : 'Seluruh ranting kecamatan'}
+      />
+
       {periodEmpty && (
         <p className="rounded-2xl border border-white/10 bg-[#F4F1EA]/5 p-4 text-xs text-[#F4F1EA]/70">
           Belum ada penjemputan dan tugas pada periode ini. Angka di atas menampilkan nol sampai data periode berjalan masuk.
@@ -212,7 +223,11 @@ export default function OverviewPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <CollectionTrendChart trend={data.monthly_trend} />
-        <ConditionBreakdown breakdown={data.condition_breakdown} />
+        <ConditionBreakdown
+          breakdown={data.condition_breakdown}
+          newCans={data.summary.new_cans}
+          withdrawn={data.summary.withdrawn}
+        />
       </div>
 
       <BranchComparisonList
