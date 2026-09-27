@@ -841,6 +841,12 @@ export interface OverviewSummary {
   total_officers: number;
   collection_nominal: number;
   successful_collections: number;
+  /** Proposal APPROVED → AKTIF pada periode (jalur cepat tak tercakup). */
+  reactivated: number;
+  /** Kaleng created_at masuk periode (arus masuk basis). */
+  new_cans: number;
+  /** Transisi → DIKEMBALIKAN pada periode (arus keluar basis). */
+  withdrawn: number;
   task_active: number;
   task_closed: number;
   task_completed: number;
@@ -875,11 +881,38 @@ export interface OverviewBranchComparisonItem {
   collection_nominal: number;
 }
 
+export interface OverviewProductivityTotals {
+  task_total: number;
+  filled: number;
+  empty: number;
+  uncollected: number;
+  active: number;
+}
+
+export interface ProductivityOfficerItem {
+  officer_id: string;
+  full_name: string;
+  employee_code: string;
+  branch_id: string;
+  branch_name: string;
+  assigned: number;
+  collected: number;
+  filled: number;
+  uncollected: number;
+}
+
+export interface ProductivityOfficersResponse {
+  scope: OverviewScope;
+  period: OverviewPeriod;
+  officers: ProductivityOfficerItem[];
+}
+
 export interface OverviewResponse {
   scope: OverviewScope;
   period: OverviewPeriod;
   summary: OverviewSummary;
   condition_breakdown: OverviewConditionBreakdownItem[];
   monthly_trend: OverviewMonthlyTrendItem[];
+  productivity: OverviewProductivityTotals;
   branch_comparison?: OverviewBranchComparisonItem[];
 }
