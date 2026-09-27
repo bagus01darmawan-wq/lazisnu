@@ -112,8 +112,8 @@ export function inAssignmentPeriod(year: number, months: number[]) {
   );
 }
 
-/** Jumlah bulan yang dikembalikan pada tren operasional. */
-export const TREND_MONTHS = 6;
+/** Jumlah bucket tren: selalu 12 (Januari–Desember). */
+export const TREND_MONTHS = 12;
 
 function sqlConditionList(conditions: CanConditionValue[]) {
   return sql`(${sql.join(conditions.map((c) => sql`${c}`), sql`, `)})`;
@@ -325,22 +325,18 @@ export async function getAssignableCanCount(scope: OverviewScopeInput) {
 }
 
 /**
- * Tren operasional N bulan terakhir (termasuk bulan periode).
+ * Tren operasional Januari–Desember tahun periode (12 bucket tetap,
+ * mendukung laporan tengah semester Juni & akhir tahun Desember).
  * Dua query agregat: penjemputan (isi/kosong/nominal) dan siklus tugas
  * (ditutup/total/tidak terjemput) — keduanya dipisah karena definisinya berbeda.
  */
 export async function getMonthlyOperationalTrend(
   scope: OverviewScopeInput,
   period: OverviewPeriodInput,
-  months: number = TREND_MONTHS,
 ) {
   const buckets: Array<{ year: number; month: number; key: string }> = [];
-  // Jangkar tren = bulan terpilih paling akhir (multi-bulan), bukan month tunggal.
-  const effMonths = effectiveMonths(period);
-  const anchorMonth = effMonths.length > 0 ? Math.max(...effMonths) : period.month;
-  for (let i = months - 1; i >= 0; i -= 1) {
-    const d = new Date(period.year, anchorMonth - 1 - i, 1);
-    buckets.push({ year: d.getFullYear(), month: d.getMonth() + 1, key: monthKey(d.getFullYear(), d.getMonth() + 1) });
+  for (let m = 1; m <= 12; m += 1) {
+    buckets.push({ year: period.year, month: m, key: monthKey(period.year, m) });
   }
 
   const first = buckets[0];
@@ -475,7 +471,6 @@ export interface GetOverviewOptions {
   /** 'branch' bila admin ranting atau admin kecamatan menyaring satu ranting. */
   scopeType?: 'branch' | 'district';
   branchName?: string;
-  trendMonths?: number;
   /** Perbandingan ranting hanya bermakna untuk agregat kecamatan. */
   includeBranchComparison?: boolean;
 }
@@ -509,7 +504,7 @@ export async function getOverview(
   ]);
 
   const [trend, comparison] = await Promise.all([
-    getMonthlyOperationalTrend(scope, period, options.trendMonths ?? TREND_MONTHS),
+    getMonthlyOperationalTrend(scope, period),
     options.includeBranchComparison
       ? getBranchComparison(scope.districtId, period)
       : Promise.resolve(undefined),

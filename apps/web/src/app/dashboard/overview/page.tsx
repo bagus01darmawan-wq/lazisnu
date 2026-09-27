@@ -205,15 +205,7 @@ export default function OverviewPage() {
         collected={data.summary.successful_collections}
       />
 
-      <ProductivitySection
-        productivity={data.productivity}
-        activeCans={data.summary.active_cans}
-        reactivated={data.summary.reactivated}
-        months={filter.months}
-        year={filter.year}
-        branchId={branchId || undefined}
-        scopeLabel={data.scope.branch_name ? `Ranting ${data.scope.branch_name}` : 'Seluruh ranting kecamatan'}
-      />
+      <CollectionTrendChart trend={data.monthly_trend} year={data.period.year} />
 
       {periodEmpty && (
         <p className="rounded-2xl border border-white/10 bg-[#F4F1EA]/5 p-4 text-xs text-[#F4F1EA]/70">
@@ -222,7 +214,15 @@ export default function OverviewPage() {
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <CollectionTrendChart trend={data.monthly_trend} />
+        <ProductivitySection
+          productivity={data.productivity}
+          activeCans={data.summary.active_cans}
+          reactivated={data.summary.reactivated}
+          months={filter.months}
+          year={filter.year}
+          branchId={branchId || undefined}
+          scopeLabel={data.scope.branch_name ? `Ranting ${data.scope.branch_name}` : 'Seluruh ranting kecamatan'}
+        />
         <ConditionBreakdown
           breakdown={data.condition_breakdown}
           newCans={data.summary.new_cans}
