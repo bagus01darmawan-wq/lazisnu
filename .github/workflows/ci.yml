@@ -559,7 +559,7 @@ jobs:
       # setelah 14 hari. if-no-files-found: error → job merah bila APK tidak
       # ada, agar tidak silently sukses tanpa artifact.
       - name: Unggah artifact APK staging
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lazisnu-staging-arm64-v8a
           path: apps/mobile/android/app/build/outputs/apk/staging/debug/*.apk
