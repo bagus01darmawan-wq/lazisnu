@@ -879,6 +879,8 @@ export interface OverviewBranchComparisonItem {
   task_closed: number;
   task_total: number;
   collection_nominal: number;
+  /** Penjemputan nominal > 0 pada periode (kaleng isi). */
+  collection_filled: number;
 }
 
 export interface OverviewProductivityTotals {

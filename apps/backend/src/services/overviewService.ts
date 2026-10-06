@@ -437,6 +437,7 @@ export async function getBranchComparison(
     db.select({
       branchId: schema.cans.branchId,
       nominal: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
+      filled: sql<number>`count(*) filter (where ${schema.collections.nominal} > 0)::int`,
     })
       .from(schema.collections)
       .innerJoin(schema.cans, eq(schema.collections.canId, schema.cans.id))
@@ -463,6 +464,7 @@ export async function getBranchComparison(
       task_closed: Number(task?.closed ?? 0),
       task_total: Number(task?.total ?? 0),
       collection_nominal: Number(collection?.nominal ?? 0),
+      collection_filled: Number(collection?.filled ?? 0),
     };
   });
 }
