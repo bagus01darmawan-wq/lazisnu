@@ -15,10 +15,22 @@ export interface CollectionScope {
   districtId?: string;
 }
 
-/** Utility: scope role ke branchId/districtId */
+/** Utility: scope role ke branchId/districtId (C1-T0: kenal Staf baru, baca saja). */
 export function getCollectionScope(role: string, branchId?: string, districtId?: string): CollectionScope {
   if (role === 'ADMIN_RANTING') return { branchId };
   if (role === 'ADMIN_KECAMATAN') return { districtId };
+  // C1-T0 (§14.13): Staf Pengumpulan 1/ranting (branchId) + 1 di MWC (districtId,
+  // urus program MWC/Taqwa); Staf Keuangan mengikuti scope pemiliknya.
+  if (role === 'STAF_PENGUMPULAN') {
+    if (branchId) return { branchId };
+    if (districtId) return { districtId };
+    return {};
+  }
+  if (role === 'STAF_KEUANGAN') {
+    if (branchId) return { branchId };
+    if (districtId) return { districtId };
+    return {};
+  }
   return {};
 }
 

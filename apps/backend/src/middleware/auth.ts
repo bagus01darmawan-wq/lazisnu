@@ -9,7 +9,9 @@ import { v4 as uuidv4 } from 'uuid';
 // JWT Payload type
 export interface JWTPayload {
   userId: string;
-  role: 'ADMIN_KECAMATAN' | 'ADMIN_RANTING' | 'PETUGAS';
+  // C1-T0: tambah STAF_PENGUMPULAN + STAF_KEUANGAN (§14.13). Izin tulis
+  // (FINAL/kunci) tetap ditolak di routes T4-T6; di sini hanya dikenali.
+  role: 'ADMIN_KECAMATAN' | 'ADMIN_RANTING' | 'PETUGAS' | 'STAF_PENGUMPULAN' | 'STAF_KEUANGAN';
   officerId?: string;
   branchId?: string;
   districtId?: string;
@@ -98,6 +100,29 @@ export function authorize(...allowedRoles: Array<JWTPayload['role']>) {
       });
     }
   };
+}
+
+/**
+ * Konversi string TTL env (mis. '15m', '365d') ke detik.
+ * Dipakai untuk menyinkronkan maxAge cookie web dengan TTL JWT.
+ */
+export function ttlToSeconds(ttl: string | undefined, fallback: number): number {
+  if (!ttl) return fallback;
+  const match = /^(\d+)\s*([smhd])$/.exec(ttl.trim());
+  if (!match) return fallback;
+  const value = parseInt(match[1], 10);
+  const unit = match[2];
+  const multiplier = unit === 's' ? 1 : unit === 'm' ? 60 : unit === 'h' ? 3600 : 86400;
+  return value * multiplier;
+}
+
+/** TTL refresh token (detik) sesuai role — sumber kebenaran tunggal utk cookie web. */
+export function getRefreshTtlSeconds(role: JWTPayload['role'] | string): number {
+  const { config } = require('../config/env');
+  const ttl = role === 'PETUGAS'
+    ? (config.JWT_REFRESH_TTL_PETUGAS || '365d')
+    : (config.JWT_REFRESH_TTL || '365d');
+  return ttlToSeconds(ttl, 365 * 24 * 60 * 60);
 }
 
 // Generate access + refresh tokens

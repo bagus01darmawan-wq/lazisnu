@@ -1,11 +1,28 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { authHelper } from '@/lib/auth';
-import { User } from '@lazisnu/shared-types';
+import { UserRole } from '@lazisnu/shared-types';
+
+/**
+ * Bentuk user sesi di sisi web (camelCase — hasil normalisasi caseConverter
+ * atas respons auth backend yang berkawat snake_case). Kontrak kawat
+ * (shared-types `User`) TIDAK diubah; tipe ini hanya untuk konsumsi UI.
+ */
+export interface SessionUser {
+  id: string;
+  email: string;
+  fullName: string;
+  phone?: string;
+  role: UserRole;
+  districtId?: string;
+  branchId?: string;
+  isActive?: boolean;
+  lastLogin?: string;
+}
 
 interface AuthState {
-  user: User | null;
-  setUser: (user: User | null) => void;
+  user: SessionUser | null;
+  setUser: (user: SessionUser | null) => void;
   logout: () => void;
 }
 
@@ -27,7 +44,10 @@ export const useAuthStore = create<AuthState>()(
       },
     }),
     {
-      name: 'lazisnu-auth-storage',
+      // v2: user sesi kini camelCase (SessionUser) hasil normalisasi
+      // caseConverter. Key baru membuang sesi snake_case lama agar
+      // terhidrasi ulang via /auth/me (cookie masih valid, tanpa login ulang).
+      name: 'lazisnu-auth-storage-v2',
       storage: createJSONStorage(() => sessionStorage),
     }
   )

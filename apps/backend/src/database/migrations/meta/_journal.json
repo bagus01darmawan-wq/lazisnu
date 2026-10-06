@@ -57,6 +57,55 @@
       "when": 1789566673829,
       "tag": "0007_remove_postponed_enum",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789845665545,
+      "tag": "0008_blue_proteus",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789880679625,
+      "tag": "0009_romantic_red_shift",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789917804146,
+      "tag": "0010_chunky_nekra",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790016422612,
+      "tag": "0011_lying_monster_badoon",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790107357066,
+      "tag": "0012_secret_harrier",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790277349667,
+      "tag": "0013_can_visit_outcome",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790430000000,
+      "tag": "0014_officer_dukuh",
+      "breakpoints": true
     }
   ]
 }

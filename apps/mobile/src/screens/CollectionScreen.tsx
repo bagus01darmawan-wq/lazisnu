@@ -12,7 +12,9 @@ import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useCollectionStore} from '../stores';
 import type {RootStackParamList} from '../navigation/types';
-import {AppButton, AppCard, AppHeader, AppTextInput} from '../components/ui';
+import {collectionService} from '../services/api';
+import {AppButton, AppCard, AppHeader, AppTextInput, SegmentedControl} from '../components/ui';
+import {CanCondition} from '@lazisnu/shared-types';
 import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
 import {formatCurrency, formatInputCurrency} from '../utils';
 
@@ -22,6 +24,13 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
   const {task} = route.params;
   const {submitCollection, isSubmitting, reset} = useCollectionStore();
   const [nominal, setNominal] = useState('');
+  const [condition, setCondition] = useState<
+    CanCondition.AKTIF | CanCondition.RUSAK | CanCondition.HILANG
+  >(
+    task.condition === CanCondition.RUSAK || task.condition === CanCondition.HILANG
+      ? task.condition
+      : CanCondition.AKTIF,
+  );
   const [showSuccess, setShowSuccess] = useState(false);
 
   const handleSubmit = async () => {
@@ -60,11 +69,39 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
 
   const doSubmit = async (numericNominal: number) => {
     reset();
+
+    // B2: visit-task (kaleng NON_AKTIF) belum tentu punya assignment_id asli.
+    // Id sintetis "visit-<can_id>" TIDAK valid sebagai assignment_id server
+    // (bukan UUID → 400). Buat assignment on-demand dulu; jika offline, antri
+    // dan sync.ts akan melengkapinya saat mengirim.
+    let assignmentId = task.id;
+    if (task.is_visit_task && task.id.startsWith('visit-')) {
+      const res = await collectionService.ensureAssignment(task.can_id);
+      if (res.success && res.data?.assignment_id) {
+        assignmentId = res.data.assignment_id;
+      } else {
+        const code = res.error?.code;
+        const isOffline = code === 'NETWORK_ERROR' || code === 'SESSION_EXPIRED' || !code;
+        if (!isOffline) {
+          // Server menjawab tegas (mis. sudah dijemput periode ini) — jangan
+          // antri data yang pasti ditolak; beri tahu petugas apa adanya.
+          Alert.alert(
+            'Tidak Bisa Disimpan',
+            res.error?.message || 'Assignment kaleng ini tidak bisa disiapkan.',
+          );
+          return;
+        }
+        // Offline: lanjut antri; sync.ts melengkapi assignment_id saat online.
+      }
+    }
+
     const result = await submitCollection({
-      assignment_id: task.id,
+      assignment_id: assignmentId,
       can_id: task.can_id,
       nominal: numericNominal,
       collected_at: new Date().toISOString(),
+      condition,
+      visit_outcome: task.condition === CanCondition.NON_AKTIF ? 'ISI' : undefined,
     });
 
     if (!result.success) {
@@ -158,6 +195,23 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
           <Text style={styles.helperText}>
             Pastikan nominal sesuai dengan uang yang diterima. Nominal akan dicantumkan pada pesan
             konfirmasi donatur.
+          </Text>
+        </AppCard>
+
+        <Text style={styles.sectionTitle}>Kondisi Fisik Kaleng</Text>
+        <AppCard variant={'default'} style={styles.formCard}>
+          <Text style={styles.label}>Pilih kondisi yang dilihat PPK</Text>
+          <SegmentedControl
+            options={[
+              {label: 'Aktif', value: CanCondition.AKTIF},
+              {label: 'Rusak', value: CanCondition.RUSAK},
+              {label: 'Hilang', value: CanCondition.HILANG},
+            ]}
+            value={condition}
+            onChange={setCondition}
+          />
+          <Text style={styles.helperText}>
+            Kondisi ini adalah fakta lapangan, bukan persetujuan admin.
           </Text>
         </AppCard>
 

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { shouldSecureCookie } from '@/lib/cookies';
+import { toCamelCase } from '@/lib/caseConverter';
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,26 +46,45 @@ export async function POST(request: NextRequest) {
     const data = await backendRes.json();
 
     if (!backendRes.ok || !data.success) {
-      // Clear cookies if refresh fails (since token is invalid or expired)
-      const response = NextResponse.json(data, { status: backendRes.status });
-      response.cookies.delete('lazisnu_token');
-      response.cookies.delete('lazisnu_refresh_token');
+      const status = backendRes.status;
+      // Hapus cookie HANYA jika token ditolak otoritatif (401/403 = token
+      // memang invalid/expired/dicabut). 5xx / gangguan infrastruktur TIDAK
+      // boleh menghapus refresh token — sesi harus bisa pulih saat backend
+      // kembali normal (dulu semua error menghapus cookie → logout massal).
+      const shouldClearCookies = status === 401 || status === 403;
+      const response = NextResponse.json(data, { status });
+      if (shouldClearCookies) {
+        response.cookies.delete('lazisnu_token');
+        response.cookies.delete('lazisnu_refresh_token');
+      }
       return response;
     }
 
-    const { access_token, refresh_token: newRefreshToken } = data.data;
+    const { accessToken, refreshToken: newRefreshToken, refreshExpiresIn } = toCamelCase<{
+      accessToken: string;
+      refreshToken?: string;
+      refreshExpiresIn?: number;
+    }>(data.data);
+
+    // Sinkronkan maxAge cookie refresh dengan TTL JWT refresh dari backend
+    // (fallback 365d = default JWT_REFRESH_TTL).
+    const REFRESH_FALLBACK_SECONDS = 60 * 60 * 24 * 365;
+    const refreshMaxAge =
+      typeof refreshExpiresIn === 'number' && refreshExpiresIn > 0
+        ? refreshExpiresIn
+        : REFRESH_FALLBACK_SECONDS;
 
     const response = NextResponse.json({
       success: true,
       data: {
-        access_token,
+        accessToken,
       },
     });
 
     // Set Access Token (non-HttpOnly for client Axios and middleware)
     // maxAge 15 menit = 900 detik, sesuai TTL access token
-    response.cookies.set('lazisnu_token', access_token, {
-      secure: process.env.NODE_ENV === 'production',
+    response.cookies.set('lazisnu_token', accessToken, {
+      secure: shouldSecureCookie(request),
       sameSite: 'strict',
       maxAge: 60 * 15, // 15 menit
       path: '/',
@@ -73,9 +94,9 @@ export async function POST(request: NextRequest) {
     if (newRefreshToken) {
       response.cookies.set('lazisnu_refresh_token', newRefreshToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: shouldSecureCookie(request),
         sameSite: 'strict',
-        maxAge: 60 * 60 * 24 * 7, // 7 days
+        maxAge: refreshMaxAge, // = TTL JWT refresh (dari backend)
         path: '/',
       });
     }

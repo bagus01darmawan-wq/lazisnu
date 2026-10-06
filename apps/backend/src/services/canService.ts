@@ -76,7 +76,7 @@ export async function assertCanAccess(
 }
 
 export async function getCans(
-  params: { page: number; limit: number; offset: number; search?: string; status?: string; branch_id?: string },
+  params: { page: number; limit: number; offset: number; search?: string; status?: string; branch_id?: string; dukuh_id?: string },
   ctx: AccessContext
 ) {
   const searchCondition = params.search ? or(
@@ -90,6 +90,8 @@ export async function getCans(
   const conditions = [
     roleScope,
     params.branch_id ? eq(schema.cans.branchId, params.branch_id) : undefined,
+    // Layer kartu admin ranting menyaring per dukuh, bukan per ranting.
+    params.dukuh_id ? eq(schema.cans.dukuhId, params.dukuh_id) : undefined,
     searchCondition,
   ];
 

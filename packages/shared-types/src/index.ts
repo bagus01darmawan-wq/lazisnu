@@ -9,7 +9,53 @@ export enum UserRole {
   ADMIN_KECAMATAN = "ADMIN_KECAMATAN",
   ADMIN_RANTING = "ADMIN_RANTING",
   PETUGAS = "PETUGAS",
+  // C1-T0 (§14.13): Staf Bid. Pengumpulan (jadwal+monitor, tanpa FINAL/kunci/nominal)
+  // dan Staf Bid. Adm & Keuangan (TTD kedua, unduh PDF, tanpa ubah nominal).
+  STAF_PENGUMPULAN = "STAF_PENGUMPULAN",
+  STAF_KEUANGAN = "STAF_KEUANGAN",
 }
+
+// C1-T0 (§8b): RANTING vs program milik MWC langsung (mis. Koin Taqwa).
+export enum BranchKind {
+  RANTING = "RANTING",
+  PROGRAM_MWC = "PROGRAM_MWC",
+}
+
+// C1-T0 (§14.6): co-sign 2 HP — PPK dulu lalu bendahara.
+export enum PpkSubmissionStatus {
+  DRAFT = "DRAFT",
+  PPK_SIGNED = "PPK_SIGNED",
+  FINAL = "FINAL",
+}
+
+// C1-T0 (§14.7): FINAL_NOL = dikunci 0 pemasukan (ranting diam lewat 10).
+export enum BranchSubmissionStatus {
+  DRAFT = "DRAFT",
+  FINAL = "FINAL",
+  FINAL_NOL = "FINAL_NOL",
+}
+
+// C1-T0 (§14.8): OPEN → TOLERANCE → LOCKED → DIBUKA_SEBAGIAN → LOCKED.
+export enum PeriodStatus {
+  OPEN = "OPEN",
+  TOLERANCE = "TOLERANCE",
+  LOCKED = "LOCKED",
+  DIBUKA_SEBAGIAN = "DIBUKA_SEBAGIAN",
+}
+
+// C1-T3 (§14.12): DRAFT = menunggu setujui (boleh diedit); APPROVED = tugas aktif.
+export enum PeriodDraftStatus {
+  DRAFT = "DRAFT",
+  APPROVED = "APPROVED",
+}
+
+// C1-T0 (§8): alasan wajib bila |aktual − ekspektasi| > Rp 10.000.
+export type VarianceReason =
+  | "KURANG_BAYAR"
+  | "LEBIH_BAYAR"
+  | "GABUNG_PERIODE"
+  | "KOREKSI_ADMIN"
+  | "HP_HILANG";
 
 export enum AssignmentStatus {
   ACTIVE = "ACTIVE",
@@ -63,8 +109,6 @@ export const ACTION_REQUIRED_CONDITIONS: CanCondition[] = [
 export type SkipReasonCode =
   | "OWNER_ABSENT"
   | "OWNER_REFUSED"
-  | "CAN_LOST"
-  | "CAN_DAMAGED"
   | "ACCESS_DIFFICULT"
   | "OTHER";
 
@@ -74,7 +118,11 @@ export type InactiveReasonCode =
   | "OWNER_REFUSED_CONTINUE"
   | "OTHER";
 
-export type ReturnedReasonCode = "OWNER_REQUEST" | "CAN_INACTIVE" | "CAN_DAMAGED";
+export type ReturnedReasonCode = "OWNER_REQUEST" | "CAN_INACTIVE";
+
+/** Hasil tindakan petugas terhadap kaleng NON_AKTIF. */
+export type CanVisitOutcome = "ISI" | "KOSONG" | "DIKEMBALIKAN" | "TIDAK_DIKUNJUNGI";
+
 
 /** Pemicu usulan perubahan kondisi. */
 export type CanProposalTriggerSource = "EMPTY_THRESHOLD" | "SKIP_REASON" | "MANUAL";
@@ -82,7 +130,7 @@ export type CanProposalTriggerSource = "EMPTY_THRESHOLD" | "SKIP_REASON" | "MANU
 export type CanProposalStatus = "PENDING" | "APPROVED" | "REJECTED";
 
 /** Jenis kunjungan non-penjemputan. */
-export type CanVisitPurpose = "VERIFIKASI" | "PENGGANTIAN";
+export type CanVisitPurpose = "VERIFIKASI" | "PENGGANTIAN" | "PENCABUTAN";
 
 // ─── District ─────────────────────────────────────────────────────────────────
 export interface District {
@@ -94,14 +142,98 @@ export interface District {
   updated_at?: string;
 }
 
-// ─── Branch (Ranting) ────────────────────────────────────────────────────────
+// ─── Branch (Ranting / Program MWC) ──────────────────────────────────────────
 export interface Branch {
   id: string;
   district_id: string;
   code: string;
   name: string;
+  /** C1-T0: RANTING vs PROGRAM_MWC (Taqwa). Default RANTING. */
+  kind?: BranchKind;
   created_at?: string;
   updated_at?: string;
+}
+
+// ─── C1-T0: Submission PPK (1 PPK × 1 periode) ───────────────────────────────
+export interface PpkSubmission {
+  id: string;
+  officer_id: string;
+  branch_id: string;
+  period_year: number;
+  period_month: number;
+  total_amount: number;
+  collection_count: number;
+  bisyaroh_amount: number;
+  net_amount: number;
+  formula_snapshot?: { bisyaroh_pct: number; rounding: string } | null;
+  status: PpkSubmissionStatus;
+  version: number;
+  pdf_url?: string | null;
+  pdf_hash?: string | null;
+}
+
+// ─── C1-T0: Submission ranting (1 ranting × 1 periode) ───────────────────────
+export interface BranchSubmission {
+  id: string;
+  branch_id: string;
+  district_id: string;
+  period_year: number;
+  period_month: number;
+  total_amount: number;
+  bisyaroh_total: number;
+  share_mwc: number;
+  net_amount: number;
+  expected_share: number;
+  share_variance: number;
+  variance_reason?: VarianceReason | null;
+  linked_periods?: string[] | null;
+  collection_count: number;
+  can_total: number;
+  can_aktif: number;
+  can_nonaktif: number;
+  can_rusak: number;
+  can_hilang: number;
+  can_dikembalikan: number;
+  status: BranchSubmissionStatus;
+  version: number;
+  pdf_url?: string | null;
+  pdf_hash?: string | null;
+}
+
+// ─── C1-T0: Kalender periode (1 baris = 1 bulan) ─────────────────────────────
+export interface PeriodCalendar {
+  period_year: number;
+  period_month: number;
+  assign_date: string;
+  due_date: string;
+  tolerance_end: string;
+  status: PeriodStatus;
+}
+
+// ─── C1-T3: Draft penugasan (1 draft = 1 ranting/program × 1 periode) ─────────
+export interface PeriodDraft {
+  id: string;
+  period: string;
+  period_year: number;
+  period_month: number;
+  branch_id: string;
+  branch_name: string;
+  branch_kind: BranchKind;
+  status: PeriodDraftStatus;
+  prepared_at: string;
+  item_count: number;
+  /** PENDING = menunggu Staf; ESCALATED = lewat 24 jam, giliran Keuangan. */
+  event_kind: "APPROVED" | "ESCALATED" | "PENDING";
+  period_status: PeriodStatus;
+}
+
+export interface PeriodDraftItem {
+  id: string;
+  can_id: string;
+  qr_code?: string | null;
+  owner_name: string;
+  officer_id: string;
+  officer_name: string;
 }
 
 // ─── User ─────────────────────────────────────────────────────────────────────
@@ -227,6 +359,8 @@ export interface Collection {
   submitted_at?: string;
   synced_at?: string;
   sync_status: SyncStatus;
+  /** Kondisi bisnis kaleng saat riwayat dibaca; mengikuti kondisi kaleng saat ini. */
+  condition?: CanCondition;
   whatsapp_status?: string;
   submit_sequence?: number;
   alasan_resubmit?: string | null;
@@ -291,13 +425,60 @@ export interface Task {
   owner_address: string;
   latitude?: number;
   longitude?: number;
+  /** Kondisi kaleng (B2): menentukan perlakuan — NON_AKTIF butuh kunjungan, bukan penjemputan. */
+  condition?: CanCondition;
+  is_active?: boolean;
   status: AssignmentStatus;
   assigned_at: string;
   period: string;
+  /**
+   * C1-T2: true bila hasil scan berasal dari periode toleransi (bulan lalu,
+   * masih dalam jendela s/d tgl 9). Dipakai chip "Toleransi" + countdown (T9).
+   */
+  tolerance?: boolean;
   last_collection?: {
     nominal: number;
     date: string;
   };
+  /**
+   * B2: true jika tugas ini berasal dari daftar "Perlu Dikunjungi" (kaleng
+   * NON_AKTIF), bukan dari assignment asli. `id` mungkin berisi assignment_id
+   * asli bila backend menyediakannya — jika tidak, id TIDAK boleh dipakai
+   * sebagai assignment_id (lihat isVisitTask guard di TaskDetailScreen).
+   */
+  is_visit_task?: boolean;
+  /**
+   * B2 (khusus visit-task): status assignment periode berjalan kaleng ini.
+   * null/undefined = belum ada assignment (dibuat on-demand saat penjemputan).
+   * Selain ACTIVE = sudah dijemput periode ini → penjemputan baru ditolak.
+   */
+  assignment_status?: AssignmentStatus | null;
+}
+
+/** B2: kaleng NON_AKTIF di wilayah petugas yang perlu dikunjungi (bukan assignment). */
+export interface VisitTask {
+  can_id: string;
+  qr_code: string;
+  owner_name: string;
+  owner_address: string;
+  latitude?: number;
+  longitude?: number;
+  condition: CanCondition;
+  /** Status pelacakan aktual; jangan diasumsikan true hanya dari label NON_AKTIF. */
+  is_active?: boolean;
+  /**
+   * B2: assignment periode berjalan untuk kaleng NON_AKTIF, bila ada.
+   * Kaleng NON_AKTIF tidak diberi assignment saat dibuat (ASSIGNABLE_CONDITIONS),
+   * tapi penjemputan berisi butuh assignment (collections.assignment_id NOT NULL).
+   * null = belum ada assignment; app wajib membuatnya on-demand sebelum submit.
+   */
+  assignment_id?: string | null;
+  assignment_status?: string | null;
+  last_visit: string | null;
+  last_visit_purpose: CanVisitPurpose | null;
+  last_visit_outcome: CanVisitOutcome | null;
+  /** Visit pengembalian yang masih menunggu tombol Terima admin. */
+  pending_return_visit_id?: string | null;
 }
 
 // ─── Dashboard Stats ─────────────────────────────────────────────────────────
@@ -359,6 +540,9 @@ export interface OfflineCollection {
   collected_at: string;
   latitude?: number;
   longitude?: number;
+  condition: Extract<CanCondition, 'AKTIF' | 'RUSAK' | 'HILANG'>;
+  /** ISI berarti kunjungan NON_AKTIF, bukan ordinary batch. */
+  visit_outcome?: 'ISI';
   device_info?: DeviceInfo;
   submit_sequence?: number;
   is_latest?: boolean;
@@ -427,6 +611,8 @@ export interface DashboardResponse {
   /** Opsional untuk kompatibilitas aplikasi lama yang masih berjalan. */
   month_stats?: MonthStats;
   pending_tasks: DashboardTaskItem[];
+  /** B2: kaleng NON_AKTIF yang perlu dikunjungi (bukan assignment). Opsional demi APK lama. */
+  visit_tasks?: { total: number; completed: number };
   recent_collections: RecentCollectionSummary[];
 }
 
@@ -530,8 +716,11 @@ export interface CanVisitHistoryItem {
   qr_code: string;
   owner_name: string;
   purpose: 'VERIFIKASI' | 'PENGGANTIAN';
+  outcome: CanVisitOutcome;
+  condition: CanCondition;
   visited_at: string;
   notes?: string | null;
+  received_at?: string | null;
 }
 
 // GET /mobile/collections (history) — paginated
@@ -545,6 +734,7 @@ export interface HistoryItem {
   owner_address: string;
   nominal: number;
   collected_at: string;
+  condition: CanCondition;
   sync_status: SyncStatus;
   submit_sequence?: number;
 }
@@ -567,6 +757,9 @@ export interface BatchCollectionRequestItem {
   collected_at: string;
   latitude?: number;
   longitude?: number;
+  condition: Extract<CanCondition, 'AKTIF' | 'RUSAK' | 'HILANG'>;
+  /** ISI berarti kunjungan NON_AKTIF, bukan ordinary batch. */
+  visit_outcome?: 'ISI';
   device_info?: DeviceInfo;
 }
 
@@ -628,7 +821,10 @@ export interface OverviewScope {
 
 export interface OverviewPeriod {
   year: number;
+  /** Bulan terpilih paling akhir (kompatibel). */
   month: number;
+  /** Seluruh bulan terpilih (filter multi-bulan). */
+  months: number[];
   timezone: string;
   generated_at: string;
 }
@@ -645,6 +841,12 @@ export interface OverviewSummary {
   total_officers: number;
   collection_nominal: number;
   successful_collections: number;
+  /** Proposal APPROVED → AKTIF pada periode (jalur cepat tak tercakup). */
+  reactivated: number;
+  /** Kaleng created_at masuk periode (arus masuk basis). */
+  new_cans: number;
+  /** Transisi → DIKEMBALIKAN pada periode (arus keluar basis). */
+  withdrawn: number;
   task_active: number;
   task_closed: number;
   task_completed: number;
@@ -655,18 +857,6 @@ export interface OverviewSummary {
 export interface OverviewConditionBreakdownItem {
   condition: CanCondition;
   count: number;
-}
-
-export interface OverviewActionItem {
-  can_id: string;
-  owner_name: string;
-  branch_id: string;
-  branch_name: string;
-  condition: CanCondition;
-  proposal_id?: string;
-  reason_code?: string;
-  since: string;
-  action_label: string;
 }
 
 export interface OverviewMonthlyTrendItem {
@@ -689,6 +879,34 @@ export interface OverviewBranchComparisonItem {
   task_closed: number;
   task_total: number;
   collection_nominal: number;
+  /** Penjemputan nominal > 0 pada periode (kaleng isi). */
+  collection_filled: number;
+}
+
+export interface OverviewProductivityTotals {
+  task_total: number;
+  filled: number;
+  empty: number;
+  uncollected: number;
+  active: number;
+}
+
+export interface ProductivityOfficerItem {
+  officer_id: string;
+  full_name: string;
+  employee_code: string;
+  branch_id: string;
+  branch_name: string;
+  assigned: number;
+  collected: number;
+  filled: number;
+  uncollected: number;
+}
+
+export interface ProductivityOfficersResponse {
+  scope: OverviewScope;
+  period: OverviewPeriod;
+  officers: ProductivityOfficerItem[];
 }
 
 export interface OverviewResponse {
@@ -696,7 +914,7 @@ export interface OverviewResponse {
   period: OverviewPeriod;
   summary: OverviewSummary;
   condition_breakdown: OverviewConditionBreakdownItem[];
-  action_items: OverviewActionItem[];
   monthly_trend: OverviewMonthlyTrendItem[];
+  productivity: OverviewProductivityTotals;
   branch_comparison?: OverviewBranchComparisonItem[];
 }

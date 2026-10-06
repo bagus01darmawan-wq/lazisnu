@@ -111,12 +111,14 @@ describe('Collection Submission Integration Test', () => {
     }).returning();
     officerId = officer.id;
 
-    // Insert assignment
+    // Insert assignment — periode BERJALAN dinamis (C1-T2: validate kini menolak
+    // periode terkunci; fixture statis Juni 2026 akan selalu terkunci).
+    const now = new Date();
     const [assignment] = await db.insert(schema.assignments).values({
       officerId,
       canId,
-      periodYear: 2026,
-      periodMonth: 6,
+      periodYear: now.getFullYear(),
+      periodMonth: now.getMonth() + 1,
       status: 'ACTIVE',
     }).returning();
     assignmentId = assignment.id;

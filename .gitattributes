@@ -18,4 +18,5 @@
 *.conf text eol=lf
 Dockerfile text eol=lf
 *.env text eol=lf
+.env.test text eol=lf
 *.env.example text eol=lf

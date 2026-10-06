@@ -15,10 +15,12 @@ describe('mobile collection history contract', () => {
         qrCode: 'QR-001',
         ownerName: 'Donatur',
         ownerAddress: 'Alamat',
+        condition: 'HILANG',
       },
     });
 
     expect(item).toMatchObject({
+      condition: 'HILANG',
       id: 'collection-1',
       offline_id: 'offline-1',
       assignment_id: '00000000-0000-0000-0000-000000000001',

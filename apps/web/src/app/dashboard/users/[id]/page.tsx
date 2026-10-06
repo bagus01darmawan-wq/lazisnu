@@ -28,28 +28,28 @@ type OfficerFormValues = z.infer<typeof officerSchema>;
 
 interface OfficerDetail {
   id: string;
-  employee_code: string;
-  full_name: string;
+  employeeCode: string;
+  fullName: string;
   phone: string;
-  photo_url?: string;
-  assigned_zone?: string;
-  is_active: boolean;
-  created_at?: string;
-  updated_at?: string;
+  photoUrl?: string;
+  assignedZone?: string;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
   branch?: { id: string; name: string; code: string } | null;
   district?: { id: string; name: string; code: string } | null;
   stats: {
-    total_collections: number;
-    total_amount: number;
-    total_assignments: number;
-    completed_assignments: number;
-    active_assignments: number;
-    uncollected_assignments: number;
-    completion_rate: number;
-    average_per_collection: number;
-    monthly_breakdown: { month: number; year: number; count: number; amount: number }[];
-    top_donors: { owner_name: string; total: number }[];
-    bottom_donors: { owner_name: string; total: number }[];
+    totalCollections: number;
+    totalAmount: number;
+    totalAssignments: number;
+    completedAssignments: number;
+    activeAssignments: number;
+    uncollectedAssignments: number;
+    completionRate: number;
+    averagePerCollection: number;
+    monthlyBreakdown: { month: number; year: number; count: number; amount: number }[];
+    topDonors: { ownerName: string; total: number }[];
+    bottomDonors: { ownerName: string; total: number }[];
   };
 }
 
@@ -102,7 +102,7 @@ export default function OfficerDetailPage({ params }: { params: Promise<{ id: st
   useEffect(() => {
     if (officer) {
       reset({
-        full_name: officer.full_name,
+        full_name: officer.fullName,
         phone: officer.phone,
       });
     }
@@ -135,11 +135,11 @@ export default function OfficerDetailPage({ params }: { params: Promise<{ id: st
 
   const handleToggleActive = async () => {
     if (!officer) return;
-    const nextActive = !officer.is_active;
+    const nextActive = !officer.isActive;
     const title = nextActive ? 'Aktifkan Petugas' : 'Nonaktifkan Petugas';
     const description = nextActive
-      ? `Yakin ingin mengaktifkan kembali ${officer.full_name}?`
-      : `Yakin ingin menonaktifkan ${officer.full_name}? Petugas tidak bisa login setelah dinonaktifkan.`;
+      ? `Yakin ingin mengaktifkan kembali ${officer.fullName}?`
+      : `Yakin ingin menonaktifkan ${officer.fullName}? Petugas tidak bisa login setelah dinonaktifkan.`;
 
     toast.custom((t) => (
       <ConfirmToast
@@ -225,11 +225,11 @@ export default function OfficerDetailPage({ params }: { params: Promise<{ id: st
             Edit
           </Button>
           <Button
-            variant={officer.is_active ? 'danger' : 'primary'}
+            variant={officer.isActive ? 'danger' : 'primary'}
             onClick={handleToggleActive}
             className="gap-2"
           >
-            {officer.is_active ? (
+            {officer.isActive ? (
               <><UserX size={16} /> Nonaktifkan</>
             ) : (
               <><UserCheck size={16} /> Aktifkan</>
@@ -261,14 +261,14 @@ export default function OfficerDetailPage({ params }: { params: Promise<{ id: st
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <DonorList
           title="10 Donasi Terbanyak"
-          donors={officer.stats.top_donors}
+          donors={officer.stats.topDonors}
           icon={ArrowUp}
           color="text-[#1F8243]"
           bg="bg-[#1F8243]/10"
         />
         <DonorList
           title="10 Donasi Terkecil"
-          donors={officer.stats.bottom_donors}
+          donors={officer.stats.bottomDonors}
           icon={ArrowDown}
           color="text-[#DE6F4A]"
           bg="bg-[#DE6F4A]/10"
@@ -276,7 +276,7 @@ export default function OfficerDetailPage({ params }: { params: Promise<{ id: st
       </div>
 
       {/* Chart */}
-      <MonthlyChart data={officer.stats.monthly_breakdown} />
+      <MonthlyChart data={officer.stats.monthlyBreakdown} />
 
       {/* Edit Modal */}
       <Modal

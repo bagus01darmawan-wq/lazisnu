@@ -14,9 +14,12 @@ import {
   HistoryResponse,
   BatchSyncResponse,
   BatchCollectionRequestItem,
+  CanCondition,
+  CanVisitOutcome,
   RangeStatsResponse,
   ProposalStatusResponse,
   CanVisitHistoryItem,
+  VisitTask,
 } from '@lazisnu/shared-types';
 import {captureAuthEvent} from '../config/crashlytics';
 import {saveRefreshTokenSilent} from './biometric';
@@ -591,6 +594,9 @@ export const collectionService = {
     collected_at: string;
     latitude?: number;
     longitude?: number;
+    /** Kondisi fisik wajib; untuk NON_AKTIF, visit_outcome menandai jalur khusus. */
+    condition: CanCondition.AKTIF | CanCondition.RUSAK | CanCondition.HILANG;
+    visit_outcome?: 'ISI';
     device_info?: {
       model: string;
       os_version: string;
@@ -670,7 +676,7 @@ export const collectionService = {
       status: string;
       message: string;
       reason_code?: string;
-      /** Diisi server bila alasan memicu usulan kondisi (CAN_LOST/CAN_DAMAGED). */
+      /** Diisi server bila alasan memicu usulan kondisi legacy. */
       proposal_id?: string;
     }>
   > => {
@@ -688,28 +694,60 @@ export const collectionService = {
     });
   },
 
-  /**
-   * Catat kunjungan non-penjemputan (verifikasi kaleng non-aktif / penggantian unit).
-   * Bukan collection: tidak ada nominal dan tidak menambah hitungan kosong.
-   */
+  /** Catat tindakan NON_AKTIF tanpa nominal. */
   recordCanVisit: async (
     canId: string,
-    purpose: 'VERIFIKASI' | 'PENGGANTIAN',
+    outcome: CanVisitOutcome,
     notes?: string,
   ): Promise<
-    ApiResponse<{id: string; can_id: string; purpose: string; condition: string; message: string}>
+    ApiResponse<{
+      id: string;
+      can_id: string;
+      outcome: CanVisitOutcome;
+      condition: string;
+      message: string;
+    }>
   > => {
     return apiRequest(`/mobile/cans/${canId}/visits`, {
       method: 'POST',
-      body: JSON.stringify(notes ? {purpose, notes} : {purpose}),
+      body: JSON.stringify(notes ? {outcome, notes} : {outcome}),
+    });
+  },
+
+  /**
+   * B2: daftar kaleng NON_AKTIF di wilayah petugas yang perlu dikunjungi.
+   */
+  getVisitRequired: async (): Promise<ApiResponse<{items: VisitTask[]; total: number}>> => {
+    return apiRequest('/mobile/cans/visit-required', {method: 'GET'});
+  },
+
+  /**
+   * B2: pastikan ada assignment periode berjalan untuk kaleng NON_AKTIF yang
+   * akan diisi petugas. Penjemputan butuh assignment asli
+   * (collections.assignment_id NOT NULL); idempoten.
+   */
+  ensureAssignment: async (
+    canId: string,
+  ): Promise<ApiResponse<{assignment_id: string; status: string}>> => {
+    // Body eksplisit: Fastify menolak POST dengan Content-Type application/json
+    // tanpa body (FST_ERR_CTP_EMPTY_JSON_BODY → 400).
+    return apiRequest(`/mobile/cans/${canId}/ensure-assignment`, {
+      method: 'POST',
+      body: JSON.stringify({}),
     });
   },
 
   completePeriod: async (): Promise<
-    ApiResponse<{period: string; skipped_count: number; message: string}>
+    ApiResponse<{
+      period: string;
+      skipped_count: number;
+      expired_closed_count: number;
+      message: string;
+    }>
   > => {
     return apiRequest('/mobile/periods/complete', {
       method: 'POST',
+      body: JSON.stringify({}),
     });
   },
 
@@ -743,10 +781,337 @@ export const networkService = {
   },
 };
 
+// ── C1-T9: kontrak peran (1 APK, tampil beda per kartu) ──────────────────────
+// DTO lokal per endpoint (snake_case, cermin respons backend). Penjaga peran
+// tetap di server; klien hanya memilih endpoint sesuai peran login.
+
+export interface PeriodInfoDto {
+  period: string;
+  period_year: number;
+  period_month: number;
+  assign_date: string;
+  due_date: string;
+  tolerance_end: string;
+  period_status: 'OPEN' | 'TOLERANCE' | 'LOCKED' | 'DIBUKA_SEBAGIAN';
+  days_to_due: number;
+  days_to_lock: number;
+  in_tolerance: boolean;
+}
+
+export interface PpkSubmissionDto {
+  id: string;
+  officer_id: string;
+  branch_id: string;
+  period: string;
+  period_year: number;
+  period_month: number;
+  total_amount: number;
+  collection_count: number;
+  bisyaroh_amount: number;
+  net_amount: number;
+  status: 'DRAFT' | 'PPK_SIGNED' | 'FINAL';
+  version: number;
+  ppk_signer_id: string | null;
+  bendahara_signer_id: string | null;
+}
+
+export interface BaTextDto {
+  kind: 'ppk' | 'branch';
+  title: string;
+  /** Kode formulir org (mis. F-NUCARE/PYL-10 Rev. 0). */
+  form_code?: string;
+  /** Nomor BA (001/BA/IX/2026) — null sebelum FINAL pertama. */
+  ba_number?: string | null;
+  period: string;
+  table: Array<{label: string; value: string}>;
+  statements: string[];
+  draft_warning: string | null;
+}
+
+export interface BaPdfDto {
+  download_url: string;
+  expires_in_seconds: number;
+  pdf_hash: string;
+  reused: boolean;
+}
+
+export interface BaVersionDto {
+  version: number;
+  status: string;
+  pdf_hash: string | null;
+  content_hash: string;
+  verify_url: string;
+  archived_at: string | null;
+  is_current: boolean;
+}
+
+/**
+ * Satu baris setoran ranting — bentuk `toBranchResponse` di backend.
+ *
+ * Dipakai halaman Profil untuk daftar Berita Acara. `pdf_url` **non-null
+ * berarti berkas sudah pernah diterbitkan**, dan itulah satu-satunya penanda
+ * yang dipakai UI untuk memutuskan tombol Unduh muncul atau belum (server tidak
+ * mengirim `pdf_hash` di daftar ini).
+ */
+export interface BranchSubmissionRowDto {
+  id: string;
+  branch_id: string;
+  /** Ditambahkan di route daftar — `toBranchResponse` sendiri hanya punya id. */
+  branch_name: string | null;
+  period: string;
+  total_amount: number;
+  bisyaroh_total: number;
+  share_mwc: number;
+  net_amount: number;
+  /** DRAFT belum sah — Generate/Unduh ditolak server sampai FINAL/FINAL_NOL. */
+  status: string;
+  version: number;
+  pdf_url: string | null;
+  ba_number: string | null;
+}
+
+export interface PeriodDraftDto {
+  id: string;
+  period: string;
+  period_year: number;
+  period_month: number;
+  branch_id: string;
+  branch_name: string;
+  branch_kind: 'RANTING' | 'PROGRAM_MWC';
+  status: 'DRAFT' | 'APPROVED';
+  prepared_at: string;
+  item_count: number;
+  /** PENDING = menunggu Staf; ESCALATED = lewat 24 jam, giliran Keuangan. */
+  event_kind: 'APPROVED' | 'ESCALATED' | 'PENDING';
+  period_status: string;
+}
+
+export interface StafSummaryDto {
+  period: string;
+  period_status: string;
+  // K1 (review-T9): countdown nyata dari server (ganti konstanta klien).
+  days_to_due: number;
+  days_to_lock: number;
+  in_tolerance: boolean;
+  scope: {kind: 'RANTING' | 'PROGRAM_MWC'; branch_id: string | null; district_id: string | null};
+  drafts: {pending: number; escalated: number; approved: number};
+  ppk: {final_count: number; total_count: number};
+  tugas_active: number;
+}
+
+export interface KeuanganInboxItemDto {
+  /**
+   * - `ppk` — setoran PPK menunggu counter-sign Bendahara Ranting.
+   * - `branch_sign` — BA ranting menunggu **tanda tangan Bendahara Ranting**
+   *   (tahap 1, serah terima ke MWC). Koreksi Pion 23 Sep 2026.
+   * - `branch` — BA ranting menunggu counter-sign Bendahara MWC.
+   */
+  kind: 'ppk' | 'branch_sign' | 'branch';
+  submission_id: string;
+  branch_id: string;
+  branch_name: string;
+  officer_name: string | null;
+  total: number;
+  status: string;
+  version: number;
+  needs_force: boolean;
+  /** Hanya berarti untuk `branch_sign`: setoran PPK yang belum FINAL. */
+  ppk_belum_final: number;
+  /** Hanya berarti untuk `branch_sign`: jumlah setoran PPK periode ini. */
+  ppk_total: number;
+  /** Hanya berarti untuk `branch_sign`: total bisyaroh PPK. */
+  bisyaroh_total: number;
+  /** Hanya berarti untuk `branch_sign`: 30% × (total − bisyaroh), dari server. */
+  expected_share: number;
+}
+
+export interface MwcRecapDto {
+  period: string;
+  kartu_ranting: {
+    total: number;
+    bisyaroh: number;
+    ekspektasi_share: number;
+    share_mwc: number;
+    bersih: number;
+    reported_count: number;
+    final_nol_count: number;
+    belum_lapor_count: number;
+  };
+  kartu_program: {
+    total: number;
+    bisyaroh: number;
+    bersih: number;
+    reported_count: number;
+    belum_lapor_count: number;
+  };
+  rows: Array<{
+    branch_id: string;
+    branch_name: string;
+    kind: 'RANTING' | 'PROGRAM_MWC';
+    status: 'FINAL' | 'FINAL_NOL' | 'BELUM_LAPOR';
+    total: number;
+    bisyaroh: number;
+    share_mwc: number;
+    bersih: number;
+    selisih_share: number;
+    variance_reason: string | null;
+    flags: string[];
+  }>;
+}
+
+const periodQuery = (year?: number, month?: number): string => {
+  const q = new URLSearchParams();
+  if (year !== undefined) q.append('year', String(year));
+  if (month !== undefined) q.append('month', String(month));
+  const s = q.toString();
+  return s ? `?${s}` : '';
+};
+
+export const c1Service = {
+  getPeriodInfo: async (year?: number, month?: number): Promise<ApiResponse<PeriodInfoDto>> => {
+    return apiRequest<PeriodInfoDto>(`/mobile/period-info${periodQuery(year, month)}`);
+  },
+
+  saveDeviceToken: async (fcmToken: string): Promise<ApiResponse<{saved: boolean}>> => {
+    return apiRequest('/mobile/device-token', {
+      method: 'POST',
+      body: JSON.stringify({fcm_token: fcmToken}),
+    });
+  },
+
+  // PPK — setoran & TTD (tanda tangan interaktif = T10; status/BA/unduh = T9).
+  getMySubmission: async (
+    year?: number,
+    month?: number,
+  ): Promise<ApiResponse<PpkSubmissionDto>> => {
+    return apiRequest<PpkSubmissionDto>(`/mobile/submissions${periodQuery(year, month)}`);
+  },
+  signSubmission: async (
+    id: string,
+    data: {signature_png: string; consent: boolean; expected_version?: number},
+  ): Promise<ApiResponse<PpkSubmissionDto>> => {
+    return apiRequest<PpkSubmissionDto>(`/mobile/submissions/${id}/sign`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  countersignSubmission: async (
+    id: string,
+    data: {signature_png: string; consent: boolean; expected_version?: number},
+  ): Promise<ApiResponse<PpkSubmissionDto>> => {
+    return apiRequest<PpkSubmissionDto>(`/mobile/submissions/${id}/countersign`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  getBeritaAcara: async (id: string): Promise<ApiResponse<BaTextDto>> => {
+    return apiRequest<BaTextDto>(`/mobile/submissions/${id}/berita-acara`);
+  },
+  getPdf: async (id: string): Promise<ApiResponse<BaPdfDto>> => {
+    return apiRequest<BaPdfDto>(`/mobile/submissions/${id}/pdf`);
+  },
+  getPdfVersions: async (id: string): Promise<ApiResponse<BaVersionDto[]>> => {
+    return apiRequest<BaVersionDto[]>(`/mobile/submissions/${id}/pdf-versions`);
+  },
+
+  // Staf Pengumpulan — setuju/monitor (approve = tombol Staf, eskalasi 24 jam).
+  getDrafts: async (year?: number, month?: number): Promise<ApiResponse<PeriodDraftDto[]>> => {
+    return apiRequest<PeriodDraftDto[]>(`/admin/period-drafts${periodQuery(year, month)}`);
+  },
+  approveDraft: async (id: string): Promise<ApiResponse<unknown>> => {
+    return apiRequest(`/admin/period-drafts/${id}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+  getStafSummary: async (year?: number, month?: number): Promise<ApiResponse<StafSummaryDto>> => {
+    return apiRequest<StafSummaryDto>(`/mobile/staf/ringkasan${periodQuery(year, month)}`);
+  },
+
+  // Keuangan — antrean TTD kedua + unduh BA.
+  getKeuanganInbox: async (
+    year?: number,
+    month?: number,
+  ): Promise<ApiResponse<{period: string; items: KeuanganInboxItemDto[]}>> => {
+    return apiRequest(`/mobile/keuangan/inbox${periodQuery(year, month)}`);
+  },
+  countersignBranch: async (
+    id: string,
+    data: {signature_png: string; consent: boolean; expected_version?: number},
+  ): Promise<ApiResponse<unknown>> => {
+    return apiRequest(`/mobile/branch-submissions/${id}/countersign`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  /**
+   * Tahap 1 BA ranting — **Bendahara Ranting** menandatangani (koreksi Pion
+   * 23 Sep 2026). Status tetap DRAFT sampai Bendahara MWC meng-counter-sign.
+   * Server menolak bila masih ada setoran PPK periode itu yang belum FINAL.
+   */
+  signBranch: async (
+    id: string,
+    data: {
+      signature_png: string;
+      consent: boolean;
+      expected_version?: number;
+      share_mwc: number;
+      variance_reason?: string;
+      linked_periods?: string[];
+      as_nol?: boolean;
+    },
+  ): Promise<ApiResponse<unknown>> => {
+    return apiRequest(`/admin/branch-submissions/${id}/sign`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  /** Teks BA ranting (baca-saja) — dipakai untuk menampilkan isi sebelum TTD. */
+  getBranchBeritaAcara: async (id: string): Promise<ApiResponse<BaTextDto>> => {
+    return apiRequest<BaTextDto>(`/admin/branch-submissions/${id}/berita-acara`);
+  },
+  getBranchPdfVersions: async (id: string): Promise<ApiResponse<BaVersionDto[]>> => {
+    return apiRequest<BaVersionDto[]>(`/admin/branch-submissions/${id}/pdf-versions`);
+  },
+  /**
+   * Daftar setoran ranting dalam cakupan akun (halaman Profil → Berita Acara).
+   * Gerbang server `rantingOnly` = ADMIN_RANTING (rantingnya) / ADMIN_KECAMATAN
+   * (sedistrik). Side effect yang disengaja server: daftar ini juga menyegarkan
+   * angka cache baris ranting.
+   */
+  getBranchSubmissions: async (
+    year?: number,
+    month?: number,
+  ): Promise<ApiResponse<BranchSubmissionRowDto[]>> => {
+    return apiRequest<BranchSubmissionRowDto[]>(
+      `/admin/branch-submissions${periodQuery(year, month)}`,
+    );
+  },
+  /**
+   * Terbitkan PDF BA ranting (idempoten). Server menolak bila status belum
+   * FINAL/FINAL_NOL — "BA belum sah — belum kedua TTD".
+   */
+  generateBranchBaPdf: async (
+    id: string,
+  ): Promise<ApiResponse<{pdf_hash: string; version: number; reused: boolean}>> => {
+    return apiRequest(`/admin/branch-submissions/${id}/pdf/generate`, {method: 'POST'});
+  },
+  /** Tautan unduh berumur pendek (600 detik) — ambil tepat saat mau dibuka. */
+  getBranchBaPdf: async (id: string): Promise<ApiResponse<BaPdfDto>> => {
+    return apiRequest<BaPdfDto>(`/admin/branch-submissions/${id}/pdf`);
+  },
+
+  // Manager — baca rekap MWC (FINAL saja, 2 kartu).
+  getLaporanMwc: async (year?: number, month?: number): Promise<ApiResponse<MwcRecapDto>> => {
+    return apiRequest<MwcRecapDto>(`/admin/laporan-mwc${periodQuery(year, month)}`);
+  },
+};
+
 export default {
   auth: authService,
   dashboard: dashboardService,
   tasks: tasksService,
   collection: collectionService,
   network: networkService,
+  c1: c1Service,
 };

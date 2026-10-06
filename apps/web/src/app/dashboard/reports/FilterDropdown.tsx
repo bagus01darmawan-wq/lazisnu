@@ -9,9 +9,9 @@ import { PeriodPicker } from '@/components/ui/PeriodPicker';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Branch, Officer, ApiResponse } from '@lazisnu/shared-types';
 
-interface OfficerExtended extends Officer {
-  fullName?: string;
-  branchId?: string;
+interface OfficerExtended extends Omit<Officer, 'full_name' | 'branch_id'> {
+  fullName: string;
+  branchId: string;
 }
 
 export default function FilterDropdown() {
@@ -100,7 +100,7 @@ export default function FilterDropdown() {
     if (type === 'branch' && value) {
       updates['branch'] = value;
       const currentOfficerData = officersById.get(currentOfficer);
-      const officerBranchId = currentOfficerData?.branch_id || currentOfficerData?.branchId;
+      const officerBranchId = currentOfficerData?.branchId;
       if (officerBranchId !== value) {
         updates['officer'] = ''; // Clear officer if branch mismatch
       }
@@ -108,7 +108,7 @@ export default function FilterDropdown() {
 
     if (type === 'officer' && value) {
       const selectedOfficer = officersById.get(value);
-      const officerBranchId = selectedOfficer?.branch_id || selectedOfficer?.branchId;
+      const officerBranchId = selectedOfficer?.branchId;
       if (officerBranchId) {
         updates['branch'] = officerBranchId; // Auto-select branch
       }
@@ -146,7 +146,7 @@ export default function FilterDropdown() {
 
 
   const filteredOfficers = currentBranch
-    ? officers.filter(o => (o.branch_id === currentBranch || o.branchId === currentBranch))
+    ? officers.filter(o => (o.branchId === currentBranch))
     : officers;
 
   return (
@@ -194,7 +194,7 @@ export default function FilterDropdown() {
           options={[
             { label: 'PETUGAS: SEMUA', value: '' },
             ...filteredOfficers.map((o) => ({
-              label: (o.full_name || o.fullName || '').toUpperCase(),
+              label: (o.fullName || '').toUpperCase(),
               value: o.id
             }))
           ]}

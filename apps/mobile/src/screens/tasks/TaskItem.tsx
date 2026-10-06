@@ -3,6 +3,7 @@ import {StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Animated, {FadeInUp, Layout as AnimatedLayout} from 'react-native-reanimated';
 import type {Task} from '@lazisnu/shared-types';
+import {CanCondition} from '@lazisnu/shared-types';
 import {AppCard, StatusBadge} from '../../components/ui';
 import {Colors, Radius, Spacing, Typography} from '../../theme';
 import {formatCurrency, formatPeriod} from '../../utils';
@@ -19,6 +20,8 @@ export interface TaskItemProps {
 
 export const TaskItem = memo(({item, index, onCopy, onPress, onLongPressDrag}: TaskItemProps) => {
   const active = item.status === 'ACTIVE';
+  const nonActiveLifecycle =
+    item.condition === CanCondition.NON_AKTIF || item.condition === CanCondition.DIKEMBALIKAN;
 
   const card = (
     <Animated.View
@@ -38,8 +41,26 @@ export const TaskItem = memo(({item, index, onCopy, onPress, onLongPressDrag}: T
             </Text>
           </View>
           <StatusBadge
-            status={active ? 'pending' : item.status === 'UNCOLLECTED' ? 'warning' : 'success'}
-            label={active ? 'Belum' : item.status === 'UNCOLLECTED' ? 'Terlewat' : 'Selesai'}
+            status={
+              nonActiveLifecycle
+                ? 'warning'
+                : active
+                  ? 'pending'
+                  : item.status === 'UNCOLLECTED'
+                    ? 'warning'
+                    : 'success'
+            }
+            label={
+              item.condition === CanCondition.DIKEMBALIKAN
+                ? 'Dikembalikan'
+                : nonActiveLifecycle
+                  ? 'Nonaktif'
+                  : active
+                    ? 'Belum'
+                    : item.status === 'UNCOLLECTED'
+                      ? 'Terlewat'
+                      : 'Selesai'
+            }
           />
         </View>
 

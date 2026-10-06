@@ -9,6 +9,19 @@
  * kapan kebijakan dapat dipindahkan ke `AT TIME ZONE` setelah kolom menjadi
  * `timestamptz`.
  *
+ * PERLUASAN PREMIS (hasil review C1-T1, 20 Sep 2026): premise TZ ini mencakup
+ * DUA lapis, bukan hanya OS server:
+ *  1. OS/VM/container server = `OPERATIONAL_TIMEZONE` (dicek via
+ *     `checkOperationalTimezone` di services/periodCalendar.ts).
+ *  2. SESSION PostgreSQL = zona operasional juga (`SHOW timezone` harus
+ *     mengembalikan Asia/Jakarta atau padanan ofsetnya). Alasan: driver pg
+ *     menyerialisasi `Date` dengan offset sesi DB; bila OS = WIB tapi sesi
+ *     PG = UTC, nilai `timestamp without time zone` yang dibaca/ditulis bisa
+ *     geser 7 jam meski kode aplikasi benar. Cek `SHOW timezone` + `SET
+ *     timezone = 'Asia/Jakarta'` (atau set pada user/connection string)
+ *     adalah bagian verifikasi deploy T12 — lihat
+ *     `docs/implementation/C1-T12-CHECKLIST-VERIFIKASI-TZ-DEPLOY-2026-09-20.md`.
+ *
  * Risiko yang ditutup: sebelum ambang "enam kali kosong" dipakai, kebijakan ini
  * harus tunggal — jangan menyebar `new Date()` dengan asumsi zona berbeda.
  */

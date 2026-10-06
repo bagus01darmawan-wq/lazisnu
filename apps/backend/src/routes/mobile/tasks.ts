@@ -5,8 +5,8 @@ import { eq, and, desc, asc, gte, lte, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { isValidQRCode } from '../../utils/qr';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
-import { getLatestCollectionCondition } from '../../services/collectionSubmission';
-import { skipAssignmentSchema, canVisitSchema } from './schemas';
+import { getLatestCollectionCondition, assertAssignmentSkippable, sumCollectionsByPeriod } from '../../services/collectionSubmission';
+import { skipAssignmentSchema, canVisitSchema, canVisitSubmitSchema } from './schemas';
 import { AppError, isAppError } from '../../utils/AppError';
 import { parseStatsRange, computeMonthsCovered } from '../../utils/statsRange';
 import { computeTaskMetrics } from '../../services/taskMetrics';
@@ -14,10 +14,22 @@ import {
   actionLabel,
   conditionAfterReplacementVisit,
   isTransitionAllowed,
+  resolveNonActiveVisit,
+  type CanVisitOutcomeValue,
 } from '../../services/conditionRules';
 import type { CanConditionValue } from '../../services/conditionRules';
-import { createProposalFromSkipReason, getLatestProposalForCan } from '../../services/conditionProposalService';
+import { getLatestProposalForCan } from '../../services/conditionProposalService';
 import { assertCanAccess } from '../../services/canService';
+import { submitCollection } from '../../services/collectionSubmission';
+import { insertActivityLog } from '../../services/auditLogService';
+import { completeOfficerPeriod } from '../../services/periodComplete';
+import { ErrorCode } from '../../utils/errorCatalog';
+import {
+  classifyScan,
+  scanAlreadyCollectedMessage,
+  scanClosedMessage,
+  scanWrongPeriodMessage,
+} from '../../services/scanClassification';
 
 export async function tasksRoutes(fastify: FastifyInstance) {
   // GET /mobile/dashboard
@@ -32,11 +44,35 @@ export async function tasksRoutes(fastify: FastifyInstance) {
 
       const latestCollectionCondition = getLatestCollectionCondition();
 
+      // B2: hitung kaleng NON_AKTIF "perlu dikunjungi" di wilayah petugas.
+      // Branch officer diambil dari token (sama dengan mekanisme akses lain).
+      const officerRec = await db.query.officers.findFirst({
+        where: eq(schema.officers.id, officerId),
+        columns: { id: true, branchId: true },
+      });
+      let visitTasks = { total: 0, completed: 0 };
+      if (officerRec?.branchId) {
+        const nonaktifCans = await db.query.cans.findMany({
+          where: and(
+            eq(schema.cans.branchId, officerRec.branchId),
+            eq(schema.cans.condition, 'NON_AKTIF'),
+          ),
+          columns: { id: true },
+          with: {
+            visits: { limit: 1, columns: { id: true } },
+          },
+        });
+        visitTasks = {
+          total: nonaktifCans.length,
+          // Menghitung KALENG, bukan kunjungan: 1 kaleng 3x visit = 1 selesai.
+          completed: nonaktifCans.filter((c) => c.visits.length > 0).length,
+        };
+      }
+
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const weekStart = new Date(today);
       weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
       const periodYear = now.getFullYear();
       const periodMonth = now.getMonth() + 1;
 
@@ -61,18 +97,16 @@ export async function tasksRoutes(fastify: FastifyInstance) {
             eq(schema.collections.syncStatus, 'COMPLETED'),
             latestCollectionCondition
           )).then(r => r[0]),
-        // Statistik bulan berjalan: penjemputan + progres tugas periode berjalan
+        // Statistik bulan berjalan: penjemputan + progres tugas periode berjalan.
+        // C1-T12 (§2.2): uang bulan = atribusi PERIODE assignment (helper
+        // bersama), bukan bulan collected_at. collected_at 20 Sep–9 Okt milik
+        // assignment Sept = pemasukan Sept. Hari/Minggu Ini di bawah tetap
+        // wall-clock (aktivitas harian, bukan atribusi).
         Promise.all([
-          db.select({
-            collected: sql<number>`count(*)::int`,
-            total_nominal: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
-          }).from(schema.collections)
-            .where(and(
-              eq(schema.collections.officerId, officerId),
-              gte(schema.collections.collectedAt, monthStart),
-              eq(schema.collections.syncStatus, 'COMPLETED'),
-              latestCollectionCondition
-            )).then(r => r[0]),
+          sumCollectionsByPeriod(db, { officerId, periods: [{ year: periodYear, month: periodMonth }] }).then((s) => ({
+            collected: s.collected,
+            total_nominal: s.total_nominal,
+          })),
           db.select({
             status: schema.assignments.status,
             count: sql<number>`count(*)::int`,
@@ -99,10 +133,17 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           };
         }),
         db.query.assignments.findMany({
-          where: and(eq(schema.assignments.officerId, officerId), eq(schema.assignments.status, 'ACTIVE')),
+          where: and(
+            eq(schema.assignments.officerId, officerId),
+            eq(schema.assignments.status, 'ACTIVE'),
+            // Penjaga yang sama dengan /tasks: dasbor hanya menagih periode
+            // berjalan; tunggakan lama ditutup via Selesai Periode (total).
+            eq(schema.assignments.periodYear, periodYear),
+            eq(schema.assignments.periodMonth, periodMonth)
+          ),
           with: {
             can: {
-              columns: { id: true, qrCode: true, ownerName: true, ownerAddress: true, latitude: true, longitude: true },
+              columns: { id: true, qrCode: true, ownerName: true, ownerAddress: true, latitude: true, longitude: true, condition: true, isActive: true },
             },
           },
           limit: 10,
@@ -121,7 +162,12 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         // Hitung jumlah AKTUAL tugas yang belum selesai (tidak dibatasi limit)
         db.$count(
           schema.assignments,
-          and(eq(schema.assignments.officerId, officerId), eq(schema.assignments.status, 'ACTIVE'))
+          and(
+            eq(schema.assignments.officerId, officerId),
+            eq(schema.assignments.status, 'ACTIVE'),
+            eq(schema.assignments.periodYear, periodYear),
+            eq(schema.assignments.periodMonth, periodMonth)
+          )
         ),
       ]);
 
@@ -154,8 +200,15 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           address: a.can.ownerAddress,
           latitude: a.can.latitude,
           longitude: a.can.longitude,
+          condition: a.can.condition,
+          is_active: a.can.isActive,
           assigned_at: a.assignedAt,
         })),
+        // B2: kaleng NON_AKTIF di wilayah petugas — "tugas kunjungan"
+        // (bukan assignment). Dihitung sebagai jumlah KALENG, bukan jumlah
+        // kunjungan: 1 kaleng 3x visit = 1. Kaleng yang sudah ditarik
+        // (DIKEMBALIKAN) otomatis keluar dari pembilang & penyebut.
+        visit_tasks: visitTasks,
         recent_collections: latestRecent.map((c) => ({
           id: c.id,
           qr_code: c.can.qrCode,
@@ -170,11 +223,195 @@ export async function tasksRoutes(fastify: FastifyInstance) {
   });
 
   // GET /mobile/tasks
+  /**
+   * GET /mobile/cans/visit-required
+   *
+   * Daftar kaleng NON_AKTIF di wilayah petugas yang perlu dikunjungi untuk
+   * penyelesaian (pencabutan / verifikasi). Tidak menggunakan assignments —
+   * kaleng NON_AKTIF memang tidak punya assignment (di luar mekanisme normal).
+   * Filter wilayah tetap lewat `assertCanAccess` per item.
+   */
+  fastify.get('/cans/visit-required', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = request.currentUser!;
+      const officerId = user.officerId;
+      if (!officerId) {
+        return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
+      }
+
+      // Officer selalu terikat ke 1 branch (ranting) — filter dari sana, bukan
+      // dari parameter permintaan, supaya tidak bisa melihat wilayah lain.
+      const officer = await db.query.officers.findFirst({
+        where: eq(schema.officers.id, officerId),
+        columns: { id: true, branchId: true, districtId: true },
+      });
+      if (!officer?.branchId) {
+        return sendSuccess(reply, { items: [], total: 0 });
+      }
+
+      const currentPeriod = new Date();
+      const year = currentPeriod.getFullYear();
+      const month = currentPeriod.getMonth() + 1;
+
+      const cans = await db.query.cans.findMany({
+        where: and(
+          eq(schema.cans.branchId, officer.branchId),
+          eq(schema.cans.condition, 'NON_AKTIF'),
+        ),
+        with: {
+          visits: {
+            limit: 1,
+            orderBy: [desc(schema.canVisits.visitedAt)],
+            columns: { id: true, purpose: true, outcome: true, visitedAt: true },
+          },
+        },
+        orderBy: [asc(schema.cans.qrCode)],
+      });
+
+      const items = (await Promise.all(cans.map(async (c) => {
+        // B2: kaleng NON_AKTIF tidak diberi assignment oleh aturan
+        // (ASSIGNABLE_CONDITIONS). Tapi kaleng NON_AKTIF yang TERNYATA berisi
+        // harus bisa dikembalikan ke AKTIF — penjemputan berisi butuh assignment
+        // (collections.assignment_id NOT NULL). Karena itu cari assignment
+        // periode berjalan untuk kaleng ini; bila tidak ada, app membuatnya
+        // on-demand lewat POST /mobile/cans/:canId/ensure-assignment.
+        // null = belum ada assignment.
+        const assignment = await db.query.assignments.findFirst({
+          where: and(
+            eq(schema.assignments.canId, c.id),
+            eq(schema.assignments.periodYear, year),
+            eq(schema.assignments.periodMonth, month),
+          ),
+          columns: { id: true, status: true },
+        });
+
+        return {
+          can_id: c.id,
+          qr_code: c.qrCode,
+          owner_name: c.ownerName,
+          owner_address: c.ownerAddress,
+          latitude: c.latitude,
+          longitude: c.longitude,
+          condition: c.condition,
+          is_active: c.isActive,
+          assignment_id: assignment?.id ?? null,
+          assignment_status: assignment?.status ?? null,
+          last_visit: c.visits[0]?.visitedAt ?? null,
+          last_visit_purpose: c.visits[0]?.purpose ?? null,
+          last_visit_outcome: c.visits[0]?.outcome ?? null,
+        };
+      }))).filter((item) => item.assignment_status !== 'COMPLETED');
+
+      return sendSuccess(reply, { items, total: items.length });
+    } catch (error: unknown) {
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  /**
+   * POST /mobile/cans/:canId/ensure-assignment (B2)
+   *
+   * Kaleng NON_AKTIF tidak punya assignment (ASSIGNABLE_CONDITIONS tidak
+   * termasuk NON_AKTIF). Saat petugas menekan "Kaleng Terisi", app butuh
+   * assignment asli agar penjemputan bisa disimpan (collections.assignment_id
+   * NOT NULL). Endpoint ini membuat assignment periode berjalan jika belum
+   * ada (idempoten), lalu mengembalikannya.
+   */
+  fastify.post('/cans/:canId/ensure-assignment', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { canId } = request.params as { canId: string };
+      const user = request.currentUser!;
+      const officerId = user.officerId;
+
+      if (!officerId) {
+        return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
+      }
+
+      const can = await db.query.cans.findFirst({
+        where: eq(schema.cans.id, canId),
+        columns: { id: true, branchId: true, condition: true, isActive: true },
+      });
+      if (!can) {
+        return sendError(reply, 404, 'NOT_FOUND', 'Kaleng tidak ditemukan');
+      }
+      if (can.condition !== 'NON_AKTIF') {
+        return sendError(reply, 409, 'CAN_NOT_NON_ACTIVE', 'Assignment khusus hanya dapat dibuat untuk kaleng NON_AKTIF');
+      }
+
+      // Wilayah: petugas hanya boleh kaleng di branch-nya sendiri.
+      await assertCanAccess(user, can, 'Kaleng ini bukan wilayah Anda');
+
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+
+      const existing = await db.query.assignments.findFirst({
+        where: and(
+          eq(schema.assignments.canId, canId),
+          eq(schema.assignments.officerId, officerId),
+          eq(schema.assignments.periodYear, year),
+          eq(schema.assignments.periodMonth, month),
+        ),
+        columns: { id: true, status: true },
+      });
+      if (existing) {
+        if (existing.status !== 'ACTIVE') {
+          // Sudah ada penjemputan periode ini (mis. tersimpan Rp 0 sebelum kaleng
+          // NON_AKTIF). Bukan kasus "belum ada assignment" — jangan ciptakan yang
+          // baru (melanggar can_officer_period_unq) dan jangan diam-diam gagal.
+          return sendError(
+            reply,
+            409,
+            'ASSIGNMENT_NOT_ACTIVE',
+            `Kaleng ini sudah dijemput pada periode ${month}/${year} (status: ${existing.status}).`,
+          );
+        }
+        return sendSuccess(reply, { assignment_id: existing.id, status: existing.status });
+      }
+
+      const [assignment] = await db.insert(schema.assignments).values({
+        canId,
+        officerId,
+        periodYear: year,
+        periodMonth: month,
+        status: 'ACTIVE',
+        assignedAt: now,
+        notes: 'Dibuat otomatis saat petugas menandai kaleng NON_AKTIF berisi (B2)',
+      }).onConflictDoNothing().returning({ id: schema.assignments.id });
+
+      if (!assignment) {
+        // Balapan jarang: baris sudah dibuat permintaan lain — ambil yang ada.
+        const raced = await db.query.assignments.findFirst({
+          where: and(
+            eq(schema.assignments.canId, canId),
+            eq(schema.assignments.officerId, officerId),
+            eq(schema.assignments.periodYear, year),
+            eq(schema.assignments.periodMonth, month),
+          ),
+          columns: { id: true, status: true },
+        });
+        if (!raced) {
+          return sendInternalError(reply, new Error('Gagal membuat assignment'), fastify.log);
+        }
+        return sendSuccess(reply, { assignment_id: raced.id, status: raced.status });
+      }
+
+      return sendSuccess(reply, { assignment_id: assignment.id, status: 'ACTIVE' });
+    } catch (error: unknown) {
+      // AppError (mis. 403 "Kaleng ini bukan wilayah Anda") harus diteruskan apa
+      // adanya — sendInternalError akan mengubahnya menjadi 500.
+      if (isAppError(error)) {
+        return sendError(reply, error.statusCode, error.code, error.message);
+      }
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
   fastify.get('/tasks', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const user = request.currentUser!;
       const officerId = user.officerId;
-      const query = request.query as { status?: string; page?: string; limit?: string };
+      const query = request.query as { status?: string; page?: string; limit?: string; year?: string; month?: string; all?: string };
 
       if (!officerId) {
         return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
@@ -192,6 +429,17 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         eq(schema.assignments.officerId, officerId!),
         eq(schema.assignments.status, status as any),
       ];
+      // Penjaga daftar fresh: ACTIVE default hanya periode berjalan agar
+      // assignment kedaluwarsa tak menumpuk di HP. Riwayat (COMPLETED/
+      // UNCOLLECTED) tetap lintas periode; `all=true` membuka semua.
+      const qYear = parseInt(query.year || '');
+      const qMonth = parseInt(query.month || '');
+      if (status === 'ACTIVE' && query.all !== 'true') {
+        const y = Number.isInteger(qYear) && qYear >= 2020 && qYear <= 2100 ? qYear : currentYear;
+        const m = Number.isInteger(qMonth) && qMonth >= 1 && qMonth <= 12 ? qMonth : currentMonth;
+        conditions.push(eq(schema.assignments.periodYear, y));
+        conditions.push(eq(schema.assignments.periodMonth, m));
+      }
       const whereClause = and(...conditions);
 
       const [assignments, total] = await Promise.all([
@@ -199,7 +447,14 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           where: whereClause,
           with: {
             can: {
-              columns: { id: true, qrCode: true, ownerName: true, ownerPhone: true, ownerAddress: true, latitude: true, longitude: true },
+              columns: { id: true, qrCode: true, ownerName: true, ownerPhone: true, ownerAddress: true, latitude: true, longitude: true, condition: true, isActive: true },
+              with: {
+                visits: {
+                  columns: { id: true, purpose: true, outcome: true, condition: true, receivedAt: true, visitedAt: true },
+                  orderBy: [desc(schema.canVisits.visitedAt)],
+                  limit: 1,
+                },
+              },
             },
           },
           orderBy: [
@@ -240,6 +495,14 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         owner_address: a.can.ownerAddress,
         latitude: a.can.latitude,
         longitude: a.can.longitude,
+        condition: a.can.condition,
+        is_active: a.can.isActive,
+        last_visit: a.can.visits[0]?.visitedAt ?? null,
+        last_visit_purpose: a.can.visits[0]?.purpose ?? null,
+        last_visit_outcome: a.can.visits[0]?.outcome ?? null,
+        pending_return_visit_id: a.can.visits[0]?.outcome === 'DIKEMBALIKAN' && !a.can.visits[0].receivedAt
+          ? a.can.visits[0].id
+          : null,
         status: a.status,
         assigned_at: a.assignedAt,
         period: `${a.periodYear}-${String(a.periodMonth).padStart(2, '0')}`,
@@ -292,17 +555,16 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       const latestCollectionCondition = getLatestCollectionCondition();
 
       const [colRes, taskRows] = await Promise.all([
-        db.select({
-          collected: sql<number>`count(*)::int`,
-          total_nominal: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
-        }).from(schema.collections)
-          .where(and(
-            eq(schema.collections.officerId, officerId),
-            gte(schema.collections.collectedAt, startDate),
-            lte(schema.collections.collectedAt, endDate),
-            eq(schema.collections.syncStatus, 'COMPLETED'),
-            latestCollectionCondition
-          )).then(r => r[0]),
+        // C1-T12 (§2.2): nominal per PERIODE assignment yang tersentuh rentang
+        // (konsisten dengan separuh tugas di bawah + months_covered) — bukan
+        // bulan collected_at.
+        sumCollectionsByPeriod(db, {
+          officerId,
+          periods: monthsCovered.map((period) => {
+            const [y, m] = period.split('-').map(Number);
+            return { year: y as number, month: m as number };
+          }),
+        }),
         db.select({
           status: schema.assignments.status,
           count: sql<number>`count(*)::int`,
@@ -353,14 +615,6 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         where: eq(schema.cans.qrCode, qrCode),
         with: {
           collections: { orderBy: [desc(schema.collections.collectedAt)], limit: 1 },
-          assignments: {
-            where: and(
-              eq(schema.assignments.officerId, officerId!),
-              eq(schema.assignments.status, 'ACTIVE'),
-              eq(schema.assignments.periodYear, new Date().getFullYear()),
-              eq(schema.assignments.periodMonth, new Date().getMonth() + 1)
-            ),
-          },
         },
       });
 
@@ -377,13 +631,45 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         return sendError(reply, 400, 'QR_INVALID', 'Kaleng tidak aktif');
       }
 
-      const lastCollection = can.collections[0];
-      const activeAssignment = can.assignments[0];
+      // C1-T2 (§5 + §14.2/14.4): lookup toleran lintas periode. Hanya assignment
+      // MILIK petugas yang dibaca — bukan tugas orang lain tidak tersentuh,
+      // sehingga respons error tidak membocorkan owner_* (uji scan-qr tetap lulus).
+      const myAssignments = await db.query.assignments.findMany({
+        where: and(
+          eq(schema.assignments.officerId, officerId!),
+          eq(schema.assignments.canId, can.id),
+        ),
+        columns: { id: true, status: true, periodYear: true, periodMonth: true, assignedAt: true },
+        orderBy: [desc(schema.assignments.periodYear), desc(schema.assignments.periodMonth)],
+      });
 
-      if (!activeAssignment) {
-        return sendError(reply, 403, 'QR_NOT_ASSIGNED', 'Kaleng ini bukan tugas Anda pada periode berjalan');
+      const verdict = classifyScan(myAssignments, new Date());
+      const lastCollection = can.collections[0];
+
+      if (verdict.kind === 'NOT_ASSIGNED') {
+        return sendError(reply, 403, ErrorCode.QR_NOT_ASSIGNED, 'Kaleng ini bukan tugas Anda pada periode berjalan');
       }
 
+      if (verdict.kind === 'WRONG_PERIOD') {
+        return sendError(reply, 409, ErrorCode.QR_WRONG_PERIOD, scanWrongPeriodMessage(verdict.period), {
+          period: verdict.period,
+        });
+      }
+
+      if (verdict.kind === 'PERIOD_CLOSED') {
+        return sendError(reply, 409, ErrorCode.QR_PERIOD_CLOSED, scanClosedMessage(verdict.period, verdict.nextPeriod), {
+          period: verdict.period,
+          next_period: verdict.nextPeriod,
+        });
+      }
+
+      if (verdict.kind === 'ALREADY_COLLECTED') {
+        return sendError(reply, 409, ErrorCode.QR_ALREADY_SUBMITTED, scanAlreadyCollectedMessage(verdict.period), {
+          period: verdict.period,
+        });
+      }
+
+      const activeAssignment = verdict.assignment;
       return sendSuccess(reply, {
         id: activeAssignment.id,
         can_id: can.id,
@@ -398,7 +684,9 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           : null,
         status: activeAssignment.status,
         assigned_at: activeAssignment.assignedAt,
-        period: `${activeAssignment.periodYear}-${String(activeAssignment.periodMonth).padStart(2, '0')}`,
+        period: verdict.period,
+        // C1-T2: badge Toleransi (chip periode di HP pada T9) + countdown.
+        tolerance: verdict.tolerance,
       });
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
@@ -429,6 +717,14 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         return sendError(reply, 403, 'ASSIGNMENT_INVALID', 'Assignment tidak valid, bukan milik Anda, atau sudah selesai');
       }
 
+      // C1-T4 (§7.5): skip pasca-FINAL ditolak (betulkan = reopen T7 dulu).
+      try {
+        await assertAssignmentSkippable(db, assignment);
+      } catch (skipErr: unknown) {
+        const appErr = AppError.fromUnknown(skipErr, 'Setoran sudah FINAL');
+        return sendError(reply, appErr.statusCode, appErr.code, appErr.message);
+      }
+
       // APK lama (pra-rilis pemilih alasan) belum mengirim reason_code → OTHER.
       const reasonCode = body.reason_code ?? 'OTHER';
       const isLegacySkip = !body.reason_code;
@@ -445,28 +741,10 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         })
         .where(eq(schema.assignments.id, id));
 
-      // CAN_LOST / CAN_DAMAGED memicu usulan perubahan kondisi.
-      // Sistem mengusulkan; admin yang memutuskan (kondisi TIDAK berubah di sini).
-      let proposalId: string | undefined;
-      if (assignment.canId) {
-        try {
-          const proposal = await createProposalFromSkipReason(
-            assignment.canId,
-            reasonCode,
-            body.notes ?? null,
-          );
-          proposalId = proposal?.id;
-        } catch (proposalError) {
-          // Usulan yang gagal tidak boleh menggagalkan penutupan tugas petugas.
-          fastify.log.warn({ err: proposalError }, 'gagal membuat usulan kondisi dari skip reason');
-        }
-      }
-
       return sendSuccess(reply, {
         id,
         status: 'UNCOLLECTED',
         reason_code: reasonCode,
-        proposal_id: proposalId,
         message: 'Kaleng ditandai tidak dijemput',
       });
     } catch (error) {
@@ -528,6 +806,10 @@ export async function tasksRoutes(fastify: FastifyInstance) {
   });
 
   // POST /mobile/periods/complete
+  // Menutup tugas periode berjalan + tugas ACTIVE kedaluwarsa (< periode
+  // berjalan) menjadi UNCOLLECTED. Tanpa ini assignment lama abadi:
+  // tampil di daftar (yang tak kenal periode) tapi semua aksi atasnya
+  // ditolak kunci periode — "mayat hidup".
   fastify.post('/periods/complete', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const user = request.currentUser!;
@@ -537,46 +819,16 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
       }
 
-      const now = new Date();
-      const periodYear = now.getFullYear();
-      const periodMonth = now.getMonth() + 1;
-
-      const activeCount = await db.$count(
-        schema.assignments,
-        and(
-          eq(schema.assignments.officerId, officerId),
-          eq(schema.assignments.periodYear, periodYear),
-          eq(schema.assignments.periodMonth, periodMonth),
-          eq(schema.assignments.status, 'ACTIVE')
-        )
+      const result = await completeOfficerPeriod(
+        {
+          officerId,
+          userId: user.userId,
+          ipAddress: request.ip,
+          userAgent: request.headers['user-agent'] || null,
+        },
+        new Date(),
       );
-
-      if (activeCount === 0) {
-        return sendSuccess(reply, {
-          period: `${periodYear}-${String(periodMonth).padStart(2, '0')}`,
-          skipped_count: 0,
-          message: 'Tidak ada kaleng yang perlu ditandai',
-        });
-      }
-
-      await db.update(schema.assignments)
-        .set({
-          status: 'UNCOLLECTED',
-          updatedAt: new Date(),
-          completedAt: new Date(),
-        })
-        .where(and(
-          eq(schema.assignments.officerId, officerId),
-          eq(schema.assignments.periodYear, periodYear),
-          eq(schema.assignments.periodMonth, periodMonth),
-          eq(schema.assignments.status, 'ACTIVE')
-        ));
-
-      return sendSuccess(reply, {
-        period: `${periodYear}-${String(periodMonth).padStart(2, '0')}`,
-        skipped_count: activeCount,
-        message: `${activeCount} kaleng ditandai tidak dijemput untuk periode berjalan`,
-      });
+      return sendSuccess(reply, result);
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
     }
@@ -615,6 +867,9 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           qr_code: v.can?.qrCode ?? '',
           owner_name: v.can?.ownerName ?? '',
           purpose: v.purpose,
+          outcome: v.outcome,
+          condition: v.condition,
+          received_at: v.receivedAt,
           visited_at: v.visitedAt,
           notes: v.notes,
         })),
@@ -627,12 +882,8 @@ export async function tasksRoutes(fastify: FastifyInstance) {
   /**
    * POST /mobile/cans/:canId/visits
    *
-   * Kunjungan verifikasi (kaleng NON_AKTIF) atau penggantian unit (RUSAK/HILANG).
-   * Sengaja BUKAN collection: tidak ada nominal, tidak menambah hitungan kosong,
-   * dan tidak muncul sebagai penjemputan di dashboard.
-   *
-   * Kunjungan PENGGANTIAN menutup kasus RUSAK/HILANG → kondisi kembali AKTIF dan
-   * angka cakupan hilang berkurang.
+   * Tindakan NON_AKTIF tanpa nominal. Kaleng Isi dengan nominal memakai
+   * /visits-filled agar collection dan perubahan kondisi berada dalam satu transaksi.
    */
   fastify.post('/cans/:canId/visits', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
@@ -640,64 +891,152 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       const body = canVisitSchema.parse(request.body || {});
       const user = request.currentUser!;
       const officerId = user.officerId;
-
-      if (!officerId) {
-        return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
+      if (!officerId) return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
+      if (body.outcome === 'ISI') {
+        return sendError(reply, 400, 'NOMINAL_REQUIRED', 'Kaleng Isi harus mengirim nominal dan kondisi fisik');
       }
 
-      // Pintu wajib: petugas hanya boleh mengunjungi kaleng pada rantingnya sendiri.
-      // Tanpa ini, penggantian unit (PENGGANTIAN) bisa mengubah status kaleng di luar
-      // wilayah petugas. Aturan diambil dari `assertCanAccess` (sumber tunggal,
-      // sama dengan semua rute admin), branchId dari token — bukan dari permintaan.
       const can = await db.query.cans.findFirst({
         where: eq(schema.cans.id, canId),
-        with: {
-          branch: { columns: { districtId: true } },
-        },
+        with: { branch: { columns: { districtId: true } } },
         columns: { id: true, condition: true, isActive: true, branchId: true },
       });
-      if (!can) {
-        return sendError(reply, 404, 'CAN_NOT_FOUND', 'Kaleng tidak ditemukan');
-      }
-
+      if (!can) return sendError(reply, 404, 'CAN_NOT_FOUND', 'Kaleng tidak ditemukan');
       await assertCanAccess(user, can, 'Kaleng ini bukan wilayah Anda');
 
-      const visitedAt = body.visited_at ? new Date(body.visited_at) : new Date();
-      const [visit] = await db.insert(schema.canVisits).values({
-        canId,
-        officerId,
-        purpose: body.purpose,
-        visitedAt,
-        notes: body.notes ?? null,
-      }).returning();
-
-      let newCondition: CanConditionValue | null = null;
-      if (body.purpose === 'PENGGANTIAN') {
-        const current = can.condition as CanConditionValue;
-        const target = conditionAfterReplacementVisit(current);
-        if (target && isTransitionAllowed(current, target)) {
-          await db.update(schema.cans)
-            .set({ condition: target, isActive: true, updatedAt: new Date() })
-            .where(eq(schema.cans.id, canId));
-          newCondition = target;
-        }
+      const current = can.condition as CanConditionValue;
+      if (current !== 'NON_AKTIF') {
+        return sendError(reply, 409, 'CAN_NOT_NON_ACTIVE', 'Tindakan khusus hanya tersedia untuk kaleng NON_AKTIF');
       }
+      const resolution = resolveNonActiveVisit(body.outcome, body.condition);
+      const visitedAt = body.visited_at ? new Date(body.visited_at) : new Date();
+
+      const [visit] = await db.transaction(async (tx) => {
+        const inserted = await tx.insert(schema.canVisits).values({
+          canId,
+          officerId,
+          purpose: 'VERIFIKASI',
+          outcome: body.outcome,
+          condition: body.condition ?? null,
+          visitedAt,
+          notes: body.notes ?? null,
+        }).returning();
+
+        await tx.update(schema.cans).set({
+          condition: resolution.condition,
+          isActive: resolution.isActive,
+          updatedAt: new Date(),
+        }).where(eq(schema.cans.id, canId));
+
+        if (body.outcome === 'DIKEMBALIKAN') {
+          await tx.update(schema.assignments)
+            .set({ status: 'COMPLETED', updatedAt: new Date() })
+            .where(and(
+              eq(schema.assignments.canId, canId),
+              eq(schema.assignments.status, 'ACTIVE'),
+            ));
+        }
+
+        await insertActivityLog({
+          userId: user.userId,
+          officerId,
+          actionType: 'CAN_VISIT_RECORDED',
+          entityType: 'can',
+          entityId: canId,
+          oldData: { from: current },
+          newData: { outcome: body.outcome, to: resolution.condition, visited_at: visitedAt.toISOString() },
+          ipAddress: 'can-visit',
+          userAgent: null,
+        }, tx);
+        return inserted;
+      });
 
       return sendSuccess(reply, {
         id: visit.id,
         can_id: canId,
-        purpose: visit.purpose,
+        outcome: body.outcome,
         visited_at: visit.visitedAt,
-        condition: newCondition ?? can.condition,
-        message: 'Kunjungan tercatat sebagai kunjungan, bukan penjemputan',
+        condition: resolution.condition,
+        message: resolution.condition === 'DIKEMBALIKAN'
+          ? 'Kaleng dikembalikan dan menunggu penerimaan admin'
+          : 'Tindakan NON_AKTIF berhasil dicatat',
       }, 201);
     } catch (error: unknown) {
-      if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+      if (error instanceof z.ZodError) return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+      if (isAppError(error)) return sendError(reply, error.statusCode, error.code, error.message);
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  /** POST /mobile/cans/:canId/visits-filled — Kaleng Isi + nominal atomik. */
+  fastify.post('/cans/:canId/visits-filled', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { canId } = request.params as { canId: string };
+      const body = canVisitSubmitSchema.parse(request.body || {});
+      const user = request.currentUser!;
+      const officerId = user.officerId;
+      if (!officerId) return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
+
+      const can = await db.query.cans.findFirst({
+        where: eq(schema.cans.id, canId),
+        with: { branch: { columns: { districtId: true } } },
+        columns: { id: true, condition: true, isActive: true, branchId: true },
+      });
+      if (!can) return sendError(reply, 404, 'CAN_NOT_FOUND', 'Kaleng tidak ditemukan');
+      await assertCanAccess(user, can, 'Kaleng ini bukan wilayah Anda');
+      if (can.condition !== 'NON_AKTIF') {
+        return sendError(reply, 409, 'CAN_NOT_NON_ACTIVE', 'Kaleng Isi hanya tersedia untuk kaleng NON_AKTIF');
       }
-      if (isAppError(error)) {
-        return sendError(reply, error.statusCode, error.code, error.message);
-      }
+
+      const visitedAt = body.collected_at ? new Date(body.collected_at) : new Date();
+      const [collection, visit] = await db.transaction(async (tx) => {
+        const submitted = await submitCollection(tx, {
+          assignmentId: body.assignment_id,
+          canId,
+          officerId,
+          actorUserId: user.userId,
+          allowNonActiveRestore: true,
+          nominal: body.nominal,
+          collectedAt: visitedAt,
+          latitude: body.latitude?.toString(),
+          longitude: body.longitude?.toString(),
+          deviceInfo: body.device_info,
+          condition: body.condition,
+        });
+        const inserted = await tx.insert(schema.canVisits).values({
+          canId,
+          officerId,
+          purpose: 'VERIFIKASI',
+          outcome: 'ISI',
+          condition: body.condition,
+          visitedAt,
+          notes: body.notes ?? null,
+        }).returning();
+        await insertActivityLog({
+          userId: user.userId,
+          officerId,
+          actionType: 'CAN_VISIT_RECORDED',
+          entityType: 'can',
+          entityId: canId,
+          oldData: { from: 'NON_AKTIF' },
+          newData: { outcome: 'ISI', to: body.condition, nominal: body.nominal },
+          ipAddress: 'can-visit-filled',
+          userAgent: null,
+        }, tx);
+        return [submitted, inserted[0]] as const;
+      });
+
+      return sendSuccess(reply, {
+        id: visit.id,
+        can_id: canId,
+        outcome: 'ISI',
+        visited_at: visit.visitedAt,
+        condition: body.condition,
+        collection_id: collection.id,
+      }, 201);
+    } catch (error: unknown) {
+      if (error instanceof z.ZodError) return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+      if (isAppError(error)) return sendError(reply, error.statusCode, error.code, error.message);
       return sendInternalError(reply, error, fastify.log);
     }
   });

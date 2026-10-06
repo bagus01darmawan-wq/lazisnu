@@ -47,18 +47,18 @@ interface WaLogItem {
 
 interface RawWaLog {
   id: string;
-  recipient_name?: string | null;
-  recipient_phone: string;
-  message_content: string;
+  recipientName?: string | null;
+  recipientPhone: string;
+  messageContent: string;
   status: string;
-  created_at: string;
+  createdAt: string;
 }
 
 interface WaLogsResponse {
   logs: RawWaLog[];
   pagination: {
     total: number;
-    total_pages: number;
+    totalPages: number;
   };
   stats: {
     sent: number;
@@ -68,11 +68,11 @@ interface WaLogsResponse {
 }
 
 interface WaSummaryStats {
-  total_sent: number;
-  total_failed: number;
-  total_pending: number;
+  totalSent: number;
+  totalFailed: number;
+  totalPending: number;
   total: number;
-  success_rate: number;
+  successRate: number;
 }
 
 interface WaDailyTrend {
@@ -84,8 +84,8 @@ interface WaDailyTrend {
 }
 
 interface WaBranchStat {
-  branch_id: string;
-  branch_name: string;
+  branchId: string;
+  branchName: string;
   sent: number;
   failed: number;
   pending: number;
@@ -94,8 +94,8 @@ interface WaBranchStat {
 
 interface WaSummaryResponse {
   summary: WaSummaryStats;
-  daily_trends: WaDailyTrend[];
-  by_branch: WaBranchStat[];
+  dailyTrends: WaDailyTrend[];
+  byBranch: WaBranchStat[];
   period: string;
 }
 
@@ -233,14 +233,14 @@ export default function WAMonitorPage() {
         const items = response.data.logs || [];
         setData(items.map((notif) => ({
           id: notif.id,
-          recipient: notif.recipient_name || 'Donatur',
-          phone: notif.recipient_phone,
-          message: notif.message_content,
+          recipient: notif.recipientName || 'Donatur',
+          phone: notif.recipientPhone,
+          message: notif.messageContent,
           status: notif.status,
-          time: notif.created_at
+          time: notif.createdAt
         })));
         setTotalItems(response.data.pagination?.total || 0);
-        setTotalPages(response.data.pagination?.total_pages || 1);
+        setTotalPages(response.data.pagination?.totalPages || 1);
         if (response.data.stats) {
           setStats(response.data.stats);
         }
@@ -269,7 +269,7 @@ export default function WAMonitorPage() {
       }) as unknown as ApiResponse<WaSummaryResponse>;
       if (response.success && response.data) {
         setDbStats(response.data.summary);
-        setDailyTrends(response.data.daily_trends || []);
+        setDailyTrends(response.data.dailyTrends || []);
       }
     } catch (error) {
       console.error('Failed to fetch WA summary:', error);
@@ -537,7 +537,7 @@ export default function WAMonitorPage() {
                   <div>
                     <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Total Terkirim</p>
                     <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-0.5 tracking-tight break-words">
-                      {dbStats?.total_sent?.toLocaleString('id-ID') ?? (dbLoading ? '...' : '0')}
+                      {dbStats?.totalSent?.toLocaleString('id-ID') ?? (dbLoading ? '...' : '0')}
                     </h3>
                     <p className="text-[9px] text-[#F4F1EA]/40">Database historis</p>
                   </div>
@@ -554,7 +554,7 @@ export default function WAMonitorPage() {
                   <div>
                     <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Total Gagal</p>
                     <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-0.5 tracking-tight break-words">
-                      {dbStats?.total_failed?.toLocaleString('id-ID') ?? (dbLoading ? '...' : '0')}
+                      {dbStats?.totalFailed?.toLocaleString('id-ID') ?? (dbLoading ? '...' : '0')}
                     </h3>
                     <p className="text-[9px] text-[#F4F1EA]/40">Database historis</p>
                   </div>
@@ -571,7 +571,7 @@ export default function WAMonitorPage() {
                   <div>
                     <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Success Rate</p>
                     <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-0.5 tracking-tight break-words">
-                      {dbStats ? `${dbStats.success_rate}%` : (dbLoading ? '...' : '0%')}
+                      {dbStats ? `${dbStats.successRate}%` : (dbLoading ? '...' : '0%')}
                     </h3>
                     <p className="text-[9px] text-[#F4F1EA]/40">Terkirim / (Terkirim + Gagal)</p>
                   </div>
@@ -588,7 +588,7 @@ export default function WAMonitorPage() {
                   <div>
                     <p className="text-[10px] font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Total Pending</p>
                     <h3 className="text-xl md:text-2xl font-black text-[#F4F1EA] mt-0.5 tracking-tight break-words">
-                      {dbStats?.total_pending?.toLocaleString('id-ID') ?? (dbLoading ? '...' : '0')}
+                      {dbStats?.totalPending?.toLocaleString('id-ID') ?? (dbLoading ? '...' : '0')}
                     </h3>
                     <p className="text-[9px] text-[#F4F1EA]/40">Masih menunggu antrean</p>
                   </div>

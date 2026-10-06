@@ -61,8 +61,8 @@ export function sanitizeAuditData(data: unknown): unknown {
   return data;
 }
 
-export async function insertActivityLog(input: AuditLogInput): Promise<void> {
-  await db.insert(schema.activityLogs).values({
+export async function insertActivityLog(input: AuditLogInput, client: any = db): Promise<void> {
+  await client.insert(schema.activityLogs).values({
     userId: input.userId,
     officerId: input.officerId,
     actionType: input.actionType,

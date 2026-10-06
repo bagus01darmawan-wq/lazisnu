@@ -9,9 +9,33 @@ import { id } from 'date-fns/locale';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Calendar, QrCode, User, UserCheck, Wallet } from 'lucide-react';
-import { CollectionReport } from '@lazisnu/shared-types';
 
-export default function ReportsClient({ data, pagination }: { data: CollectionReport[], pagination?: { page: number, limit: number, total: number, total_pages: number } }) {
+/**
+ * Baris laporan koleksi di sisi web (camelCase — hasil normalisasi
+ * caseConverter atas respons backend yang berkawat snake_case).
+ */
+export interface CollectionReportRow {
+  id: string;
+  collectedAt: string;
+  nominal: number;
+  syncStatus?: string;
+  officerName: string;
+  officerCode?: string;
+  branchName?: string;
+  districtName?: string;
+  ownerName: string;
+  ownerAddress?: string;
+  qrCode: string;
+}
+
+export interface ReportPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export default function ReportsClient({ data, pagination }: { data: CollectionReportRow[], pagination?: ReportPagination }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -20,9 +44,9 @@ export default function ReportsClient({ data, pagination }: { data: CollectionRe
     params.set('page', newPage.toString());
     router.push(`?${params.toString()}`);
   };
-  const columns: ColumnDef<CollectionReport>[] = [
+  const columns: ColumnDef<CollectionReportRow>[] = [
     {
-      accessorKey: 'collected_at',
+      accessorKey: 'collectedAt',
       header: () => (
         <div className="flex items-center gap-1.5">
           <Calendar size={12} className="text-[#EAD19B]" />
@@ -31,32 +55,32 @@ export default function ReportsClient({ data, pagination }: { data: CollectionRe
       ),
       cell: ({ row }) => (
         <span className="text-xs font-medium text-[#F4F1EA]/60">
-          {format(new Date(row.original.collected_at), 'HH:mm dd/MM/yyyy', { locale: id })}
+          {format(new Date(row.original.collectedAt), 'HH:mm dd/MM/yyyy', { locale: id })}
         </span>
       ),
     },
     {
-      accessorKey: 'qr_code',
+      accessorKey: 'qrCode',
       header: () => (
         <div className="flex items-center gap-1.5">
           <QrCode size={12} className="text-[#EAD19B]" />
           <span>Kode Kaleng</span>
         </div>
       ),
-      cell: ({ row }) => <span className="font-bold text-[#F4F1EA]">{row.original.qr_code}</span>,
+      cell: ({ row }) => <span className="font-bold text-[#F4F1EA]">{row.original.qrCode}</span>,
     },
     {
-      accessorKey: 'owner_name',
+      accessorKey: 'ownerName',
       header: () => (
         <div className="flex items-center gap-1.5">
           <User size={12} className="text-[#EAD19B]" />
           <span>Pemilik</span>
         </div>
       ),
-      cell: ({ row }) => <span className="text-sm font-bold text-[#F4F1EA]">{row.original.owner_name}</span>,
+      cell: ({ row }) => <span className="text-sm font-bold text-[#F4F1EA]">{row.original.ownerName}</span>,
     },
     {
-      accessorKey: 'officer_name',
+      accessorKey: 'officerName',
       header: () => (
         <div className="flex items-center gap-1.5">
           <UserCheck size={12} className="text-[#EAD19B]" />
@@ -64,7 +88,7 @@ export default function ReportsClient({ data, pagination }: { data: CollectionRe
         </div>
       ),
       cell: ({ row }) => (
-        <span className="text-sm font-medium text-[#F4F1EA]/80">{row.original.officer_name}</span>
+        <span className="text-sm font-medium text-[#F4F1EA]/80">{row.original.officerName}</span>
       ),
     },
     {
@@ -83,7 +107,7 @@ export default function ReportsClient({ data, pagination }: { data: CollectionRe
     },
   ];
 
-  const totalPages = pagination?.total_pages || 0;
+  const totalPages = pagination?.totalPages || 0;
   const currentPage = pagination?.page || 1;
   const total = pagination?.total || 0;
 

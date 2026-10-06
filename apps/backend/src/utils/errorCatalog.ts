@@ -16,6 +16,19 @@ export const ErrorCode = {
   ASSIGNMENT_INVALID: 'ASSIGNMENT_INVALID',
   CAN_ID_MISMATCH: 'CAN_ID_MISMATCH',
 
+  // C1-T2 (§14.2/14.4 + B1): hasil klasifikasi scan/submit lintas periode.
+  // Non-retryable: sync mobile memindah ke gagal permanen yang terlihat
+  // (tidak retry ngotot, tidak hilang diam-diam, tidak spam).
+  QR_NOT_ASSIGNED: 'QR_NOT_ASSIGNED',
+  QR_WRONG_PERIOD: 'QR_WRONG_PERIOD',
+  QR_PERIOD_CLOSED: 'QR_PERIOD_CLOSED',
+
+  // C1-T3 (§14.12): draft penugasan tidak ditemukan.
+  DRAFT_NOT_FOUND: 'DRAFT_NOT_FOUND',
+
+  // C1-T4 (§14.10): konflik versi / status pada FINAL (tombol ganda, data berubah).
+  CONFLICT: 'CONFLICT',
+
   // Auth / access
   FORBIDDEN: 'FORBIDDEN',
   FORBIDDEN_SCOPE: 'FORBIDDEN_SCOPE',
@@ -67,6 +80,21 @@ export const Errors = {
 
   CAN_ID_MISMATCH: (msg?: string) =>
     new AppError(ErrorCode.CAN_ID_MISMATCH, msg || 'can_id tidak sesuai dengan assignment', 400),
+
+  QR_NOT_ASSIGNED: (msg?: string, details?: unknown) =>
+    new AppError(ErrorCode.QR_NOT_ASSIGNED, msg || 'Kaleng ini bukan tugas Anda pada periode berjalan', 403, false, details),
+
+  QR_WRONG_PERIOD: (msg?: string, details?: unknown) =>
+    new AppError(ErrorCode.QR_WRONG_PERIOD, msg || 'Kaleng ini tugas Anda pada periode lain — di luar periode berjalan', 409, false, details),
+
+  QR_PERIOD_CLOSED: (msg?: string, details?: unknown) =>
+    new AppError(ErrorCode.QR_PERIOD_CLOSED, msg || 'Periode sudah dikunci, pakai tugas periode berjalan', 409, false, details),
+
+  DRAFT_NOT_FOUND: (msg?: string, details?: unknown) =>
+    new AppError(ErrorCode.DRAFT_NOT_FOUND, msg || 'Draft penugasan tidak ditemukan', 404, false, details),
+
+  CONFLICT: (msg?: string, details?: unknown) =>
+    new AppError(ErrorCode.CONFLICT, msg || 'Data berubah — muat ulang lalu coba lagi', 409, false, details),
 
   FORBIDDEN: (msg?: string) =>
     new AppError(ErrorCode.FORBIDDEN, msg || 'Anda tidak memiliki akses', 403),

@@ -198,6 +198,11 @@
 melakukan trim atau perubahan kapitalisasi. Endpoint dilindungi JWT dan hanya
 mengembalikan detail ketika assignment aktif dimiliki petugas pada periode berjalan.
 
+> C1-T2 (20 Sep 2026): lookup toleran lintas periode. Scan assignment periode
+> bulan lalu **tetap lolos** selama `now <= tolerance_end` (tgl 9 bln berikut
+> 23:59 WIB) dengan flag `tolerance: true` (badge "Toleransi" di HP).
+> Patokan periode = `assignments.(periodYear, periodMonth)`, bukan waktu scan.
+
 **Response (200):**
 ```json
 {
@@ -215,10 +220,15 @@ mengembalikan detail ketika assignment aktif dimiliki petugas pada periode berja
       "amount": 75000,
       "date": "2026-03-15"
     },
-    "status": "ACTIVE"
+    "status": "ACTIVE",
+    "period": "2026-09",
+    "tolerance": false
   }
 }
 ```
+
+`period` = periode assignment (`YYYY-MM`); `tolerance: true` berarti jemputan
+tercatat pada periode bulan lalu (masih dalam jendela toleransi s/d tgl 9).
 
 **Response (403 - bukan assignment petugas):**
 ```json
@@ -230,6 +240,48 @@ mengembalikan detail ketika assignment aktif dimiliki petugas pada periode berja
   }
 }
 ```
+
+**Response (409 - tugas periode lain, C1-T2):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "QR_WRONG_PERIOD",
+    "message": "Kaleng ini tugas Anda pada periode 2026-07 — di luar periode berjalan.",
+    "details": { "period": "2026-07" }
+  }
+}
+```
+
+**Response (409 - periode sudah dikunci, C1-T2):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "QR_PERIOD_CLOSED",
+    "message": "Periode 2026-09 sudah dikunci, pakai tugas 2026-10.",
+    "details": { "period": "2026-09", "next_period": "2026-10" }
+  }
+}
+```
+
+**Response (409 - sudah dijemput periode ini, C1-T2):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "QR_ALREADY_SUBMITTED",
+    "message": "Kaleng ini sudah dijemput pada periode 2026-09.",
+    "details": { "period": "2026-09" }
+  }
+}
+```
+
+Kasus "benar-benar bukan tugas" (`QR_NOT_ASSIGNED`) tetap tanpa data pemilik
+(`owner_*`) — jaminan privasi. Kode baru juga dipakai jalur submit/sync:
+submit ke periode terkunci ditolak `QR_PERIOD_CLOSED` (non-retry, terlihat di
+antrean gagal permanen); `collected_at` di luar jendela periode ditolak
+`VALIDATION_ERROR`.
 
 **Response (404):**
 ```json
@@ -254,6 +306,7 @@ mengembalikan detail ketika assignment aktif dimiliki petugas pada periode berja
   "assignment_id": "uuid",
   "can_id": "uuid",
   "amount": 75000,
+  "condition": "AKTIF",
   "payment_method": "CASH",
   "transfer_receipt_url": null,
   "collected_at": "2026-04-09T10:30:00Z",
@@ -306,6 +359,7 @@ mengembalikan detail ketika assignment aktif dimiliki petugas pada periode berja
       "assignment_id": "uuid",
       "can_id": "uuid",
       "amount": 50000,
+      "condition": "AKTIF",
       "collected_at": "2026-04-09T10:30:00Z",
       "latitude": -6.200000,
       "longitude": 106.820000
@@ -315,6 +369,7 @@ mengembalikan detail ketika assignment aktif dimiliki petugas pada periode berja
       "assignment_id": "uuid",
       "can_id": "uuid",
       "amount": 75000,
+      "condition": "HILANG",
       "collected_at": "2026-04-09T10:45:00Z",
       "latitude": -6.201000,
       "longitude": 106.821000
@@ -322,6 +377,15 @@ mengembalikan detail ketika assignment aktif dimiliki petugas pada periode berja
   ]
 }
 ```
+
+**Kontrak kondisi dan nominal:** `condition` wajib pada setiap ordinary submit
+dan tetap hanya menerima `AKTIF`, `RUSAK`, atau `HILANG`. Nominal negatif
+ditolak; nominal `0` valid dan tetap disimpan. `NON_AKTIF` bukan kondisi
+ordinary: officer memprosesnya melalui kunjungan dengan outcome
+`ISI`/`KOSONG`/`TIDAK_DIKUNJUNJI`, sedangkan `DIKEMBALIKAN` hanya melalui
+jalur pengembalian dan persetujuan admin. Pada batch, `visit_outcome: "ISI"`
+adalah penanda satu-satunya untuk kaleng nonaktif dan tetap memerlukan
+`condition` fisik eksplisit.
 
 **Response (200):**
 ```json
@@ -393,6 +457,46 @@ mengembalikan detail ketika assignment aktif dimiliki petugas pada periode berja
   }
 }
 ```
+
+### 3.8 Setoran PPK — Lihat, Co-sign 2 HP, Berita Acara, PDF (C1-T4/T5)
+
+Angka (total, bisyaroh 10% ceil ribuan, bersih) dihitung server dari
+collections periode itu — tanpa ketik nominal. Baris DRAFT dihitung ulang
+tiap dibuka; baris FINAL beku. Setelah FINAL, submit/resubmit/skip periode
+itu ditolak (`QR_ALREADY_SUBMITTED`).
+
+Upacara co-sign (C1-T5, §14.6): PPK menandatangani di HP-nya, bendahara di
+HP-nya — `signer_id` selalu pemilik sesi login, tidak pernah dari body
+(kunci `*_signer_id` di body otomatis 400). Alur: `sign` (DRAFT →
+PPK_SIGNED) → `countersign` (→ FINAL bila tak ada ACTIVE tersisa, atau tetap
+PPK_SIGNED + `needs_force: true`) → `force-finalize` (Admin Ranting, butuh
+PPK_SIGNED + kedua TTD + alasan; menimpa gerbang ACTIVE saja).
+
+**Endpoint:** `GET /mobile/submissions?year=&month=` (PETUGAS, miliknya)
+
+**Endpoint:** `POST /mobile/submissions/{id}/sign` (PETUGAS pemilik)
+
+**Request:**
+```json
+{ "signature_png": "<base64 PNG ≤ 50KB>", "consent": true, "expected_version": 1 }
+```
+
+**Endpoint:** `POST /mobile/submissions/{id}/countersign` (STAF_KEUANGAN
+seranting) — body sama. Balasan `FINAL` atau `{ status: "PPK_SIGNED",
+needs_force: true, active_left: N }`.
+
+**Endpoint:** `POST /mobile/submissions/{id}/force-finalize`
+(ADMIN_RANTING pemilik) — body `{ "force_reason": "...", "expected_version": 1 }`.
+
+**Endpoint:** `GET /mobile/submissions/{id}/berita-acara` (pemilik,
+keuangan/ranting seranting, kecamatan sedistrik) — teks readable dari
+snapshot; sebelum FINAL berlabel `DRAFT — belum sah`.
+
+**Endpoint:** `GET /mobile/submissions/{id}/pdf` (peran sama; FINAL saja) —
+lazy-generate → `{ download_url (signed, pendek), expires_in_seconds,
+pdf_hash, reused }`. Idempoten: versi sama + berkas sudah ada → `reused: true`
+(hash sama). `sign`/`countersign` dengan versi basi atau tanda ulang →
+`409 CONFLICT`.
 
 ---
 
@@ -684,6 +788,260 @@ mengembalikan detail ketika assignment aktif dimiliki petugas pada periode berja
 }
 ```
 
+### 4.11 Draft Penugasan — Generate Approve (C1-T3)
+
+Robot menyiapkan draft siap-jalan per ranting/program tepat tgl 10 & 20
+(via Scheduler §5.3); Staf Bid. Pengumpulan melihat–mengedit–menyetujui,
+diam 24 jam → eskalasi ke Staf Keuangan (Bendahara/Sekretaris). Semua route
+di bawah otorisasi `STAF_PENGUMPULAN` + `STAF_KEUANGAN` (scope rantingnya /
+program MWC distriknya). Setujui = tugas aktif dalam 1 transaksi; kedua kali
+ditolak ("tombol mati sekali").
+
+**Endpoint:** `GET /admin/period-drafts?year=&month=`
+
+**Response (200):** daftar `{ id, period, branch_id, branch_name, branch_kind, status, prepared_at, item_count, event_kind, period_status }` — `event_kind`: `PENDING` (menunggu Staf) / `ESCALATED` (lewat 24 jam, giliran Keuangan) / `APPROVED`.
+
+**Endpoint:** `GET /admin/period-drafts/{id}` — rincian + item `{ id, can_id, qr_code, owner_name, officer_id, officer_name }`.
+
+**Endpoint:** `POST /admin/period-drafts/{id}/approve`
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "draft_id": "uuid",
+    "period": "2026-10",
+    "item_count": 120,
+    "created_assignments": 118,
+    "approved_by_role": "STAF_PENGUMPULAN",
+    "escalated": false
+  }
+}
+```
+
+**Endpoint:** `PATCH /admin/period-drafts/items/{itemId}` body `{ "officer_id": "uuid" }` (hanya Staf Pengumpulan, draft DRAFT, petugas satu ranting/program) • `DELETE /admin/period-drafts/items/{itemId}` (keluarkan kaleng dari draft).
+
+### 4.12 Setoran Ranting — Co-sign, Berita Acara, PDF (C1-T4/T5/T6)
+
+Agregat PPK FINAL + ekspektasi share 30% × sisa + selisih. Kunci aktif hanya
+bila semua PPK sudah FINAL (disebut namanya bila belum). Selisih
+`|aktual − ekspektasi| > Rp 10.000` wajib alasan; `GABUNG_PERIODE` wajib
+`linked_periods`. `as_nol: true` = kunci 0 pemasukan (totals 0 + alasan wajib)
+→ status `FINAL_NOL`.
+
+Upacara co-sign (C1-T5): Admin Ranting sign di sesinya (+ angka; status tetap
+DRAFT) → Bendahara MWC (STAF_KEUANGAN sedistrik) countersign di HP-nya →
+`FINAL`/`FINAL_NOL`. `signer_id` selalu pemilik sesi.
+
+Keputusan T6 (review-T5): (F6) `as_nol` tidak dipersistensi — `FINAL_NOL`
+diturunkan sebagai total 0 + share 0 + alasan tersimpan (aman karena variance
+0 normalnya tak butuh alasan); massal MWC memakai `KOREKSI_ADMIN` + audit
+"tidak ada laporan penjemputan". (F8) countersign ulang selama `PPK_SIGNED`
+dibiarkan sebagai koreksi coretan sebelum FINAL (konsisten menimpa tier-2).
+(F3) verifikasi QR mensyaratkan `FINAL`/`FINAL_NOL` — hash benar + status
+DRAFT → `valid: false`. (F1a) coretan yang gagal gerbang dihapus best-effort
+agar tak ada objek yatim.
+
+**Endpoint:** `GET /admin/branch-submissions?year=&month=` • `GET /admin/branch-submissions/{id}` (+ `ppk_penyusun`)
+
+**Endpoint:** `POST /admin/branch-submissions/{id}/sign` (ADMIN_RANTING pemilik)
+
+**Request:**
+```json
+{
+  "signature_png": "<base64 PNG ≤ 50KB>",
+  "consent": true,
+  "expected_version": 1,
+  "share_mwc": 1675000,
+  "variance_reason": "LEBIH_BAYAR",
+  "linked_periods": ["2026-07", "2026-08"],
+  "as_nol": false
+}
+```
+
+**Endpoint:** `POST /mobile/branch-submissions/{id}/countersign`
+(STAF_KEUANGAN sedistrik) — body `{ signature_png, consent,
+expected_version }`.
+
+**Endpoint:** `GET /admin/branch-submissions/{id}/berita-acara` (ranting
+pemilik / kecamatan sedistrik / keuangan se-scope) •
+`GET /admin/branch-submissions/{id}/pdf` (FINAL/FINAL_NOL saja) →
+`{ download_url, expires_in_seconds, pdf_hash, reused }`.
+
+**Format BAST org (F7/D-14):** teks + PDF mengikuti formulir
+`F-NUCARE/PYL-10 Rev. 0` — kop logo, `Nomor: 001/BA/IX/2026`, hari/tanggal
+pengesahan, identitas PIHAK PERTAMA (nama/alamat/SK dikosongkan) +
+PIHAK KEDUA (nama/jabatan/alamat), nominal angka + terbilang dari snapshot
+TERKUNCI, waktu penghimpunan = periode bulan, 2 kolom TTD (tanpa Mengetahui),
+QR verifikasi. Nomor diisi saat FINAL pertama (respons `ba_number`),
+stabil lintas versi/reopen; sekuens per ranting (BA PPK) / per MWC (BA
+ranting) jalan terus lintas bulan. Respons submission memuat `ba_number`
+(null pra-FINAL).
+
+**Endpoint publik:** `GET /v1/verify/ba?type=ppk|branch&id=&version=&hash=`
+→ `{ valid: true|false }` saja (tanpa nominal/nama/pihak). `valid: true`
+berarti "BA SAH (FINAL/FINAL_NOL) + konten cocok hash" (C1-T6 F3).
+
+**Endpoint:** `DELETE /admin/signatures` (ADMIN_KECAMATAN) — hapus coretan
+TTD (retensi UU 27/2022), body `{ key, reason }`.
+
+### 4.13 Kunci Periode MWC — Berlapis 2 Tahap (C1-T6, §14.7)
+
+Tombol aktif sejak 27 00:00 bulan berjalan. Hanya `ADMIN_KECAMATAN`
+sedistrik; massal hanya `kind=RANTING` (program MWC/Taqwa dikecualikan).
+`FINAL_NOL` tidak dihitung "sudah lapor" (flag merah UI) — `reported_count`
+= FINAL saja. Notifikasi push/WA = T11 (tiket ini audit + daftar untuk UI).
+
+**Endpoint:** `POST /admin/kunci-periode` — body `{ "year": 2026, "month": 9 }`.
+
+- `<27 00:00` → `400 VALIDATION_ERROR` (belum saatnya).
+- `27 00:00–9 23:59` → fase `REKAP`: tarik FINAL saja, tanpa tulis
+  submission/LOCKED (baris kalender di-ensure bila belum ada). Balasan
+  `{ phase: "REKAP", final_count, final_nol_count, reported_count,
+  pending_count, pending[], created_final_nol: [] }`.
+- `≥10 00:00` → fase `KUNCI_KERAS`: buat `FINAL_NOL` (0 + `KOREKSI_ADMIN` +
+  snapshot kaleng + `finalizedBy=MWC`, signer NULL = segel sistem) untuk tiap
+  ranting TANPA baris submission DAN TANPA baris PPK (DRAFT/ranting parsial
+  dibiarkan pending manual — tidak menghapus uang) + `period_calendar=LOCKED`
+  + audit. Idempoten (panggil dua kali → `created_final_nol: []` kedua kali).
+
+**Response (200) KUNCI_KERAS:**
+```json
+{
+  "success": true,
+  "data": {
+    "period": "2026-09",
+    "phase": "KUNCI_KERAS",
+    "period_status": "LOCKED",
+    "total_ranting": 5,
+    "final_count": 1,
+    "final_nol_count": 1,
+    "reported_count": 1,
+    "pending_count": 3,
+    "pending": [{ "branch_id": "uuid", "branch_name": "Ranting", "submission_status": "DRAFT", "has_ppk_rows": true }],
+    "created_final_nol": [{ "branch_id": "uuid", "branch_name": "Ranting diam", "submission_id": "uuid" }],
+    "program_mwc_total": 1,
+    "program_mwc_final": 0,
+    "calendar_locked": true
+  }
+}
+```
+
+### 4.14 Reopen Menular + Arsip PDF per Versi (C1-T7, §14.8)
+
+Reopen 1 PPK FINAL → DRAFT + otomatis menurunkan branch pasangannya yang
+sudah FINAL/FINAL_NOL ke DRAFT + TTD tingkat 2 hangus. Reopen langsung 1
+ranting (mis. FINAL_NOL massal T6 yang butuh koreksi susulan) juga didukung.
+Hanya Admin Ranting pemilik + MWC sedistrik; wajib alasan min 10 + audit.
+Jendela koreksi 48 jam (`reopened_until`): tulis lewat jendela ditolak
+`VALIDATION_ERROR` (`details.reason: REOPEN_WINDOW_CLOSED`) — perpanjang via
+reopen ulang. DRAFT normal (`reopened_until` NULL) tidak terpengaruh.
+PPK re-FINAL menyegarkan jendela branch pasangan (satu episode koreksi).
+Tiap reopen menaikkan `version`; PDF versi lama diarsipkan ke
+`ba_pdf_archives` (QR lama tetap `valid: true`); coretan TTD dihapus dari R2
+(bytes PDF lama dipertahankan sebagai arsip imut).
+
+**Endpoint:** `POST /mobile/submissions/{id}/reopen` (ADMIN_RANTING,
+ADMIN_KECAMATAN) • `POST /admin/branch-submissions/{id}/reopen` (sama) —
+body `{ "reason": "...", "expected_version": 2 }`.
+
+**Response (200):** `{ ...submission, reopened_until, archived_version,
+extended: false, contagion: { ...branch, reopened_until, archived_version } }`
+(`extended: true` = perpanjangan jendela tanpa arsip/bump).
+
+### 4.15 Laporan MWC + Agregat Insiden (C1-T8, §8 + §14 #5b/#5c)
+
+MWC hanya menarik yang FINAL/FINAL_NOL — DRAFT tak berangka (belum lapor).
+Dua kartu (§8b): Perolehan Ranting (`kind=RANTING`, dengan share 30%) dan
+Perolehan Program MWC (`kind=PROGRAM_MWC`, bruto penuh, gerbang selisih
+dilepas). Angka dari snapshot beku submission (bukan hitung ulang).
+Flag merah otomatis: `SELISIH_TANPA_ALASAN` (defensif), `BELUM_LAPOR` /
+`MASIH_DRAFT` (rekonsiliasi hilang), `GABUNG_PERIODE`, `INSIDEN_*`,
+`MEMUAT_AGREGAT`.
+
+Agregat darurat: HP + kertas hilang → admin catat 1 angka uang fisik + saksi
+bendahara + `HP_HILANG`; masuk total, tak masuk rincian kaleng (satu baris
+aktif per officer+periode, upsert-ganti + audit). Salin manual: catatan
+kertas → admin salin per kaleng + alasan (min 10); validasi inti sama dengan
+submit PPK; provenance di audit `MANUAL_COLLECTION`; tanpa WA donatur.
+
+**Endpoint:** `GET /admin/laporan-mwc?year=&month=` (ADMIN_KECAMATAN) →
+`{ period, kartu_ranting, kartu_program, rows[] }`.
+
+**Endpoint:** `POST /admin/emergency-aggregates` (ADMIN_RANTING pemilik /
+ADMIN_KECAMATAN sedistrik) — body `{ officer_id, year, month, amount (>0),
+reason: HP_HILANG|KOREKSI_ADMIN, witness_user_id (Keuangan seranting),
+note (min 10) }`.
+
+**Endpoint:** `POST /admin/collections/manual` (sama) — body
+`{ assignment_id, can_id, officer_id, nominal, collected_at, reason (min 10) }`.
+
+### 4.16 Mobile 1 APK Peran (C1-T9, §14.6/13/15)
+
+Satu APK, tampil beda per kartu (penjaga tetap di server): PPK = tab penuh +
+layar Setoran (status/TTD/BA/riwayat versi); Staf Pengumpulan = Persetujuan
+(ringkasan scope + setujui draft); Keuangan = antrean TTD + unduh;
+Manager = Rekap (MWC: 2 kartu; ranting: info web). Chip toleransi +
+countdown dari `period-info`; pengingat deadline di aplikasi (push = T11);
+auto-sync saat foreground; TTD interaktif = T10 (perlu canvas→PNG +
+verifikasi perangkat). Token perangkat siap di `device-token` (T11 memanggil
+pasca integrasi messaging).
+
+**Endpoint:** `GET /mobile/period-info?year=&month=` (semua peran) →
+`{ period, *_date, period_status, days_to_due, days_to_lock, in_tolerance }`.
+
+**Endpoint:** `POST /mobile/device-token` — body `{ fcm_token (1–255) }`
+(milik sesi sendiri).
+
+**Endpoint:** `GET /mobile/staf/ringkasan?year=&month=` (STAF_PENGUMPULAN) →
+`{ period, scope, drafts{pending,escalated,approved}, ppk{final,total}, tugas_active }`.
+
+**Endpoint:** `GET /mobile/keuangan/inbox?year=&month=` (STAF_KEUANGAN) →
+PPK_SIGNED seranting / branch-signed sedistrik + `needs_force`.
+
+**Endpoint:** `GET /mobile/submissions/:id/pdf-versions` •
+`GET /admin/branch-submissions/:id/pdf-versions` (gerbang = berita-acara) →
+riwayat `{ version, status, pdf_hash, content_hash, verify_url, archived_at,
+is_current }` (tanpa `pdf_key`; `pdf_hash` NULL = belum diunduh, bukan rusak).
+
+### 4.17 Web Peran + TTD Interaktif (C1-T10, §14.7/13 + §14.6)
+
+Web: Staf = `/dashboard/persetujuan` (monitor scope + setujui draft, eskalasi
+terbaca; countdown nyata dari server — K1); Ranting =
+`/dashboard/setoran` (rincian + TTD kanvas + BA + unduh + riwayat versi);
+MWC = `/dashboard/rekap-mwc` (2 kartu FINAL + flag + tabel). Menu sidebar
+difilter peran (`menu-config`; Staf tak lagi kosong). Log Aktivitas melabeli
+aksi C1 (`PPK_SIGNED`, `*_FINALIZED`, `*_REOPENED`, `KUNCI_PERIODE_*`,
+`EMERGENCY_*`, `MANUAL_*`, `DRAFT_*`, `BA_DOWNLOADED`) + tone kunci/warning.
+
+Mobile TTD interaktif: kanvas coretan → raster → PNG grayscale 240×120 via
+encoder murni (blok stored, tanpa dep native) → `signature_png` (kontrak T5:
+PNG ≤ 50KB + consent). `POST /mobile/submissions/:id/sign` (PPK, DRAFT) +
+`countersign` (Keuangan) + `POST /mobile/branch-submissions/:id/countersign`
+(MWC) dipanggil dari HP; penjaga scope di server.
+
+### 4.18 Notifikasi 7 Event + WA Fallback (C1-T11, §14.15)
+
+Push dulu (FCM per token), gagal/tanpa-token + punya HP → antre WA
+(`send-text`, retry 10x + backoff + DLQ di worker). Tak pernah menggagalkan
+tugas (dispatcher tak melempar; audit best-effort). Template: tugas
+digenerate (approve → PPK+Staf), approve diminta (robot → Staf, dedup 20 jam),
+eskalasi (sapu harian → Keuangan), H-3 + mendekati kunci (sapu → PPK ACTIVE),
+PPK FINAL (→ Admin Ranting) + BA siap (→ PPK), reopen (→ PPK + Admin + MWC
+bila ranting), selisih besar (→ Admin + MWC), BA ranting siap (→ Admin).
+
+**Endpoint:** `POST /scheduler/notifikasi-sapu` (kunci internal)
+— body `{ year, month }` (periode disapu; cron harian 07:00 WIB = T12) →
+`{ eskalasi_terkirim, pengingat_h3_terkirim, mendekati_kunci_terkirim }`.
+
+### 4.19 Tutup Siklus + Rollout (C1-T12)
+
+Atribusi uang = periode assignment (§2.2, lihat catatan §5.2). Cron: robot
+draft tgl 10 & 20 + sapu notifikasi harian 07:00 (detail +
+dual-run/go-no-go/saklar-balik/urutan migrasi 0008→0011: lihat
+`docs/implementation/C1-T12-ROLLOUT-DUALRUN-2026-09-22.md`).
+
 ---
 
 ## 5. Scheduler API (Internal)
@@ -720,6 +1078,36 @@ mengembalikan detail ketika assignment aktif dimiliki petugas pada periode berja
 {
   "year": 2026,
   "month": 4
+}
+```
+
+> C1-T12 (§2.2): agregat per PERIODE ASSIGNMENT (`assignment.periodYear/Month`),
+> bukan bulan `collected_at`. Sama untuk `GET /mobile/dashboard` (uang bulan)
+> dan `GET /mobile/tasks/stats-range` (helper bersama
+> `sumCollectionsByPeriod`). Hari/Minggu Ini tetap wall-clock (aktivitas,
+> bukan atribusi).
+
+### 5.3 Prepare Draft Penugasan (C1-T3, robot)
+
+**Endpoint:** `POST /scheduler/prepare-draft` (kunci `x-internal-api-key`)
+
+Menyiapkan draft siap-jalan untuk `{year, month}` = **bulan berjalan**
+(cron tgl 10 → bulan itu; cron tgl 20 → susulan bulan itu; bulan masa depan
+ditolak). Robot tidak menulis `assignments` — hanya draft + baris
+`period_calendar` yang identik `buildPeriodBoundaries(y, m)`. Idempoten
+(aman cron ganda).
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "period": "2026-10",
+    "calendar_row_written": true,
+    "drafts": [
+      { "branch_id": "uuid", "draft_id": "uuid", "status": "DRAFT", "added_items": 120, "total_items": 120, "direct_assignments": 0 }
+    ]
+  }
 }
 ```
 

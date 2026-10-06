@@ -157,6 +157,45 @@ Terakhir diperbarui: 2026-08-03
 
 ---
 
+### D-12 — Purge Coretan Lintas-Distrik (F2): Perlu Scope Check?
+
+| Atribut | Detail |
+|---------|--------|
+| **ID** | D-12 |
+| **Status** | ✅ Diputuskan |
+| **Direferensikan di** | Backlog C1 (F2, review-T5) |
+| **Konteks** | `DELETE /admin/signatures` hanya cek role + prefix key, tanpa cek distrik. |
+| **Keputusan** | **Tidak diperbaiki (WONTFIX)** — organisasi hanya punya SATU distrik/kecamatan, sehingga skenario admin-distrik-lain praktis tidak ada. |
+| **Diputuskan oleh** | Product Owner — 2026-09-22 |
+
+---
+
+### D-13 — Dedup Sapu per HP (M2): Satu Keuangan Pegang 2 Ranting?
+
+| Atribut | Detail |
+|---------|--------|
+| **ID** | D-13 |
+| **Status** | ✅ Diputuskan |
+| **Direferensikan di** | Backlog C1 (M2, review-T11) |
+| **Konteks** | Dedup sapu per (template+HP) 20 jam bisa men-suppress ranting kedua bila 1 Keuangan mencakup 2 ranting eskalasi bareng. |
+| **Keputusan** | **Tidak diperbaiki (WONTFIX)** — ketentuan organisasi: satu ranting satu bendahara; satu orang Keuangan hanya pegang 1 ranting, sehingga kasusnya tidak terjadi. |
+| **Diputuskan oleh** | Product Owner — 2026-09-22 |
+
+---
+
+### D-14 — Format PDF BA Mengikuti Ketentuan Organisasi (F7)
+
+| Atribut | Detail |
+|---------|--------|
+| **ID** | D-14 |
+| **Status** | ✅ Diputuskan (implementasi = tiket tersendiri) |
+| **Direferensikan di** | Backlog C1 (F7), `baPdfService.ts:169` |
+| **Sumber format** | `contoh BA.docx` (Lampiran 5 BAST `F-NUCARE/PYL-10 Rev. 0`) — kop logo NUCARE-LAZISNU |
+| **Keputusan** | PDF BA mengikuti formulir org, bukan format dev: (1) Nomor BA `001/BA/{bulan romawi}/{tahun}` — BA PPK→ranting urut **per ranting jalan terus lintas bulan**, BA ranting→MWC urut **per MWC jalan terus lintas bulan** (bulan/tahun = bulan pengesahan); (2) Hari/tanggal = tanggal pengesahan (FINAL); (3) Alamat = nama ranting ybs; (4) No SK dikosongkan; (5) Nominal = total snapshot TERKUNCI + terbilang; (6) Waktu penghimpunan = periode bulan (mis. September 2026); (7) Kolom Mengetahui DIHILANGKAN; (8) Kop logo sama dengan docx. Pernyataan generik + potong-95-huruf (F7) diganti susunan BAST: identitas PIHAK PERTAMA/KEDUA + nominal + waktu. Butuh: kolom nomor BA (migrasi), counter sekuens per ranting/MWC anti-balapan, fungsi terbilang ID, embed logo PNG, snapshot/hash ikut nomor. |
+| **Diputuskan oleh** | Product Owner — 2026-09-22 |
+
+---
+
 ## Ringkasan Status
 
 | ID | Topik | Status | Sub-bab |
@@ -172,5 +211,8 @@ Terakhir diperbarui: 2026-08-03
 | D-09 | Biometrik Mobile | ✅ Diputuskan | 05, 08 |
 | D-10 | sync_queues Schema | ✅ Diputuskan (DROP Opsi A) | 03, 07 |
 | D-11 | Role BENDAHARA | ✅ Diputuskan (Hapus Total) | 02, 03 |
+| D-12 | Purge Lintas-Distrik (F2) | ✅ Diputuskan (WONTFIX — 1 distrik) | C1 backlog |
+| D-13 | Dedup Sapu per HP (M2) | ✅ Diputuskan (WONTFIX — 1 bendahara/ranting) | C1 backlog |
+| D-14 | Format PDF BA Org (F7) | ✅ Diputuskan (tiket tersendiri) | C1 backlog |
 
-> 🎉 **SEMUA 11 KEPUTUSAN SUDAH DIPUTUSKAN!** Bebas hambatan untuk memulai pengerjaan sub-bab.
+> 🎉 **SEMUA 14 KEPUTUSAN SUDAH DIPUTUSKAN!** Bebas hambatan untuk memulai pengerjaan sub-bab.

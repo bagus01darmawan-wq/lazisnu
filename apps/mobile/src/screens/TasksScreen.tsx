@@ -16,6 +16,8 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
 import DraggableFlatList, {RenderItemParams, ScaleDecorator} from 'react-native-draggable-flatlist';
 import type {Task} from '@lazisnu/shared-types';
+import {AssignmentStatus, CanCondition, VisitTask} from '@lazisnu/shared-types';
+import {collectionService} from '../services/api';
 import {useTasksStore, useSyncStore} from '../stores';
 import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
 import type {MainNavigationProp} from '../navigation/types';
@@ -50,12 +52,25 @@ const TasksScreen: React.FC = () => {
   // Urutan pribadi hanya bermakna pada daftar penuh — saat mencari, drag dinonaktifkan.
   const dragEnabled = !searchQuery.trim();
   const [issuesVisible, setIssuesVisible] = useState(false);
+  const [visitRequired, setVisitRequired] = useState<VisitTask[]>([]);
+
+  const fetchVisitRequired = useCallback(async () => {
+    try {
+      const res = await collectionService.getVisitRequired();
+      if (res.success && res.data) {
+        setVisitRequired(res.data.items);
+      }
+    } catch {
+      // Bukan halangan utama — daftar penjemputan tetap tampil.
+    }
+  }, []);
 
   useEffect(() => {
     fetchTasks();
     fetchStats();
+    fetchVisitRequired();
     checkStatus();
-  }, [checkStatus, fetchTasks, fetchStats]);
+  }, [checkStatus, fetchTasks, fetchStats, fetchVisitRequired]);
 
   const copyToClipboard = useCallback((text: string) => {
     Clipboard.setString(text);
@@ -63,6 +78,13 @@ const TasksScreen: React.FC = () => {
   }, []);
 
   const filteredTasks = tasks.filter(task => {
+    // B2: kaleng NON_AKTIF mendapat section sendiri ("Perlu Dikunjungi").
+    // Meskipun backend /tasks mengembalikan assignment periode berjalan untuk
+    // kaleng NON_AKTIF (diperlukan agar penjemputan berisi bisa tersimpan),
+    // kaleng itu BUKAN tugas penjemputan biasa — jangan tampilkan dua-duanya.
+    if (task.condition === CanCondition.NON_AKTIF) {
+      return false;
+    }
     const query = searchQuery.toLowerCase().trim();
     if (!query) {
       return true;
@@ -110,7 +132,7 @@ const TasksScreen: React.FC = () => {
             <Text style={styles.headerSubtitle}>
               {isLoading && page === 1
                 ? 'Memuat penugasan...'
-                : `${tasks.length} tugas ditampilkan`}
+                : `${filteredTasks.length} tugas ditampilkan`}
             </Text>
           </View>
           <TouchableOpacity
@@ -156,9 +178,56 @@ const TasksScreen: React.FC = () => {
           onChangeText={setSearchQuery}
           onClear={() => setSearchQuery('')}
         />
+        <View style={styles.conditionSummary}>
+          <View style={[styles.conditionChip, styles.activeChip]}>
+            <Text style={styles.activeChipText}>Aktif ({filteredTasks.length})</Text>
+          </View>
+          <View style={[styles.conditionChip, styles.nonActiveChip]}>
+            <Text style={styles.nonActiveChipText}>Non-Aktif ({visitRequired.length})</Text>
+          </View>
+        </View>
       </LinearGradient>
 
       <Text style={[styles.sectionTitle, styles.sectionTitleFirst]}>Perlu Dijemput</Text>
+
+      {/* B2: kaleng NON_AKTIF — bukan penjemputan, tapi kunjungan penyelesaian. */}
+      {visitRequired.length > 0 && (
+        <Text style={styles.sectionTitle}>Perlu Dikunjungi ({visitRequired.length})</Text>
+      )}
+      {visitRequired.map(v => {
+        // Kaleng NON_AKTIF tidak punya assignment asli — bentuk tugas ringkas
+        // dari data visit-required supaya layar detail bisa dipakai.
+        // B2: assignment_id dari backend (periode berjalan) bila sudah ada;
+        // kalau belum, id sintetis dipakai hanya sebagai key React —
+        // TaskDetailScreen tahu membedakannya via is_visit_task.
+        const visitTask: Task = {
+          id: v.assignment_id ?? `visit-${v.can_id}`,
+          can_id: v.can_id,
+          qr_code: v.qr_code,
+          owner_name: v.owner_name,
+          owner_phone: '',
+          owner_address: v.owner_address ?? '',
+          latitude: v.latitude,
+          longitude: v.longitude,
+          condition: CanCondition.NON_AKTIF,
+          is_active: v.is_active,
+          status: AssignmentStatus.ACTIVE,
+          assigned_at: v.last_visit ?? new Date().toISOString(),
+          period: '',
+          is_visit_task: true,
+          assignment_status: (v.assignment_status as AssignmentStatus | null) ?? null,
+        };
+        return (
+          <TouchableOpacity
+            key={v.can_id}
+            accessibilityRole={'button'}
+            accessibilityLabel={`Detail kaleng nonaktif ${v.qr_code}`}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('TaskDetail', {task: visitTask})}>
+            <TaskItem item={visitTask} index={0} onCopy={copyToClipboard} />
+          </TouchableOpacity>
+        );
+      })}
 
       {!!error && !isLoading && (
         <TouchableOpacity
@@ -194,6 +263,7 @@ const TasksScreen: React.FC = () => {
             onRefresh={() => {
               fetchTasks();
               fetchStats();
+              fetchVisitRequired();
               checkStatus();
             }}
             colors={[Colors.brand.emerald]}
@@ -277,6 +347,20 @@ const styles = StyleSheet.create({
     opacity: 0.86,
     marginTop: Spacing.xs,
   },
+  conditionSummary: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  conditionChip: {
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  activeChip: {backgroundColor: Colors.surface.successSubtle},
+  nonActiveChip: {backgroundColor: Colors.surface.warningSoft},
+  activeChipText: {...Typography.caption, color: Colors.brand.deepGreen, fontWeight: '700'},
+  nonActiveChipText: {...Typography.caption, color: Colors.status.warning, fontWeight: '700'},
   listContainer: {
     paddingHorizontal: Layout.screenPadding,
     paddingBottom: Spacing.xl,

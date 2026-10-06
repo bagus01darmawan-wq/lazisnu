@@ -1,5 +1,5 @@
 import NetInfo from '@react-native-community/netinfo';
-import {AssignmentStatus, Collection, SyncStatus, Task} from '@lazisnu/shared-types';
+import {AssignmentStatus, CanCondition, Collection, SyncStatus, Task} from '@lazisnu/shared-types';
 import {getOfflineStorage, initializeOfflineStorage} from '../../src/services/offline/mmkv';
 import {offlineQueue, QueuedCollection} from '../../src/services/offline/queue';
 import {taskCache} from '../../src/services/offline/tasks';
@@ -54,6 +54,7 @@ const makeQueueItem = (
   assignment_id: assignmentId,
   can_id: canId,
   nominal: 50000,
+  condition: CanCondition.AKTIF,
   collected_at: '2026-07-15T02:00:00.000Z',
 });
 

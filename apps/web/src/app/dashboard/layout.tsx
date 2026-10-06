@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import Sidebar from '@/components/Sidebar';
-import { useAuthStore } from '@/store/useAuthStore';
+import { useAuthStore, type SessionUser } from '@/store/useAuthStore';
 import { usePathname } from 'next/navigation';
 import api from '@/lib/api';
-import type { User } from '@lazisnu/shared-types';
+import { startSessionKeeper } from '@/lib/session-keeper';
 import { Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
@@ -18,6 +18,13 @@ export default function DashboardLayout({
   const { user, setUser } = useAuthStore();
   const pathname = usePathname();
 
+  // Refresh token proaktif — access token (15 menit) selalu diperbarui
+  // sebelum expire selama tab terbuka, sehingga pengguna tidak di-logout
+  // setelah idle (penyebab utama "keluar sendiri" di dashboard).
+  useEffect(() => {
+    startSessionKeeper();
+  }, []);
+
   // Hidrasi profil: sessionStorage (zustand persist) kosong di tab baru,
   // padahal cookie token masih valid. Tanpa ini Sidebar spinner selamanya.
   // Kegagalan 401 ditangani interceptor api (refresh → redirect /login).
@@ -25,7 +32,7 @@ export default function DashboardLayout({
     if (user) return;
     let cancelled = false;
     api
-      .get<{ success: boolean; data: User }>('/auth/me')
+      .get<{ success: boolean; data: SessionUser }>('/auth/me')
       .then((res) => {
         if (!cancelled) setUser(res.data);
       })
@@ -49,7 +56,7 @@ export default function DashboardLayout({
     <div className="flex bg-[var(--canvas)] min-h-screen overflow-x-hidden">
       <Sidebar
         role={user?.role}
-        userName={user?.full_name}
+        userName={user?.fullName}
         isMobileOpen={isMobileSidebarOpen}
         isDesktopVisible={isDesktopSidebarVisible}
         onMobileClose={() => setIsMobileSidebarOpen(false)}
@@ -94,11 +101,11 @@ export default function DashboardLayout({
           <div className="flex items-center gap-4">
              <ThemeSwitcher />
              <div className="text-right hidden sm:block">
-               <p className="text-xs font-bold text-[var(--text)]">{user?.full_name}</p>
+                <p className="text-xs font-bold text-[var(--text)]">{user?.fullName}</p>
                <p className="text-[10px] text-[var(--text)]/70 font-bold uppercase">{user?.role?.replace(/_/g, ' ')}</p>
              </div>
              <div className="w-8 h-8 md:w-9 md:h-9 bg-[var(--primary)] rounded-xl flex items-center justify-center text-[var(--primary-ink)] font-bold text-sm shadow-lg shadow-[var(--primary)]/20">
-               {user?.full_name?.charAt(0).toUpperCase() || 'U'}
+                {user?.fullName?.charAt(0).toUpperCase() || 'U'}
              </div>
           </div>
         </header>

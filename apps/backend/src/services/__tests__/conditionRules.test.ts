@@ -85,10 +85,10 @@ describe('usulan dan transisi kondisi', () => {
     expect(shouldRestoreActive('AKTIF', 5000)).toBe(false);
   });
 
-  it('CAN_LOST → HILANG dan CAN_DAMAGED → RUSAK; kode lain tidak mengusulkan', () => {
-    expect(proposalForSkipReason('CAN_LOST')).toBe('HILANG');
-    expect(proposalForSkipReason('CAN_DAMAGED')).toBe('RUSAK');
+  it('tidak ada kode skip yang mengusulkan perubahan kondisi', () => {
     expect(proposalForSkipReason('OWNER_ABSENT')).toBeNull();
+    expect(proposalForSkipReason('OWNER_REFUSED')).toBeNull();
+    expect(proposalForSkipReason('ACCESS_DIFFICULT')).toBeNull();
     expect(proposalForSkipReason('OTHER')).toBeNull();
   });
 

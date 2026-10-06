@@ -25,7 +25,10 @@ export async function assertBranchAccess(ctx: AuthContext, branchId: string): Pr
 
   switch (ctx.role) {
     case 'ADMIN_RANTING':
-      if (ctx.branchId !== branchId) {
+    case 'STAF_PENGUMPULAN':
+    case 'STAF_KEUANGAN':
+      // C1-T0: staf baca scope rantingnya (bila punya branchId); tanpa branchId → tolak.
+      if (!ctx.branchId || ctx.branchId !== branchId) {
         throw Errors.FORBIDDEN_SCOPE('Tidak punya akses ke ranting ini');
       }
       return;
@@ -95,7 +98,9 @@ export async function assertCollectionAccess(ctx: AuthContext, collectionId: str
       }
       return;
     case 'ADMIN_RANTING':
-      if (collection.can.branchId !== ctx.branchId) {
+    case 'STAF_PENGUMPULAN':
+    case 'STAF_KEUANGAN':
+      if (!ctx.branchId || collection.can.branchId !== ctx.branchId) {
         throw Errors.FORBIDDEN_SCOPE('Tidak punya akses ke perolehan ini');
       }
       return;

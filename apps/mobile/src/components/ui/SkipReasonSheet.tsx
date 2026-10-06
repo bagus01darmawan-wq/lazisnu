@@ -14,20 +14,10 @@ import {AppButton} from './AppButton';
 import {AppTextInput} from './AppTextInput';
 import {OptionList} from './OptionList';
 
-/** 6 alasan baku, sama persis dengan `SKIP_REASON_LABELS` di back-end. */
+/** Empat alasan baku; alasan ini tidak mengubah kondisi kaleng. */
 export const SKIP_REASON_OPTIONS = [
   {value: 'OWNER_ABSENT', label: 'Pemilik tidak di tempat'},
   {value: 'OWNER_REFUSED', label: 'Pemilik menolak dijemput'},
-  {
-    value: 'CAN_DAMAGED',
-    label: 'Kaleng rusak',
-    hint: 'Mengusulkan status Rusak — admin akan menindaklanjuti.',
-  },
-  {
-    value: 'CAN_LOST',
-    label: 'Kaleng hilang',
-    hint: 'Mengusulkan status Hilang — admin akan menindaklanjuti.',
-  },
   {value: 'ACCESS_DIFFICULT', label: 'Akses ke lokasi sulit'},
   {value: 'OTHER', label: 'Lainnya'},
 ] as const;
@@ -46,8 +36,8 @@ type SkipReasonSheetProps = {
 /**
  * Pilihan alasan "tidak terjemput" — menggantikan konfirmasi Ya/Batal.
  *
- * Petugas wajib pilih 1 dari 6 alasan sebelum bisa menyimpan. Catatan teks opsional.
- * Pilihan "Kaleng rusak"/"Kaleng hilang" memicu usulan perubahan kondisi di server.
+ * Petugas wajib memilih satu dari empat alasan sebelum bisa menyimpan. Catatan teks opsional.
+ * Pilihan ini hanya mencatat hasil penjemputan; tidak mengusulkan perubahan kondisi.
  */
 export function SkipReasonSheet({
   visible,

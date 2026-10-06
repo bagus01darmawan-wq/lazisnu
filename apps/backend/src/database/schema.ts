@@ -2,7 +2,32 @@ import { pgTable, uuid, varchar, text, timestamp, boolean, decimal, integer, jso
 import { relations, sql } from 'drizzle-orm';
 
 // Enums
-export const userRoleEnum = pgEnum('user_role', ['ADMIN_KECAMATAN', 'ADMIN_RANTING', 'PETUGAS']);
+// C1-T0: tambah STAF_PENGUMPULAN (siapkan jadwal, pantau — tanpa FINAL/kunci/ubah nominal)
+// dan STAF_KEUANGAN (pegang uang fisik, TTD kedua, unduh PDF — tanpa ubah nominal).
+// Penegakan "tidak boleh" ada di server (routes/services, T4-T6), bukan cuma di UI.
+export const userRoleEnum = pgEnum('user_role', ['ADMIN_KECAMATAN', 'ADMIN_RANTING', 'PETUGAS', 'STAF_PENGUMPULAN', 'STAF_KEUANGAN']);
+/**
+ * C1-T0: jenis cabang.
+ * - RANTING     : ranting biasa (wajib setor share 30% ke MWC).
+ * - PROGRAM_MWC : program milik MWC langsung (mis. Koin Taqwa — 100% ke MWC, tanpa share).
+ * Default RANTING agar data lama tetap terbaca sebagai ranting; Taqwa di-backfill via migrasi.
+ */
+export const branchKindEnum = pgEnum('branch_kind', ['RANTING', 'PROGRAM_MWC']);
+/** C1-T0: status setoran PPK — co-sign 2 HP (§14.6): DRAFT → PPK_SIGNED → FINAL. */
+export const ppkSubmissionStatusEnum = pgEnum('ppk_submission_status', ['DRAFT', 'PPK_SIGNED', 'FINAL']);
+/** C1-T0: status setoran ranting — FINAL_NOL = dikunci 0 pemasukan (§14.7). */
+export const branchSubmissionStatusEnum = pgEnum('branch_submission_status', ['DRAFT', 'FINAL', 'FINAL_NOL']);
+/** C1-T0: status kalender periode (§14.8): OPEN → TOLERANCE → LOCKED → DIBUKA_SEBAGIAN → LOCKED. */
+export const periodStatusEnum = pgEnum('period_status', ['OPEN', 'TOLERANCE', 'LOCKED', 'DIBUKA_SEBAGIAN']);
+/** C1-T0: alasan selisih share — wajib bila |selisih| > Rp 10.000 (§8). */
+export const varianceReasonEnum = pgEnum('variance_reason', ['KURANG_BAYAR', 'LEBIH_BAYAR', 'GABUNG_PERIODE', 'KOREKSI_ADMIN', 'HP_HILANG']);
+/**
+ * C1-T3: status draft penugasan — robot siapkan → manusia setujui (§14.12).
+ * DRAFT = menunggu persetujuan Staf (boleh diedit); APPROVED = sudah jadi
+ * tugas aktif (tombol mati, tidak bisa disetujui dua kali). Tidak ada EXPIRED:
+ * draft basi ditolak saat approve bila periodenya sudah dikunci (T3).
+ */
+export const draftStatusEnum = pgEnum('draft_status', ['DRAFT', 'APPROVED']);
 export const collectionStatusEnum = pgEnum('collection_status', ['PENDING', 'COMPLETED', 'FAILED', 'CANCELLED']);
 // POSTPONED dihapus 2026-09-16: dead enum — tidak pernah ditulis oleh alur
 // manapun (generator hanya ACTIVE; transfer REASSIGNED; skip UNCOLLECTED)
@@ -44,6 +69,8 @@ export const branches = pgTable('branches', {
   districtId: uuid('district_id').references(() => districts.id, { onDelete: 'cascade' }).notNull(),
   code: varchar('code', { length: 10 }).unique().notNull(),
   name: varchar('name', { length: 100 }).notNull(),
+  // C1-T0 (§8b opsi 1): diskriminator ranting vs program MWC. Default RANTING.
+  kind: branchKindEnum('kind').default('RANTING').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -75,6 +102,18 @@ export const officers = pgTable('officers', {
   photoUrl: varchar('photo_url', { length: 500 }),
   districtId: uuid('district_id').references(() => districts.id).notNull(),
   branchId: uuid('branch_id').references(() => branches.id).notNull(),
+  /**
+   * Relasi ke dukuh untuk layer kartu di halaman Penugasan.
+   *
+   * Sebelumnya tidak ada: `assignedZone` berisi nama dusun ('kajen'/'krajan')
+   * yang TIDAK cocok dengan nama dukuh di tabel `dukuhs`, jadi tidak bisa
+   * dipakai sebagai sumber pengelompokan.
+   *
+   * Nullable: petugas yang belum dipetakan tetap valid — kartu wilayah
+   * tanpa petugas adalah informasi yang dicari admin, bukan kondisi yang
+   * harus diblokir.
+   */
+  dukuhId: uuid('dukuh_id').references(() => dukuhs.id),
   assignedZone: varchar('assigned_zone', { length: 100 }),
   isActive: boolean('is_active').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -208,6 +247,12 @@ export const canVisits = pgTable('can_visits', {
   /** 'VERIFIKASI' | 'PENGGANTIAN' */
   purpose: varchar('purpose', { length: 20 }).notNull(),
   visitedAt: timestamp('visited_at').notNull(),
+  /** Tindakan NON_AKTIF; untuk subset lama purpose tetap disimpan. */
+  outcome: varchar('outcome', { length: 20 }).notNull().default('TIDAK_DIKUNJUNGI'),
+  /** Kondisi fisik pada saat visit; nullable untuk outcome tanpa kondisi. */
+  condition: varchar('condition', { length: 20 }),
+  receivedAt: timestamp('received_at'),
+  receivedBy: uuid('received_by').references(() => users.id),
   notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => ({
@@ -245,6 +290,243 @@ export const activityLogs = pgTable('activity_logs', {
   userAgent: text('user_agent'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+// ============================================================================
+// C1-T0: submission PPK — satu baris per PPK per periode (§9.1 + §14.6/14.8/14.9/14.10).
+// Total = SUM(collections.nominal) milik officer+periode, dihitung server (tanpa ketik manual).
+// Unik (officer_id, period_year, period_month) agar FINAL dobel ditolak DB.
+// TTD: PPK dulu (HP PPK) lalu bendahara (HP bendahara); beda userId ditegakkan
+// aplikasi + CHECK DB; reopen menghanguskan TTD (T7).
+// pdf_hash: SHA-256 hex PDF per versi agar unduhan lama tetap terverifikasi.
+// ============================================================================
+export const ppkSubmissions = pgTable('ppk_submissions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  officerId: uuid('officer_id').references(() => officers.id).notNull(),
+  branchId: uuid('branch_id').references(() => branches.id).notNull(),
+  periodYear: integer('period_year').notNull(),
+  periodMonth: integer('period_month').notNull(),
+  totalAmount: bigint('total_amount', { mode: 'bigint' }).default(sql`0`).notNull(),
+  collectionCount: integer('collection_count').default(0).notNull(),
+  bisyarohAmount: bigint('bisyaroh_amount', { mode: 'bigint' }).default(sql`0`).notNull(),
+  netAmount: bigint('net_amount', { mode: 'bigint' }).default(sql`0`).notNull(),
+  formulaSnapshot: json('formula_snapshot'),
+  status: ppkSubmissionStatusEnum('status').default('DRAFT').notNull(),
+  finalizedAt: timestamp('finalized_at'),
+  finalizedBy: uuid('finalized_by').references(() => users.id),
+  ppkSignerId: uuid('ppk_signer_id').references(() => users.id),
+  ppkSignedAt: timestamp('ppk_signed_at'),
+  ppkSignatureUrl: varchar('ppk_signature_url', { length: 500 }),
+  bendaharaSignerId: uuid('bendahara_signer_id').references(() => users.id),
+  bendaharaSignedAt: timestamp('bendahara_signed_at'),
+  bendaharaSignatureUrl: varchar('bendahara_signature_url', { length: 500 }),
+  version: integer('version').default(1).notNull(),
+  pdfUrl: varchar('pdf_url', { length: 500 }),
+  pdfHash: varchar('pdf_hash', { length: 128 }),
+  // F7/D-14: nomor BA org (001/BA/IX/2026) — diisi saat FINAL pertama,
+  // stabil lintas versi/reopen; sekuens per ranting jalan terus.
+  baNumber: varchar('ba_number', { length: 40 }),
+  // C1-T7 (§14.8): jendela koreksi pasca-reopen (NULL = DRAFT normal, selalu
+  // boleh ditulis; terisi = DRAFT-dibuka-kembali, tulis ditolak bila lewat).
+  reopenedUntil: timestamp('reopened_until'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  ppkOfficerPeriodUnq: uniqueIndex('ppk_officer_period_unq').on(t.officerId, t.periodYear, t.periodMonth),
+  ppkBranchPeriodStatusIdx: index('ppk_branch_period_status_idx').on(t.branchId, t.periodYear, t.periodMonth, t.status),
+}));
+
+// ============================================================================
+// C1-T0: submission ranting — satu baris per ranting per periode (§9.2 + B-4).
+// share_mwc = nominal aktual disetor (boleh ≠ ekspektasi, wajib alasan bila |selisih|>10rb).
+// 6 angka kaleng = snapshot kondisi saat FINAL (total + 5 keranjang §8c; ditarik tak dihitung).
+// Taqwa (kind=PROGRAM_MWC) memakai tabel yang sama dengan share_mwc=0, label program.
+// ============================================================================
+export const branchSubmissions = pgTable('branch_submissions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  branchId: uuid('branch_id').references(() => branches.id).notNull(),
+  districtId: uuid('district_id').references(() => districts.id).notNull(),
+  periodYear: integer('period_year').notNull(),
+  periodMonth: integer('period_month').notNull(),
+  totalAmount: bigint('total_amount', { mode: 'bigint' }).default(sql`0`).notNull(),
+  bisyarohTotal: bigint('bisyaroh_total', { mode: 'bigint' }).default(sql`0`).notNull(),
+  shareMwc: bigint('share_mwc', { mode: 'bigint' }).default(sql`0`).notNull(),
+  netAmount: bigint('net_amount', { mode: 'bigint' }).default(sql`0`).notNull(),
+  expectedShare: bigint('expected_share', { mode: 'bigint' }).default(sql`0`).notNull(),
+  shareVariance: bigint('share_variance', { mode: 'bigint' }).default(sql`0`).notNull(),
+  varianceReason: varianceReasonEnum('variance_reason'),
+  linkedPeriods: json('linked_periods'),
+  collectionCount: integer('collection_count').default(0).notNull(),
+  canTotal: integer('can_total').default(0).notNull(),
+  canAktif: integer('can_aktif').default(0).notNull(),
+  canNonaktif: integer('can_nonaktif').default(0).notNull(),
+  canRusak: integer('can_rusak').default(0).notNull(),
+  canHilang: integer('can_hilang').default(0).notNull(),
+  canDikembalikan: integer('can_dikembalikan').default(0).notNull(),
+  formulaSnapshot: json('formula_snapshot'),
+  status: branchSubmissionStatusEnum('status').default('DRAFT').notNull(),
+  finalizedAt: timestamp('finalized_at'),
+  finalizedBy: uuid('finalized_by').references(() => users.id),
+  rantingSignerId: uuid('ranting_signer_id').references(() => users.id),
+  rantingSignedAt: timestamp('ranting_signed_at'),
+  rantingSignatureUrl: varchar('ranting_signature_url', { length: 500 }),
+  mwcBendaharaSignerId: uuid('mwc_bendahara_signer_id').references(() => users.id),
+  mwcBendaharaSignedAt: timestamp('mwc_bendahara_signed_at'),
+  mwcBendaharaSignatureUrl: varchar('mwc_bendahara_signature_url', { length: 500 }),
+  version: integer('version').default(1).notNull(),
+  pdfUrl: varchar('pdf_url', { length: 500 }),
+  pdfHash: varchar('pdf_hash', { length: 128 }),
+  // F7/D-14: nomor BA org — diisi saat FINAL pertama, stabil lintas
+  // versi/reopen; sekuens per MWC (distrik) jalan terus.
+  baNumber: varchar('ba_number', { length: 40 }),
+  // C1-T7 (§14.8): jendela koreksi pasca-reopen (NULL = DRAFT normal).
+  reopenedUntil: timestamp('reopened_until'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  branchPeriodUnq: uniqueIndex('branch_period_unq').on(t.branchId, t.periodYear, t.periodMonth),
+  branchDistrictPeriodStatusIdx: index('branch_district_period_status_idx').on(t.districtId, t.periodYear, t.periodMonth, t.status),
+}));
+
+// ============================================================================
+// C1-T8: agregat darurat PPK (§14 C-1/C-2 #5c + §8).
+// HP + catatan kertas hilang → admin catat 1 angka total dari uang fisik +
+// saksi bendahara + alasan HP_HILANG. Masuk total setoran, TIDAK masuk rincian
+// per kaleng (collection_count tak bertambah). Satu baris aktif per
+// officer+periode (upsert-ganti + audit); alasan KOREKSI_ADMIN didukung untuk
+// koreksi administratif tanpa kertas.
+// Compute: computePpkTotals menambahkan SUM agregat ke total (bisyaroh ikut
+// dihitung dari total gabungan — uang fisiknya nyata di tangan bendahara).
+// ============================================================================
+export const ppkEmergencyAggregates = pgTable('ppk_emergency_aggregates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  officerId: uuid('officer_id').references(() => officers.id).notNull(),
+  branchId: uuid('branch_id').references(() => branches.id).notNull(),
+  periodYear: integer('period_year').notNull(),
+  periodMonth: integer('period_month').notNull(),
+  amount: bigint('amount', { mode: 'bigint' }).notNull(),
+  reason: varianceReasonEnum('reason').notNull(),
+  /** Saksi bendahara/sekretaris (STAF_KEUANGAN seranting) — wajib tercatat. */
+  witnessUserId: uuid('witness_user_id').references(() => users.id).notNull(),
+  /** Admin pencatat (ADMIN_RANTING pemilik / ADMIN_KECAMATAN sedistrik). */
+  createdBy: uuid('created_by').references(() => users.id).notNull(),
+  note: varchar('note', { length: 255 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  emergencyOfficerPeriodUnq: uniqueIndex('emergency_officer_period_unq').on(t.officerId, t.periodYear, t.periodMonth),
+  emergencyBranchPeriodIdx: index('emergency_branch_period_idx').on(t.branchId, t.periodYear, t.periodMonth),
+}));
+
+// ============================================================================
+// C1-T7: arsip PDF berita acara per versi (§14.8 + F1b review-T5).
+// Kolom pdf_url/pdf_hash di submission hanya menyimpan versi TERAKHIR; tiap
+// reopen mengarsipkan versi lama ke sini SEBELUM di-null-kan, agar PDF yang
+// sudah terlanjur diunduh orang tetap terverifikasi (hash cocok = asli versi
+// itu). Bytes PDF tak deterministik (doc-ID acak) sehingga regen tak bisa
+// menggantikan arsip — wajib tabel riwayat, bukan kolom tunggal.
+// Tanpa FK ke submission (baris arsip dipertahankan walau submission
+// dihapus di test/retensi; join manual via submission_id + version).
+// ============================================================================
+export const baPdfArchives = pgTable('ba_pdf_archives', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  /** 'ppk' | 'branch' — tier submission pemilik PDF. */
+  tier: varchar('tier', { length: 10 }).notNull(),
+  submissionId: uuid('submission_id').notNull(),
+  version: integer('version').notNull(),
+  /** Key R2 PDF versi itu (NULL bila versi itu tak pernah diunduh). */
+  pdfKey: varchar('pdf_key', { length: 500 }),
+  /** SHA-256 hex bytes PDF (NULL bila tak pernah di-generate). */
+  pdfHash: varchar('pdf_hash', { length: 128 }),
+  /** SHA-256 hash konten kanonis (masukan QR verifikasi) — selalu terisi. */
+  contentHash: varchar('content_hash', { length: 128 }).notNull(),
+  /** Status saat diarsipkan: FINAL / FINAL_NOL. */
+  status: varchar('status', { length: 20 }).notNull(),
+  archivedAt: timestamp('archived_at').defaultNow().notNull(),
+  archivedBy: uuid('archived_by').references(() => users.id),
+  reopenReason: varchar('reopen_reason', { length: 255 }),
+}, (t) => ({
+  baArchiveTierSubmissionVersionUnq: uniqueIndex('ba_archive_tier_submission_version_unq').on(t.tier, t.submissionId, t.version),
+  baArchiveSubmissionIdx: index('ba_archive_submission_idx').on(t.tier, t.submissionId),
+}));
+
+// ============================================================================
+// F7/D-14: counter nomor BA org — satu baris per scope, bump atomik
+// (INSERT .. ON CONFLICT DO UPDATE) di dalam tx finalize sehingga dua FINAL
+// berbarengan tak dapat nomor sama. scopeType: 'RANTING' (scopeId=branchId,
+// untuk BA PPK) atau 'MWC' (scopeId=districtId, untuk BA ranting).
+// Tanpa FK (scope divalidasi pemanggil; counter hidup mandiri).
+// ============================================================================
+export const baCounters = pgTable('ba_counters', {
+  scopeType: varchar('scope_type', { length: 10 }).notNull(),
+  scopeId: uuid('scope_id').notNull(),
+  lastSeq: integer('last_seq').default(0).notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  baCounterScopeUnq: uniqueIndex('ba_counter_scope_unq').on(t.scopeType, t.scopeId),
+}));
+
+// ============================================================================
+// C1-T0: kalender periode — satu baris per periode YYYY-MM (§9.3).
+// Tanggal tetap: assign tgl 20 00:00, due tgl 27, toleransi s/d tgl 9 bln berikut
+// 23:59 WIB. Semua batas dihitung server WIB (T1 memakai operationalTimeZone).
+// ============================================================================
+export const periodCalendar = pgTable('period_calendar', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  periodYear: integer('period_year').notNull(),
+  periodMonth: integer('period_month').notNull(),
+  assignDate: timestamp('assign_date').notNull(),
+  dueDate: timestamp('due_date').notNull(),
+  toleranceEnd: timestamp('tolerance_end').notNull(),
+  status: periodStatusEnum('status').default('OPEN').notNull(),
+  lockedAt: timestamp('locked_at'),
+  lockedBy: uuid('locked_by').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  periodCalendarYearMonthUnq: uniqueIndex('period_calendar_year_month_unq').on(t.periodYear, t.periodMonth),
+}));
+
+// ============================================================================
+// C1-T3: draft penugasan — robot siapkan, manusia setujui (§14.12, §6).
+// Satu draft per (periode, ranting): draft ranting (branch kind=RANTING) dan
+// draft program (branch kind=PROGRAM_MWC, mis. Taqwa) — keduanya baris branches
+// biasa (Opsi 1 T0), sehingga branchId selalu terisi dan unik per periode.
+// Robot TIDAK PERNAH menulis tabel assignments (hanya draft + period_calendar);
+// tugas aktif lahir saat approve (sekali, tombol mati) atau sapuan susulan
+// pasca-approve yang sudah diaudit.
+// ============================================================================
+export const periodDrafts = pgTable('period_drafts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  periodYear: integer('period_year').notNull(),
+  periodMonth: integer('period_month').notNull(),
+  branchId: uuid('branch_id').references(() => branches.id).notNull(),
+  districtId: uuid('district_id').references(() => districts.id).notNull(),
+  status: draftStatusEnum('status').default('DRAFT').notNull(),
+  preparedAt: timestamp('prepared_at').defaultNow().notNull(),
+  approvedAt: timestamp('approved_at'),
+  approvedBy: uuid('approved_by').references(() => users.id),
+  approvedByRole: varchar('approved_by_role', { length: 20 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  periodBranchUnq: uniqueIndex('period_draft_period_branch_unq').on(t.periodYear, t.periodMonth, t.branchId),
+  draftsDistrictPeriodStatusIdx: index('period_drafts_district_period_status_idx').on(t.districtId, t.periodYear, t.periodMonth, t.status),
+}));
+
+// Calon (kaleng → petugas) di dalam satu draft. officerId boleh diubah Staf
+// Pengumpulan sebelum approve (edit draft, §14.12); backupOfficerId diteruskan
+// ke assignments saat approve.
+export const periodDraftItems = pgTable('period_draft_items', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  draftId: uuid('draft_id').references(() => periodDrafts.id, { onDelete: 'cascade' }).notNull(),
+  canId: uuid('can_id').references(() => cans.id).notNull(),
+  officerId: uuid('officer_id').references(() => officers.id).notNull(),
+  backupOfficerId: uuid('backup_officer_id').references(() => officers.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  draftCanUnq: uniqueIndex('period_draft_item_draft_can_unq').on(t.draftId, t.canId),
+  draftItemsDraftIdx: index('period_draft_items_draft_idx').on(t.draftId),
+}));
 
 // Collection Summary
 export const collectionSummaries = pgTable('collection_summaries', {
@@ -285,6 +567,7 @@ export const officersRelations = relations(officers, ({ one, many }) => ({
   user: one(users, { fields: [officers.userId], references: [users.id] }),
   district: one(districts, { fields: [officers.districtId], references: [districts.id] }),
   branch: one(branches, { fields: [officers.branchId], references: [branches.id] }),
+  dukuh: one(dukuhs, { fields: [officers.dukuhId], references: [dukuhs.id] }),
   assignments: many(assignments, { relationName: 'PrimaryOfficer' }),
   backupAssignments: many(assignments, { relationName: 'BackupOfficer' }),
   collections: many(collections),
@@ -313,6 +596,7 @@ export const canVisitsRelations = relations(canVisits, ({ one }) => ({
 export const dukuhsRelations = relations(dukuhs, ({ one, many }) => ({
   branch: one(branches, { fields: [dukuhs.branchId], references: [branches.id] }),
   cans: many(cans),
+  officers: many(officers),
 }));
 
 export const assignmentsRelations = relations(assignments, ({ one, many }) => ({
@@ -355,5 +639,36 @@ export const userSessions = pgTable('user_sessions', {
 
 export const userSessionsRelations = relations(userSessions, ({ one }) => ({
   user: one(users, { fields: [userSessions.userId], references: [users.id] }),
+}));
+
+export const ppkSubmissionsRelations = relations(ppkSubmissions, ({ one }) => ({
+  officer: one(officers, { fields: [ppkSubmissions.officerId], references: [officers.id] }),
+  branch: one(branches, { fields: [ppkSubmissions.branchId], references: [branches.id] }),
+  ppkSigner: one(users, { fields: [ppkSubmissions.ppkSignerId], references: [users.id] }),
+  bendaharaSigner: one(users, { fields: [ppkSubmissions.bendaharaSignerId], references: [users.id] }),
+}));
+
+export const branchSubmissionsRelations = relations(branchSubmissions, ({ one }) => ({
+  branch: one(branches, { fields: [branchSubmissions.branchId], references: [branches.id] }),
+  district: one(districts, { fields: [branchSubmissions.districtId], references: [districts.id] }),
+  rantingSigner: one(users, { fields: [branchSubmissions.rantingSignerId], references: [users.id] }),
+  mwcBendaharaSigner: one(users, { fields: [branchSubmissions.mwcBendaharaSignerId], references: [users.id] }),
+}));
+
+export const periodCalendarRelations = relations(periodCalendar, ({ one }) => ({
+  locker: one(users, { fields: [periodCalendar.lockedBy], references: [users.id] }),
+}));
+
+export const periodDraftsRelations = relations(periodDrafts, ({ one, many }) => ({
+  branch: one(branches, { fields: [periodDrafts.branchId], references: [branches.id] }),
+  district: one(districts, { fields: [periodDrafts.districtId], references: [districts.id] }),
+  approver: one(users, { fields: [periodDrafts.approvedBy], references: [users.id] }),
+  items: many(periodDraftItems),
+}));
+
+export const periodDraftItemsRelations = relations(periodDraftItems, ({ one }) => ({
+  draft: one(periodDrafts, { fields: [periodDraftItems.draftId], references: [periodDrafts.id] }),
+  can: one(cans, { fields: [periodDraftItems.canId], references: [cans.id] }),
+  officer: one(officers, { fields: [periodDraftItems.officerId], references: [officers.id] }),
 }));
 

@@ -5,8 +5,26 @@ import { ColumnDef } from '@tanstack/react-table';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { CalendarDays, History, QrCode, RotateCcw, Search, User as UserIcon } from 'lucide-react';
-import { ApiResponse, ResubmitTrackerItem } from '@lazisnu/shared-types';
+import { ApiResponse } from '@lazisnu/shared-types';
 import api from '@/lib/api';
+
+/** Baris riwayat koreksi di sisi web (camelCase — hasil normalisasi caseConverter). */
+interface ResubmitTrackerRow {
+  id: string;
+  collectedAt: string;
+  correctedAt?: string | null;
+  submitSequence: number;
+  originalNominal: number;
+  correctedNominal: number;
+  difference: number;
+  alasanResubmit: string;
+  officerName: string;
+  officerCode: string;
+  qrCode: string;
+  ownerName: string;
+  branchName: string;
+  districtName: string;
+}
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Table } from '@/components/ui/Table';
@@ -19,7 +37,7 @@ const formatDate = (value?: string | null) => {
 };
 
 export default function ResubmitPage() {
-  const [data, setData] = useState<ResubmitTrackerItem[]>([]);
+  const [data, setData] = useState<ResubmitTrackerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -35,13 +53,13 @@ export default function ResubmitPage() {
     try {
       const response = await api.get('/bendahara/resubmits', {
         params: { page: currentPage, limit, search: searchQuery || undefined },
-      }) as unknown as ApiResponse<{ items: ResubmitTrackerItem[]; pagination: { total: number; total_pages: number } }>;
+      }) as unknown as ApiResponse<{ items: ResubmitTrackerRow[]; pagination: { total: number; totalPages: number } }>;
       if (!response.success || !response.data) {
         throw new Error(response.error?.message || 'Riwayat koreksi tidak dapat dimuat.');
       }
       setData(response.data.items);
       setTotalItems(response.data.pagination.total);
-      setTotalPages(Math.max(1, response.data.pagination.total_pages));
+      setTotalPages(Math.max(1, response.data.pagination.totalPages));
     } catch (requestError) {
       setData([]);
       setTotalItems(0);
@@ -74,47 +92,47 @@ export default function ResubmitPage() {
     void fetchResubmits(search, nextPage, PAGE_SIZE);
   };
 
-  const columns: ColumnDef<ResubmitTrackerItem>[] = [
+  const columns: ColumnDef<ResubmitTrackerRow>[] = [
     {
-      accessorKey: 'corrected_at',
+      accessorKey: 'correctedAt',
       header: () => <span className="flex items-center gap-1.5"><CalendarDays size={12} className="text-[#EAD19B]" />Tanggal Koreksi</span>,
-      cell: ({ row }) => <span className="whitespace-nowrap text-xs">{formatDate(row.original.corrected_at)}</span>,
+      cell: ({ row }) => <span className="whitespace-nowrap text-xs">{formatDate(row.original.correctedAt)}</span>,
       size: 160,
     },
     {
       id: 'officer',
       header: () => <span className="flex items-center gap-1.5"><UserIcon size={12} className="text-[#EAD19B]" />Petugas</span>,
-      cell: ({ row }) => <div className="flex flex-col"><span className="font-bold text-[#F4F1EA]">{row.original.officer_name}</span><span className="text-[10px] font-bold tracking-widest text-[#F4F1EA]/40">{row.original.officer_code}</span></div>,
+      cell: ({ row }) => <div className="flex flex-col"><span className="font-bold text-[#F4F1EA]">{row.original.officerName}</span><span className="text-[10px] font-bold tracking-widest text-[#F4F1EA]/40">{row.original.officerCode}</span></div>,
       size: 200,
     },
     {
       id: 'can',
       header: () => <span className="flex items-center gap-1.5"><QrCode size={12} className="text-[#EAD19B]" />Kaleng / Pemilik</span>,
-      cell: ({ row }) => <div className="flex flex-col"><span className="font-bold text-[#F4F1EA]">{row.original.owner_name}</span><span className="text-[10px] font-bold tracking-widest text-[#F4F1EA]/40">{row.original.qr_code}</span></div>,
+      cell: ({ row }) => <div className="flex flex-col"><span className="font-bold text-[#F4F1EA]">{row.original.ownerName}</span><span className="text-[10px] font-bold tracking-widest text-[#F4F1EA]/40">{row.original.qrCode}</span></div>,
       size: 220,
     },
     {
-      accessorKey: 'original_nominal',
+      accessorKey: 'originalNominal',
       header: 'Nominal Awal',
-      cell: ({ row }) => <span className="whitespace-nowrap text-sm font-bold text-[#D97A76] line-through">{formatCurrency(row.original.original_nominal)}</span>,
+      cell: ({ row }) => <span className="whitespace-nowrap text-sm font-bold text-[#D97A76] line-through">{formatCurrency(row.original.originalNominal)}</span>,
       size: 140,
     },
     {
-      accessorKey: 'corrected_nominal',
+      accessorKey: 'correctedNominal',
       header: 'Nominal Revisi',
-      cell: ({ row }) => <span className="whitespace-nowrap text-sm font-bold text-[#1F8243]">{formatCurrency(row.original.corrected_nominal)}</span>,
+      cell: ({ row }) => <span className="whitespace-nowrap text-sm font-bold text-[#1F8243]">{formatCurrency(row.original.correctedNominal)}</span>,
       size: 140,
     },
     {
-      accessorKey: 'alasan_resubmit',
+      accessorKey: 'alasanResubmit',
       header: 'Alasan Koreksi',
-      cell: ({ row }) => <span className="block min-w-48 max-w-72 text-xs leading-relaxed text-[#F4F1EA]/70">{row.original.alasan_resubmit || '-'}</span>,
+      cell: ({ row }) => <span className="block min-w-48 max-w-72 text-xs leading-relaxed text-[#F4F1EA]/70">{row.original.alasanResubmit || '-'}</span>,
       size: 280,
     },
     {
-      accessorKey: 'submit_sequence',
+      accessorKey: 'submitSequence',
       header: 'Versi',
-      cell: ({ row }) => <span className="rounded-lg border border-[#EAD19B]/30 bg-[#EAD19B]/10 px-2 py-1 text-xs font-bold text-[#EAD19B]">v{row.original.submit_sequence}</span>,
+      cell: ({ row }) => <span className="rounded-lg border border-[#EAD19B]/30 bg-[#EAD19B]/10 px-2 py-1 text-xs font-bold text-[#EAD19B]">v{row.original.submitSequence}</span>,
       size: 90,
     },
   ];

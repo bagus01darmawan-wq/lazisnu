@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pohon Alur Status Kaleng — Lazisnu</title>
+<style>
+  :root {
+    --line: #d9d4c7;
+    --card: #ffffff;
+    --ink: #2C473E;
+    --ink-soft: #5c6f68;
+    --ink-dim: #8b978f;
+    --paper: #F4F1EA;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--paper); color: var(--ink); line-height: 1.55;
+    padding: 40px 24px 64px; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  header { margin-bottom: 30px; border-bottom: 3px solid #1F8243; padding-bottom: 22px; }
+  header .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: #1F8243; margin-bottom: 8px; }
+  header h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
+  header p { font-size: 14px; color: var(--ink-soft); margin-top: 8px; max-width: 820px; }
+  header .meta { margin-top: 16px; font-size: 12px; color: #7d8c86; display: flex; gap: 20px; flex-wrap: wrap; }
+  header .meta b { color: var(--ink); font-weight: 600; }
+
+  .legend { background: var(--card); border: 1px solid #e2ded2; border-radius: 14px; padding: 16px 20px; margin-bottom: 20px; }
+  .legend-t { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-dim); margin-bottom: 11px; }
+  .legend-row { display: flex; gap: 9px; flex-wrap: wrap; }
+  .lg { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--ink-soft); background: #FAF8F3; border: 1px solid #eceae3; border-radius: 20px; padding: 4px 12px 4px 8px; }
+  .lg i { width: 11px; height: 11px; border-radius: 3px; border: 1.5px solid; display: block; flex: 0 0 auto; }
+  .lg i.li-green { background: #EAF4EC; border-color: #1F8243; }
+  .lg i.li-coral { background: #FCEDE6; border-color: #DE6F4A; }
+  .lg i.li-gold  { background: #FBF3E0; border-color: #C9A227; }
+  .lg i.li-teal  { background: #E7F1F1; border-color: #4f8486; }
+  .lg i.li-gray  { background: #F0EFEB; border-color: #9aa39f; }
+  .lg i.li-out   { background: #fff; border-color: #c9c6bd; border-style: dotted; }
+
+  .panel { background: var(--card); border: 1px solid #e2ded2; border-radius: 18px; padding: 30px 30px 26px; box-shadow: 0 1px 3px rgba(44,71,62,0.05); }
+
+  /* ---- Pohon ---- */
+  .tree { font-size: 13px; }
+  .tree .kids { margin-left: 26px; border-left: 2px solid var(--line); }
+  .tree .kid { position: relative; padding-left: 26px; padding-top: 11px; }
+  .tree .kid::before {
+    content: ""; position: absolute; left: 0; top: 32px; width: 26px; height: 2px;
+    background: var(--line);
+  }
+  .tree .kid:last-child::after {
+    content: ""; position: absolute; left: -3px; top: 34px; bottom: 0; width: 6px;
+    background: var(--card);
+  }
+
+  .node {
+    position: relative; display: block;
+    background: #fff; border: 1.5px solid #e2ded2; border-left-width: 5px;
+    border-radius: 0 11px 11px 0; padding: 11px 15px;
+    max-width: 860px;
+  }
+  .node .ttl { font-size: 13.5px; font-weight: 800; letter-spacing: -0.01em; display: block; }
+  .node .desc { font-size: 12px; color: var(--ink-soft); display: block; margin-top: 3px; line-height: 1.5; }
+  .node .desc b { color: var(--ink); font-weight: 700; }
+  .node .badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
+  .node .badges b {
+    font-size: 9.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 20px; white-space: nowrap;
+  }
+  .b-hitung { background: #EAF4EC; color: #1a5f36; }
+  .b-tidak  { background: #F0EFEB; color: #6f8079; }
+  .b-tugas  { background: #FCEDE6; color: #96401f; }
+  .b-tindak { background: #FBF3E0; color: #7a6210; }
+  .b-auto   { background: #E7F1F1; color: #2f5c5e; }
+
+  .k-aktif    { border-left-color: #1F8243; background: #F7FCF8; }
+  .k-aktif .ttl { color: #1a5f36; }
+  .k-siklus   { border-left-color: #DE6F4A; background: #FFFBF9; }
+  .k-siklus .ttl { color: #96401f; }
+  .k-hasil    { border-left-color: #C9A227; background: #FFFDF7; }
+  .k-hasil .ttl { color: #7a6210; }
+  .k-nonaktif { border-left-color: #4f8486; background: #F8FCFC; }
+  .k-nonaktif .ttl { color: #2f5c5e; }
+  .k-kembali  { border-left-color: #C9A227; background: #FBF3E0; }
+  .k-kembali .ttl { color: #7a6210; }
+  .k-luar     { border-left-color: #c9c6bd; background: #FCFCFA; }
+  .k-luar .ttl { color: var(--ink-dim); }
+  .k-masuk    { border-left-color: #9aa39f; background: #FAF9F6; }
+  .k-masuk .ttl { color: #5c6f68; }
+  .k-tindakan { border-left-color: #96401f; background: #FCEDE6; }
+  .k-tindakan .ttl { color: #7a3a1a; }
+
+  .node.ret { border-left-color: #1F8243; background: #EAF4EC; }
+  .node.ret .ttl { color: #1a5f36; }
+  .node .loop { font-size: 15px; font-weight: 800; color: #1F8243; margin-right: 6px; }
+
+  .callout {
+    display: inline-block; margin-top: 7px; font-size: 11.5px; font-weight: 600;
+    color: #96401f; background: #FCEDE6; padding: 5px 11px; border-radius: 8px;
+  }
+  .callout.ok { color: #1a5f36; background: #EAF4EC; }
+  .callout.info { color: #2f5c5e; background: #E7F1F1; }
+
+  /* ---- Blok ujung ---- */
+  .terminal { margin-top: 30px; padding-top: 22px; border-top: 2px dashed #ddd8ca; }
+  .term-lbl {
+    font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-dim); margin-bottom: 14px;
+  }
+  .term-lbl b { color: #96401f; }
+
+  .divider { height: 1px; background: #e2ded2; margin: 32px 0 28px; }
+  h3.sec { font-size: 15px; font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 9px; }
+  h3.sec::before { content: ""; width: 4px; height: 17px; background: #1F8243; border-radius: 2px; display: inline-block; }
+  .sec-note { font-size: 12.5px; color: #6f8079; margin-bottom: 16px; }
+
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 14px; overflow: hidden; border: 1px solid #e2ded2; }
+  thead th { background: var(--ink); color: var(--paper); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; text-align: left; padding: 11px 14px; white-space: nowrap; }
+  tbody td { padding: 11px 14px; font-size: 12.5px; border-top: 1px solid #eceae3; vertical-align: top; }
+  tbody tr:nth-child(even) { background: #FCFBF8; }
+  tbody td.name { font-weight: 700; color: var(--ink); white-space: nowrap; }
+  tbody td.c { text-align: center; }
+  .tag { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; white-space: nowrap; }
+  .tag.ya { background: #EAF4EC; color: #1a5f36; }
+  .tag.tidak { background: #F0EFEB; color: #6f8079; }
+
+  footer { margin-top: 38px; padding-top: 18px; border-top: 1px solid #ddd8ca; font-size: 11.5px; color: var(--ink-dim); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+  @media print {
+    body { background: #fff; padding: 0; }
+    .panel, .legend, table { box-shadow: none; }
+    .node, .tree .kid { break-inside: avoid; }
+    .panel { border: none; padding: 0; }
+    @page { margin: 12mm; }
+  }
+  @media (max-width: 900px) {
+    .node { max-width: 100%; }
+    .tree .kids { margin-left: 14px; }
+    .tree .kid { padding-left: 16px; }
+    .tree .kid::before { width: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Pohon Alur Lengkap · 12 September 2026</div>
+    <h1>Pohon Alur Status Kaleng Lazisnu</h1>
+    <p>
+      Satu diagram memuat <b>seluruh cabang</b> — dari kaleng pertama kali ditambahkan,
+      melewati siklus bulanan, sampai keluar dari sistem. Setiap kotak adalah satu
+      kejadian atau satu kondisi, dan setiap garis adalah satu langkah yang benar-benar
+      bisa terjadi.
+    </p>
+    <div class="meta">
+      <span><b>26 keputusan</b> Pion · 12 Sep 2026</span>
+      <span><b>5 kondisi</b> · 6 status siklus</span>
+      <span>Turunan dari <b>alur-status-kaleng.html</b> revisi 7</span>
+    </div>
+  </header>
+
+  <div class="legend">
+    <div class="legend-t">Cara membaca warna</div>
+    <div class="legend-row">
+      <span class="lg"><i class="li-green"></i>Kondisi kaleng</span>
+      <span class="lg"><i class="li-coral"></i>Siklus penagihan &amp; kejadian</span>
+      <span class="lg"><i class="li-gold"></i>Hasil penjemputan &amp; tindakan</span>
+      <span class="lg"><i class="li-teal"></i>Naik dari hitungan</span>
+      <span class="lg"><i class="li-gray"></i>Masuk &amp; keluar sistem</span>
+    </div>
+  </div>
+
+  <div class="panel">
+
+    <div class="tree">
+
+      <!-- ============ AKAR ============ -->
+      <div class="node k-masuk">
+        <span class="ttl">Kaleng ditambahkan ke sistem</span>
+        <span class="desc">Di lapangan: kaleng ditempatkan dan <b>diterima pemilik rumah</b>. Di sistem: begitu ditambahkan, kaleng <b>langsung Aktif</b> — tidak ada tombol yang perlu ditekan.</span>
+        <span class="badges"><b class="b-auto">otomatis</b></span>
+      </div>
+
+      <div class="kids">
+        <div class="kid">
+          <div class="node k-masuk">
+            <span class="ttl">Ditempatkan</span>
+            <span class="desc">Pintu masuk, bukan tempat berhenti. <b>Tidak pernah tersimpan sebagai status</b> — kalau disimpan, akan ada kaleng yang selamanya berstatus Ditempatkan padahal sudah Aktif.</span>
+            <span class="badges"><b class="b-hitung">cakupan penempatan</b></span>
+          </div>
+
+          <div class="kids">
+            <div class="kid">
+              <div class="node k-aktif">
+                <span class="ttl">AKTIF</span>
+                <span class="desc">Ada di rumah warga dan diisi oleh pemiliknya. <b>Titik awal yang sesungguhnya</b> — semua cabang di bawah ini berangkat dari sini.</span>
+                <span class="badges">
+                  <b class="b-hitung">cakupan penempatan</b>
+                  <b class="b-tugas">dapat tugas bulanan</b>
+                </span>
+              </div>
+
+              <div class="kids">
+
+                <!-- ===== CABANG A ===== -->
+                <div class="kid">
+                  <div class="node k-siklus">
+                    <span class="ttl">A · Siklus penagihan — berulang tiap bulan</span>
+                    <span class="desc">Ini satu-satunya cabang yang <b>berulang</b>. Selesai satu bulan, kalengnya kembali ke titik ini lagi. Dijalankan oleh <b>PPK — Petugas Penjemput Koin</b> (seluruh petugas).</span>
+                    <span class="badges"><b class="b-tugas">berulang</b></span>
+                  </div>
+
+                  <div class="kids">
+                    <div class="kid">
+                      <div class="node k-siklus">
+                        <span class="ttl">Ditugaskan</span>
+                        <span class="desc">Kaleng dibebankan ke satu PPK untuk dijemput bulan ini. Yang masuk ke sini: kaleng <b>Aktif</b>, <b>Rusak</b>, dan <b>Hilang</b>. Hanya kaleng Non-Aktif dan Dikembalikan yang <b>tidak masuk</b>.</span>
+                        <span class="badges"><b class="b-tugas">dapat tugas</b></span>
+                      </div>
+
+                      <div class="kids">
+                        <!-- Terjemput -->
+                        <div class="kid">
+                          <div class="node k-siklus">
+                            <span class="ttl">Terjemput</span>
+                            <span class="desc">PPK selesai melakukan penjemputan. Dari sini hasilnya bercabang dua: berisi atau tidak berisi.</span>
+                          </div>
+
+                          <div class="kids">
+                            <!-- ISI -->
+                            <div class="kid">
+                              <div class="node k-hasil">
+                                <span class="ttl">Isi — ada nominal infak</span>
+                                <span class="desc">Pemilik menerima WA terima kasih. Penjemputan tercatat sebagai kejadian biasa, dan kalengnya kembali Aktif untuk bulan berikutnya.</span>
+                              </div>
+                              <div class="kids">
+                                <div class="kid">
+                                  <div class="node ret">
+                                    <span class="ttl"><span class="loop">↺</span>Hitungan kosong kembali ke NOL</span>
+                                    <span class="desc">Ini yang paling mudah terlewat. Satu penjemputan berisi <b>menghapus seluruh riwayat kosong</b> — bukan mundur satu langkah. Kalau kalengnya sedang Non-Aktif, ia <b>langsung kembali Aktif</b>.</span>
+                                    <span class="callout ok">Untuk naik ke Non-Aktif lagi, perlu 6× kosong yang baru</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <!-- KOSONG -->
+                            <div class="kid">
+                              <div class="node k-hasil">
+                                <span class="ttl">Kosong — tanpa nominal</span>
+                                <span class="desc">Tetap tercatat, dan pemiliknya <b>tetap menerima WA</b> dengan teks yang berbeda — supaya tidak terkesan berterima kasih atas nominal nol. Satu kali kosong <b>tidak mengubah status apa pun</b>.</span>
+                                <span class="badges"><b class="b-tugas">hitungan +1</b></span>
+                              </div>
+
+                              <div class="kids">
+                                <div class="kid">
+                                  <div class="node k-aktif">
+                                    <span class="ttl">Hitungan 1 sampai 5 → tetap AKTIF</span>
+                                    <span class="desc">Wajar. Pemilik bisa lupa, sedang tidak di rumah, atau belum sempat mengisi. Lima kali pun belum cukup untuk menyimpulkan apa pun tentang donaturnya.</span>
+                                  </div>
+                                </div>
+                                <div class="kid">
+                                  <div class="node k-nonaktif">
+                                    <span class="ttl">Hitungan ke-6 → diusulkan NON-AKTIF</span>
+                                    <span class="desc">Ambang tercapai. <b>Sistem tidak menaikkannya sendiri</b> — ia mengumpulkan buktinya lalu mengusulkan. <b>Admin yang menekan tombolnya</b>, karena ini menyangkut hubungan dengan donatur.</span>
+                                    <span class="callout info">Bukti yang disertakan: 6 penjemputan kosong berturut-turut</span>
+                                  </div>
+                                </div>
+                                <div class="kid">
+                                  <div class="node k-luar">
+                                    <span class="ttl">Catatan: yang dihitung adalah penjemputan, bukan bulan</span>
+                                    <span class="desc">Kalau kaleng tidak sempat dijemput tiga bulan karena kendala logistik, tiga bulan itu <b>tidak ikut dihitung</b>. Kalau dihitung per bulan kalender, kaleng bisa dinyatakan non-aktif padahal baru kosong sekali.</span>
+                                    <span class="badges"><b class="b-tidak">bukan hitungan</b></span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- TIDAK TERJEMPUT -->
+                        <div class="kid">
+                          <div class="node k-siklus">
+                            <span class="ttl">Tidak Terjemput</span>
+                            <span class="desc">PPK tidak menyelesaikan penjemputan. <b>Alasan wajib dipilih dari daftar baku</b>, bukan diketik bebas — teks bebas tidak bisa dihitung, jadi tidak bisa dipakai melihat pola. Tidak dijemput <b>bukan berarti kosong</b>, jadi hitungannya tidak bertambah.</span>
+                            <span class="badges"><b class="b-tidak">hitungan tidak bertambah</b></span>
+                          </div>
+
+                          <div class="kids">
+                            <div class="kid">
+                              <div class="node k-luar">
+                                <span class="ttl">Pemilik tidak di tempat</span>
+                                <span class="desc">Kembali Aktif bulan depan. Tidak ada yang berubah.</span>
+                              </div>
+                            </div>
+                            <div class="kid">
+                              <div class="node k-luar">
+                                <span class="ttl">Pemilik menolak dijemput</span>
+                                <span class="desc">Kembali Aktif bulan depan. Kalau berulang terus, admin bisa mempertimbangkan Non-Aktif dengan alasan “pemilik menolak melanjutkan”.</span>
+                              </div>
+                            </div>
+                            <div class="kid">
+                              <div class="node k-siklus">
+                                <span class="ttl">Kaleng hilang</span>
+                                <span class="desc">Alasan ini <b>menembus ke lajur kondisi</b>. Sistem mengusulkan statusnya berubah menjadi Hilang; admin menyetujui.</span>
+                                <span class="callout">→ mengusulkan cabang C</span>
+                              </div>
+                            </div>
+                            <div class="kid">
+                              <div class="node k-siklus">
+                                <span class="ttl">Kaleng rusak</span>
+                                <span class="desc">Sama, alasan ini juga menembus ke lajur kondisi dan mengusulkan status menjadi Rusak.</span>
+                                <span class="callout">→ mengusulkan cabang B</span>
+                              </div>
+                            </div>
+                            <div class="kid">
+                              <div class="node k-luar">
+                                <span class="ttl">Akses ke lokasi sulit</span>
+                                <span class="desc">Kembali Aktif bulan depan. Perlu dicatat supaya admin tahu ada wilayah yang sulit dijangkau.</span>
+                              </div>
+                            </div>
+                            <div class="kid">
+                              <div class="node k-luar">
+                                <span class="ttl">Lainnya</span>
+                                <span class="desc">Penampung untuk sebab yang belum masuk daftar. Kalau sering muncul, itu tanda daftarnya perlu ditambah.</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- ===== CABANG B ===== -->
+                <div class="kid">
+                  <div class="node k-siklus">
+                    <span class="ttl">B · Kejadian RUSAK</span>
+                    <span class="desc">Unit fisiknya tidak layak dipakai. Dipicu oleh alasan “kaleng rusak” saat tidak terjemput, atau temuan PPK di lapangan.</span>
+                    <span class="badges"><b class="b-hitung">cakupan penempatan</b></span>
+                  </div>
+
+                  <div class="kids">
+                    <div class="kid">
+                      <div class="node k-aktif">
+                        <span class="ttl">Tetap dijemput seperti kaleng Aktif</span>
+                        <span class="desc">Ini yang paling mudah salah dipahami. Kaleng rusak <b>tetap dapat tugas bulanan</b>, karena pemilik rumah masih bisa menyalurkan donasi tanpa lewat kaleng — diserahkan langsung ke PPK.</span>
+                        <span class="badges"><b class="b-tugas">dapat tugas</b><b class="b-hitung">tetap dihitung</b></span>
+                      </div>
+                    </div>
+                    <div class="kid">
+                      <div class="node k-luar">
+                        <span class="ttl">Sistem hanya mencatat, tidak mengubah apa pun</span>
+                        <span class="desc">Mencatat kejadian kondisi rusaknya saja. Jadwal penjemputan, hitungan cakupan, dan hitungan kosongnya semua berjalan normal.</span>
+                      </div>
+                    </div>
+                    <div class="kid">
+                      <div class="node k-tindakan">
+                        <span class="ttl">Tindakan yang diperlukan: ganti unitnya</span>
+                        <span class="desc">Karena identitas di sistem melekat pada <b>rumah</b>, bukan pada unit fisiknya, unit rusak bisa ditukar tanpa memutus riwayat penjemputan. Setelah unit baru ditempatkan, kalengnya kembali Aktif.</span>
+                        <span class="badges"><b class="b-tindak">daftar kerja admin</b></span>
+                      </div>
+                    </div>
+                    <div class="kid">
+                      <div class="node k-nonaktif">
+                        <span class="ttl">Kalau ternyata juga kosong 6× berturut-turut</span>
+                        <span class="desc">Karena tetap dijemput, hitungan kosongnya juga jalan. Kalau pemiliknya tidak menyerahkan apa pun selama enam kali, kaleng rusak ini <b>naik menjadi Non-Aktif</b>. Satu kaleng hanya bisa memegang satu kondisi, jadi Non-Aktif yang menang — dan tindakannya berubah dari “ganti unit” menjadi “dikembalikan”.</span>
+                        <span class="callout">→ masuk ke cabang D</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- ===== CABANG C ===== -->
+                <div class="kid">
+                  <div class="node k-siklus">
+                    <span class="ttl">C · Kejadian HILANG</span>
+                    <span class="desc">Kaleng tidak lagi berada di rumah warga, tanpa proses pengembalian. Dipicu oleh alasan “kaleng hilang” saat tidak terjemput.</span>
+                    <span class="badges">
+                      <b class="b-tidak">keluar dari cakupan penempatan</b>
+                      <b class="b-tugas">tetap dapat tugas</b>
+                      <b class="b-tindak">perlu tindakan</b>
+                    </span>
+                  </div>
+
+                  <div class="kids">
+                    <div class="kid">
+                      <div class="node k-luar">
+                        <span class="ttl">Masuk ke cakupan hilang — dihitung tersendiri</span>
+                        <span class="desc">Rumahnya keluar dari cakupan penempatan, tapi tidak hilang dari pandangan. Angka cakupan hilang berdiri sendiri, supaya selisihnya tetap bisa dipertanggungjawabkan.</span>
+                        <span class="badges"><b class="b-hitung">cakupan hilang</b></span>
+                      </div>
+                    </div>
+                    <div class="kid">
+                      <div class="node k-siklus">
+                        <span class="ttl">PPK tetap menjemput — sama seperti kaleng Rusak</span>
+                        <span class="desc">Tidak ada kalengnya bukan berarti tidak ada donasinya. Pemilik rumah atau donatur <b>masih bisa menyerahkan infaq langsung ke PPK</b> tanpa lewat kaleng. Karena itu rumah ini tetap masuk daftar tugas bulanan — yang hilang cuma wadahnya, bukan niat bersedekahnya.</span>
+                        <span class="callout">→ tetap masuk cabang A</span>
+                      </div>
+                    </div>
+                    <div class="kid">
+                      <div class="node k-tindakan">
+                        <span class="ttl">Tindakan yang diperlukan: beri kaleng baru</span>
+                        <span class="desc">Sistem mencatat kejadian hilang, lalu memunculkannya di daftar kerja admin sebagai kaleng yang perlu diganti. Kejadiannya dicatat, bukan dihapus — supaya ketahuan kalau satu rumah kehilangan kaleng berkali-kali.</span>
+                        <span class="callout warn">Sistem mengusulkan, admin yang menekan tombol</span>
+                      </div>
+                    </div>
+                    <div class="kid">
+                      <div class="node k-luar">
+                        <span class="ttl">Diberi kaleng baru</span>
+                        <span class="desc">Karena catatan kondisi melekat pada <b>rumahnya</b>, bukan pada unit kalengnya, begitu kaleng baru ditempatkan rumah ini <b>langsung kembali Aktif</b> dan hitungan kosongnya mulai dari nol. Angka cakupan hilang berkurang satu.</span>
+                        <span class="callout info">Kembali ke cabang A</span>
+                      </div>
+                    </div>
+                    <div class="kid">
+                      <div class="node k-luar">
+                        <span class="ttl">Sementara itu, kaleng lamanya ditemukan</span>
+                        <span class="desc">Kaleng yang ketemu <b>tidak kembali ke status apa pun</b> — masuk ke kelompok kaleng belum terdistribusi, yang memang di luar sistem. Ia jadi unit cadangan yang siap dipakai untuk penggantian berikutnya. Yang berubah hanya angkanya: cakupan hilang berkurang.</span>
+                        <span class="callout info">Sistem hanya menyesuaikan angka</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- ===== CABANG D ===== -->
+                <div class="kid">
+                  <div class="node k-nonaktif">
+                    <span class="ttl">D · NON-AKTIF</span>
+                    <span class="desc">Bukan kejadian baru, melainkan <b>hasil akumulasi</b> — enam kali penjemputan kosong berturut-turut. Bukan dipilih manual oleh siapa pun.</span>
+                    <span class="badges">
+                      <b class="b-hitung">cakupan penempatan</b>
+                      <b class="b-tidak">tidak dapat tugas</b>
+                      <b class="b-tindak">perlu tindakan</b>
+                    </span>
+                  </div>
+
+                  <div class="kids">
+                    <div class="kid">
+                      <div class="node k-nonaktif">
+                        <span class="ttl">Sistem memberi tahu admin</span>
+                        <span class="desc">Muncul pemberitahuan bahwa ada kaleng yang perlu ditindak. Inilah bedanya dengan kaleng Aktif biasa — ia tidak berjalan sendiri, ia menunggu keputusan.</span>
+                      </div>
+                    </div>
+                    <div class="kid">
+                      <div class="node k-nonaktif">
+                        <span class="ttl">Tetap dikunjungi PPK — untuk verifikasi</span>
+                        <span class="desc">Kalengnya masih ada di rumah warga, jadi masih perlu dilihat. Tapi kunjungan ini <b>dicatat sebagai kunjungan, bukan penjemputan</b>. Kalau dicatat sebagai penjemputan, ia akan menambah hitungan kosong palsu dan kalengnya terlihat makin “kosong” justru karena dikunjungi.</span>
+                        <span class="callout">Kunjungan verifikasi ≠ penjemputan</span>
+                      </div>
+                    </div>
+                    <div class="kid">
+                      <div class="node k-tindakan">
+                        <span class="ttl">Tindakan yang diperlukan: DIKEMBALIKAN</span>
+                        <span class="desc">Tarik kalengnya dari rumah warga. <b>Admin yang memutuskan</b>, setelah PPK memverifikasi di lapangan. Sistem hanya menyiapkan usulannya.</span>
+                        <span class="badges"><b class="b-tindak">daftar kerja admin</b></span>
+                      </div>
+                    </div>
+                    <div class="kid">
+                      <div class="node ret">
+                        <span class="ttl"><span class="loop">↺</span>Kalau ternyata terisi lagi → kembali AKTIF</span>
+                        <span class="desc">Pemberitahuan “perlu dikembalikan” sudah muncul, lalu PPK verifikasi dan ternyata pemiliknya sudah mulai mengisi lagi. Kalengnya <b>kembali Aktif</b>, dan hitungan kosongnya <b>diulang dari nol</b> — bukan mundur satu langkah. Naik lagi perlu 6× kosong yang baru.</span>
+                        <span class="callout ok">Kembali ke kotak AKTIF di atas</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /.tree -->
+
+    <!-- ============ UJUNG ============ -->
+    <div class="terminal">
+      <div class="term-lbl">Ujung dari <b>cabang B (Rusak)</b> dan <b>cabang D (Non-Aktif)</b> — tidak bisa dicapai dari cabang A maupun C</div>
+      <div class="tree">
+        <div class="node k-kembali">
+          <span class="ttl">DIKEMBALIKAN — ujung dari alur ini</span>
+          <span class="desc">Kaleng ditarik dari rumah warga dan kembali ke tangan PPK. Dianggap selesai; keberadaannya <b>tidak dilacak lagi</b> dan berbaur bersama kaleng yang belum ditempatkan.</span>
+          <span class="badges"><b class="b-tidak">keluar dari cakupan penempatan</b></span>
+        </div>
+
+        <div class="kids">
+          <div class="kid">
+            <div class="node k-kembali">
+              <span class="ttl">Alasannya wajib dipilih</span>
+              <span class="desc">Permintaan pemilik · kaleng non-aktif · kaleng rusak. Dua yang terakhir menjelaskan jalur mana yang tadi dilalui.</span>
+            </div>
+          </div>
+          <div class="kid">
+            <div class="node k-kembali">
+              <span class="ttl">Angkanya tetap ditampilkan — dua angka</span>
+              <span class="desc">Berapa yang ditarik <b>bulan ini</b> (menunjukkan seberapa aktif penataan berjalan) dan berapa <b>total seluruhnya</b> (menunjukkan berapa rumah yang sudah keluar dari program). Tiap kalengnya tidak dilacak, tapi jumlahnya dihitung.</span>
+            </div>
+          </div>
+          <div class="kid">
+            <div class="node k-luar">
+              <span class="ttl">Tidak dilacak lebih jauh</span>
+              <span class="desc">Selesai. Kalau nanti mau ditempatkan lagi di rumah lain, itu kaleng baru dengan catatan baru.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="divider"></div>
+
+  <h3 class="sec">Ringkasan angka di ujung setiap cabang</h3>
+  <p class="sec-note">
+    Pohon di atas menunjukkan <b>jalannya</b>. Tabel ini menunjukkan <b>akibatnya terhadap angka</b> —
+    dan kolom “dapat tugas” adalah yang paling sering tertukar.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Kondisi</th>
+        <th>Cakupan penempatan</th>
+        <th>Cakupan hilang</th>
+        <th>Dapat tugas bulanan</th>
+        <th>Dikunjungi PPK</th>
+        <th>Tindakan</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="name">Aktif</td>
+        <td class="c"><span class="tag ya">Ya</span></td>
+        <td class="c">—</td>
+        <td class="c"><span class="tag ya">Ya</span></td>
+        <td class="c">—</td>
+        <td class="c">—</td>
+      </tr>
+      <tr>
+        <td class="name">Rusak</td>
+        <td class="c"><span class="tag ya">Ya</span></td>
+        <td class="c">—</td>
+        <td class="c"><span class="tag ya">Ya</span></td>
+        <td class="c">—</td>
+        <td class="c">Ganti unit</td>
+      </tr>
+      <tr>
+        <td class="name">Non-Aktif</td>
+        <td class="c"><span class="tag ya">Ya</span></td>
+        <td class="c">—</td>
+        <td class="c"><span class="tag tidak">Tidak</span></td>
+        <td class="c">Verifikasi</td>
+        <td class="c">Dikembalikan</td>
+      </tr>
+      <tr>
+        <td class="name">Hilang</td>
+        <td class="c"><span class="tag tidak">Tidak</span></td>
+        <td class="c"><span class="tag ya">Ya</span></td>
+        <td class="c"><span class="tag ya">Ya</span></td>
+        <td class="c">Rutin</td>
+        <td class="c">Beri kaleng baru</td>
+      </tr>
+      <tr>
+        <td class="name">Dikembalikan</td>
+        <td class="c"><span class="tag tidak">Tidak</span></td>
+        <td class="c">—</td>
+        <td class="c"><span class="tag tidak">Tidak</span></td>
+        <td class="c">—</td>
+        <td class="c">—</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <footer>
+    <span>Pohon Alur Status Kaleng · Lazisnu — turunan dari alur-status-kaleng.html revisi 7, 26 keputusan Pion 12 September 2026</span>
+    <span>Tekan Ctrl/Cmd + P untuk menyimpan sebagai PDF</span>
+  </footer>
+
+</div>
+</body>
+</html>

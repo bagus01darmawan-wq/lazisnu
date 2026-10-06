@@ -224,7 +224,7 @@ export async function canProposalsRoutes(fastify: FastifyInstance) {
 
       return sendSuccess(reply, {
         evaluated: result.evaluated,
-        proposed_inactive: result.proposed_inactive,
+        auto_nonaktif: result.auto_nonaktif,
         restored_active: result.restored_active,
       });
     } catch (error: unknown) {

@@ -15,8 +15,9 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Camera, CameraType} from 'react-native-camera-kit';
 import {useTasksStore} from '../stores';
-import {Task} from '@lazisnu/shared-types';
+import {type CanVisitOutcome, type Task} from '@lazisnu/shared-types';
 import type {MainTabParamList, RootStackParamList} from '../navigation/types';
+import {collectionService} from '../services/api';
 import {pickAndDecodeQRCode} from '../services/qrImageScanner';
 import {AppHeader, SkipReasonSheet} from '../components/ui';
 import {Colors, Typography} from '../theme';
@@ -36,8 +37,16 @@ const QR_ERROR_MESSAGES: Record<string, string> = {
   CAN_RETURNED: 'Kaleng ini sudah dikembalikan dan ditarik admin, bukan tugas aktif.',
   QR_NOT_ASSIGNED: 'Kaleng ini bukan tugas Anda pada periode berjalan.',
   QR_ALREADY_SUBMITTED: 'Kaleng ini sudah disetor pada periode berjalan.',
+  // C1-T2: pesan server untuk dua kode ini sudah menyematkan periode
+  // (mis. "Periode 2026-09 sudah dikunci, pakai tugas 2026-10.") — teks di
+  // sini hanya fallback bila pesan server kosong (lihat processQRCode).
+  QR_WRONG_PERIOD: 'Kaleng ini tugas Anda pada periode lain — di luar periode berjalan.',
+  QR_PERIOD_CLOSED: 'Periode sudah dikunci, pakai tugas periode berjalan.',
   NETWORK_ERROR: 'Tidak ada koneksi internet. Coba lagi setelah jaringan tersedia.',
 };
+
+// Kode yang pesannya wajib memakai teks server (menyematkan periode spesifik).
+const SERVER_MESSAGE_CODES = new Set(['QR_WRONG_PERIOD', 'QR_PERIOD_CLOSED']);
 
 const ScanScreen: React.FC = () => {
   const navigation = useNavigation<ScanNavigationProp>();
@@ -109,6 +118,7 @@ const ScanScreen: React.FC = () => {
 
   const [skipSheetTask, setSkipSheetTask] = useState<Task | null>(null);
   const [skipping, setSkipping] = useState(false);
+  const [visiting, setVisiting] = useState(false);
 
   const handleSkip = (task: Task) => {
     setSkipSheetTask(task);
@@ -141,6 +151,27 @@ const ScanScreen: React.FC = () => {
     }
   };
 
+  const submitVisitOutcome = async (outcome: Exclude<CanVisitOutcome, 'ISI'>) => {
+    if (!scannedData) return;
+    setVisiting(true);
+    try {
+      const result = await collectionService.recordCanVisit(scannedData.can_id, outcome);
+      if (!result.success) {
+        Alert.alert('Gagal Mencatat', result.error?.message || 'Gagal menyimpan tindakan kaleng.');
+        return;
+      }
+      Alert.alert('Tindakan Tercatat', result.data?.message || 'Tindakan kaleng tersimpan.', [
+        {text: 'OK', onPress: handleReset},
+      ]);
+    } catch (error) {
+      Alert.alert(
+        'Gagal Mencatat',
+        error instanceof Error ? error.message : 'Gagal menyimpan tindakan kaleng.',
+      );
+    } finally {
+      setVisiting(false);
+    }
+  };
   const processQRCode = async (qrCode: string, source: QRInputSource) => {
     if (processingRef.current || imagePickerRef.current || !isScanning) {
       return;
@@ -170,8 +201,10 @@ const ScanScreen: React.FC = () => {
       } else {
         Vibration.vibrate([0, 100, 50, 100]);
         const errorCode = result.error?.code || '';
-        const errorMessage =
-          QR_ERROR_MESSAGES[errorCode] || result.error?.message || 'Kode QR tidak valid.';
+        const serverMessage = result.error?.message || '';
+        const errorMessage = SERVER_MESSAGE_CODES.has(errorCode)
+          ? serverMessage || QR_ERROR_MESSAGES[errorCode] || 'Kode QR tidak valid.'
+          : QR_ERROR_MESSAGES[errorCode] || serverMessage || 'Kode QR tidak valid.';
         Alert.alert('QR Tidak Dapat Diproses', errorMessage, [{text: 'COBA LAGI'}]);
       }
     } catch {
@@ -294,6 +327,8 @@ const ScanScreen: React.FC = () => {
           task={scannedData}
           onSkip={handleSkip}
           onContinue={task => navigation.navigate('Collection', {task})}
+          onVisitOutcome={outcome => void submitVisitOutcome(outcome)}
+          visiting={visiting}
         />
       )}
 

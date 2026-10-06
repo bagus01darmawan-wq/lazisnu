@@ -1,4 +1,5 @@
 import NetInfo from '@react-native-community/netinfo';
+import {CanCondition} from '@lazisnu/shared-types';
 import {syncService} from '../../src/services/offline/sync';
 import {offlineQueue, QueuedCollection} from '../../src/services/offline/queue';
 import {collectionService} from '../../src/services/api';
@@ -16,6 +17,7 @@ describe('Sync Service (sync.ts)', () => {
     assignment_id: `asg_${id}`,
     can_id: `can_${id}`,
     nominal,
+    condition: CanCondition.AKTIF,
     collected_at: new Date().toISOString(),
     retry_attempts: retries,
   });

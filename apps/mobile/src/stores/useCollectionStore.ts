@@ -5,7 +5,7 @@ import {correctionQueue} from '../services/offline/corrections';
 import {syncService} from '../services/offline/sync';
 import NetInfo from '@react-native-community/netinfo';
 import {getDeviceInfo} from '../utils/device';
-import {Collection, HistoryItem, SyncStatus} from '@lazisnu/shared-types';
+import {Collection, CanCondition, HistoryItem, SyncStatus} from '@lazisnu/shared-types';
 import {useTasksStore} from './useTasksStore';
 import {refreshSyncCounts} from './useSyncStore';
 import {useDashboardStore} from './useDashboardStore';
@@ -25,6 +25,7 @@ interface SubmittedCollectionDraft {
   collected_at: string;
   latitude?: number;
   longitude?: number;
+  condition: CanCondition.AKTIF | CanCondition.RUSAK | CanCondition.HILANG;
   offline_id: string;
 }
 
@@ -40,6 +41,8 @@ interface CollectionState {
     collected_at: string;
     latitude?: number;
     longitude?: number;
+    condition: CanCondition.AKTIF | CanCondition.RUSAK | CanCondition.HILANG;
+    visit_outcome?: 'ISI';
     offline_id?: string;
   }) => Promise<{success: boolean; synced: boolean; error?: string}>;
 

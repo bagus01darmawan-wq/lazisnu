@@ -40,6 +40,35 @@ export function formatAuditAction(actionType: string): string {
   
   // Resubmit
   if (type.includes('RESUBMIT')) return 'Koreksi Setoran';
+
+  // C1-T10 (§15): aksi siklus periode — label eksplisit agar terbaca di
+  // halaman Log Aktivitas (sebelumnya jatuh ke fallback generik).
+  const C1_LABELS: Record<string, string> = {
+    PPK_SIGNED: 'PPK Menandatangani Setoran',
+    PPK_COUNTERSIGNED: 'Bendahara Menandatangani (Counter-sign)',
+    PPK_COUNTERSIGNED_FINAL: 'Bendahara Mengunci Setoran PPK (FINAL)',
+    PPK_FINALIZED: 'Setoran PPK Dikunci (FINAL)',
+    BRANCH_SIGNED: 'Admin Ranting Menandatangani Rekap',
+    BRANCH_COUNTERSIGNED: 'Bendahara MWC Mengunci Rekap (FINAL)',
+    BRANCH_FINALIZED: 'Rekap Ranting Dikunci (FINAL)',
+    BA_DOWNLOADED: 'Mengunduh Berita Acara',
+    SIGNATURE_PURGED: 'Menghapus Coretan TTD (Retensi)',
+    DRAFT_PREPARED: 'Robot Menyiapkan Draft Tugas',
+    DRAFT_APPROVED: 'Draft Tugas Disetujui',
+    DRAFT_ITEM_EDITED: 'Item Draft Diubah',
+    DRAFT_ITEM_DELETED: 'Item Draft Dihapus',
+    DRAFT_TOPPED_UP_POST_APPROVAL: 'Sapuan Susulan Pasca-Approve',
+    KUNCI_PERIODE_REKAP: 'MWC Menarik Rekap Periode',
+    KUNCI_PERIODE_FINAL_NOL_MASSAL: 'MWC Mengunci NOL Massal',
+    PPK_REOPENED: 'Setoran PPK Dibuka Kembali (Reopen)',
+    BRANCH_REOPENED: 'Rekap Ranting Dibuka Kembali (Reopen)',
+    REOPEN_WINDOW_EXTENDED: 'Jendela Koreksi Diperpanjang',
+    EMERGENCY_AGGREGATE_RECORDED: 'Mencatat Agregat Darurat',
+    MANUAL_COLLECTION: 'Salin Manual Koleksi (Kertas)',
+    COLLECTED_AT_REJECTED: 'Waktu Jemput Ditolak (Di Luar Jendela)',
+    SCHEDULER_MISMATCH: 'Kunci Scheduler Tak Valid',
+  };
+  if (type in C1_LABELS) return C1_LABELS[type];
   
   // WhatsApp bulk queue actions
   if (type.includes('WA/RETRY')) return 'Jadwalkan Ulang Notifikasi';
@@ -112,7 +141,17 @@ export function getAuditActionTone(actionType: string): 'success' | 'warning' | 
   ) return 'danger';
   if (type.includes('DELETE')) return 'danger';
   if (type.includes('PUT') || type.includes('PATCH') || type.includes('RESUBMIT')) return 'warning';
-  
+  // C1-T10: kunci/reopen = warning; FINAL/approve/unduh = success; sisanya info.
+  if (
+    type.includes('REOPEN') || type.includes('KUNCI_PERIODE') ||
+    type === 'EMERGENCY_AGGREGATE_RECORDED' || type === 'MANUAL_COLLECTION' ||
+    type === 'COLLECTED_AT_REJECTED' || type === 'SIGNATURE_PURGED'
+  ) return 'warning';
+  if (
+    type.includes('FINALIZED') || type.includes('COUNTERSIGNED_FINAL') ||
+    type === 'DRAFT_APPROVED' || type === 'BA_DOWNLOADED'
+  ) return 'success';
+
   return 'info';
 }
 

@@ -6,7 +6,7 @@ import { authorize } from '../../middleware/auth';
 import { assertBranchAccess, assertDukuhAccess } from '../../middleware/ownership';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { getPostgresError } from '../../utils/error-guards';
-import { getOverview } from '../../services/overviewService';
+import { getOverview, parseOverviewPeriod } from '../../services/overviewService';
 import { z } from 'zod';
 
 const branchSchema = z.object({
@@ -189,7 +189,7 @@ export async function districtRoutes(fastify: FastifyInstance) {
         return sendError(reply, 403, 'FORBIDDEN', 'Bukan admin kecamatan');
       }
 
-      const query = request.query as { branch_id?: string };
+      const query = request.query as { branch_id?: string; year?: string; months?: string };
       let branchId: string | undefined;
       let branchName: string | undefined;
 
@@ -206,7 +206,10 @@ export async function districtRoutes(fastify: FastifyInstance) {
       }
 
       const now = new Date();
-      const period = { year: now.getFullYear(), month: now.getMonth() + 1 };
+      const period = parseOverviewPeriod(query.year, query.months);
+      if (!period) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Parameter year/months tidak valid');
+      }
 
       const data = await getOverview(
         branchId ? { districtId, branchId } : { districtId },

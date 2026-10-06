@@ -10,7 +10,14 @@ set -euo pipefail
 #
 # Env: /opt/lazisnu/secrets/env.auth-probe (root, chmod 600) atau variabel
 # lingkungan override: BACKEND_URL, DASHBOARD_URL, TEST_EMAIL, TEST_PASSWORD,
-# ALERT_WEBHOOK_URL, REFRESH_WAIT_SECONDS, PROBE_DEVICE_ID, LOG_FILE, STATE_FILE.
+# ALERT_WEBHOOK_URL, REFRESH_WAIT_SECONDS, PROBE_DEVICE_ID,
+# AUTH_PROBE_LOG_FILE, AUTH_PROBE_STATE_FILE.
+#
+# CATATAN NAMA VARIABEL (temuan 2026-09-18): nama yang dibaca script adalah
+# AUTH_PROBE_LOG_FILE / AUTH_PROBE_STATE_FILE (lihat baris 33-34). Jangan
+# tulis LOG_FILE / STATE_FILE di env file — keduanya AKAN DIABAIKAN dan
+# probe menulis ke path default milik probe lain (contoh: probe staging
+# pernah menulis ke log probe produksi karena kesalahan ini).
 
 ENV_FILE="${AUTH_PROBE_ENV_FILE:-/opt/lazisnu/secrets/env.auth-probe}"
 if [[ ! -r "$ENV_FILE" ]]; then

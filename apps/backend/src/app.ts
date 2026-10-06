@@ -12,6 +12,7 @@ import adminRoutes from './routes/admin';
 import { bendaharaRoutes } from './routes/bendahara';
 import { schedulerRoutes } from './routes/scheduler';
 import { healthRoutes } from './routes/health';
+import { verifyRoutes } from './routes/verify';
 import { metricsRoutes } from './routes/metrics';
 import { httpRequestDurationMs, httpRequestsTotal } from './routes/metrics';
 import { correlationIdHook } from './middleware/correlationId';
@@ -37,6 +38,31 @@ export async function buildApp() {
 
   // Paling awal: correlation ID untuk semua request
   server.addHook('onRequest', correlationIdHook);
+
+  // Sebagian klien mobile memasang `Content-Type: application/json` pada POST
+  // tanpa body. Parser bawaan Fastify menolak body kosong dengan
+  // FST_ERR_CTP_EMPTY_JSON_BODY (HTTP 400) sehingga endpoint yang tidak
+  // membutuhkan body — POST /mobile/cans/:canId/ensure-assignment dan
+  // POST /mobile/periods/complete — gagal sebelum handler dijalankan.
+  // Body kosong diperlakukan sebagai {} dan JSON yang rusak tetap 400.
+  server.addContentTypeParser(
+    'application/json',
+    { parseAs: 'string' },
+    (_request, body, done) => {
+      const raw = typeof body === 'string' ? body.trim() : '';
+      if (!raw) {
+        done(null, {});
+        return;
+      }
+      try {
+        done(null, JSON.parse(raw));
+      } catch (err) {
+        const parseError = err as Error & { statusCode?: number };
+        parseError.statusCode = 400;
+        done(parseError, undefined);
+      }
+    },
+  );
 
   // Plugins
   await server.register(cors, {
@@ -232,6 +258,8 @@ export async function buildApp() {
   await server.register(authRoutes, { prefix: '/v1/auth' });
   // Publik (tanpa auth): info rilis untuk fitur update-in-app Tingkat 1
   await server.register(versionRoutes, { prefix: '/v1/mobile' });
+  // Publik (tanpa auth): verifikasi QR BA — hanya { valid }, tanpa bocor data.
+  await server.register(verifyRoutes, { prefix: '/v1/verify' });
   await server.register(mobileRoutes, { prefix: '/v1/mobile' });
   await server.register(adminRoutes, { prefix: '/v1/admin' });
   await server.register(bendaharaRoutes, { prefix: '/v1/bendahara' });

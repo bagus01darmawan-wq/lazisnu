@@ -39,10 +39,28 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useAuthStore } from '@/store/useAuthStore';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
-import { Officer as BaseOfficer, Branch, ApiResponse, PaginatedResponse } from '@lazisnu/shared-types';
+import { ApiResponse, PaginatedResponse } from '@lazisnu/shared-types';
 
-interface OfficerExtended extends BaseOfficer {
-  branch?: Pick<Branch, 'id' | 'name' | 'code' | 'district_id'> | null;
+/** Bentuk petugas di sisi web (camelCase — hasil normalisasi caseConverter). */
+interface OfficerExtended {
+  id: string;
+  userId?: string;
+  employeeCode: string;
+  fullName: string;
+  phone: string;
+  photoUrl?: string;
+  districtId: string;
+  branchId: string;
+  assignedZone?: string;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  branch?: { id: string; name: string; code?: string; districtId?: string } | null;
+}
+
+interface Branch {
+  id: string;
+  name: string;
 }
 
 interface ApiError {
@@ -165,9 +183,9 @@ export default function UsersPage() {
 
   const handleEdit = (officer: OfficerExtended) => {
     setEditingOfficer(officer);
-    setValue('full_name', officer.full_name);
+    setValue('full_name', officer.fullName);
     setValue('phone', officer.phone);
-    setValue('branch_id', officer.branch_id);
+    setValue('branch_id', officer.branchId);
     setIsModalOpen(true);
   };
 
@@ -304,7 +322,7 @@ export default function UsersPage() {
       ),
     },
     {
-      accessorKey: 'full_name',
+      accessorKey: 'fullName',
       header: () => (
         <div className="flex items-center gap-1.5">
           <User size={12} className="text-[#EAD19B]" />
@@ -313,8 +331,8 @@ export default function UsersPage() {
       ),
       cell: ({ row }) => (
         <div className="space-y-0.5">
-          <p className="font-bold text-[#F4F1EA]">{row.original.full_name}</p>
-          <p className="text-[10px] text-[#F4F1EA]/40 font-bold uppercase tracking-widest">{row.original.employee_code}</p>
+          <p className="font-bold text-[#F4F1EA]">{row.original.fullName}</p>
+          <p className="text-[10px] text-[#F4F1EA]/40 font-bold uppercase tracking-widest">{row.original.employeeCode}</p>
         </div>
       ),
     },
@@ -352,7 +370,7 @@ export default function UsersPage() {
       },
     },
     {
-      accessorKey: 'is_active',
+      accessorKey: 'isActive',
       header: () => (
         <div className="flex items-center gap-1.5">
           <UserCheck size={12} className="text-[#EAD19B]" />
@@ -360,7 +378,7 @@ export default function UsersPage() {
         </div>
       ),
       cell: ({ row }) => (
-        row.original.is_active ? (
+        row.original.isActive ? (
           <span className="text-[10px] font-bold uppercase tracking-widest text-[#1F8243]">AKTIF</span>
         ) : (
           <span className="text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/40">NON-AKTIF</span>
@@ -371,7 +389,7 @@ export default function UsersPage() {
       id: 'actions',
       header: '',
       cell: ({ row }) => {
-        const isNonActiveRow = !row.original.is_active;
+        const isNonActiveRow = !row.original.isActive;
         return (
           <div className="flex items-center justify-end gap-2">
             <Button

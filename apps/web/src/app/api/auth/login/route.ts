@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { shouldSecureCookie } from '@/lib/cookies';
+import { toCamelCase } from '@/lib/caseConverter';
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,32 +38,48 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(data, { status: backendRes.status });
     }
 
-    const { access_token, refresh_token, user } = data.data;
+    // Normalisasi ke camelCase (kontrak UI Opsi A). Backend mengirim
+    // snake_case; route ini satu-satunya jembatan auth ke client.
+    const { accessToken, refreshToken, user, refreshExpiresIn } = toCamelCase<{
+      accessToken: string;
+      refreshToken?: string;
+      refreshExpiresIn?: number;
+      user: unknown;
+    }>(data.data);
 
     const response = NextResponse.json({
       success: true,
       data: {
-        access_token,
+        accessToken,
         user,
       },
     });
 
+    // Sinkronkan maxAge cookie refresh dengan TTL JWT refresh dari backend
+    // (fallback 365d = default JWT_REFRESH_TTL) agar keduanya tidak pernah
+    // miss-match (dulu cookie 7 hari vs JWT 365 hari → logout paksa hari ke-7).
+    const REFRESH_FALLBACK_SECONDS = 60 * 60 * 24 * 365;
+    const refreshMaxAge =
+      typeof refreshExpiresIn === 'number' && refreshExpiresIn > 0
+        ? refreshExpiresIn
+        : REFRESH_FALLBACK_SECONDS;
+
     // Set Access Token (non-HttpOnly for client Axios and middleware)
     // maxAge 15 menit = 900 detik, sesuai TTL access token
-    response.cookies.set('lazisnu_token', access_token, {
-      secure: process.env.NODE_ENV === 'production',
+    response.cookies.set('lazisnu_token', accessToken, {
+      secure: shouldSecureCookie(request),
       sameSite: 'strict',
       maxAge: 60 * 15, // 15 menit
       path: '/',
     });
 
     // Set Refresh Token (HttpOnly for security)
-    if (refresh_token) {
-      response.cookies.set('lazisnu_refresh_token', refresh_token, {
+    if (refreshToken) {
+      response.cookies.set('lazisnu_refresh_token', refreshToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: shouldSecureCookie(request),
         sameSite: 'strict',
-        maxAge: 60 * 60 * 24 * 7, // 7 days
+        maxAge: refreshMaxAge, // = TTL JWT refresh (dari backend), bukan angka bebas
         path: '/',
       });
     }
@@ -69,7 +87,7 @@ export async function POST(request: NextRequest) {
     // Persist deviceId cookie (non-HttpOnly) agar route handler refresh bisa membacanya
     if (deviceId) {
       response.cookies.set('lazisnu_device_id', deviceId, {
-        secure: process.env.NODE_ENV === 'production',
+        secure: shouldSecureCookie(request),
         sameSite: 'strict',
         maxAge: 60 * 60 * 24 * 365, // 365 hari — sama dengan refresh token TTL
         path: '/',

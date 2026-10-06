@@ -63,6 +63,10 @@ global.crypto = {
   },
 };
 
+// Unit tests have no native Firebase app. Production behavior is covered by
+// config/__tests__/crashlytics.test.ts with an explicit default-app fixture.
+jest.mock('@react-native-firebase/app', () => ({getApps: jest.fn(() => [])}));
+
 jest.mock('@react-native-firebase/crashlytics', () => {
   const reporter = {
     log: jest.fn(),
@@ -87,3 +91,21 @@ jest.mock('@react-native-community/netinfo', () => ({
   ),
   addEventListener: jest.fn(() => jest.fn()),
 }));
+
+// Mock react-native-signature-canvas — WebView tidak berjalan di environment
+// Jest (tanpa native bridge). SignaturePad/SignSheet diuji lewat perilaku
+// callback (onChange/onOK), bukan piksel kanvas.
+jest.mock('react-native-signature-canvas', () => {
+  const React = require('react');
+  const {View} = require('react-native');
+  return {
+    __esModule: true,
+    default: React.forwardRef((props, ref) => {
+      React.useImperativeHandle(ref, () => ({
+        clearSignature: jest.fn(),
+        readSignature: jest.fn(),
+      }));
+      return React.createElement(View, {testID: 'mock-signature-canvas', ...props});
+    }),
+  };
+});

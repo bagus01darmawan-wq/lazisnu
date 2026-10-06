@@ -10,8 +10,10 @@ import { AppError, isAppError } from '../../utils/AppError';
 import { Errors } from '../../utils/errorCatalog';
 import { correctCollection } from '../../services/collectionCorrectionService';
 
-import { validateAssignmentForSubmit, submitCollection, getLatestCollectionCondition } from '../../services/collectionSubmission';
-import { getPostgresError } from '../../utils/error-guards';
+import { validateAssignmentForSubmit, submitCollection, getLatestCollectionCondition, assertCollectedAtInWindow } from '../../services/collectionSubmission';
+import { getPostgresError, getErrorMessage } from '../../utils/error-guards';
+import { evaluateEmptyStreakForCan } from '../../services/conditionProposalService';
+import { insertActivityLog } from '../../services/auditLogService';
 
 type MobileHistoryCollection = {
   id: string;
@@ -26,6 +28,7 @@ type MobileHistoryCollection = {
     qrCode: string | null;
     ownerName: string;
     ownerAddress: string | null;
+    condition?: string;
   };
 };
 
@@ -40,6 +43,7 @@ export function toMobileHistoryItem(collection: MobileHistoryCollection) {
     owner_address: collection.can.ownerAddress || '',
     nominal: Number(collection.nominal),
     collected_at: collection.collectedAt,
+    condition: collection.can.condition ?? 'AKTIF',
     sync_status: collection.syncStatus,
     submit_sequence: collection.submitSequence,
   };
@@ -71,8 +75,9 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
       }
 
       const result = await db.transaction(async (tx) => {
+        let assignment;
         try {
-          await validateAssignmentForSubmit(tx, body.assignment_id, body.can_id, officerId);
+          assignment = await validateAssignmentForSubmit(tx, body.assignment_id, body.can_id, officerId);
         } catch (err: unknown) {
           const appErr = AppError.fromUnknown(err, 'Assignment tidak valid');
           if (appErr.code === 'CAN_ID_MISMATCH') {
@@ -81,17 +86,46 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
           throw appErr;
         }
 
-        return await submitCollection(tx, {
+        // C1-T2 (§14.3): collected_at (klaim HP) wajib dalam jendela periode
+        // milik assignment. Pelanggaran → tolak + audit (bukan diam-diam).
+        try {
+          assertCollectedAtInWindow(new Date(body.collected_at), assignment.periodYear, assignment.periodMonth);
+        } catch (err: unknown) {
+          const appErr = AppError.fromUnknown(err, 'collected_at di luar jendela periode');
+          await insertActivityLog({
+            userId: user.userId,
+            officerId,
+            actionType: 'COLLECTED_AT_REJECTED',
+            entityType: 'assignment',
+            entityId: body.assignment_id,
+            oldData: null,
+            newData: {
+              collected_at: body.collected_at,
+              periodYear: assignment.periodYear,
+              periodMonth: assignment.periodMonth,
+              reason: (appErr.details as any)?.reason ?? null,
+            },
+            ipAddress: request.ip,
+            userAgent: request.headers['user-agent'] || null,
+          }, tx);
+          throw appErr;
+        }
+
+        const result = await submitCollection(tx, {
           assignmentId: body.assignment_id,
           canId: body.can_id,
           officerId,
+          actorUserId: user.userId,
           nominal: body.nominal,
           collectedAt: new Date(body.collected_at),
           latitude: body.latitude?.toString(),
           longitude: body.longitude?.toString(),
           offlineId: body.offline_id,
           deviceInfo: body.device_info as any,
+          condition: body.condition,
         });
+        await evaluateEmptyStreakForCan(body.can_id, tx);
+        return result;
       });
 
       const insertedCan = await db.query.cans.findFirst({ 
@@ -162,7 +196,7 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
             eq(schema.collections.syncStatus, 'COMPLETED'),
             latestCollectionCondition
           ),
-          with: { can: { columns: { qrCode: true, ownerName: true, ownerAddress: true } } },
+          with: { can: { columns: { qrCode: true, ownerName: true, ownerAddress: true, condition: true } } },
           orderBy: [desc(schema.collections.collectedAt)],
           offset: skip,
           limit,

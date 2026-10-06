@@ -3,8 +3,8 @@ import { Card } from '@/components/ui/Card';
 import { FileSpreadsheet, Wallet, FileText, Users, AlertCircle, PackageOpen } from 'lucide-react';
 import { cookies } from 'next/headers';
 import { decodeJwt } from 'jose';
-import ReportsClient from './ReportsClient';
-import { CollectionReport } from '@lazisnu/shared-types';
+import ReportsClient, { CollectionReportRow, ReportPagination } from './ReportsClient';
+import { toCamelCase } from '@/lib/caseConverter';
 import { Skeleton } from '@/components/ui/Skeleton';
 import FilterDropdown from './FilterDropdown';
 import ExportButton from './ExportButton';
@@ -31,7 +31,7 @@ async function getStatsData(month: string, months: string, year: string, branch:
 
     if (!res.ok) return null;
     const json = await res.json();
-    return json.data?.summary || null;
+    return toCamelCase(json.data?.summary) || null;
   } catch (error) {
     console.error('Stats fetch error:', error);
     return null;
@@ -59,7 +59,7 @@ async function getAdditionalStats(month: string, months: string, year: string, b
 
     if (!res.ok) return null;
     const json = await res.json();
-    return json.data || null;
+    return toCamelCase(json.data) || null;
   } catch (error) {
     console.error('Additional stats fetch error:', error);
     return null;
@@ -72,8 +72,8 @@ async function TransactionList({ month, months, year, branch, officer, search, p
 
   if (!token) return <ReportsClient data={[]} />;
 
-  let collectionsData: CollectionReport[] = [];
-  let paginationData: { page: number; limit: number; total: number; total_pages: number } | undefined;
+  let collectionsData: CollectionReportRow[] = [];
+  let paginationData: ReportPagination | undefined;
 
   try {
     const API_URL = process.env.API_URL || 'http://localhost:3001';
@@ -114,8 +114,8 @@ async function TransactionList({ month, months, year, branch, officer, search, p
 
     if (res.ok) {
       const json = await res.json();
-      collectionsData = json.data?.collections || [];
-      paginationData = json.data?.pagination;
+      collectionsData = toCamelCase(json.data?.collections) || [];
+      paginationData = toCamelCase(json.data?.pagination);
     }
   } catch {
     collectionsData = [];
@@ -166,16 +166,16 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
   const additionalStats = await getAdditionalStats(month, months, year, branch);
 
   // Calculate Average Per Can
-  const totalAmount = Number(stats?.total_amount || 0);
-  const totalCount = Number(stats?.total_count || 0);
+  const totalAmount = Number(stats?.totalAmount || 0);
+  const totalCount = Number(stats?.totalCount || 0);
   const averagePerCan = totalCount > 0 ? totalAmount / totalCount : 0;
 
-  const officersAssigned = Number(additionalStats?.officers_assigned || 0);
-  const officersTotal = Number(additionalStats?.officers_total || 0);
-  const zeroNominalCount = Number(additionalStats?.zero_nominal_count || 0);
-  const uncollectedCount = Number(additionalStats?.uncollected_count || 0);
-  const totalCollectedCans = Number(additionalStats?.total_collected_cans || 0);
-  const totalAssignments = Number(additionalStats?.total_assignments || 0);
+  const officersAssigned = Number(additionalStats?.officersAssigned || 0);
+  const officersTotal = Number(additionalStats?.officersTotal || 0);
+  const zeroNominalCount = Number(additionalStats?.zeroNominalCount || 0);
+  const uncollectedCount = Number(additionalStats?.uncollectedCount || 0);
+  const totalCollectedCans = Number(additionalStats?.totalCollectedCans || 0);
+  const totalAssignments = Number(additionalStats?.totalAssignments || 0);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">

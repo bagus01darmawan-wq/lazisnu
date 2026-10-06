@@ -1,0 +1,8 @@
+# Penyapu label QR di R2 — harian 03:30 (sepi trafik), retensi bawaan 7 hari.
+# Hanya prefix `qr-pdfs/`; `ba-pdfs/` (arsip hukum) tidak pernah disentuh.
+# Dipanggil via `bash script` agar kebal terhadap exec-bit yang hilang saat
+# `git checkout` di VM (insiden 2026-08-04).
+30 3 * * * root /usr/bin/flock -n /run/lock/lazisnu-cleanup-qr.lock /usr/bin/timeout --foreground 10m bash /opt/lazisnu/scripts/cleanup-qr-pdfs.sh
+
+# Sapuan staging — retensi sama, bucket & log terpisah via ENVIRONMENT.
+45 3 * * * root /usr/bin/flock -n /run/lock/lazisnu-cleanup-qr-staging.lock /usr/bin/timeout --foreground 10m env ENVIRONMENT=staging SCHEDULER_LOG_FILE=/var/log/lazisnu-cleanup-qr-staging.log bash /opt/lazisnu/scripts/cleanup-qr-pdfs.sh

@@ -17,7 +17,7 @@ export async function syncRoutes(fastify: FastifyInstance) {
 
       if (!officerId) return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
 
-      const result = await syncCollectionsBatch(body.collections as any, officerId);
+      const result = await syncCollectionsBatch(body.collections as any, officerId, user.userId);
       return sendSuccess(reply, result);
     } catch (error: unknown) {
       if (error instanceof z.ZodError) return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid');

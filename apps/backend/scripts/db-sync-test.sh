@@ -36,10 +36,23 @@ if [ -z "${DATABASE_URL:-}" ]; then
   exit 1
 fi
 
+# PENGAMAN PROD (insiden 2026-09-23): drizzle.config.ts memakai
+# DIRECT_URL || DATABASE_URL, dan dotenv() memuat .env yang DIRECT_URL-nya
+# menunjuk Supabase PRODUKSI. Tolak URL non-test + paksa DIRECT_URL = test
+# agar migrate dari laptop TAK PERNAH menyentuh prod.
+case "${DATABASE_URL}" in
+  *lazisnu_test*) ;;
+  *)
+    echo "❌ REFUSE: DATABASE_URL bukan DB test — abort (tidak menyentuh apa pun)"
+    exit 1
+    ;;
+esac
+export DIRECT_URL="${DATABASE_URL}"
+
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "TD-03: Reset Test DB & Apply Migrations"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "DB: ${DATABASE_URL}"
+echo "DB: $(printf '%s' "${DATABASE_URL}" | sed -E 's#:([^:@/]+)@#:***@#')"
 echo ""
 
 # ─── Step 1: Drop schema public ───
@@ -50,8 +63,8 @@ echo ""
 
 # ─── Step 2: Apply migrations via drizzle-kit ───
 echo "▶ [2/4] Apply migrations via drizzle-kit migrate..."
-# drizzle-kit migrate membaca .env; kita inject DATABASE_URL env var
-DATABASE_URL="${DATABASE_URL}" npx drizzle-kit migrate --config=drizzle.config.ts
+# DATABASE_URL + DIRECT_URL sudah dipin ke test (lihat pengaman di atas).
+DATABASE_URL="${DATABASE_URL}" DIRECT_URL="${DIRECT_URL}" npx drizzle-kit migrate --config=drizzle.config.ts
 echo "  ✅ Migrations applied"
 echo ""
 

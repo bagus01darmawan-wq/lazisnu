@@ -69,6 +69,7 @@ describe('TaskDetailScreen — detail penjemputan dari kartu tugas', () => {
   let skipSpy: jest.SpyInstance;
   let fetchSpy: jest.SpyInstance;
   let alertSpy: jest.SpyInstance;
+  let mountedTree: renderer.ReactTestRenderer | undefined;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -82,17 +83,22 @@ describe('TaskDetailScreen — detail penjemputan dari kartu tugas', () => {
   });
 
   afterEach(() => {
+    if (mountedTree) {
+      act(() => mountedTree?.unmount());
+      mountedTree = undefined;
+    }
     skipSpy.mockRestore();
     fetchSpy.mockRestore();
     alertSpy.mockRestore();
   });
 
   const renderScreen = async () => {
-    let tree: renderer.ReactTestRenderer;
+    let tree!: renderer.ReactTestRenderer;
     await act(async () => {
       tree = renderer.create(<TaskDetailScreen />);
     });
-    return tree!;
+    mountedTree = tree!;
+    return tree;
   };
 
   it('menampilkan judul Detail Penjemputan + baris info lengkap (termasuk Periode)', async () => {
@@ -153,13 +159,13 @@ describe('TaskDetailScreen — detail penjemputan dari kartu tugas', () => {
       .join(' ');
     expect(allText).toContain('Kenapa tidak terjemput?');
 
-    // Pilih alasan "Kaleng hilang", lalu Simpan.
+    // Pilih alasan "Lainnya", lalu Simpan.
     const option = tree.root
       .findAllByType(require('react-native').TouchableOpacity)
       .find(t =>
         t
           .findAllByType(require('react-native').Text)
-          .some(n => collectText(n.props.children) === 'Kaleng hilang'),
+          .some(n => collectText(n.props.children) === 'Lainnya'),
       );
     expect(option).toBeDefined();
 
@@ -178,7 +184,7 @@ describe('TaskDetailScreen — detail penjemputan dari kartu tugas', () => {
       simpan?.props?.onPress?.();
     });
 
-    expect(skipSpy).toHaveBeenCalledWith('task-1', 'CAN_LOST', '');
+    expect(skipSpy).toHaveBeenCalledWith('task-1', 'OTHER', '');
     expect(fetchSpy).toHaveBeenCalledWith('ACTIVE');
     expect(mockGoBack).toHaveBeenCalled();
   });
@@ -232,7 +238,7 @@ describe('TaskDetailScreen — detail penjemputan dari kartu tugas', () => {
       .find(t =>
         t
           .findAllByType(require('react-native').Text)
-          .some(n => collectText(n.props.children) === 'Kaleng rusak'),
+          .some(n => collectText(n.props.children) === 'Lainnya'),
       );
     await act(async () => {
       option?.props?.onPress?.();

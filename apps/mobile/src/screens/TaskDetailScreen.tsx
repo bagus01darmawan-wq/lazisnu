@@ -7,6 +7,7 @@ import {AppButton, AppHeader, SkipReasonSheet} from '../components/ui';
 import type {SkipReasonCode} from '../components/ui';
 import {useTasksStore} from '../stores';
 import {collectionService, tasksService} from '../services/api';
+import {CanCondition, CanVisitOutcome, AssignmentStatus} from '@lazisnu/shared-types';
 import type {ProposalStatusResponse} from '@lazisnu/shared-types';
 import {KalengInfoCard} from './scan';
 import {Colors, Radius, Spacing, Typography} from '../theme';
@@ -32,8 +33,16 @@ const TaskDetailScreen: React.FC = () => {
 
   // Status usulan kondisi terbaru untuk tugas ini (on-demand, gagal senyap —
   // banner hanya pelengkap, bukan penghalang alur utama).
+  // B2: untuk visit-task (kaleng NON_AKTIF), task.id MUNGKIN id sintetis
+  // "visit-<can_id>" bila backend belum menyediakan assignment_id. Jangan
+  // kirim id sintetis ke endpoint assignment — itu UUID di DB (invalid input
+  // → crash). Hanya panggil bila id ini assignment asli.
+  const isVisitTaskWithoutAssignment = !!(task.is_visit_task && task.id.startsWith('visit-'));
   useEffect(() => {
     let cancelled = false;
+    if (isVisitTaskWithoutAssignment) {
+      return;
+    }
     tasksService
       .getProposalStatus(task.id)
       .then(res => {
@@ -45,47 +54,49 @@ const TaskDetailScreen: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [task.id]);
+  }, [task.id, isVisitTaskWithoutAssignment]);
 
   const handleSkip = () => {
     setSkipSheetVisible(true);
   };
 
-  // Kunjungan non-penjemputan (Fase 3): verifikasi kaleng non-aktif atau
-  // penggantian unit rusak/hilang. Bukan collection — tanpa nominal dan
-  // tidak mengubah angka infak.
-  const submitVisit = async (purpose: 'VERIFIKASI' | 'PENGGANTIAN') => {
+  // Tindakan NON_AKTIF dipisahkan dari submit ordinary. ISI tetap diarahkan
+  // ke CollectionScreen agar nominal dan kondisi fisik berada dalam satu transaksi.
+  const visitAlreadyCollectedThisPeriod = !!(
+    task.is_visit_task &&
+    task.assignment_status &&
+    task.assignment_status !== AssignmentStatus.ACTIVE
+  );
+
+  const submitVisitOutcome = async (outcome: Exclude<CanVisitOutcome, 'ISI'>) => {
     setVisiting(true);
     try {
-      const res = await collectionService.recordCanVisit(task.can_id, purpose);
-      if (res.success && res.data) {
-        Alert.alert(
-          'Kunjungan Tercatat',
-          `Kondisi kaleng: ${res.data.condition}. Angka infak tidak berubah.`,
-        );
-      } else {
-        Alert.alert('Gagal Mencatat', res.error?.message || 'Gagal mencatat kunjungan. Coba lagi.');
+      const res = await collectionService.recordCanVisit(task.can_id, outcome);
+      if (!res.success) {
+        Alert.alert('Gagal Mencatat', res.error?.message || 'Gagal menyimpan tindakan kaleng.');
+        return;
       }
-    } catch (e) {
+      const message = res.data?.message || 'Tindakan kaleng tersimpan.';
+      Alert.alert('Tindakan Tercatat', message, [{text: 'OK', onPress: () => navigation.goBack()}]);
+    } catch (error) {
       Alert.alert(
         'Gagal Mencatat',
-        e instanceof Error ? e.message : 'Gagal mencatat kunjungan. Coba lagi.',
+        error instanceof Error ? error.message : 'Gagal menyimpan tindakan kaleng.',
       );
     } finally {
       setVisiting(false);
     }
   };
 
-  const handleVisit = () => {
-    Alert.alert(
-      'Catat Kunjungan',
-      'Kunjungan bukan penjemputan: tidak ada nominal dan tidak mengubah angka infak.',
-      [
-        {text: 'Batal', style: 'cancel'},
-        {text: 'Verifikasi', onPress: () => void submitVisit('VERIFIKASI')},
-        {text: 'Penggantian', onPress: () => void submitVisit('PENGGANTIAN')},
-      ],
-    );
+  const handleFilled = () => {
+    if (visitAlreadyCollectedThisPeriod) {
+      Alert.alert(
+        'Sudah Dijemput Periode Ini',
+        'Kaleng ini sudah dijemput pada periode berjalan. Hubungi admin bila nominalnya perlu dikoreksi.',
+      );
+      return;
+    }
+    navigation.navigate('Collection', {task});
   };
 
   const handleSkipConfirm = async (reasonCode: SkipReasonCode, notes: string) => {
@@ -149,22 +160,56 @@ const TaskDetailScreen: React.FC = () => {
           </View>
         ) : null}
 
-        <View style={styles.actions}>
-          <AppButton label="Tidak Dijemput" variant="outline" onPress={handleSkip} fullWidth />
-          <AppButton
-            label={visiting ? 'Mencatat…' : 'Catat Kunjungan'}
-            variant="outline"
-            onPress={handleVisit}
-            fullWidth
-            disabled={visiting}
-          />
-          <AppButton
-            label="Lanjutkan"
-            icon="arrow-right"
-            onPress={() => navigation.navigate('Collection', {task})}
-            fullWidth
-          />
-        </View>
+        {/** B2: kaleng NON_AKTIF — perlakuan berbeda: kunjungan + pencabutan. */}
+        {task.condition === CanCondition.NON_AKTIF ? (
+          <View style={styles.proposalBox}>
+            <Text style={styles.proposalTitle}>Kaleng Nonaktif</Text>
+            <Text style={styles.proposalText}>
+              Kaleng ini sudah 6x kosong berturut-turut. Bukan tugas penjemputan biasa — cabut
+              kalengnya untuk dikembalikan ke kantor, atau catat jika kaleng ternyata berisi.
+            </Text>
+          </View>
+        ) : null}
+
+        {task.condition === CanCondition.NON_AKTIF ? (
+          <View style={styles.actions}>
+            <AppButton label="Kaleng Isi" icon="cash-multiple" onPress={handleFilled} fullWidth />
+            <AppButton
+              label="Kaleng Kosong"
+              icon="bottle-soda-outline"
+              variant="outline"
+              onPress={() => void submitVisitOutcome('KOSONG')}
+              fullWidth
+              disabled={visiting}
+            />
+            <AppButton
+              label="Kaleng Dikembalikan"
+              icon="package-down"
+              variant="outline"
+              onPress={() => void submitVisitOutcome('DIKEMBALIKAN')}
+              fullWidth
+              disabled={visiting}
+            />
+            <AppButton
+              label="Tidak Dikunjungi"
+              icon="map-marker-off-outline"
+              variant="outline"
+              onPress={() => void submitVisitOutcome('TIDAK_DIKUNJUNGI')}
+              fullWidth
+              disabled={visiting}
+            />
+          </View>
+        ) : (
+          <View style={styles.actions}>
+            <AppButton label="Tidak Dijemput" variant="outline" onPress={handleSkip} fullWidth />
+            <AppButton
+              label="Lanjutkan"
+              icon="arrow-right"
+              onPress={() => navigation.navigate('Collection', {task})}
+              fullWidth
+            />
+          </View>
+        )}
       </View>
 
       <SkipReasonSheet

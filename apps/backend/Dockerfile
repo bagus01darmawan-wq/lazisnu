@@ -28,6 +28,7 @@ COPY apps/backend/package.json apps/backend/
 COPY packages/shared-types/package.json packages/shared-types/
 COPY --from=build /app/packages/shared-types/dist packages/shared-types/dist
 COPY --from=build /app/apps/backend/dist apps/backend/dist
+COPY --from=build /app/apps/backend/src/assets apps/backend/dist/assets
 COPY --from=build /app/apps/backend/src/database/migrations apps/backend/src/database/migrations
 COPY --from=build /app/apps/backend/drizzle.config.ts apps/backend/
 

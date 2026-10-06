@@ -13,11 +13,14 @@ import { JWTPayload } from '../middleware/auth';
  * @returns A Drizzle expression, or undefined if no specific scope
  */
 export async function getRoleScope(user: JWTPayload, tableAlias: any) {
-  if (user.role === 'ADMIN_RANTING' && user.branchId) {
+  // C1-T0 (§14.13/B-5): Staf Pengumpulan scope branchId (1/ranting) membaca rantingnya
+  // seperti Admin Ranting; Staf Keuangan mengikuti scope pemiliknya (branch/district).
+  // Ini scope BACA — izin FINAL/kunci tetap ditolak di routes (T4-T6).
+  if ((user.role === 'ADMIN_RANTING' || (user.role === 'STAF_PENGUMPULAN' && user.branchId) || (user.role === 'STAF_KEUANGAN' && user.branchId)) && user.branchId) {
     if (tableAlias.branchId) {
       return eq(tableAlias.branchId, user.branchId);
     }
-  } else if (user.role === 'ADMIN_KECAMATAN' && user.districtId) {
+  } else if ((user.role === 'ADMIN_KECAMATAN' || (user.role === 'STAF_PENGUMPULAN' && user.districtId) || (user.role === 'STAF_KEUANGAN' && user.districtId)) && user.districtId) {
     if (tableAlias.districtId) {
       return eq(tableAlias.districtId, user.districtId);
     } else if (tableAlias.branchId) {

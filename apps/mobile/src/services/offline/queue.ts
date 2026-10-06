@@ -1,5 +1,6 @@
 import 'react-native-get-random-values';
 import {getOfflineStorage} from './mmkv';
+import {CanCondition} from '@lazisnu/shared-types';
 
 /**
  * Menghasilkan ID unik transaksi offline menggunakan generator acak kriptografis.
@@ -49,6 +50,10 @@ export interface QueuedCollection {
   collected_at: string;
   latitude?: number;
   longitude?: number;
+  /** Kondisi kaleng menurut PPK (halaman submit) — ikut tersinkron. */
+  condition: CanCondition.AKTIF | CanCondition.RUSAK | CanCondition.HILANG;
+  /** ISI menandai jalur kunjungan NON_AKTIF, bukan submit ordinary. */
+  visit_outcome?: 'ISI';
   device_info?: object;
   submit_sequence?: number;
   is_latest?: boolean;
@@ -59,14 +64,26 @@ export interface QueuedCollection {
   next_retry_at?: string; // Waktu earliest retry untuk exponential backoff
 }
 
-type LegacyQueuedCollection = QueuedCollection & {
+type LegacyQueuedCollection = Omit<QueuedCollection, 'condition'> & {
+  condition?: string;
   payment_method?: unknown;
   transfer_receipt_url?: unknown;
 };
 
 function sanitizeQueue(items: LegacyQueuedCollection[]): QueuedCollection[] {
   return items.map(
-    ({payment_method: _paymentMethod, transfer_receipt_url: _transferReceiptUrl, ...item}) => item,
+    ({
+      payment_method: _paymentMethod,
+      transfer_receipt_url: _transferReceiptUrl,
+      condition,
+      ...item
+    }) => ({
+      ...item,
+      condition:
+        condition === CanCondition.RUSAK || condition === CanCondition.HILANG
+          ? (condition as CanCondition.RUSAK | CanCondition.HILANG)
+          : CanCondition.AKTIF,
+    }),
   );
 }
 
@@ -135,6 +152,28 @@ export const offlineQueue = {
       return false;
     }
     item.nominal = newNominal;
+    getOfflineStorage().set(getQueueKey(), JSON.stringify(queue));
+    notifyQueueChanged();
+    return true;
+  },
+
+  /**
+   * B2: lengkapi assignment_id item yang masih sintetis ("visit-<can_id>")
+   * dengan assignment_id asli. Visit-task (kaleng NON_AKTIF) bisa dibuat saat
+   * offline; assignment aslinya baru didapat saat online. Mengembalikan true
+   * bila item ditemukan dan diperbarui.
+   */
+  patchAssignmentId: (offline_id: string, assignmentId: string): boolean => {
+    if (!assignmentId || assignmentId.startsWith('visit-')) {
+      return false;
+    }
+    const queue = offlineQueue.getQueue();
+    const idx = queue.findIndex(item => item.offline_id === offline_id);
+    const item = queue[idx];
+    if (idx === -1 || !item) {
+      return false;
+    }
+    item.assignment_id = assignmentId;
     getOfflineStorage().set(getQueueKey(), JSON.stringify(queue));
     notifyQueueChanged();
     return true;
@@ -258,6 +297,7 @@ export const offlineQueue = {
             collected_at: item.collected_at,
             latitude: item.latitude,
             longitude: item.longitude,
+            condition: item.condition,
             device_info: item.device_info,
             submit_sequence: item.submit_sequence,
             is_latest: item.is_latest,

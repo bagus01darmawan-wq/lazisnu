@@ -11,14 +11,13 @@
  */
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { and, eq, gte, lt, inArray, sql, desc } from 'drizzle-orm';
+import { and, eq, gte, lt, inArray, or, sql } from 'drizzle-orm';
 import { getLatestCollectionCondition } from './collectionSubmission';
 import { computeTaskMetrics } from './taskMetrics';
 import {
   ACTION_REQUIRED_CONDITIONS,
   ASSIGNABLE_CONDITIONS,
   PLACEMENT_CONDITIONS,
-  actionLabel,
 } from './conditionRules';
 import type { CanConditionValue } from './conditionRules';
 import { OPERATIONAL_TIMEZONE } from '../utils/operationalTimeZone';
@@ -33,12 +32,88 @@ export interface OverviewScopeInput {
 export interface OverviewPeriodInput {
   year: number;
   month: number;
+  /**
+   * Bulan-bulan terpilih (filter PeriodPicker multi-bulan). Kosong/tidak ada =
+   * hanya `month` (perilaku lama, kompatibel dengan pemanggil & test lama).
+   */
+  months?: number[];
 }
 
-/** Jumlah bulan yang dikembalikan pada tren operasional. */
-export const TREND_MONTHS = 6;
-/** Batas default daftar "perlu tindakan" pada overview. */
-export const ACTION_ITEM_LIMIT = 10;
+/** Bulan efektif: normalisasi months bila ada, jika tidak [month]. */
+export function effectiveMonths(period: OverviewPeriodInput): number[] {
+  const clean = normalizePeriodMonths(period.months);
+  if (clean.length > 0) return clean;
+  return Number.isInteger(period.month) && period.month >= 1 && period.month <= 12
+    ? [period.month]
+    : [];
+}
+
+/**
+ * Parse query periode overview (`?year=2026&months=7,8,9`).
+ * Null = 400 VALIDATION_ERROR. Tanpa param = bulan berjalan (perilaku lama,
+ * kompatibel dengan pemanggil yang belum mengirim periode).
+ */
+export function parseOverviewPeriod(yearRaw: unknown, monthsRaw: unknown): OverviewPeriodInput | null {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  let year = currentYear;
+  if (yearRaw !== undefined && yearRaw !== '') {
+    const y = Number(yearRaw);
+    if (!Number.isInteger(y) || y < 2000 || y > currentYear + 1) return null;
+    year = y;
+  }
+
+  let months: number[] | undefined;
+  if (monthsRaw !== undefined && monthsRaw !== '') {
+    const parsed = String(monthsRaw).split(',').map((s) => Number(s.trim()));
+    if (parsed.length === 0 || parsed.length > 12) return null;
+    if (parsed.some((m) => !Number.isInteger(m) || m < 1 || m > 12)) return null;
+    months = [...new Set(parsed)].sort((a, b) => a - b);
+  }
+
+  const eff = months ?? [now.getMonth() + 1];
+  return { year, month: Math.max(...eff), months: eff };
+}
+
+/** Normalisasi input periode: buang di luar 1-12, unik, terurut. */
+export function normalizePeriodMonths(months: unknown): number[] {
+  const list = Array.isArray(months) ? months : [];
+  const clean = list
+    .map((m) => Number(m))
+    .filter((m) => Number.isInteger(m) && m >= 1 && m <= 12);
+  return [...new Set(clean)].sort((a, b) => a - b);
+}
+
+/** Rentang [start, end) untuk tiap bulan terpilih (diskrit, bukan min-max). */
+export function periodRanges(year: number, months: number[]): Array<{ start: Date; end: Date }> {
+  const list = months.length > 0 ? months : Array.from({ length: 12 }, (_, i) => i + 1);
+  return list.map((m) => ({
+    start: new Date(year, m - 1, 1),
+    end: new Date(year, m, 1),
+  }));
+}
+
+/** Kondisi tanggal-masuk-periode untuk kolom timestamp (collections.collectedAt, cans.updatedAt). */
+export function inSelectedMonths(column: Parameters<typeof gte>[0], year: number, months: number[]) {
+  const ranges = periodRanges(year, months);
+  if (ranges.length === 1) {
+    return and(gte(column, ranges[0].start), lt(column, ranges[0].end));
+  }
+  return or(...ranges.map(({ start, end }) => and(gte(column, start), lt(column, end))));
+}
+
+/** Kondisi periode untuk assignments (kolom periodYear/periodMonth diskrit). */
+export function inAssignmentPeriod(year: number, months: number[]) {
+  const list = months.length > 0 ? months : Array.from({ length: 12 }, (_, i) => i + 1);
+  return and(
+    eq(schema.assignments.periodYear, year),
+    list.length === 1 ? eq(schema.assignments.periodMonth, list[0]) : inArray(schema.assignments.periodMonth, list),
+  );
+}
+
+/** Jumlah bucket tren: selalu 12 (Januari–Desember). */
+export const TREND_MONTHS = 12;
 
 function sqlConditionList(conditions: CanConditionValue[]) {
   return sql`(${sql.join(conditions.map((c) => sql`${c}`), sql`, `)})`;
@@ -128,7 +203,7 @@ export async function getOfficerCount(scope: OverviewScopeInput) {
 
 /** Nominal & jumlah penjemputan berhasil pada periode (versi submit terbaru saja). */
 export async function getCollectionSummary(scope: OverviewScopeInput, period: OverviewPeriodInput) {
-  const { start, end } = monthBounds(period);
+  const months = effectiveMonths(period);
 
   const [row] = await db
     .select({
@@ -141,8 +216,7 @@ export async function getCollectionSummary(scope: OverviewScopeInput, period: Ov
       scopeCondition(scope),
       eq(schema.collections.syncStatus, 'COMPLETED'),
       getLatestCollectionCondition(),
-      gte(schema.collections.collectedAt, start),
-      lt(schema.collections.collectedAt, end),
+      inSelectedMonths(schema.collections.collectedAt, period.year, months),
     ));
 
   return {
@@ -159,11 +233,11 @@ export async function getCollectionSummary(scope: OverviewScopeInput, period: Ov
  * usulan) menulis `updated_at` pada saat transisi terjadi.
  */
 export async function getReturnedCounts(scope: OverviewScopeInput, period: OverviewPeriodInput) {
-  const { start, end } = monthBounds(period);
+  const months = effectiveMonths(period);
 
   // Dua query terpisah, bukan satu `count(*) filter (...)`:
   //  - total: seluruh kaleng DIKEMBALIKAN (tanpa batas waktu)
-  //  - thisMonth: hanya yang updated_at di bulan periode
+  //  - thisMonth: yang updated_at masuk bulan-bulan periode terpilih
   //
   // Filter tanggal HARUS memakai operator Drizzle (gte/lt) agar di-bind
   // sebagai parameter. Interpolasi `${start}` mentah di template sql`...`
@@ -181,8 +255,7 @@ export async function getReturnedCounts(scope: OverviewScopeInput, period: Overv
       .where(and(
         scopeCondition(scope),
         eq(schema.cans.condition, 'DIKEMBALIKAN'),
-        gte(schema.cans.updatedAt, start),
-        lt(schema.cans.updatedAt, end),
+        inSelectedMonths(schema.cans.updatedAt, period.year, months),
       )),
   ]);
 
@@ -223,8 +296,7 @@ export async function getTaskSummary(
     .innerJoin(schema.cans, eq(schema.assignments.canId, schema.cans.id))
     .where(and(
       scopeCondition(scope),
-      eq(schema.assignments.periodYear, period.year),
-      eq(schema.assignments.periodMonth, period.month),
+      inAssignmentPeriod(period.year, effectiveMonths(period)),
     ))
     .groupBy(schema.assignments.status);
 
@@ -253,19 +325,18 @@ export async function getAssignableCanCount(scope: OverviewScopeInput) {
 }
 
 /**
- * Tren operasional N bulan terakhir (termasuk bulan periode).
+ * Tren operasional Januari–Desember tahun periode (12 bucket tetap,
+ * mendukung laporan tengah semester Juni & akhir tahun Desember).
  * Dua query agregat: penjemputan (isi/kosong/nominal) dan siklus tugas
  * (ditutup/total/tidak terjemput) — keduanya dipisah karena definisinya berbeda.
  */
 export async function getMonthlyOperationalTrend(
   scope: OverviewScopeInput,
   period: OverviewPeriodInput,
-  months: number = TREND_MONTHS,
 ) {
   const buckets: Array<{ year: number; month: number; key: string }> = [];
-  for (let i = months - 1; i >= 0; i -= 1) {
-    const d = new Date(period.year, period.month - 1 - i, 1);
-    buckets.push({ year: d.getFullYear(), month: d.getMonth() + 1, key: monthKey(d.getFullYear(), d.getMonth() + 1) });
+  for (let m = 1; m <= 12; m += 1) {
+    buckets.push({ year: period.year, month: m, key: monthKey(period.year, m) });
   }
 
   const first = buckets[0];
@@ -322,82 +393,6 @@ export async function getMonthlyOperationalTrend(
 }
 
 /**
- * Daftar "perlu tindakan": NON_AKTIF + RUSAK + HILANG yang masih dilacak.
- * Terbatas dan berurutan deterministik (HILANG → RUSAK → NON_AKTIF, lalu kasus terlama).
- * Alasan & waktu kasus diambil dari usulan pending/approved bila ada.
- */
-export async function getActionItems(
-  scope: OverviewScopeInput,
-  limit: number = ACTION_ITEM_LIMIT,
-) {
-  const rows = await db
-    .select({
-      can_id: schema.cans.id,
-      owner_name: schema.cans.ownerName,
-      branch_id: schema.cans.branchId,
-      branch_name: schema.branches.name,
-      condition: schema.cans.condition,
-      changed_at: schema.cans.updatedAt,
-    })
-    .from(schema.cans)
-    .innerJoin(schema.branches, eq(schema.cans.branchId, schema.branches.id))
-    .where(and(
-      scopeCondition(scope),
-      eq(schema.cans.isActive, true),
-      inArray(schema.cans.condition, ACTION_REQUIRED_CONDITIONS),
-    ))
-    .orderBy(
-      sql`case ${schema.cans.condition} when 'HILANG' then 0 when 'RUSAK' then 1 else 2 end`,
-      sql`${schema.cans.updatedAt} asc`,
-      sql`${schema.cans.id} asc`,
-    )
-    .limit(limit);
-
-  if (rows.length === 0) return [];
-
-  const canIds = rows.map((r) => r.can_id);
-  const proposals = await db
-    .select({
-      id: schema.canConditionProposals.id,
-      canId: schema.canConditionProposals.canId,
-      status: schema.canConditionProposals.status,
-      reasonCode: schema.canConditionProposals.reasonCode,
-      approvedAt: schema.canConditionProposals.approvedAt,
-      createdAt: schema.canConditionProposals.createdAt,
-    })
-    .from(schema.canConditionProposals)
-    .where(and(
-      inArray(schema.canConditionProposals.canId, canIds),
-      inArray(schema.canConditionProposals.status, ['PENDING', 'APPROVED']),
-    ))
-    .orderBy(desc(schema.canConditionProposals.createdAt));
-
-  const pendingByCan = new Map<string, (typeof proposals)[number]>();
-  const approvedByCan = new Map<string, (typeof proposals)[number]>();
-  for (const p of proposals) {
-    if (p.status === 'PENDING' && !pendingByCan.has(p.canId)) pendingByCan.set(p.canId, p);
-    if (p.status === 'APPROVED' && !approvedByCan.has(p.canId)) approvedByCan.set(p.canId, p);
-  }
-
-  return rows.map((r) => {
-    const pending = pendingByCan.get(r.can_id);
-    const approved = approvedByCan.get(r.can_id);
-    const since = approved?.approvedAt ?? r.changed_at;
-    return {
-      can_id: r.can_id,
-      owner_name: r.owner_name,
-      branch_id: r.branch_id,
-      branch_name: r.branch_name ?? '',
-      condition: r.condition,
-      proposal_id: pending?.id,
-      reason_code: pending?.reasonCode ?? approved?.reasonCode,
-      since: since instanceof Date ? since.toISOString() : String(since),
-      action_label: actionLabel(r.condition),
-    };
-  });
-}
-
-/**
  * Perbandingan per ranting untuk admin kecamatan.
  * Scope & pengelompokan memakai `cans.branch_id`, bukan `officer.branch_id`
  * (memperbaiki bug lama di routes/admin/district.ts).
@@ -406,7 +401,7 @@ export async function getBranchComparison(
   districtId: string,
   period: OverviewPeriodInput,
 ) {
-  const { start, end } = monthBounds(period);
+  const months = effectiveMonths(period);
 
   const [branchList, coverageRows, taskRows, collectionRows] = await Promise.all([
     db.select({ id: schema.branches.id, name: schema.branches.name })
@@ -435,14 +430,14 @@ export async function getBranchComparison(
       .innerJoin(schema.branches, eq(schema.cans.branchId, schema.branches.id))
       .where(and(
         eq(schema.branches.districtId, districtId),
-        eq(schema.assignments.periodYear, period.year),
-        eq(schema.assignments.periodMonth, period.month),
+        inAssignmentPeriod(period.year, months),
       ))
       .groupBy(schema.cans.branchId),
 
     db.select({
       branchId: schema.cans.branchId,
       nominal: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
+      filled: sql<number>`count(*) filter (where ${schema.collections.nominal} > 0)::int`,
     })
       .from(schema.collections)
       .innerJoin(schema.cans, eq(schema.collections.canId, schema.cans.id))
@@ -451,8 +446,7 @@ export async function getBranchComparison(
         eq(schema.branches.districtId, districtId),
         eq(schema.collections.syncStatus, 'COMPLETED'),
         getLatestCollectionCondition(),
-        gte(schema.collections.collectedAt, start),
-        lt(schema.collections.collectedAt, end),
+        inSelectedMonths(schema.collections.collectedAt, period.year, months),
       ))
       .groupBy(schema.cans.branchId),
   ]);
@@ -470,6 +464,7 @@ export async function getBranchComparison(
       task_closed: Number(task?.closed ?? 0),
       task_total: Number(task?.total ?? 0),
       collection_nominal: Number(collection?.nominal ?? 0),
+      collection_filled: Number(collection?.filled ?? 0),
     };
   });
 }
@@ -478,8 +473,6 @@ export interface GetOverviewOptions {
   /** 'branch' bila admin ranting atau admin kecamatan menyaring satu ranting. */
   scopeType?: 'branch' | 'district';
   branchName?: string;
-  actionItemLimit?: number;
-  trendMonths?: number;
   /** Perbandingan ranting hanya bermakna untuk agregat kecamatan. */
   includeBranchComparison?: boolean;
 }
@@ -502,9 +495,18 @@ export async function getOverview(
     getTaskSummary(scope, period),
   ]);
 
-  const [actionItems, trend, comparison] = await Promise.all([
-    getActionItems(scope, options.actionItemLimit ?? ACTION_ITEM_LIMIT),
-    getMonthlyOperationalTrend(scope, period, options.trendMonths ?? TREND_MONTHS),
+  // Arus produktivitas (dipakai section Kondisi + Produktivitas). Diambil
+  // terpisah dari productivityService agar fungsi agregasi inti tetap ramping.
+  const { getCollectionOutcome, getNewCansCount, getReactivatedCount, getWithdrawnCount } = await import('./productivityService.js');
+  const [reactivated, newCans, withdrawn, outcome] = await Promise.all([
+    getReactivatedCount(scope, period.year, effectiveMonths(period)),
+    getNewCansCount(scope, period.year, effectiveMonths(period)),
+    getWithdrawnCount(scope, period.year, effectiveMonths(period)),
+    getCollectionOutcome(scope, period.year, effectiveMonths(period)),
+  ]);
+
+  const [trend, comparison] = await Promise.all([
+    getMonthlyOperationalTrend(scope, period),
     options.includeBranchComparison
       ? getBranchComparison(scope.districtId, period)
       : Promise.resolve(undefined),
@@ -512,6 +514,13 @@ export async function getOverview(
 
   const countOf = (condition: CanConditionValue) =>
     Number(breakdown.find((b) => b.condition === condition)?.count ?? 0);
+
+  // `month` = bulan terpilih paling akhir (kompatibel pemanggil lama);
+  // `months` = seluruh bulan terpilih untuk label rentang.
+  const selectedMonths = effectiveMonths(period);
+  const latestMonth = selectedMonths.length > 0
+    ? Math.max(...selectedMonths)
+    : period.month;
 
   return {
     scope: {
@@ -522,7 +531,8 @@ export async function getOverview(
     },
     period: {
       year: period.year,
-      month: period.month,
+      month: latestMonth,
+      months: selectedMonths,
       timezone: OPERATIONAL_TIMEZONE,
       generated_at: new Date().toISOString(),
     },
@@ -539,6 +549,11 @@ export async function getOverview(
       total_officers: officers,
       collection_nominal: collections.nominal,
       successful_collections: collections.successful_collections,
+      // Arus periode (section Produktivitas + Kondisi): reaktivasi dihitung
+      // dari proposal APPROVED → AKTIF (batasan: jalur cepat tak tercakup).
+      reactivated: reactivated,
+      new_cans: newCans,
+      withdrawn: withdrawn,
       task_active: tasks.task_active,
       task_closed: tasks.task_closed,
       task_completed: tasks.task_completed,
@@ -546,8 +561,16 @@ export async function getOverview(
       task_total: tasks.task_total,
     },
     condition_breakdown: breakdown,
-    action_items: actionItems,
     monthly_trend: trend,
+    // Total hasil kunjungan periode terpilih (eksak, tak tergantung jendela
+    // 6 bulan tren): donat produktivitas menutup genap total ditugaskan.
+    productivity: {
+      task_total: tasks.task_total,
+      filled: Math.max(0, outcome.collected - outcome.empty),
+      empty: outcome.empty,
+      uncollected: tasks.task_uncollected,
+      active: Math.max(0, tasks.task_total - tasks.task_closed),
+    },
     ...(comparison ? { branch_comparison: comparison } : {}),
   };
 }

@@ -5,7 +5,8 @@
  * Semua angka berasal dari server (OverviewResponse). TIDAK ada perhitungan definisi
  * metrik di sini: yang boleh hanya pemformatan.
  */
-import type { CanCondition, OverviewMonthlyTrendItem, OverviewSummary } from '@lazisnu/shared-types';
+import type { CanCondition } from '@lazisnu/shared-types';
+import type { OverviewMonthlyTrendItemView, OverviewSummaryView } from './overviewView';
 
 export const MONTH_NAMES_ID = [
   'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -37,9 +38,35 @@ export function formatRupiah(value: number): string {
   return `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
 }
 
+/** Pecah 'Rp' dan angka agar ukurannya bisa berbeda (judul hero). */
+export function splitRupiah(value: number): { currency: string; amount: string } {
+  return { currency: 'Rp', amount: Number(value || 0).toLocaleString('id-ID') };
+}
+
 export function formatPeriod(year: number, month: number): string {
   const name = MONTH_NAMES_ID[month - 1] ?? String(month);
   return `${name} ${year}`;
+}
+
+/**
+ * Label rentang multi-bulan: 'September 2026' (1 bulan),
+ * 'Juli–September 2026' (kontigu), '3 bulan pilihan 2026' (tersebar).
+ */
+export function formatPeriodRange(year: number, months: number[]): string {
+  const clean = [...new Set(months.filter((m) => Number.isInteger(m) && m >= 1 && m <= 12))].sort((a, b) => a - b);
+  if (clean.length === 0) return `Tahun ${year}`;
+  if (clean.length === 1) return formatPeriod(year, clean[0]);
+  const contiguous = clean.every((m, i) => i === 0 || m === clean[i - 1] + 1);
+  if (contiguous) {
+    return `${MONTH_NAMES_ID[clean[0] - 1]}–${MONTH_NAMES_ID[clean[clean.length - 1] - 1]} ${year}`;
+  }
+  return `${clean.length} bulan pilihan ${year}`;
+}
+
+/** Rata-rata isi per kaleng (tampilan): nominal / jumlah dijemput, Rp0 bila nol. */
+export function formatAveragePerCan(nominal: number, collected: number): string {
+  if (!collected) return 'Rp 0';
+  return formatRupiah(Math.round(Number(nominal || 0) / collected));
 }
 
 /** '2026-05' → 'Mei 2026' */
@@ -69,26 +96,26 @@ export function formatCaseAge(since: string, now: Date = new Date()): string {
 }
 
 /** Ringkasan tugas: '12 dari 40 tugas sudah ditutup'. */
-export function taskProgressLabel(summary: OverviewSummary): string {
-  return `${summary.task_closed} dari ${summary.task_total} tugas sudah ditutup`;
+export function taskProgressLabel(summary: OverviewSummaryView): string {
+  return `${summary.taskClosed} dari ${summary.taskTotal} tugas sudah ditutup`;
 }
 
 /** Kalimat pendukung kartu tugas — memakai bahasa manusia, bukan nama field. */
-export function taskSupportLabel(summary: OverviewSummary): string {
+export function taskSupportLabel(summary: OverviewSummaryView): string {
   const parts: string[] = [];
-  if (summary.task_active > 0) parts.push(`${summary.task_active} tugas belum ditutup`);
-  if (summary.task_uncollected > 0) parts.push(`${summary.task_uncollected} ditutup tanpa penjemputan`);
+  if (summary.taskActive > 0) parts.push(`${summary.taskActive} tugas belum ditutup`);
+  if (summary.taskUncollected > 0) parts.push(`${summary.taskUncollected} ditutup tanpa penjemputan`);
   return parts.length > 0 ? parts.join(' • ') : 'Tidak ada tugas pada periode ini';
 }
 
 /** Persentase penutupan tugas, dibulatkan; 0 bila tidak ada tugas. */
-export function taskClosedRate(summary: OverviewSummary): number {
-  if (!summary.task_total) return 0;
-  return Math.round((summary.task_closed / summary.task_total) * 100);
+export function taskClosedRate(summary: OverviewSummaryView): number {
+  if (!summary.taskTotal) return 0;
+  return Math.round((summary.taskClosed / summary.taskTotal) * 100);
 }
 
 /** Total penjemputan pada tren (isi + kosong) untuk label seri. */
-export function trendTotals(trend: OverviewMonthlyTrendItem[]) {
+export function trendTotals(trend: OverviewMonthlyTrendItemView[]) {
   return trend.reduce(
     (acc, item) => ({
       collected: acc.collected + item.collected,

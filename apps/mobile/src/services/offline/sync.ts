@@ -13,6 +13,8 @@ function toBatchPayload(item: QueuedCollection): BatchCollectionRequestItem {
     collected_at: item.collected_at,
     latitude: item.latitude,
     longitude: item.longitude,
+    condition: item.condition,
+    visit_outcome: item.visit_outcome,
     device_info: item.device_info as DeviceInfo | undefined,
   };
 }
@@ -171,7 +173,63 @@ export const syncService = {
       }
 
       try {
-        const payload = remaining.map(toBatchPayload);
+        // B2: item dari visit-task (kaleng NON_AKTIF) mungkin masih membawa
+        // assignment_id sintetis "visit-<can_id>" bila dibuat saat offline.
+        // Sebelum mengirim batch, lengkapi assignment_id asli on-demand.
+        // Tiga kemungkinan, dibedakan supaya antrean tidak menggantung:
+        //  - berhasil  → kirim dengan UUID asli;
+        //  - offline   → tahan (coba lagi nanti, jangan dikirim → pasti 400);
+        //  - ditolak   → gagal permanen (mis. periode ini sudah dijemput),
+        //                biar tidak jadi item zombi yang menunggu selamanya.
+        const ready: QueuedCollection[] = [];
+        const held: QueuedCollection[] = [];
+        const permanentlyRejected: QueuedCollection[] = [];
+        for (const item of remaining) {
+          if (!item.assignment_id.startsWith('visit-')) {
+            ready.push(item);
+            continue;
+          }
+
+          const res = await collectionService.ensureAssignment(item.can_id);
+          if (res.success && res.data?.assignment_id) {
+            offlineQueue.patchAssignmentId(item.offline_id, res.data.assignment_id);
+            ready.push({...item, assignment_id: res.data.assignment_id});
+            continue;
+          }
+
+          const code = res.error?.code;
+          const networkish = !code || code === 'NETWORK_ERROR' || code === 'SESSION_EXPIRED';
+          if (networkish) {
+            held.push(item);
+          } else {
+            permanentlyRejected.push({
+              ...item,
+              error_type: 'VALIDATION',
+              can_retry: false,
+              error_message: res.error?.message || 'Assignment kaleng tidak bisa disiapkan.',
+            });
+          }
+        }
+
+        if (permanentlyRejected.length > 0) {
+          offlineQueue.moveToFailedPermanent(permanentlyRejected);
+          totalFailed += permanentlyRejected.length;
+          devLog(
+            `[Sync] ${permanentlyRejected.length} item ditolak permanen (assignment tidak tersedia).`,
+          );
+        }
+
+        if (ready.length === 0) {
+          devLog(`[Sync] ${held.length} item ditahan (assignment_id belum tersedia).`);
+          return {
+            success: held.length === 0,
+            synced: totalSynced,
+            failed: totalFailed,
+            remaining: offlineQueue.getQueueCount(),
+          };
+        }
+
+        const payload = ready.map(toBatchPayload);
         const response = await collectionService.batchSubmit(payload);
 
         if (response.success && response.data) {

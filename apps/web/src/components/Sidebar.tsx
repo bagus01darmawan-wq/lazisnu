@@ -23,7 +23,7 @@ const Sidebar = ({ role: initialRole, userName: initialUserName, isMobileOpen = 
 
   // Use store data or fallback to props
   const role = user?.role || initialRole;
-  const userName = user?.full_name || initialUserName;
+  const userName = user?.fullName || initialUserName;
 
   if (!role) {
     return (

@@ -6,8 +6,17 @@ export async function middleware(request: NextRequest) {
   const token = request.cookies.get('lazisnu_token')?.value;
   const isAuthPage = request.nextUrl.pathname.startsWith('/login');
 
-  // 1. Redirect to login if no token and trying to access dashboard
+  // 1. Redirect to login if no token and trying to access dashboard.
+  // Lubang logout-spontan yang ditutup: cookie access (15 mnt) bisa kedaluwarsa
+  // saat tab hidden (session-keeper pause) — tapi refresh cookie (365 hari)
+  // biasanya masih hidup. Jangan redirect membabi-buta; beri kesempatan
+  // pulih via client (session-keeper mount-refresh + interceptor /auth/me).
+  // Backend tetap menegakkan auth+RBAC per request API, jadi shell tanpa
+  // data yang sempat ter-render tidak membocorkan apa pun.
   if (!token && !isAuthPage) {
+    if (request.cookies.get('lazisnu_refresh_token')?.value) {
+      return NextResponse.next();
+    }
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
@@ -61,8 +70,21 @@ export async function middleware(request: NextRequest) {
           userRole !== 'ADMIN_KECAMATAN' && userRole !== 'ADMIN_RANTING') {
         return NextResponse.redirect(new URL('/dashboard/overview', request.url));
       }
+
+      // Laporan Berita Acara — baca saja untuk Ranting & MWC.
+      // Bendahara Ranting menandatangani di aplikasi mobile (tab Keuangan),
+      // jadi role staf tidak perlu halaman ini.
+      if (path.includes('/setoran') &&
+          userRole !== 'ADMIN_KECAMATAN' && userRole !== 'ADMIN_RANTING') {
+        return NextResponse.redirect(new URL('/dashboard/overview', request.url));
+      }
     } catch {
-      // Invalid token or missing JWT_SECRET
+      // Access token expire/invalid — JANGAN langsung logout bila refresh token
+      // masih ada. Client akan memulihkan sesi via POST /api/auth/refresh
+      // (interceptor axios / session-keeper). RBAC tetap ditegakkan backend.
+      if (request.cookies.get('lazisnu_refresh_token')?.value) {
+        return NextResponse.next();
+      }
       const response = NextResponse.redirect(new URL('/login', request.url));
       response.cookies.delete('lazisnu_token');
       return response;
