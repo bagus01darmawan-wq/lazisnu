@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { formatAveragePerCan, splitRupiah } from './format';
+import { splitRupiah } from './format';
 
 interface PerolehanHeroProps {
   /** Total nominal penjemputan pada periode (server, realtime per fetch). */
@@ -20,6 +20,8 @@ interface PerolehanHeroProps {
  */
 export function PerolehanHero({ nominal, collected }: PerolehanHeroProps) {
   const { currency, amount } = splitRupiah(nominal);
+  const avgNominal = collected ? Math.round(Number(nominal || 0) / collected) : 0;
+  const { currency: avgCurrency, amount: avgAmount } = splitRupiah(avgNominal);
 
   return (
     <section aria-labelledby="perolehan-infaq" className="flex flex-col gap-4">
@@ -37,16 +39,17 @@ export function PerolehanHero({ nominal, collected }: PerolehanHeroProps) {
       <div className="border-t border-white/10" aria-hidden="true" />
       <div className="grid grid-cols-2 divide-x divide-white/10" role="list">
         <div className="px-4 text-center" role="listitem">
-          <p className="text-xl font-black tracking-tight text-[#F4F1EA] md:text-2xl">
+          <p className="text-xl font-black tracking-tight text-[#EAD19B] md:text-2xl">
             {Number(collected || 0).toLocaleString('id-ID')}
           </p>
           <p className="mt-0.5 text-xs font-semibold text-[#F4F1EA]/60">
-            Kaleng dijemput
+            Kaleng isi
           </p>
         </div>
         <div className="px-4 text-center" role="listitem">
           <p className="text-xl font-black tracking-tight text-[#EAD19B] md:text-2xl">
-            {formatAveragePerCan(nominal, collected)}
+            <span className="align-middle text-xs font-bold text-[#EAD19B]/70 md:text-sm">{avgCurrency} </span>
+            <span>{avgAmount}</span>
           </p>
           <p className="mt-0.5 text-xs font-semibold text-[#F4F1EA]/60">
             Rata-rata per kaleng
