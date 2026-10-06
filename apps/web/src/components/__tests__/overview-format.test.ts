@@ -4,7 +4,7 @@
  * label Indonesia yang tidak bergantung warna.
  */
 import { describe, expect, it } from 'vitest';
-import type { OverviewSummary } from '@lazisnu/shared-types';
+import type { OverviewSummaryView } from '../overview/overviewView';
 import {
   CONDITION_LABEL,
   formatAveragePerCan,
@@ -20,26 +20,26 @@ import {
   trendTotals,
 } from '../overview/format';
 
-const summary = (overrides: Partial<OverviewSummary> = {}): OverviewSummary => ({
-  placement_coverage: 100,
-  active_cans: 80,
-  inactive_cans: 15,
-  damaged_cans: 5,
-  lost_cans: 4,
-  returned_this_month: 2,
-  returned_total: 10,
-  action_required: 24,
-  total_officers: 6,
-  collection_nominal: 1_250_000,
-  successful_collections: 40,
+const summary = (overrides: Partial<OverviewSummaryView> = {}): OverviewSummaryView => ({
+  placementCoverage: 100,
+  activeCans: 80,
+  inactiveCans: 15,
+  damagedCans: 5,
+  lostCans: 4,
+  returnedThisMonth: 2,
+  returnedTotal: 10,
+  actionRequired: 24,
+  totalOfficers: 6,
+  collectionNominal: 1_250_000,
+  successfulCollections: 40,
   reactivated: 3,
-  new_cans: 5,
+  newCans: 5,
   withdrawn: 1,
-  task_active: 12,
-  task_closed: 28,
-  task_completed: 20,
-  task_uncollected: 8,
-  task_total: 40,
+  taskActive: 12,
+  taskClosed: 28,
+  taskCompleted: 20,
+  taskUncollected: 8,
+  taskTotal: 40,
   ...overrides,
 });
 
@@ -97,22 +97,22 @@ describe('ringkasan tugas', () => {
 
   it('kalimat pendukung menyebut tugas belum ditutup dan ditutup tanpa penjemputan', () => {
     expect(taskSupportLabel(summary())).toBe('12 tugas belum ditutup • 8 ditutup tanpa penjemputan');
-    expect(taskSupportLabel(summary({ task_active: 0, task_uncollected: 0 }))).toBe(
+    expect(taskSupportLabel(summary({ taskActive: 0, taskUncollected: 0 }))).toBe(
       'Tidak ada tugas pada periode ini',
     );
   });
 
   it('persentase penutupan dibulatkan dan 0 bila tidak ada tugas', () => {
     expect(taskClosedRate(summary())).toBe(70);
-    expect(taskClosedRate(summary({ task_total: 0, task_closed: 0 }))).toBe(0);
+    expect(taskClosedRate(summary({ taskTotal: 0, taskClosed: 0 }))).toBe(0);
   });
 });
 
 describe('tren', () => {
   it('menjumlahkan isi, kosong, tidak terjemput, dan nominal', () => {
     const totals = trendTotals([
-      { month: '2026-08', collected: 30, empty: 10, uncollected: 2, task_closed: 32, task_total: 40, nominal: 500000 },
-      { month: '2026-09', collected: 20, empty: 5, uncollected: 1, task_closed: 21, task_total: 40, nominal: 300000 },
+      { month: '2026-08', collected: 30, empty: 10, uncollected: 2, taskClosed: 32, taskTotal: 40, nominal: 500000 },
+      { month: '2026-09', collected: 20, empty: 5, uncollected: 1, taskClosed: 21, taskTotal: 40, nominal: 300000 },
     ]);
     expect(totals.collected).toBe(50);
     expect(totals.empty).toBe(15);

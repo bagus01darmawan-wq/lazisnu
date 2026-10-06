@@ -6,7 +6,7 @@ import { LucideIcon } from 'lucide-react';
 
 interface DonorListProps {
   title: string;
-  donors: { owner_name: string; total: number }[];
+  donors: { ownerName: string; total: number }[];
   icon: LucideIcon;
   color: string;
   bg: string;
@@ -35,7 +35,7 @@ export function DonorList({ title, donors, icon: Icon, color, bg }: DonorListPro
                 }`}
               >
                 <span className="text-sm font-bold text-[#F4F1EA] truncate mr-3">
-                  {donor.owner_name}
+                  {donor.ownerName}
                 </span>
                 <span className="text-sm font-bold text-[#F4F1EA]/60 whitespace-nowrap tabular-nums">
                   Rp {donor.total.toLocaleString('id-ID')}

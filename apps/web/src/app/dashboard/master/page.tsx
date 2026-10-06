@@ -13,7 +13,13 @@ import {
   Hash,
   Building2,
   Power,
-  Loader2
+  Loader2,
+  Phone,
+  Shield,
+  User,
+  UserCheck,
+  Users,
+  RotateCcw
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Table } from '@/components/ui/Table';
@@ -22,6 +28,7 @@ import { ColumnDef } from '@tanstack/react-table';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
+import { GlassSelect } from '@/components/ui/GlassSelect';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmToast } from '@/components/ui/ConfirmToast';
 import { ApiResponse } from '@lazisnu/shared-types';
@@ -41,6 +48,18 @@ interface Dukuh {
   id: string;
   name: string;
   branchId: string;
+}
+
+interface UserAccount {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  role: string;
+  isActive: boolean;
+  lastLogin: string | null;
+  branchId: string | null;
+  branchName: string | null;
 }
 
 interface ApiError {
@@ -76,6 +95,29 @@ export default function MasterDataPage() {
   const [backupActive, setBackupActive] = useState(false);
   const [backupLoading, setBackupLoading] = useState(false);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
+
+  // Daftar seluruh akun login se-kecamatan (read-only).
+  const [accounts, setAccounts] = useState<UserAccount[]>([]);
+  const [accountsLoading, setAccountsLoading] = useState(true);
+  const [accountSearch, setAccountSearch] = useState('');
+
+  // Modal tambah/edit akun (non-petugas saja).
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<UserAccount | null>(null);
+  const [accountForm, setAccountForm] = useState({ full_name: '', phone: '', password: '', role: 'ADMIN_RANTING', branch_id: '' });
+  const [accountSubmitting, setAccountSubmitting] = useState(false);
+
+  const fetchAccounts = async () => {
+    setAccountsLoading(true);
+    try {
+      const res = await api.get('/admin/user-accounts', { params: { limit: 100 } }) as unknown as ApiResponse<{ items?: UserAccount[] }>;
+      if (res.success && res.data) setAccounts(res.data.items || []);
+    } catch {
+      // tampil sebagai daftar kosong
+    } finally {
+      setAccountsLoading(false);
+    }
+  };
 
   const handleToggleBackup = async () => {
     try {
@@ -145,7 +187,116 @@ export default function MasterDataPage() {
         if (r.success && r.data) setBackupActive(r.data.active);
       })
       .catch(() => { /* optional infra, silent fail */ });
+    // Seluruh akun login se-kecamatan.
+    api.get('/admin/user-accounts', { params: { limit: 100 } })
+      .then((res: unknown) => {
+        const r = res as ApiResponse<{ items?: UserAccount[] }>;
+        if (r.success && r.data) setAccounts(r.data.items || []);
+      })
+      .catch(() => { /* tampil sebagai daftar kosong */ })
+      .finally(() => setAccountsLoading(false));
   }, []);
+
+  const openAddAccount = () => {
+    setEditingAccount(null);
+    setAccountForm({ full_name: '', phone: '', password: '', role: 'ADMIN_RANTING', branch_id: '' });
+    setIsAccountModalOpen(true);
+  };
+
+  const openEditAccount = (row: UserAccount) => {
+    setEditingAccount(row);
+    setAccountForm({ full_name: row.fullName, phone: row.phone, password: '', role: row.role, branch_id: row.branchId || '' });
+    setIsAccountModalOpen(true);
+  };
+
+  const handleAccountSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!accountForm.full_name.trim() || !accountForm.phone.trim()) {
+      toast.error('Nama dan nomor HP wajib diisi');
+      return;
+    }
+    if (!editingAccount && !accountForm.password) {
+      toast.error('Password wajib diisi untuk akun baru');
+      return;
+    }
+    if (accountForm.role === 'ADMIN_RANTING' && !accountForm.branch_id) {
+      toast.error('Admin ranting wajib punya ranting');
+      return;
+    }
+    setAccountSubmitting(true);
+    try {
+      if (editingAccount) {
+        const payload: Record<string, unknown> = {
+          full_name: accountForm.full_name.trim(),
+          phone: accountForm.phone.trim(),
+          branch_id: accountForm.branch_id || null,
+        };
+        if (accountForm.password) payload.password = accountForm.password;
+        const res = await api.put(`/admin/user-accounts/${editingAccount.id}`, payload) as unknown as ApiResponse<unknown>;
+        if (res.success) {
+          toast.success('Akun berhasil diperbarui');
+          setIsAccountModalOpen(false);
+          setEditingAccount(null);
+          void fetchAccounts();
+        }
+      } else {
+        const res = await api.post('/admin/user-accounts', {
+          full_name: accountForm.full_name.trim(),
+          phone: accountForm.phone.trim(),
+          password: accountForm.password,
+          role: accountForm.role,
+          branch_id: accountForm.branch_id || null,
+        }) as unknown as ApiResponse<unknown>;
+        if (res.success) {
+          toast.success('Akun baru berhasil dibuat');
+          setIsAccountModalOpen(false);
+          void fetchAccounts();
+        }
+      }
+    } catch (error) {
+      const err = error as ApiError;
+      toast.error(err.error?.message || err.message || 'Gagal menyimpan akun');
+    } finally {
+      setAccountSubmitting(false);
+    }
+  };
+
+  const handleToggleAccountActive = async (row: UserAccount) => {
+    try {
+      const res = await api.put(`/admin/user-accounts/${row.id}`, { is_active: !row.isActive }) as unknown as ApiResponse<unknown>;
+      if (res.success) {
+        toast.success(row.isActive ? 'Akun dinonaktifkan' : 'Akun diaktifkan kembali');
+        void fetchAccounts();
+      }
+    } catch (error) {
+      const err = error as ApiError;
+      toast.error(err.error?.message || err.message || 'Gagal mengubah status akun');
+    }
+  };
+
+  const handleDeleteAccount = (row: UserAccount) => {
+    toast.custom((t: string | number) => (
+      <ConfirmToast
+        id={t}
+        title="Hapus Akun?"
+        description={`Hapus permanen akun ${row.fullName}? Tidak bisa dibatalkan.`}
+        confirmLabel="Ya, Hapus"
+        onConfirm={async () => {
+          try {
+            const res = await api.delete(`/admin/user-accounts/${row.id}`) as unknown as ApiResponse<unknown>;
+            if (res.success) {
+              toast.success('Akun berhasil dihapus');
+              void fetchAccounts();
+            }
+          } catch (error) {
+            const err = error as ApiError;
+            toast.error(err.error?.message || err.message || 'Gagal menghapus akun');
+          }
+        }}
+        variant="danger"
+      />
+    ), { duration: 5000 });
+  };
 
   const handleBranchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -383,6 +534,132 @@ export default function MasterDataPage() {
     }
   ];
 
+  const roleLabel = (role: string) =>
+    role === 'ADMIN_KECAMATAN' ? 'Admin Kecamatan' : role === 'ADMIN_RANTING' ? 'Admin Ranting' : 'Petugas';
+
+  const accountColumns: ColumnDef<UserAccount>[] = [
+    {
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <User size={12} className="text-[#EAD19B]" />
+          <span>Nama / Login</span>
+        </div>
+      ),
+      accessorKey: 'fullName',
+      cell: ({ row }) => (
+        <div className="flex flex-col">
+          <span className="font-bold text-[#F4F1EA]">{row.original.fullName}</span>
+          <span className="text-[10px] text-[#F4F1EA]/40 font-bold tracking-tight mt-0.5">{row.original.email}</span>
+        </div>
+      ),
+    },
+    {
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <Phone size={12} className="text-[#EAD19B]" />
+          <span>Kontak</span>
+        </div>
+      ),
+      accessorKey: 'phone',
+      cell: ({ row }) => (
+        <span className="text-[12px] font-bold text-[#F4F1EA]/40 tracking-tight">{row.original.phone}</span>
+      ),
+    },
+    {
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <Shield size={12} className="text-[#EAD19B]" />
+          <span>Peran</span>
+        </div>
+      ),
+      accessorKey: 'role',
+      cell: ({ row }) => (
+        <span className="text-[10px] font-bold uppercase tracking-widest text-[#EAD19B]/80">{roleLabel(row.original.role)}</span>
+      ),
+    },
+    {
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <MapPin size={12} className="text-[#EAD19B]" />
+          <span>Ranting</span>
+        </div>
+      ),
+      accessorKey: 'branchName',
+      cell: ({ row }) => (
+        <span className="text-[10px] font-bold uppercase tracking-widest text-[#EAD19B]/60">
+          {row.original.branchName?.replace(/ranting/gi, '').trim() || '—'}
+        </span>
+      ),
+    },
+    {
+      header: () => (
+        <div className="flex items-center gap-1.5">
+          <UserCheck size={12} className="text-[#EAD19B]" />
+          <span>Status</span>
+        </div>
+      ),
+      accessorKey: 'isActive',
+      cell: ({ row }) => (
+        row.original.isActive ? (
+          <span className="text-[10px] font-bold uppercase tracking-widest text-[#1F8243]">AKTIF</span>
+        ) : (
+          <span className="text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/40">NON-AKTIF</span>
+        )
+      ),
+    },
+    {
+      id: 'actions',
+      header: '',
+      cell: ({ row }) => {
+        // Akun petugas dikelola di halaman Users — tanpa aksi di sini.
+        if (row.original.role === 'PETUGAS') {
+          return <span className="text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/30">Users</span>;
+        }
+        const isNonActiveRow = !row.original.isActive;
+        return (
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-white/10 transition-all duration-300 group"
+              onClick={() => openEditAccount(row.original)}
+              title="Edit Akun"
+            >
+              <Edit size={14} className="text-[#EAD19B]" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-white/10 transition-all duration-300 group"
+              onClick={() => void handleToggleAccountActive(row.original)}
+              title={isNonActiveRow ? 'Aktifkan Kembali' : 'Nonaktifkan'}
+            >
+              <RotateCcw size={14} className="text-[#EAD19B]" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#D97A76] hover:bg-red-500/10 hover:border-red-500/20 transition-all duration-300 group"
+              onClick={() => handleDeleteAccount(row.original)}
+              title="Hapus Permanen"
+            >
+              <Trash2 size={14} className="text-[#F4F1EA]/40 group-hover:text-[#D97A76]" />
+            </Button>
+          </div>
+        );
+      },
+    },
+  ];
+
+  const filteredAccounts = React.useMemo(() => {
+    const q = accountSearch.trim().toLowerCase();
+    if (!q) return accounts;
+    return accounts.filter((a) =>
+      [a.fullName, a.email, a.phone, roleLabel(a.role), a.branchName ?? '']
+        .join(' ').toLowerCase().includes(q),
+    );
+  }, [accounts, accountSearch]);
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Header */}
@@ -590,6 +867,49 @@ export default function MasterDataPage() {
         )}
       </Card>
 
+      {/* Seluruh Akun — kelola akun non-petugas, khusus ADMIN_KECAMATAN */}
+      <Card variant="glass" className="p-0 border-white/5 shadow-2xl overflow-hidden w-full max-w-full">
+        <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center justify-between bg-transparent p-4 md:p-5 border-none shadow-none">
+          <div className="flex items-center gap-3 px-1">
+            <Users className="text-[#EAD19B]" size={22} />
+            <div>
+              <h2 className="text-base font-bold text-[#F4F1EA] tracking-tight">Seluruh Akun</h2>
+              <p className="text-[#F4F1EA]/60 text-xs font-medium">
+                {filteredAccounts.length} akun login se-kecamatan
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+            <button
+              onClick={openAddAccount}
+              className="h-[35px] px-4 rounded-xl text-[11px] font-bold bg-[#EAD19B] text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 hover:bg-[#EAD19B]/90 transition-all active:scale-95 flex items-center gap-2"
+            >
+              <Plus size={14} strokeWidth={3} />
+              Tambah Akun
+            </button>
+            <div className="relative w-full lg:w-80 group">
+            <div className="flex h-[35px] items-center bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1 transition-all duration-500 group-focus-within:ring-2 group-focus-within:ring-[#F4F1EA]/20 group-focus-within:border-[#F4F1EA]/30 shadow-lg shadow-black/5">
+              <div className="pl-2 pr-1 transition-transform group-focus-within:scale-110">
+                <Search size={14} strokeWidth={3} className="text-[#DE6F4A]" />
+              </div>
+              <input
+                type="text"
+                placeholder="Cari akun..."
+                className="bg-transparent w-full px-4 py-1 text-sm font-bold text-white placeholder-[#F4F1EA]/60 focus:outline-none"
+                value={accountSearch}
+                onChange={(e) => setAccountSearch(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+        </div>
+        <div className="overflow-x-auto w-full custom-scrollbar">
+          <div className="min-w-[800px] w-full">
+            <Table columns={accountColumns} data={filteredAccounts} loading={accountsLoading} variant="glass" />
+          </div>
+        </div>
+      </Card>
+
       {/* Branch Modal */}
       <Modal
         isOpen={isBranchModalOpen}
@@ -678,6 +998,105 @@ export default function MasterDataPage() {
               className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] font-bold rounded-xl h-11 shadow-lg shadow-[#EAD19B]/20"
             >
               Simpan
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal Tambah/Edit Akun (non-petugas) */}
+      <Modal
+        isOpen={isAccountModalOpen}
+        onClose={() => {
+          setIsAccountModalOpen(false);
+          setEditingAccount(null);
+        }}
+        title={editingAccount ? 'Edit Akun' : 'Tambah Akun Baru'}
+        variant="glass"
+      >
+        <form onSubmit={handleAccountSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-[#F4F1EA]/60">Nama Lengkap</label>
+            <input
+              value={accountForm.full_name}
+              onChange={(e) => setAccountForm({ ...accountForm, full_name: e.target.value })}
+              placeholder="Nama pemegang akun"
+              className="w-full h-11 px-3 bg-white/3 border border-white/10 rounded-xl text-sm text-[#F4F1EA] font-medium focus:ring-2 focus:ring-[#EAD19B]/30 outline-none transition-all placeholder:text-[#F4F1EA]/30"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-[#F4F1EA]/60">Nomor HP (login)</label>
+            <input
+              value={accountForm.phone}
+              onChange={(e) => setAccountForm({ ...accountForm, phone: e.target.value })}
+              placeholder="Contoh: 628123456789"
+              className="w-full h-11 px-3 bg-white/3 border border-white/10 rounded-xl text-sm text-[#F4F1EA] font-medium focus:ring-2 focus:ring-[#EAD19B]/30 outline-none transition-all placeholder:text-[#F4F1EA]/30"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-[#F4F1EA]/60">
+              Password {editingAccount && '(kosongkan bila tidak diganti)'}
+            </label>
+            <input
+              type="password"
+              value={accountForm.password}
+              onChange={(e) => setAccountForm({ ...accountForm, password: e.target.value })}
+              placeholder={editingAccount ? 'Password baru (opsional)' : 'Minimal 6 karakter'}
+              className="w-full h-11 px-3 bg-white/3 border border-white/10 rounded-xl text-sm text-[#F4F1EA] font-medium focus:ring-2 focus:ring-[#EAD19B]/30 outline-none transition-all placeholder:text-[#F4F1EA]/30"
+            />
+          </div>
+
+          {!editingAccount && (
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-[#F4F1EA]/60">Peran</label>
+              <GlassSelect
+                value={accountForm.role}
+                onChange={(val) => setAccountForm({ ...accountForm, role: val })}
+                placeholder="-- Pilih Peran --"
+                options={[
+                  { label: 'Admin Ranting', value: 'ADMIN_RANTING' },
+                  { label: 'Admin Kecamatan', value: 'ADMIN_KECAMATAN' },
+                  { label: 'Staf Keuangan (Bendahara)', value: 'STAF_KEUANGAN' },
+                  { label: 'Staf Pengumpulan', value: 'STAF_PENGUMPULAN' },
+                ]}
+              />
+            </div>
+          )}
+
+          {accountForm.role !== 'ADMIN_KECAMATAN' && (
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-[#F4F1EA]/60">
+                Ranting {accountForm.role === 'ADMIN_RANTING' ? '(wajib)' : '(opsional)'}
+              </label>
+              <GlassSelect
+                value={accountForm.branch_id}
+                onChange={(val) => setAccountForm({ ...accountForm, branch_id: val })}
+                placeholder="-- Pilih Ranting --"
+                options={branches.map((b: Branch) => ({ label: b.name, value: b.id }))}
+                searchable
+              />
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-4">
+            <Button
+              type="button"
+              variant="secondary"
+              className="flex-1 rounded-xl h-12 font-bold border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-white/10 hover:text-[#F4F1EA]"
+              onClick={() => {
+                setIsAccountModalOpen(false);
+                setEditingAccount(null);
+              }}
+            >
+              Batal
+            </Button>
+            <Button
+              type="submit"
+              isLoading={accountSubmitting}
+              className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] rounded-xl h-12 font-bold shadow-lg shadow-[#EAD19B]/20"
+            >
+              {editingAccount ? 'Simpan Perubahan' : 'Buat Akun'}
             </Button>
           </div>
         </form>

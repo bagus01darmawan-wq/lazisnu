@@ -26,6 +26,8 @@ export interface RegionSummary {
   /**
    * Jumlah baris penugasan pada periode ini. Angka utama di halaman
    * Assignments, ditampilkan sebagai baris kedua di halaman Kaleng.
+   *
+   * Respons API dinormalisasi ke camelCase oleh interceptor (caseConverter).
    */
   assignmentTotal: number;
   breakdown: Record<string, number>;
@@ -216,7 +218,7 @@ function RegionCard({
     : region.total === 0
       ? 0
       : Math.round((region.assigned / region.total) * 100);
-  const barLabel = isAssignments ? 'penugasan selesai' : 'ter-alokasi';
+  const barLabel = isAssignments ? 'penugasan selesai' : 'ditugaskan';
   const barValue = isAssignments
     ? `${region.completed}/${region.assignmentTotal}`
     : `${region.assigned}/${region.total}`;

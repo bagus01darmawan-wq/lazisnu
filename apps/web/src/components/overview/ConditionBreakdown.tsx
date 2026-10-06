@@ -3,12 +3,12 @@
 import React from 'react';
 import { Hexagon } from 'lucide-react';
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart, ResponsiveContainer, Tooltip } from 'recharts';
-import type { OverviewConditionBreakdownItem } from '@lazisnu/shared-types';
+import type { OverviewConditionBreakdownItemView } from './overviewView';
 import type { CanCondition } from '@lazisnu/shared-types';
 import { CONDITION_BADGE_CLASS, CONDITION_LABEL } from './format';
 
 interface ConditionBreakdownProps {
-  breakdown: OverviewConditionBreakdownItem[];
+  breakdown: OverviewConditionBreakdownItemView[];
   /** Arus periode berjalan (stok di atas timeless, arus ikut filter bulan). */
   newCans: number;
   withdrawn: number;

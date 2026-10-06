@@ -4,7 +4,8 @@ import React from 'react';
 import { AlertTriangle, ChevronLeft, Loader2 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
-import { ApiResponse, OverviewResponse } from '@lazisnu/shared-types';
+import { ApiResponse } from '@lazisnu/shared-types';
+import type { OverviewResponseView } from '@/components/overview/overviewView';
 import OverviewHeader from '@/components/overview/OverviewHeader';
 import PerolehanHero from '@/components/overview/PerolehanHero';
 import ProductivitySection from '@/components/overview/ProductivitySection';
@@ -29,7 +30,7 @@ export default function OverviewPage() {
   const user = useAuthStore((state) => state.user);
   const isDistrictAdmin = user?.role === 'ADMIN_KECAMATAN';
 
-  const [data, setData] = React.useState<OverviewResponse | null>(null);
+  const [data, setData] = React.useState<OverviewResponseView | null>(null);
   // Filter periode multi-bulan ala assignments; default bulan berjalan.
   const [filter, setFilter] = React.useState<{ year: number; months: number[] }>(() => {
     const now = new Date();
@@ -62,7 +63,7 @@ export default function OverviewPage() {
         ? `/admin/district/dashboard?${params.toString()}`
         : `/admin/branch/dashboard?${params.toString()}`;
 
-      const response = await api.get(endpoint) as unknown as ApiResponse<OverviewResponse>;
+      const response = await api.get(endpoint) as unknown as ApiResponse<OverviewResponseView>;
       if (response.success && response.data) {
         setData(response.data);
       } else {
@@ -167,7 +168,7 @@ export default function OverviewPage() {
 
   if (!data) return null;
 
-  const periodEmpty = data.summary.successful_collections === 0 && data.summary.task_total === 0;
+  const periodEmpty = data.summary.successfulCollections === 0 && data.summary.taskTotal === 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -201,11 +202,17 @@ export default function OverviewPage() {
       )}
 
       <PerolehanHero
-        nominal={data.summary.collection_nominal}
-        collected={data.summary.successful_collections}
+        nominal={data.summary.collectionNominal}
+        collected={data.summary.successfulCollections}
       />
 
-      <CollectionTrendChart trend={data.monthly_trend} year={data.period.year} />
+      <BranchComparisonList
+        comparison={data.branchComparison ?? []}
+        hidden={!isDistrictAdmin || Boolean(branchId)}
+        onPickBranch={handleBranchChange}
+      />
+
+      <CollectionTrendChart trend={data.monthlyTrend} year={data.period.year} />
 
       {periodEmpty && (
         <p className="rounded-2xl border border-white/10 bg-[#F4F1EA]/5 p-4 text-xs text-[#F4F1EA]/70">
@@ -216,25 +223,19 @@ export default function OverviewPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ProductivitySection
           productivity={data.productivity}
-          activeCans={data.summary.active_cans}
+          activeCans={data.summary.activeCans}
           reactivated={data.summary.reactivated}
           months={filter.months}
           year={filter.year}
           branchId={branchId || undefined}
-          scopeLabel={data.scope.branch_name ? `Ranting ${data.scope.branch_name}` : 'Seluruh ranting kecamatan'}
+          scopeLabel={data.scope.branchName ? `Ranting ${data.scope.branchName}` : 'Seluruh ranting kecamatan'}
         />
         <ConditionBreakdown
-          breakdown={data.condition_breakdown}
-          newCans={data.summary.new_cans}
+          breakdown={data.conditionBreakdown}
+          newCans={data.summary.newCans}
           withdrawn={data.summary.withdrawn}
         />
       </div>
-
-      <BranchComparisonList
-        comparison={data.branch_comparison ?? []}
-        hidden={!isDistrictAdmin || Boolean(branchId)}
-        onPickBranch={handleBranchChange}
-      />
     </div>
   );
 }

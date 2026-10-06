@@ -15,87 +15,87 @@ export interface C1Envelope<T> {
 export interface PeriodDraftItem {
   id: string;
   period: string;
-  branch_id: string;
-  branch_name: string;
-  branch_kind: 'RANTING' | 'PROGRAM_MWC';
+  branchId: string;
+  branchName: string;
+  branchKind: 'RANTING' | 'PROGRAM_MWC';
   status: 'DRAFT' | 'APPROVED';
-  prepared_at: string;
-  item_count: number;
-  event_kind: 'APPROVED' | 'ESCALATED' | 'PENDING';
-  period_status: string;
+  preparedAt: string;
+  itemCount: number;
+  eventKind: 'APPROVED' | 'ESCALATED' | 'PENDING';
+  periodStatus: string;
 }
 
 export interface StafSummary {
   period: string;
-  period_status: string;
-  days_to_due: number;
-  days_to_lock: number;
-  in_tolerance: boolean;
+  periodStatus: string;
+  daysToDue: number;
+  daysToLock: number;
+  inTolerance: boolean;
   drafts: { pending: number; escalated: number; approved: number };
-  ppk: { final_count: number; total_count: number };
-  tugas_active: number;
+  ppk: { finalCount: number; totalCount: number };
+  tugasActive: number;
 }
 
 export interface PpkPenyusun {
-  officer_name: string;
+  officerName: string;
   total: number;
   status: string;
 }
 
 export interface BranchSubmissionDetail {
   id: string;
-  branch_id: string;
+  branchId: string;
   period: string;
-  period_year: number;
-  period_month: number;
-  total_amount: number;
-  bisyaroh_total: number;
-  share_mwc: number;
-  net_amount: number;
-  expected_share: number;
-  share_variance: number;
-  variance_reason: string | null;
-  linked_periods: string[] | null;
-  collection_count: number;
+  periodYear: number;
+  periodMonth: number;
+  totalAmount: number;
+  bisyarohTotal: number;
+  shareMwc: number;
+  netAmount: number;
+  expectedShare: number;
+  shareVariance: number;
+  varianceReason: string | null;
+  linkedPeriods: string[] | null;
+  collectionCount: number;
   status: 'DRAFT' | 'FINAL' | 'FINAL_NOL';
   version: number;
-  ranting_signer_id: string | null;
-  mwc_bendahara_signer_id: string | null;
-  ppk_penyusun?: PpkPenyusun[];
+  rantingSignerId: string | null;
+  mwcBendaharaSignerId: string | null;
+  ppkPenyusun?: PpkPenyusun[];
 }
 
 export interface MwcRecapRow {
-  branch_id: string;
-  branch_name: string;
+  branchId: string;
+  branchName: string;
   kind: 'RANTING' | 'PROGRAM_MWC';
   status: 'FINAL' | 'FINAL_NOL' | 'BELUM_LAPOR';
   total: number;
   bisyaroh: number;
-  share_mwc: number;
+  shareMwc: number;
   bersih: number;
-  selisih_share: number;
-  variance_reason: string | null;
+  selisihShare: number;
+  varianceReason: string | null;
   flags: string[];
 }
 
 export interface MwcRecap {
   period: string;
-  kartu_ranting: {
+  kartuRanting: {
     total: number;
     bisyaroh: number;
-    ekspektasi_share: number;
-    share_mwc: number;
+    ekspektasiShare: number;
+    shareMwc: number;
     bersih: number;
-    reported_count: number;
-    final_nol_count: number;
-    belum_lapor_count: number;
+    reportedCount: number;
+    finalNolCount: number;
+    belumLaporCount: number;
   };
-  kartu_program: {
+  kartuProgram: {
     total: number;
     bisyaroh: number;
     bersih: number;
-    reported_count: number;
-    belum_lapor_count: number;
+    reportedCount: number;
+    belumLaporCount: number;
   };
   rows: MwcRecapRow[];
 }
@@ -103,31 +103,31 @@ export interface MwcRecap {
 export interface BaVersion {
   version: number;
   status: string;
-  pdf_hash: string | null;
-  content_hash: string;
-  verify_url: string;
-  archived_at: string | null;
-  is_current: boolean;
+  pdfHash: string | null;
+  contentHash: string;
+  verifyUrl: string;
+  archivedAt: string | null;
+  isCurrent: boolean;
 }
 
 /** Cerminan `BranchBaText` di backend (`services/beritaAcara.ts`). */
 export interface BranchBaText {
   kind: 'branch';
   title: string;
-  form_code: string;
-  ba_number: string | null;
+  formCode: string;
+  baNumber: string | null;
   period: string;
-  branch_name: string;
-  district_name: string | null;
+  branchName: string;
+  districtName: string | null;
   table: Array<{ label: string; value: string }>;
-  ppk_penyusun: Array<{ officer_name: string; total: string }>;
+  ppkPenyusun: Array<{ officerName: string; total: string }>;
   statements: string[];
   signatures: {
-    ranting: { filled: boolean; signer_id: string | null; signed_at: string | null };
-    mwc_bendahara: { filled: boolean; signer_id: string | null; signed_at: string | null };
+    ranting: { filled: boolean; signerId: string | null; signedAt: string | null };
+    mwcBendahara: { filled: boolean; signerId: string | null; signedAt: string | null };
   };
   /** Non-null = belum sah (tampilkan sebagai cap). */
-  draft_warning: string | null;
+  draftWarning: string | null;
 }
 
 function periodQuery(year?: number, month?: number): string {
@@ -170,10 +170,10 @@ export const c1Api = {
    * browser (tanpa menaruh key R2 di DOM).
    */
   downloadBranchPdf: async (id: string, filename: string): Promise<void> => {
-    const res = await api.get<C1Envelope<{ download_url: string }>>(
+    const res = await api.get<C1Envelope<{ downloadUrl: string }>>(
       `/admin/branch-submissions/${id}/pdf`,
     );
-    const url = res.data?.download_url;
+    const url = res.data?.downloadUrl;
     if (!res.success || !url) throw new Error(res.error?.message || 'Berkas BA belum siap');
     const a = document.createElement('a');
     a.href = url;
@@ -189,7 +189,7 @@ export const c1Api = {
    * Idempoten — aman ditekan berulang, tidak menumpuk berkas di R2.
    */
   generateBranchPdf: (id: string) =>
-    api.post<C1Envelope<{ pdf_hash: string; version: number; reused: boolean }>>(
+    api.post<C1Envelope<{ pdfHash: string; version: number; reused: boolean }>>(
       `/admin/branch-submissions/${id}/pdf/generate`,
       {},
     ),
@@ -200,7 +200,7 @@ export const c1Api = {
    * menutup modal.
    */
   deleteBranchPdf: (id: string) =>
-    api.delete<C1Envelope<{ deleted: boolean; had_pdf: boolean }>>(
+    api.delete<C1Envelope<{ deleted: boolean; hadPdf: boolean }>>(
       `/admin/branch-submissions/${id}/pdf`,
     ),
 };

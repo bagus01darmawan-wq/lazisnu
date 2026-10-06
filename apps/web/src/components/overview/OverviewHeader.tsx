@@ -2,12 +2,12 @@
 
 import React from 'react';
 import { RefreshCw } from 'lucide-react';
-import type { OverviewResponse } from '@lazisnu/shared-types';
+import type { OverviewResponseView } from './overviewView';
 import { formatPeriodRange, formatUpdatedAt } from './format';
 import { PeriodPicker } from '@/components/ui/PeriodPicker';
 
 interface OverviewHeaderProps {
-  data: OverviewResponse | null;
+  data: OverviewResponseView | null;
   /** Periode terpilih (filter multi-bulan ala assignments). */
   months: number[];
   year: number;
@@ -30,21 +30,21 @@ export function OverviewHeader({
   onRefresh,
   refreshing = false,
 }: OverviewHeaderProps) {
-  const scopeLabel = data?.scope.branch_name
-    ? `Ranting ${data.scope.branch_name}`
+  const scopeLabel = data?.scope.branchName
+    ? `Ranting ${data.scope.branchName}`
     : 'Seluruh ranting kecamatan';
   const periodMonths = data?.period.months?.length ? data.period.months : months;
 
   return (
     <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div>
-        <h1 className="text-xl md:text-2xl font-black text-[#F4F1EA]">Overview kaleng</h1>
+        <h1 className="text-xl md:text-2xl font-black text-[#F4F1EA]">Overview</h1>
         <p className="mt-1 text-sm text-[#F4F1EA]/60">
           {scopeLabel} • Data ditentukan otomatis dari akun Anda
         </p>
         <p className="mt-1 text-xs text-[#F4F1EA]/45">
           {data
-            ? `Periode ${formatPeriodRange(data.period.year, periodMonths)} • Zona ${data.period.timezone} • Diperbarui ${formatUpdatedAt(data.period.generated_at)}`
+            ? `Periode ${formatPeriodRange(data.period.year, periodMonths)} • Zona ${data.period.timezone} • Diperbarui ${formatUpdatedAt(data.period.generatedAt)}`
             : 'Memuat periode dan scope…'}
         </p>
       </div>

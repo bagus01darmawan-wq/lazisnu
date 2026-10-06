@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { shouldSecureCookie } from '@/lib/cookies';
+import { toCamelCase } from '@/lib/caseConverter';
 
 export async function POST(request: NextRequest) {
   try {
@@ -58,27 +60,31 @@ export async function POST(request: NextRequest) {
       return response;
     }
 
-    const { access_token, refresh_token: newRefreshToken } = data.data;
+    const { accessToken, refreshToken: newRefreshToken, refreshExpiresIn } = toCamelCase<{
+      accessToken: string;
+      refreshToken?: string;
+      refreshExpiresIn?: number;
+    }>(data.data);
 
     // Sinkronkan maxAge cookie refresh dengan TTL JWT refresh dari backend
     // (fallback 365d = default JWT_REFRESH_TTL).
     const REFRESH_FALLBACK_SECONDS = 60 * 60 * 24 * 365;
     const refreshMaxAge =
-      typeof data.data.refresh_expires_in === 'number' && data.data.refresh_expires_in > 0
-        ? data.data.refresh_expires_in
+      typeof refreshExpiresIn === 'number' && refreshExpiresIn > 0
+        ? refreshExpiresIn
         : REFRESH_FALLBACK_SECONDS;
 
     const response = NextResponse.json({
       success: true,
       data: {
-        access_token,
+        accessToken,
       },
     });
 
     // Set Access Token (non-HttpOnly for client Axios and middleware)
     // maxAge 15 menit = 900 detik, sesuai TTL access token
-    response.cookies.set('lazisnu_token', access_token, {
-      secure: process.env.NODE_ENV === 'production',
+    response.cookies.set('lazisnu_token', accessToken, {
+      secure: shouldSecureCookie(request),
       sameSite: 'strict',
       maxAge: 60 * 15, // 15 menit
       path: '/',
@@ -88,7 +94,7 @@ export async function POST(request: NextRequest) {
     if (newRefreshToken) {
       response.cookies.set('lazisnu_refresh_token', newRefreshToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: shouldSecureCookie(request),
         sameSite: 'strict',
         maxAge: refreshMaxAge, // = TTL JWT refresh (dari backend)
         path: '/',

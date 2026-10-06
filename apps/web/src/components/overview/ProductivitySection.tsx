@@ -4,10 +4,10 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import { Activity, ChevronRight } from 'lucide-react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
-import type { OverviewProductivityTotals } from '@lazisnu/shared-types';
+import type { OverviewProductivityTotalsView } from './overviewView';
 
 interface ProductivitySectionProps {
-  productivity: OverviewProductivityTotals;
+  productivity: OverviewProductivityTotalsView;
   /** Basis kaleng aktif (snapshot) + aktif kembali periode ini. */
   activeCans: number;
   reactivated: number;
@@ -34,7 +34,7 @@ const SLICE_FILL = {
  */
 export function ProductivitySection({ productivity, activeCans, reactivated, months, year, branchId, scopeLabel }: ProductivitySectionProps) {
   const router = useRouter();
-  const { task_total: total, filled, empty, uncollected, active } = productivity;
+  const { taskTotal: total, filled, empty, uncollected, active } = productivity;
   const hasData = total > 0 || filled > 0 || empty > 0 || uncollected > 0;
 
   const data = [

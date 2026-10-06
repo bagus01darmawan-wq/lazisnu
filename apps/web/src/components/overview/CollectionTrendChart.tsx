@@ -5,18 +5,18 @@ import { TrendingUp } from 'lucide-react';
 import {
   Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import type { OverviewMonthlyTrendItem } from '@lazisnu/shared-types';
+import type { OverviewMonthlyTrendItemView } from './overviewView';
 import { formatMonthKey, formatRupiah, trendTotals } from './format';
 
 interface CollectionTrendChartProps {
-  trend: OverviewMonthlyTrendItem[];
+  trend: OverviewMonthlyTrendItemView[];
   year: number;
 }
 
 type TrendMode = 'kunjungan' | 'rata-rata';
 
 /** Rata-rata isi per kaleng yang dijemput bulan itu (Rp, dibulatkan). */
-function monthlyAverage(item: OverviewMonthlyTrendItem): number {
+function monthlyAverage(item: OverviewMonthlyTrendItemView): number {
   if (!item.collected) return 0;
   return Math.round(item.nominal / item.collected);
 }
@@ -81,8 +81,10 @@ export function CollectionTrendChart({ trend, year }: CollectionTrendChartProps)
                   tickFormatter={formatMonthKey}
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 11, fill: '#F4F1EA', fontWeight: 600 }}
-                  dy={8}
+                  tick={{ fontSize: 10, fill: '#F4F1EA', fontWeight: 600 }}
+                  angle={-45}
+                  textAnchor="end"
+                  height={52}
                   interval={0}
                 />
                 <YAxis
@@ -150,8 +152,10 @@ export function CollectionTrendChart({ trend, year }: CollectionTrendChartProps)
                   tickFormatter={formatMonthKey}
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 11, fill: '#F4F1EA', fontWeight: 600 }}
-                  dy={8}
+                  tick={{ fontSize: 10, fill: '#F4F1EA', fontWeight: 600 }}
+                  angle={-45}
+                  textAnchor="end"
+                  height={52}
                   interval={0}
                 />
                 <YAxis

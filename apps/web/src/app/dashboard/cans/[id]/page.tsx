@@ -41,13 +41,24 @@ import { z } from 'zod';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
 import { GlassSelect } from '@/components/ui/GlassSelect';
 import { Card } from '@/components/ui/Card';
-import { Can as BaseCan, Branch, ApiResponse, PaginatedResponse } from '@lazisnu/shared-types';
+import { ApiResponse, PaginatedResponse } from '@lazisnu/shared-types';
 
-interface CanExtended extends BaseCan {
+/**
+ * Bentuk kaleng di sisi web (camelCase — hasil normalisasi caseConverter).
+ * Payload keluar (POST/PUT) tetap snake_case sesuai kontrak backend.
+ */
+interface CanExtended {
+  id: string;
+  qrCode?: string;
+  branchId: string;
+  dukuhId?: string;
+  ownerName: string;
+  dukuh?: string;
   rt?: string;
   rw?: string;
-  dukuh?: string;
-  dukuh_id?: string;
+  ownerWhatsapp: string;
+  isActive: boolean;
+  condition?: string;
   assignments?: {
     id: string;
     status: 'ACTIVE' | 'COMPLETED' | 'REASSIGNED';
@@ -55,27 +66,32 @@ interface CanExtended extends BaseCan {
   branch?: {
     name: string;
   } | null;
-  dukuh_details?: {
+  dukuhDetails?: {
     name: string;
   } | null;
 }
 
+interface Branch {
+  id: string;
+  name: string;
+}
+
 interface Dukuh {
   id: string;
-  branch_id?: string;
+  branchId?: string;
   name: string;
 }
 
 interface QrPreviewItem {
-  qr_code: string;
-  owner_name?: string;
-  qr_image_url: string;
+  qrCode: string;
+  ownerName?: string;
+  qrImageUrl: string;
 }
 
 interface QrResponseData {
-  qr_code?: string;
-  qr_image_url?: string;
-  print_url: string;
+  qrCode?: string;
+  qrImageUrl?: string;
+  printUrl: string;
   count?: number;
   previews?: QrPreviewItem[];
 }
@@ -226,7 +242,7 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
     try {
       // ADMIN_RANTING tidak boleh pindah ranting: kunci ke branch asal.
       const payloadBranchId = user?.role === 'ADMIN_RANTING' && editingCan
-        ? editingCan.branch_id
+        ? editingCan.branchId
         : values.branch_id;
       const payload = {
         owner_name: values.owner_name,
@@ -239,7 +255,7 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
       };
 
       if (editingCan) {
-        const isBranchMove = payloadBranchId !== editingCan.branch_id;
+        const isBranchMove = payloadBranchId !== editingCan.branchId;
         const response = await api.put(`/admin/cans/${editingCan.id}`, payload) as unknown as ApiResponse<CanExtended>;
         if (response.success) {
           const movedBranchName = isBranchMove
@@ -275,12 +291,12 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
 
   const handleEdit = (can: CanExtended) => {
     setEditingCan(can);
-    setValue('owner_name', can.owner_name);
-    setValue('branch_id', can.branch_id);
-    setValue('dukuh_id', can.dukuh_id || '');
+    setValue('owner_name', can.ownerName);
+    setValue('branch_id', can.branchId);
+    setValue('dukuh_id', can.dukuhId || '');
     setValue('rt', can.rt || '');
     setValue('rw', can.rw || '');
-    setValue('owner_whatsapp', can.owner_whatsapp || '');
+    setValue('owner_whatsapp', can.ownerWhatsapp || '');
     setIsModalOpen(true);
   };
 
@@ -548,21 +564,7 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
       },
     },
     {
-      accessorKey: 'qr_code',
-      header: () => (
-        <div className="flex items-center gap-1.5">
-          <QrCode size={12} className="text-[#EAD19B]" />
-          <span>Kode Kaleng</span>
-        </div>
-      ),
-      cell: ({ row }) => (
-        <div className="flex flex-col">
-          <span className="text-[12px] font-bold text-[#F4F1EA]/40 tracking-tight">{row.original.qr_code}</span>
-        </div>
-      ),
-    },
-    {
-      accessorKey: 'owner_name',
+      accessorKey: 'ownerName',
       header: () => (
         <div className="flex items-center gap-1.5">
           <User size={12} className="text-[#EAD19B]" />
@@ -571,9 +573,10 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
       ),
       cell: ({ row }) => (
         <div className="flex flex-col">
-          <span className="font-bold text-[#F4F1EA] tracking-tight">{row.original.owner_name}</span>
-          <span className="text-[10px] text-[#EAD19B]/60 font-bold uppercase tracking-widest mt-0.5">
-            {cleanBranchName(row.original.branch?.name) || 'PUSAT'}
+          <span className="text-[11px] font-bold text-[#F4F1EA]/40 tracking-tight">{row.original.qrCode}</span>
+          <span className="font-bold text-[#F4F1EA] tracking-tight mt-0.5">{row.original.ownerName}</span>
+          <span className="text-[11px] font-medium text-[#F4F1EA]/50 tracking-tight mt-0.5">
+            {row.original.ownerWhatsapp || '-'}
           </span>
         </div>
       ),
@@ -583,13 +586,16 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
       header: () => (
         <div className="flex items-center gap-1.5">
           <MapPin size={12} className="text-[#EAD19B]" />
-          <span>DUSUN</span>
+          <span>ALAMAT</span>
         </div>
       ),
       cell: ({ row }) => (
         <div className="flex flex-col">
-          <span className="text-xs font-medium uppercase tracking-tight text-[#F4F1EA]/60">
-            {row.original.dukuh_details?.name || row.original.dukuh || '-'}
+          <span className="text-[10px] text-[#EAD19B]/60 font-bold uppercase tracking-widest">
+            {cleanBranchName(row.original.branch?.name) || 'PUSAT'}
+          </span>
+          <span className="text-xs font-medium uppercase tracking-tight text-[#F4F1EA]/60 mt-0.5">
+            {row.original.dukuhDetails?.name || row.original.dukuh || '-'}
           </span>
           <span className="text-[10px] opacity-50 font-bold uppercase tracking-widest mt-0.5">
             RT {row.original.rt || '-'} / RW {row.original.rw || '-'}
@@ -598,21 +604,7 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
       ),
     },
     {
-      accessorKey: 'owner_whatsapp',
-      header: () => (
-        <div className="flex items-center gap-1.5">
-          <Phone size={12} className="text-[#EAD19B]" />
-          <span>WHATSAPP</span>
-        </div>
-      ),
-      cell: ({ row }) => (
-        <span className="text-[12px] font-bold text-[#F4F1EA]/40 tracking-tight">
-          {row.original.owner_whatsapp}
-        </span>
-      ),
-    },
-    {
-      accessorKey: 'is_active',
+      accessorKey: 'isActive',
       header: () => (
         <div className="flex items-center gap-1.5">
           <CheckCircle2 size={12} className="text-[#EAD19B]" />
@@ -624,7 +616,7 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
         const isAssigned = can.assignments && can.assignments.length > 0;
         const assignmentStatus = can.assignments?.[0]?.status;
 
-        if (!can.is_active) {
+        if (!can.isActive) {
           return <span className="text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/40">NON-AKTIF</span>;
         }
 
@@ -656,12 +648,12 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
       id: 'actions',
       header: '',
       cell: ({ row }) => {
-        const isNonActiveRow = !row.original.is_active;
+        const isNonActiveRow = !row.original.isActive;
         const isAssigned = row.original.assignments && row.original.assignments.length > 0;
 
         return (
           <div className="flex items-center justify-end gap-2">
-            {row.original.qr_code && (
+            {row.original.qrCode && (
               <Button
                 variant="outline"
                 size="sm"
@@ -786,8 +778,8 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
               onClick={() => {
                 setEditingCan(null);
                 reset();
-                if (user?.role === 'ADMIN_RANTING' && user?.branch_id) {
-                  setValue('branch_id', user.branch_id);
+                if (user?.role === 'ADMIN_RANTING' && user?.branchId) {
+                  setValue('branch_id', user.branchId);
                 }
                 setIsModalOpen(true);
               }}
@@ -1152,8 +1144,8 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
                 // Satu sumber daftar preview: bulk pakai previews[], single dibungkus array 1 item
                 const items: QrPreviewItem[] = isBulkPrint
                   ? (qrData.previews || [])
-                  : (qrData.qr_image_url
-                      ? [{ qr_code: qrData.qr_code || '', qr_image_url: qrData.qr_image_url }]
+                  : (qrData.qrImageUrl
+                      ? [{ qrCode: qrData.qrCode || '', qrImageUrl: qrData.qrImageUrl }]
                       : []);
                 const total = items.length;
                 const idx = Math.min(qrIndex, Math.max(total - 1, 0));
@@ -1173,10 +1165,10 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
                           </button>
                           <div className="bg-white p-4 rounded-2xl shadow-sm border border-white/10 flex flex-col items-center gap-2">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={current.qr_image_url} alt="QR Code" className="w-40 h-40 object-contain" />
-                            <p className="text-xs font-bold text-[#2C473E]/70 uppercase tracking-widest">{current.qr_code}</p>
-                            {current.owner_name && (
-                              <p className="text-[11px] font-semibold text-[#2C473E]/50">{current.owner_name}</p>
+                            <img src={current.qrImageUrl} alt="QR Code" className="w-40 h-40 object-contain" />
+                            <p className="text-xs font-bold text-[#2C473E]/70 uppercase tracking-widest">{current.qrCode}</p>
+                            {current.ownerName && (
+                              <p className="text-[11px] font-semibold text-[#2C473E]/50">{current.ownerName}</p>
                             )}
                           </div>
                           <button
@@ -1207,8 +1199,8 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
                         className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] rounded-xl h-12 font-bold shadow-lg shadow-[#EAD19B]/20 flex items-center gap-2 justify-center"
                         onClick={() => {
                           const a = document.createElement('a');
-                          a.href = qrData.print_url;
-                          a.download = isBulkPrint ? 'lazisnu-qr-batch.pdf' : `lazisnu-qr-${qrData.qr_code}.pdf`;
+                          a.href = qrData.printUrl;
+                          a.download = isBulkPrint ? 'lazisnu-qr-batch.pdf' : `lazisnu-qr-${qrData.qrCode}.pdf`;
                           document.body.appendChild(a);
                           a.click();
                           document.body.removeChild(a);

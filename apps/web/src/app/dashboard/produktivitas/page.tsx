@@ -9,8 +9,26 @@ import { ColumnDef } from '@tanstack/react-table';
 import api from '@/lib/api';
 import { ArrowLeft, ChevronLeft, ChevronRight, UserCheck, Users } from 'lucide-react';
 import type { ApiResponse } from '@lazisnu/shared-types';
-import type { ProductivityOfficerItem, ProductivityOfficersResponse } from '@lazisnu/shared-types';
 import { MONTH_NAMES_ID } from '@/components/overview/format';
+
+/** Baris produktivitas di sisi web (camelCase — hasil normalisasi caseConverter). */
+interface ProductivityOfficerRow {
+  officerId: string;
+  fullName: string;
+  employeeCode: string;
+  branchId: string;
+  branchName: string;
+  assigned: number;
+  collected: number;
+  filled: number;
+  uncollected: number;
+}
+
+interface ProductivityOfficersView {
+  scope: { branchName?: string };
+  period: unknown;
+  officers: ProductivityOfficerRow[];
+}
 
 interface PageQuery {
   kind?: string;
@@ -44,7 +62,7 @@ export default function ProduktivitasPage({
     .filter((m) => Number.isInteger(m) && m >= 1 && m <= 12);
   const branchId = typeof query.branch_id === 'string' ? query.branch_id : '';
 
-  const [data, setData] = React.useState<ProductivityOfficerItem[]>([]);
+  const [data, setData] = React.useState<ProductivityOfficerRow[]>([]);
   const [scopeName, setScopeName] = React.useState('');
   const [loading, setLoading] = React.useState(true);
   const [currentPage, setCurrentPage] = React.useState(1);
@@ -58,10 +76,10 @@ export default function ProduktivitasPage({
         const params = new URLSearchParams({ year: String(year) });
         if (months.length > 0) params.set('months', months.join(','));
         if (branchId) params.set('branch_id', branchId);
-        const res = (await api.get(`/admin/productivity/officers?${params.toString()}`)) as unknown as ApiResponse<ProductivityOfficersResponse>;
+        const res = (await api.get(`/admin/productivity/officers?${params.toString()}`)) as unknown as ApiResponse<ProductivityOfficersView>;
         if (!cancelled && res.success && res.data) {
           setData(res.data.officers);
-          setScopeName(res.data.scope.branch_name ?? 'Seluruh ranting kecamatan');
+          setScopeName(res.data.scope.branchName ?? 'Seluruh ranting kecamatan');
         }
       } catch {
         // error ditampilkan sebagai tabel kosong
@@ -75,9 +93,9 @@ export default function ProduktivitasPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const columns: ColumnDef<ProductivityOfficerItem>[] = [
+  const columns: ColumnDef<ProductivityOfficerRow>[] = [
     {
-      accessorKey: 'full_name',
+      accessorKey: 'fullName',
       header: () => (
         <div className="flex items-center gap-1.5">
           <UserCheck size={12} className="text-[#EAD19B]" />
@@ -86,9 +104,9 @@ export default function ProduktivitasPage({
       ),
       cell: ({ row }) => (
         <div className="flex flex-col">
-          <span className="font-bold text-[#F4F1EA]">{row.original.full_name}</span>
+          <span className="font-bold text-[#F4F1EA]">{row.original.fullName}</span>
           <span className="text-[10px] text-[#F4F1EA]/40 font-bold uppercase tracking-widest mt-0.5">
-            {row.original.employee_code} • {row.original.branch_name}
+            {row.original.employeeCode} • {row.original.branchName}
           </span>
         </div>
       ),

@@ -6,14 +6,14 @@ import { Wallet, ClipboardList, CheckCircle, TrendingUp, Calculator, AlertCircle
 
 interface StatsCardsProps {
   stats: {
-    total_collections: number;
-    total_amount: number;
-    total_assignments: number;
-    completed_assignments: number;
-    active_assignments: number;
-    uncollected_assignments: number;
-    completion_rate: number;
-    average_per_collection: number;
+    totalCollections: number;
+    totalAmount: number;
+    totalAssignments: number;
+    completedAssignments: number;
+    activeAssignments: number;
+    uncollectedAssignments: number;
+    completionRate: number;
+    averagePerCollection: number;
   };
 }
 
@@ -21,7 +21,7 @@ export function StatsCards({ stats }: StatsCardsProps) {
   const cards = [
     {
       label: 'Total Penjemputan',
-      value: stats.total_collections.toLocaleString('id-ID'),
+      value: stats.totalCollections.toLocaleString('id-ID'),
       sub: 'kali penjemputan',
       icon: ClipboardList,
       color: 'text-[#6B9E9F]',
@@ -29,7 +29,7 @@ export function StatsCards({ stats }: StatsCardsProps) {
     },
     {
       label: 'Total Nominal',
-      value: `Rp ${stats.total_amount.toLocaleString('id-ID')}`,
+      value: `Rp ${stats.totalAmount.toLocaleString('id-ID')}`,
       sub: 'terkumpul',
       icon: Wallet,
       color: 'text-[#EAD19B]',
@@ -37,15 +37,15 @@ export function StatsCards({ stats }: StatsCardsProps) {
     },
     {
       label: 'Total Tugas',
-      value: stats.total_assignments.toLocaleString('id-ID'),
-      sub: `${stats.completed_assignments} selesai · ${stats.active_assignments} aktif · ${stats.uncollected_assignments} terlewat`,
+      value: stats.totalAssignments.toLocaleString('id-ID'),
+      sub: `${stats.completedAssignments} selesai · ${stats.activeAssignments} aktif · ${stats.uncollectedAssignments} terlewat`,
       icon: CheckCircle,
       color: 'text-[#DE6F4A]',
       bg: 'bg-[#DE6F4A]/10',
     },
     {
       label: 'Tingkat Penyelesaian',
-      value: `${stats.completion_rate}%`,
+      value: `${stats.completionRate}%`,
       sub: 'dari total tugas',
       icon: TrendingUp,
       color: 'text-[#1F8243]',
@@ -53,7 +53,7 @@ export function StatsCards({ stats }: StatsCardsProps) {
     },
     {
       label: 'Rata-rata per Jemput',
-      value: `Rp ${stats.average_per_collection.toLocaleString('id-ID')}`,
+      value: `Rp ${stats.averagePerCollection.toLocaleString('id-ID')}`,
       sub: 'nominal rata-rata',
       icon: Calculator,
       color: 'text-[#F59E0B]',
@@ -61,7 +61,7 @@ export function StatsCards({ stats }: StatsCardsProps) {
     },
     {
       label: 'Kaleng Terlewat',
-      value: stats.uncollected_assignments.toLocaleString('id-ID'),
+      value: stats.uncollectedAssignments.toLocaleString('id-ID'),
       sub: 'status tidak terjemput',
       icon: AlertCircle,
       color: 'text-[#F59E0B]',

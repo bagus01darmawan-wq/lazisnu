@@ -57,7 +57,7 @@ export default function RekapMwcPage() {
       header: 'Ranting / Program',
       cell: ({ row }) => (
         <div className="flex flex-col">
-          <span className="font-semibold text-slate-900">{row.original.branch_name}</span>
+          <span className="font-semibold text-slate-900">{row.original.branchName}</span>
           <span className="text-[10px] text-slate-400 uppercase tracking-wider">
             {row.original.kind === 'PROGRAM_MWC' ? 'Program MWC' : 'Ranting'}
           </span>
@@ -72,7 +72,7 @@ export default function RekapMwcPage() {
     {
       id: 'share',
       header: 'Share',
-      cell: ({ row }) => <span className="text-slate-900">Rp {Number(row.original.share_mwc).toLocaleString('id-ID')}</span>,
+      cell: ({ row }) => <span className="text-slate-900">Rp {Number(row.original.shareMwc).toLocaleString('id-ID')}</span>,
     },
     {
       id: 'status',
@@ -115,15 +115,15 @@ export default function RekapMwcPage() {
       {recap ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card title={`Perolehan Ranting • ${recap.period}`}>
-            <p className="text-2xl font-bold text-slate-900">Rp {Number(recap.kartu_ranting.total).toLocaleString('id-ID')}</p>
+            <p className="text-2xl font-bold text-slate-900">Rp {Number(recap.kartuRanting.total).toLocaleString('id-ID')}</p>
             <p className="text-xs text-slate-500">
-              Share Rp {Number(recap.kartu_ranting.share_mwc).toLocaleString('id-ID')} • Lapor {recap.kartu_ranting.reported_count} •
-              NOL {recap.kartu_ranting.final_nol_count} • Belum {recap.kartu_ranting.belum_lapor_count}
+              Share Rp {Number(recap.kartuRanting.shareMwc).toLocaleString('id-ID')} • Lapor {recap.kartuRanting.reportedCount} •
+              NOL {recap.kartuRanting.finalNolCount} • Belum {recap.kartuRanting.belumLaporCount}
             </p>
           </Card>
           <Card title="Perolehan Program MWC">
-            <p className="text-2xl font-bold text-slate-900">Rp {Number(recap.kartu_program.total).toLocaleString('id-ID')}</p>
-            <p className="text-xs text-slate-500">Bruto penuh (tanpa share 30%) • Lapor {recap.kartu_program.reported_count}</p>
+            <p className="text-2xl font-bold text-slate-900">Rp {Number(recap.kartuProgram.total).toLocaleString('id-ID')}</p>
+            <p className="text-xs text-slate-500">Bruto penuh (tanpa share 30%) • Lapor {recap.kartuProgram.reportedCount}</p>
           </Card>
         </div>
       ) : null}

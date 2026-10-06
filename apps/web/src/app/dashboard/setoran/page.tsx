@@ -147,7 +147,7 @@ export default function SetoranPage() {
    */
   const closeBa = () => {
     const target = selected;
-    const hadPdf = generated || versions.some((v) => v.is_current && v.pdf_hash);
+    const hadPdf = generated || versions.some((v) => v.isCurrent && v.pdfHash);
     setBaOpen(false);
     setBaText(null);
     setGenerated(false);
@@ -209,12 +209,12 @@ export default function SetoranPage() {
     {
       id: 'total',
       header: 'Total',
-      cell: ({ row }) => <span className="text-slate-900">Rp {Number(row.original.total_amount).toLocaleString('id-ID')}</span>,
+      cell: ({ row }) => <span className="text-slate-900">Rp {Number(row.original.totalAmount).toLocaleString('id-ID')}</span>,
     },
     {
       id: 'share',
       header: 'Share MWC',
-      cell: ({ row }) => <span className="text-slate-900">Rp {Number(row.original.share_mwc).toLocaleString('id-ID')}</span>,
+      cell: ({ row }) => <span className="text-slate-900">Rp {Number(row.original.shareMwc).toLocaleString('id-ID')}</span>,
     },
     {
       id: 'status',
@@ -292,19 +292,19 @@ export default function SetoranPage() {
       {selected ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card title="Rincian Setoran">
-            <p className="text-sm text-slate-600">Total Rp {Number(selected.total_amount).toLocaleString('id-ID')} • Bisyaroh Rp {Number(selected.bisyaroh_total).toLocaleString('id-ID')} • Bersih Rp {Number(selected.net_amount).toLocaleString('id-ID')}</p>
-            <p className="text-sm text-slate-600 mt-1">Ekspektasi share Rp {Number(selected.expected_share).toLocaleString('id-ID')} • Selisih Rp {Number(selected.share_variance).toLocaleString('id-ID')}
-              {selected.variance_reason ? ` • Alasan: ${selected.variance_reason}` : ''}</p>
+            <p className="text-sm text-slate-600">Total Rp {Number(selected.totalAmount).toLocaleString('id-ID')} • Bisyaroh Rp {Number(selected.bisyarohTotal).toLocaleString('id-ID')} • Bersih Rp {Number(selected.netAmount).toLocaleString('id-ID')}</p>
+            <p className="text-sm text-slate-600 mt-1">Ekspektasi share Rp {Number(selected.expectedShare).toLocaleString('id-ID')} • Selisih Rp {Number(selected.shareVariance).toLocaleString('id-ID')}
+              {selected.varianceReason ? ` • Alasan: ${selected.varianceReason}` : ''}</p>
             <div className="mt-3 space-y-1">
-              {(selected.ppk_penyusun || []).map((p) => (
-                <p key={p.officer_name} className="text-sm text-slate-700">{p.officer_name} — Rp {Number(p.total).toLocaleString('id-ID')} ({PPK_STATUS_LABEL[p.status] ?? p.status})</p>
+              {(selected.ppkPenyusun || []).map((p) => (
+                <p key={p.officerName} className="text-sm text-slate-700">{p.officerName} — Rp {Number(p.total).toLocaleString('id-ID')} ({PPK_STATUS_LABEL[p.status] ?? p.status})</p>
               ))}
             </div>
           </Card>
           <Card title={`Riwayat BA (${versions.length})`}>
             {versions.map((v) => (
               <p key={v.version} className="text-sm text-slate-700">
-                v{v.version} • {v.status}{v.is_current ? ' • berlaku' : ''} • {v.pdf_hash ? 'berkas tersimpan' : 'belum dibuat'}
+                v{v.version} • {v.status}{v.isCurrent ? ' • berlaku' : ''} • {v.pdfHash ? 'berkas tersimpan' : 'belum dibuat'}
               </p>
             ))}
             {versions.length === 0 ? <p className="text-sm text-slate-400">Belum ada riwayat.</p> : null}
@@ -318,19 +318,19 @@ export default function SetoranPage() {
             <p className="text-sm text-slate-500">Memuat berita acara…</p>
           ) : null}
 
-          {baText?.draft_warning ? (
+          {baText?.draftWarning ? (
             <div className="flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 p-3">
               <TriangleAlert size={16} className="text-amber-600 mt-0.5 shrink-0" />
-              <p className="text-xs text-amber-800">{baText.draft_warning}</p>
+              <p className="text-xs text-amber-800">{baText.draftWarning}</p>
             </div>
           ) : null}
 
           {baText ? (
             <>
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                <span className="font-semibold text-slate-700">{baText.form_code}</span>
+                <span className="font-semibold text-slate-700">{baText.formCode}</span>
                 <span>•</span>
-                <span>Nomor: {baText.ba_number || '—'}</span>
+                <span>Nomor: {baText.baNumber || '—'}</span>
                 <span>•</span>
                 <span>Periode {baText.period}</span>
               </div>
@@ -341,12 +341,12 @@ export default function SetoranPage() {
                 ))}
               </div>
 
-              {baText.ppk_penyusun.length > 0 ? (
+              {baText.ppkPenyusun.length > 0 ? (
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-1">PPK penyusun</p>
-                  {baText.ppk_penyusun.map((p) => (
-                    <p key={p.officer_name} className="text-sm text-slate-700">
-                      {p.officer_name} — {p.total}
+                  {baText.ppkPenyusun.map((p) => (
+                    <p key={p.officerName} className="text-sm text-slate-700">
+                      {p.officerName} — {p.total}
                     </p>
                   ))}
                 </div>

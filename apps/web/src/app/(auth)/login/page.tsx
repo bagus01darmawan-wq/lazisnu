@@ -57,7 +57,7 @@ export default function LoginPage() {
 
       if (response.ok && resData.success && resData.data) {
         // Sync token to client-side cookie storage explicitly
-        authHelper.setToken(resData.data.access_token);
+        authHelper.setToken(resData.data.accessToken);
         setUser(resData.data.user);
 
         // Redirect to dashboard

@@ -51,10 +51,10 @@ interface Branch {
 
 interface Officer {
   id: string;
-  full_name: string;
-  employee_code?: string;
-  branch_id?: string;
-  branch_name?: string;
+  fullName: string;
+  employeeCode?: string;
+  branchId?: string;
+  branchName?: string;
 }
 
 interface Dukuh {
@@ -64,43 +64,43 @@ interface Dukuh {
 
 interface AssignmentItem {
   id: string;
-  can_id: string;
-  officer_id: string;
-  period_month: number;
-  period_year: number;
+  canId: string;
+  officerId: string;
+  periodMonth: number;
+  periodYear: number;
   status: string;
-  assigned_at: string;
+  assignedAt: string;
   can: {
-    qr_code: string;
-    owner_name: string;
-    branch_name?: string;
-    dukuh_name?: string;
+    qrCode: string;
+    ownerName: string;
+    branchName?: string;
+    dukuhName?: string;
     dukuh?: string;
     rt?: string;
     rw?: string;
-    branch_id: string;
+    branchId: string;
   };
   officer: {
-    full_name: string;
-    employee_code?: string;
-    branch_name?: string;
+    fullName: string;
+    employeeCode?: string;
+    branchName?: string;
   };
 }
 
 interface TransferAssignment {
   id: string;
-  officer_id: string;
+  officerId: string;
   newOfficerId?: string;
-  officer: { full_name: string };
-  can: { qr_code: string; branch_id: string };
+  officer: { fullName: string };
+  can: { qrCode: string; branchId: string };
 }
 
 interface ApiListResponse {
   success: boolean;
-  data?: { items?: AssignmentItem[]; pagination?: { page: number; limit: number; total: number; total_pages: number } };
+  data?: { items?: AssignmentItem[]; pagination?: { page: number; limit: number; total: number; totalPages: number } };
   items?: AssignmentItem[];
-  pagination?: { page: number; limit: number; total: number; total_pages: number };
-  assigned_count?: number;
+  pagination?: { page: number; limit: number; total: number; totalPages: number };
+  assignedCount?: number;
   period?: string;
 }
 
@@ -254,8 +254,8 @@ export default function AssignmentsDetailPage({ params, searchParams }: { params
   useEffect(() => {
     if (selectedOfficerId) {
       const officer = officers.find((o: Officer) => o.id === selectedOfficerId);
-      if (officer && officer.branch_id) {
-        setValue('branch_id', officer.branch_id, { shouldValidate: true });
+      if (officer && officer.branchId) {
+        setValue('branch_id', officer.branchId, { shouldValidate: true });
       }
     } else {
       setValue('branch_id', '', { shouldValidate: true });
@@ -274,7 +274,7 @@ export default function AssignmentsDetailPage({ params, searchParams }: { params
         reset();
         setIsModalOpen(false);
         fetchData();
-        toast.success(`Berhasil! ${response.assigned_count} kaleng telah ditugaskan untuk periode ${response.period}`);
+        toast.success(`Berhasil! ${response.assignedCount} kaleng telah ditugaskan untuk periode ${response.period}`);
       }
     } catch (_error) {
       const err = _error as { response?: { data?: { error?: { message?: string } } }; message?: string };
@@ -448,12 +448,12 @@ export default function AssignmentsDetailPage({ params, searchParams }: { params
       ),
       cell: ({ row }) => (
         <div className="flex flex-col">
-          <p className="font-bold text-[#F4F1EA] tracking-tight">{row.original.can.owner_name}</p>
+          <p className="font-bold text-[#F4F1EA] tracking-tight">{row.original.can.ownerName}</p>
           <p className="text-[10px] text-[#EAD19B]/60 font-bold uppercase tracking-widest mt-0.5">
-            {row.original.can.branch_name?.replace(/ranting/gi, '').trim() || 'PUSAT'}
+            {row.original.can.branchName?.replace(/ranting/gi, '').trim() || 'PUSAT'}
           </p>
           <p className="text-[10px] text-[#F4F1EA]/40 font-bold tracking-tight mt-1">
-            #{row.original.can.qr_code}
+            #{row.original.can.qrCode}
           </p>
         </div>
       ),
@@ -468,7 +468,7 @@ export default function AssignmentsDetailPage({ params, searchParams }: { params
       ),
       cell: ({ row }) => (
         <div className="flex flex-col text-xs font-medium text-[#F4F1EA]/60">
-          <span className="uppercase tracking-tight">{row.original.can.dukuh_name || row.original.can.dukuh || '-'}</span>
+          <span className="uppercase tracking-tight">{row.original.can.dukuhName || row.original.can.dukuh || '-'}</span>
           <span className="text-[10px] opacity-50 font-bold uppercase tracking-widest mt-0.5">
             RT {row.original.can.rt || '-'} / RW {row.original.can.rw || '-'}
           </span>
@@ -485,9 +485,9 @@ export default function AssignmentsDetailPage({ params, searchParams }: { params
       ),
       cell: ({ row }) => (
         <div className="flex flex-col">
-          <span className="font-bold text-[#F4F1EA]">{row.original.officer.full_name}</span>
+          <span className="font-bold text-[#F4F1EA]">{row.original.officer.fullName}</span>
           <span className="text-[10px] text-[#F4F1EA]/40 font-bold uppercase tracking-widest mt-0.5">
-            {row.original.officer.branch_name?.replace(/ranting/gi, '').trim() || 'PUSAT'}
+            {row.original.officer.branchName?.replace(/ranting/gi, '').trim() || 'PUSAT'}
           </span>
         </div>
       ),
@@ -503,10 +503,10 @@ export default function AssignmentsDetailPage({ params, searchParams }: { params
       cell: ({ row }) => (
         <div className="flex flex-col gap-0.5">
           <span className="text-xs font-medium uppercase tracking-tight text-[#F4F1EA]/60">
-            {months[row.original.period_month - 1]}
+            {months[row.original.periodMonth - 1]}
           </span>
           <span className="text-[10px] text-[#F4F1EA]/40 font-bold tracking-[0.2em]">
-            {row.original.period_year}
+            {row.original.periodYear}
           </span>
         </div>
       ),
@@ -793,7 +793,7 @@ export default function AssignmentsDetailPage({ params, searchParams }: { params
               onChange={(val) => setValue('officer_id', val)}
               placeholder="-- Pilih Petugas --"
               options={officers.map((o: Officer) => ({
-                label: `${o.full_name} (${o.employee_code})`,
+                label: `${o.fullName} (${o.employeeCode})`,
                 value: o.id
               }))}
               error={errors.officer_id?.message}
@@ -894,11 +894,11 @@ export default function AssignmentsDetailPage({ params, searchParams }: { params
             <div className="bg-white/[0.03] p-4 rounded-2xl border border-white/10 space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase">Kaleng / Pemilik</span>
-                <span className="text-xs font-bold text-[#F4F1EA]">{transferringAssignment.can.qr_code}</span>
+                <span className="text-xs font-bold text-[#F4F1EA]">{transferringAssignment.can.qrCode}</span>
               </div>
               <div className="flex justify-between items-center border-t border-white/10 pt-3">
                 <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase">Petugas Saat Ini</span>
-                <span className="text-xs font-bold text-[#D97A76]">{transferringAssignment.officer.full_name}</span>
+                <span className="text-xs font-bold text-[#D97A76]">{transferringAssignment.officer.fullName}</span>
               </div>
             </div>
 
@@ -910,9 +910,9 @@ export default function AssignmentsDetailPage({ params, searchParams }: { params
                   onChange={(val) => setTransferringAssignment({ ...transferringAssignment, newOfficerId: val })}
                   placeholder="-- Pilih Petugas Baru --"
                   options={officers
-                    .filter((o: Officer) => o.id !== transferringAssignment.officer_id && o.branch_id === transferringAssignment.can.branch_id)
+                    .filter((o: Officer) => o.id !== transferringAssignment.officerId && o.branchId === transferringAssignment.can.branchId)
                     .map((o: Officer) => ({
-                      label: `${o.full_name} (${o.employee_code})`,
+                      label: `${o.fullName} (${o.employeeCode})`,
                       value: o.id
                     }))}
                   searchable
@@ -966,7 +966,7 @@ export default function AssignmentsDetailPage({ params, searchParams }: { params
                 onChange={(val) => setBulkReassignOfficerId(val)}
                 placeholder="-- Pilih Petugas Baru --"
                 options={officers.map((o: Officer) => ({
-                  label: `${o.full_name} (${o.employee_code})`,
+                  label: `${o.fullName} (${o.employeeCode})`,
                   value: o.id
                 }))}
                 searchable

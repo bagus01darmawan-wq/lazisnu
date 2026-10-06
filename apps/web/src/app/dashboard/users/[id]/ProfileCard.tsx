@@ -8,28 +8,28 @@ import { MapPin, Phone, Calendar, UserCheck, UserX, Briefcase, Hash } from 'luci
 interface ProfileCardProps {
   officer: {
     id: string;
-    employee_code: string;
-    full_name: string;
+    employeeCode: string;
+    fullName: string;
     phone: string;
-    photo_url?: string;
-    assigned_zone?: string;
-    is_active: boolean;
-    created_at?: string;
+    photoUrl?: string;
+    assignedZone?: string;
+    isActive: boolean;
+    createdAt?: string;
     branch?: { name: string } | null;
     district?: { name: string } | null;
   };
 }
 
 export function ProfileCard({ officer }: ProfileCardProps) {
-  const initials = officer.full_name
+  const initials = officer.fullName
     .split(' ')
     .map(n => n[0])
     .join('')
     .slice(0, 2)
     .toUpperCase();
 
-  const formattedDate = officer.created_at
-    ? new Date(officer.created_at).toLocaleDateString('id-ID', {
+  const formattedDate = officer.createdAt
+    ? new Date(officer.createdAt).toLocaleDateString('id-ID', {
         day: 'numeric',
         month: 'long',
         year: 'numeric',
@@ -41,10 +41,10 @@ export function ProfileCard({ officer }: ProfileCardProps) {
       <div className="bg-white/3 -m-6 p-6">
         <div className="flex flex-col md:flex-row gap-6 items-start">
           <div className="flex-shrink-0">
-            {officer.photo_url ? (
+            {officer.photoUrl ? (
               <Image
-                src={officer.photo_url}
-                alt={officer.full_name}
+                src={officer.photoUrl}
+                alt={officer.fullName}
                 width={96}
                 height={96}
                 className="w-24 h-24 rounded-2xl object-cover border-2 border-white/10"
@@ -60,16 +60,16 @@ export function ProfileCard({ officer }: ProfileCardProps) {
           <div className="flex-1 min-w-0">
             <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 mb-4">
               <h1 className="text-2xl font-black text-[#F4F1EA] tracking-tight truncate">
-                {officer.full_name}
+                {officer.fullName}
               </h1>
               <span className={`
                 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest w-fit
-                ${officer.is_active
+                ${officer.isActive
                   ? 'bg-[#1F8243]/15 text-[#1F8243] border border-[#1F8243]/20'
                   : 'bg-[#F4F1EA]/10 text-[#F4F1EA]/60 border border-white/10'
                 }
               `}>
-                {officer.is_active ? (
+                {officer.isActive ? (
                   <><UserCheck size={12} /> Aktif</>
                 ) : (
                   <><UserX size={12} /> Non-Aktif</>
@@ -84,7 +84,7 @@ export function ProfileCard({ officer }: ProfileCardProps) {
                 </div>
                 <div>
                   <p className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-wider">ID Petugas</p>
-                  <p className="text-sm font-bold text-[#F4F1EA]">{officer.employee_code}</p>
+                  <p className="text-sm font-bold text-[#F4F1EA]">{officer.employeeCode}</p>
                 </div>
               </div>
 
@@ -124,7 +124,7 @@ export function ProfileCard({ officer }: ProfileCardProps) {
                 </div>
                 <div>
                   <p className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-wider">Wilayah Tugas</p>
-                  <p className="text-sm font-bold text-[#F4F1EA]">{officer.assigned_zone || '-'}</p>
+                  <p className="text-sm font-bold text-[#F4F1EA]">{officer.assignedZone || '-'}</p>
                 </div>
               </div>
 

@@ -24,31 +24,31 @@ import {
 
 interface AuditLogResponse {
   id: string;
-  action_type: string;
-  entity_type: string | null;
-  entity_id: string | null;
-  created_at: string;
-  user?: { full_name: string; role: string };
-  officer?: { full_name: string };
-  old_data: unknown;
-  new_data: unknown;
+  actionType: string;
+  entityType: string | null;
+  entityId: string | null;
+  createdAt: string;
+  user?: { fullName: string; role: string };
+  officer?: { fullName: string };
+  oldData: unknown;
+  newData: unknown;
 }
 
 function mapAuditLog(log: AuditLogResponse): IAuditLog {
   return {
     id: log.id,
-    actionType: log.action_type,
-    entityType: log.entity_type,
-    entityId: log.entity_id,
-    createdAt: log.created_at,
+    actionType: log.actionType,
+    entityType: log.entityType,
+    entityId: log.entityId,
+    createdAt: log.createdAt,
     user: log.user
-      ? { fullName: log.user.full_name, role: log.user.role }
+      ? { fullName: log.user.fullName, role: log.user.role }
       : undefined,
     officer: log.officer
-      ? { fullName: log.officer.full_name }
+      ? { fullName: log.officer.fullName }
       : undefined,
-    oldData: log.old_data,
-    newData: log.new_data,
+    oldData: log.oldData,
+    newData: log.newData,
   };
 }
 
@@ -80,10 +80,10 @@ export default function AuditLogPage() {
           start_date: startOfMonth,
           end_date: endOfMonth
         }
-      }) as unknown as ApiResponse<{ logs: AuditLogResponse[]; pagination: { total: number; total_pages: number } }>;
+      }) as unknown as ApiResponse<{ logs: AuditLogResponse[]; pagination: { total: number; totalPages: number } }>;
       if (response.success && response.data) {
         setLogs(response.data.logs.map(mapAuditLog));
-        setTotalPages(response.data.pagination.total_pages);
+        setTotalPages(response.data.pagination.totalPages);
         setTotalItems(response.data.pagination.total);
       }
     } catch (error) {

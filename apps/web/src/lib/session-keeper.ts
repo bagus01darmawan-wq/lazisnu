@@ -34,7 +34,7 @@ async function refreshNow(force = false): Promise<void> {
   if (!force && !authHelper.isAuthenticated()) return;
   try {
     const res = await axios.post('/api/auth/refresh', null, { withCredentials: true });
-    const accessToken = res.data?.data?.access_token;
+    const accessToken = res.data?.data?.accessToken;
     if (typeof accessToken === 'string' && accessToken.length > 0) {
       authHelper.setToken(accessToken);
     }

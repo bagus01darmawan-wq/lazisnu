@@ -82,9 +82,9 @@ export default function PersetujuanPage() {
       header: 'Ranting / Program',
       cell: ({ row }) => (
         <div className="flex flex-col">
-          <span className="font-semibold text-slate-900">{row.original.branch_name}</span>
+          <span className="font-semibold text-slate-900">{row.original.branchName}</span>
           <span className="text-[10px] text-slate-400 uppercase tracking-wider">
-            {row.original.branch_kind === 'PROGRAM_MWC' ? 'Program MWC' : 'Ranting'} • {row.original.item_count} kaleng
+            {row.original.branchKind === 'PROGRAM_MWC' ? 'Program MWC' : 'Ranting'} • {row.original.itemCount} kaleng
           </span>
         </div>
       ),
@@ -93,8 +93,8 @@ export default function PersetujuanPage() {
       id: 'event',
       header: 'Status',
       cell: ({ row }) => (
-        <Badge variant={row.original.status === 'APPROVED' ? 'success' : row.original.event_kind === 'ESCALATED' ? 'failed' : 'pending'}>
-          {row.original.event_kind}
+        <Badge variant={row.original.status === 'APPROVED' ? 'success' : row.original.eventKind === 'ESCALATED' ? 'failed' : 'pending'}>
+          {row.original.eventKind}
         </Badge>
       ),
     },
@@ -149,15 +149,15 @@ export default function PersetujuanPage() {
             <p className="text-xs text-slate-500">lewat 24 jam (giliran Keuangan)</p>
           </Card>
           <Card title="PPK FINAL">
-            <p className="text-2xl font-bold text-slate-900">{summary.ppk.final_count}/{summary.ppk.total_count}</p>
-            <p className="text-xs text-slate-500">tugas aktif tersisa: {summary.tugas_active}</p>
+            <p className="text-2xl font-bold text-slate-900">{summary.ppk.finalCount}/{summary.ppk.totalCount}</p>
+            <p className="text-xs text-slate-500">tugas aktif tersisa: {summary.tugasActive}</p>
           </Card>
           <Card title="Batas Waktu">
             <p className="text-2xl font-bold text-slate-900 flex items-center gap-1">
               <Clock size={20} />
-              {summary.in_tolerance ? `${summary.days_to_lock} hr` : `${summary.days_to_due} hr`}
+              {summary.inTolerance ? `${summary.daysToLock} hr` : `${summary.daysToDue} hr`}
             </p>
-            <p className="text-xs text-slate-500">{summary.in_tolerance ? 'masa toleransi' : 'sisa penjemputan'} • {summary.period_status}</p>
+            <p className="text-xs text-slate-500">{summary.inTolerance ? 'masa toleransi' : 'sisa penjemputan'} • {summary.periodStatus}</p>
           </Card>
         </div>
       ) : null}

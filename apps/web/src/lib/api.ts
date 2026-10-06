@@ -1,5 +1,6 @@
 import axios, { AxiosRequestConfig } from 'axios';
 import { authHelper } from './auth';
+import { toCamelCase } from './caseConverter';
 
 const defaultApiUrl = process.env.NODE_ENV === 'production' 
   ? (typeof window !== 'undefined' ? window.location.origin : '')
@@ -58,9 +59,11 @@ apiInstance.interceptors.request.use(
   }
 );
 
-// Response Interceptor: Handle Errors & Auto Refresh
+// Response Interceptor: normalisasi snake_case → camelCase + Handle Errors & Auto Refresh.
+// Cakupan: hanya respons backend via instance ini. Request keluar (body/params)
+// tetap snake_case sesuai kontrak backend. Download biner (CSV) tidak lewat sini.
 apiInstance.interceptors.response.use(
-  (response) => response.data,
+  (response) => toCamelCase(response.data),
   async (error) => {
     const originalRequest = error.config;
 
@@ -87,14 +90,14 @@ apiInstance.interceptors.response.use(
         // Lakukan request ke local Next.js Route Handler
         const refreshRes = await axios.post('/api/auth/refresh');
 
-        const { access_token } = refreshRes.data.data;
+        const { accessToken } = refreshRes.data.data;
         
-        authHelper.setToken(access_token);
+        authHelper.setToken(accessToken);
 
         isRefreshing = false;
-        onRefreshed(access_token);
+        onRefreshed(accessToken);
 
-        originalRequest.headers.Authorization = `Bearer ${access_token}`;
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return apiInstance(originalRequest);
       } catch (refreshError: unknown) {
         isRefreshing = false;
