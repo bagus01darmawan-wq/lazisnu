@@ -1,6 +1,6 @@
 {
   "_caraPakai": "Daftar kerentanan yang sudah dikenal dan diterima. Gerbang CI gagal hanya bila muncul id yang BELUM ada di sini. Perbarui dengan: node scripts/audit-baseline.mjs --update",
-  "updatedAt": "2026-10-06T05:25:34.189Z",
+  "updatedAt": "2026-10-06T05:46:18.105Z",
   "advisories": {
     "GHSA-5p2g-fcmc-qvqq": {
       "module": "image-size",
@@ -13,12 +13,6 @@
       "severity": "moderate",
       "url": "https://github.com/advisories/GHSA-67mh-4wv8-2f99",
       "patched": ">=0.25.0"
-    },
-    "GHSA-6j4f-fj2g-mc7p": {
-      "module": "brace-expansion",
-      "severity": "high",
-      "url": "https://github.com/advisories/GHSA-6j4f-fj2g-mc7p",
-      "patched": ">=5.0.10"
     },
     "GHSA-86w9-cpqp-85rv": {
       "module": "node-forge",
@@ -50,18 +44,6 @@
       "url": "https://github.com/advisories/GHSA-m9gg-hp2v-232j",
       "patched": ">=1.13.6"
     },
-    "GHSA-q2hr-2g5m-vwhr": {
-      "module": "brace-expansion",
-      "severity": "moderate",
-      "url": "https://github.com/advisories/GHSA-q2hr-2g5m-vwhr",
-      "patched": ">=5.0.12"
-    },
-    "GHSA-qhr7-859c-m2p7": {
-      "module": "brace-expansion",
-      "severity": "high",
-      "url": "https://github.com/advisories/GHSA-qhr7-859c-m2p7",
-      "patched": ">=5.0.11"
-    },
     "GHSA-vfj7-8cjw-p6xm": {
       "module": "braces",
       "severity": "high",
@@ -79,12 +61,6 @@
       "severity": "moderate",
       "url": "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
       "patched": ">=11.1.1"
-    },
-    "GHSA-wr44-6hxh-3jwq": {
-      "module": "joi",
-      "severity": "moderate",
-      "url": "https://github.com/advisories/GHSA-wr44-6hxh-3jwq",
-      "patched": ">=17.13.8"
     }
   }
 }
