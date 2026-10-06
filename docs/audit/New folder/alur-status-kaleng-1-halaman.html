@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alur Status Kaleng Lazisnu — Satu Halaman</title>
+<style>
+  @page { size: A4 landscape; margin: 8mm; }
+
+  :root {
+    --line: #cfc9ba;
+    --ink: #24382F;
+    --ink-soft: #55665F;
+    --ink-dim: #8b978f;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: #E8E4DA; color: var(--ink); line-height: 1.38;
+    padding: 8mm; -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    width: 281mm; min-height: 194mm; margin: 0 auto;
+    background: #fff; padding: 6mm 7mm 5mm;
+    box-shadow: 0 2px 14px rgba(36,56,47,.14);
+  }
+
+  /* ---------- Kepala ---------- */
+  .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 8mm; border-bottom: 2.5px solid #1F8243; padding-bottom: 2mm; }
+  .head h1 { font-size: 13.5pt; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; }
+  .head p { font-size: 7.2pt; color: var(--ink-soft); margin-top: .8mm; }
+  .head .stamp { font-size: 6.4pt; color: var(--ink-dim); text-align: right; white-space: nowrap; line-height: 1.5; }
+  .head .stamp b { color: var(--ink); }
+
+  /* ---------- Legenda ---------- */
+  .legend { display: flex; gap: 3.6mm; flex-wrap: wrap; align-items: center; padding: 1.9mm 0 2.1mm; border-bottom: 1px solid #eae6dc; }
+  .lg { display: inline-flex; align-items: center; gap: 1.3mm; font-size: 6.6pt; color: var(--ink-soft); }
+  .lg i { width: 2.5mm; height: 2.5mm; border-radius: .7mm; border: .4mm solid; display: block; }
+  .li-green { background: #EAF4EC; border-color: #1F8243; }
+  .li-coral { background: #FCEDE6; border-color: #DE6F4A; }
+  .li-gold  { background: #FBF3E0; border-color: #C9A227; }
+  .li-teal  { background: #E7F1F1; border-color: #4f8486; }
+  .li-gray  { background: #F0EFEB; border-color: #9aa39f; }
+  .lg-note { font-size: 6.4pt; color: var(--ink-dim); font-style: italic; margin-left: auto; }
+
+  /* ---------- Papan ---------- */
+  .board { display: grid; grid-template-columns: 42mm 1fr; margin-top: 2.6mm; }
+
+  .col-masuk { border-right: 1.5px solid var(--line); padding-right: 5.5mm; display: flex; flex-direction: column; justify-content: center; }
+  .box {
+    border: .4mm solid; border-left-width: 1.4mm; border-radius: 0 1.6mm 1.6mm 0;
+    padding: 1.5mm 2.1mm; font-size: 7.9pt; font-weight: 700; line-height: 1.24;
+  }
+  .box span { display: block; font-size: 6.4pt; font-weight: 500; color: var(--ink-soft); margin-top: .4mm; line-height: 1.32; }
+  .b-masuk { border-color: #c8c4b8; border-left-color: #9aa39f; background: #FAF9F6; color: #55665F; }
+  .b-aktif { border-color: #8cc4a0; border-left-color: #1F8243; background: #EAF4EC; color: #14512e; font-size: 9.8pt; text-align: center; }
+  .b-aktif span { font-size: 6.4pt; color: #3d6b52; }
+
+  .varrow { text-align: center; font-size: 6pt; color: var(--ink-dim); padding: .9mm 0; letter-spacing: .04em; }
+  .varrow b { display: block; font-size: 6.6pt; color: #1F8243; line-height: 1; }
+  .fan { text-align: center; font-size: 6.2pt; color: var(--ink-dim); padding-top: 1.5mm; font-style: italic; }
+
+  .lanes { display: flex; flex-direction: column; }
+  .lane { position: relative; padding: 2.2mm 0 2.2mm 7mm; }
+  .lane + .lane { border-top: 1px dashed #e6e2d8; }
+  .lane::before { content: ""; position: absolute; left: 0; top: 5mm; width: 7mm; height: 1.5px; background: var(--line); }
+
+  .lane-head { display: flex; align-items: center; gap: 1.8mm; margin-bottom: 1.4mm; }
+  .lane-tag { font-size: 6.4pt; font-weight: 800; color: #fff; background: var(--ink); border-radius: .8mm; padding: .4mm 1.5mm; letter-spacing: .04em; }
+  .lane-tag.a { background: #DE6F4A; } .lane-tag.b { background: #C0653F; }
+  .lane-tag.c { background: #9aa39f; } .lane-tag.d { background: #4f8486; }
+  .lane-title { font-size: 8.3pt; font-weight: 800; letter-spacing: -.01em; }
+  .lane-sub { font-size: 6.4pt; color: var(--ink-dim); margin-left: auto; }
+
+  .chain { display: flex; align-items: center; flex-wrap: wrap; gap: 1.1mm; margin-bottom: 1.4mm; }
+  .n {
+    border: .35mm solid; border-radius: 1.3mm; padding: 1mm 1.9mm;
+    font-size: 7.3pt; font-weight: 700; line-height: 1.2; white-space: nowrap;
+  }
+  .n small { font-weight: 500; font-size: 6.2pt; color: var(--ink-soft); }
+  .ar { font-size: 6.8pt; color: var(--line); font-weight: 700; }
+  .n-coral { background: #FCEDE6; border-color: #DE6F4A; color: #8a3a1c; }
+  .n-gold  { background: #FBF3E0; border-color: #C9A227; color: #6d5710; }
+  .n-teal  { background: #E7F1F1; border-color: #4f8486; color: #2b5456; }
+  .n-green { background: #EAF4EC; border-color: #1F8243; color: #14512e; }
+  .n-gray  { background: #F0EFEB; border-color: #9aa39f; color: #55665F; }
+  .n-out   { background: #FCFCFA; border-color: #cfc9ba; border-style: dashed; color: #6b7a74; }
+  .n-aksi  { background: #FCEDE6; border-color: #96401f; color: #7a3a1a; }
+
+  .notes { display: flex; flex-direction: column; gap: .7mm; }
+  .note { font-size: 6.8pt; color: var(--ink-soft); line-height: 1.34; padding-left: 3.3mm; position: relative; }
+  .note::before { content: "·"; position: absolute; left: .8mm; color: var(--line); font-weight: 800; }
+  .note b { color: var(--ink); }
+  .note .hi { color: #96401f; font-weight: 700; }
+  .note .ok { color: #14512e; font-weight: 700; }
+  .note.warn { color: #8a3a1c; }
+  .note.warn::before { content: "!"; color: #DE6F4A; font-size: 6.4pt; font-weight: 800; }
+
+  /* ---------- Strip bawah ---------- */
+  .strip { display: grid; grid-template-columns: 1.2fr 1fr; gap: 4mm; margin-top: 2.6mm; border-top: 1.5px solid var(--line); padding-top: 2.4mm; }
+  .endwrap { display: grid; grid-template-columns: 21mm 1fr; gap: 4mm; }
+  .endwrap .lbl { font-size: 6.2pt; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-dim); padding-top: .8mm; line-height: 1.45; }
+  .endwrap .lbl b { color: #8a3a1c; }
+  .endbox { border: .4mm solid #C9A227; border-left-width: 1.4mm; border-radius: 0 1.6mm 1.6mm 0; background: #FBF3E0; padding: 1.6mm 2.2mm; }
+  .endbox .et { font-size: 8.2pt; font-weight: 800; color: #6d5710; }
+  .endbox .ed { font-size: 6.5pt; color: #7a6a30; margin-top: .7mm; line-height: 1.35; }
+  .endbox .ed b { color: #5c4a15; }
+
+  .figs { display: grid; grid-template-columns: 1fr 1fr; gap: 2mm; }
+  .fig { background: var(--ink); border-radius: 1.5mm; padding: 1.6mm 2.1mm; }
+  .fig .k { font-size: 6pt; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #EAD19B; }
+  .fig .v { font-size: 6.5pt; color: rgba(255,255,255,.82); margin-top: .5mm; line-height: 1.3; }
+  .fig .v b { color: #fff; }
+
+  footer { margin-top: 2.2mm; padding-top: 1.5mm; border-top: 1px solid #eae6dc; display: flex; justify-content: space-between; gap: 6mm; font-size: 6pt; color: var(--ink-dim); }
+
+  @media print {
+    body { background: #fff; padding: 0; }
+    .page { width: auto; min-height: 0; box-shadow: none; padding: 0; }
+    .box, .fig, .endbox, .n, .lane-head { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="head">
+    <div>
+      <h1>Alur Status Kaleng Lazisnu</h1>
+      <p>Satu halaman — dari kaleng ditempatkan sampai keluar dari sistem. Empat cabang, satu ujung.</p>
+    </div>
+    <div class="stamp">
+      <b>26 keputusan</b> ditetapkan<br>
+      12 September 2026 · 11 status
+    </div>
+  </div>
+
+  <div class="legend">
+    <span class="lg"><i class="li-green"></i>Kondisi kaleng</span>
+    <span class="lg"><i class="li-coral"></i>Siklus &amp; kejadian</span>
+    <span class="lg"><i class="li-gold"></i>Hasil &amp; tindakan</span>
+    <span class="lg"><i class="li-teal"></i>Naik dari hitungan</span>
+    <span class="lg"><i class="li-gray"></i>Masuk &amp; keluar sistem</span>
+    <span class="lg-note">PPK = Petugas Penjemput Koin · seluruh petugas adalah PPK</span>
+  </div>
+
+  <div class="board">
+
+    <!-- ============ KOLOM MASUK ============ -->
+    <div class="col-masuk">
+      <div class="box b-masuk">Kaleng ditambahkan<span>di lapangan: ditempatkan &amp; diterima pemilik</span></div>
+      <div class="varrow"><b>▼</b>otomatis</div>
+      <div class="box b-masuk">Ditempatkan<span>pintu masuk, tidak pernah tersimpan sebagai status</span></div>
+      <div class="varrow"><b>▼</b>otomatis</div>
+      <div class="box b-aktif">AKTIF<span>diisi pemilik rumah — titik awal sesungguhnya</span></div>
+      <div class="fan">empat cabang ↓</div>
+    </div>
+
+    <!-- ============ LAJUR ============ -->
+    <div class="lanes">
+
+      <!-- LANE A -->
+      <div class="lane">
+        <div class="lane-head">
+          <span class="lane-tag a">A</span>
+          <span class="lane-title">Siklus penagihan — berulang tiap bulan</span>
+          <span class="lane-sub">kaleng Aktif, Rusak &amp; Hilang yang masuk sini</span>
+        </div>
+        <div class="chain">
+          <span class="n n-coral">Ditugaskan</span>
+          <span class="ar">▶</span>
+          <span class="n n-coral">Terjemput</span>
+          <span class="ar">▶</span>
+          <span class="n n-gold">Isi <small>· ada nominal</small></span>
+          <span class="ar">/</span>
+          <span class="n n-gold">Kosong <small>· tanpa nominal</small></span>
+          <span class="ar">|</span>
+          <span class="n n-gray">Tidak Terjemput <small>· alasan wajib</small></span>
+        </div>
+        <div class="notes">
+          <span class="note"><b>Isi</b> → hitungan kosong <span class="ok">direset ke nol</span>; kalau sedang Non-Aktif, langsung <span class="ok">kembali Aktif</span>.</span>
+          <span class="note"><b>Kosong 1–5×</b> → tetap Aktif. <b>Kosong 6× berturut-turut</b> → sistem mengusulkan <b>Non-Aktif</b>; admin yang menekan tombolnya.</span>
+          <span class="note">Alasan Tidak Terjemput: pemilik tidak di tempat · menolak dijemput · <span class="hi">kaleng hilang</span> · <span class="hi">kaleng rusak</span> · akses sulit · lainnya.</span>
+          <span class="note warn">Yang dihitung adalah <b>penjemputan</b>, bukan bulan kalender. Tidak dijemput bukan berarti kosong.</span>
+        </div>
+      </div>
+
+      <!-- LANE B -->
+      <div class="lane">
+        <div class="lane-head">
+          <span class="lane-tag b">B</span>
+          <span class="lane-title">Kejadian Rusak</span>
+          <span class="lane-sub">unit fisik tidak layak dipakai</span>
+        </div>
+        <div class="chain">
+          <span class="n n-coral">Rusak</span>
+          <span class="ar">▶</span>
+          <span class="n n-green">tetap dijemput &amp; tetap dihitung</span>
+          <span class="ar">▶</span>
+          <span class="n n-aksi">tindakan: ganti unit</span>
+        </div>
+        <div class="notes">
+          <span class="note">Pemilik masih bisa menyalurkan donasi <b>tanpa lewat kaleng</b> — diserahkan langsung ke PPK. Sistem hanya mencatat, tidak mengubah apa pun.</span>
+          <span class="note warn">Kalau ternyata juga kosong 6× berturut-turut → naik <b>Non-Aktif</b>, tindakannya berubah jadi “dikembalikan”.</span>
+        </div>
+      </div>
+
+      <!-- LANE C -->
+      <div class="lane">
+        <div class="lane-head">
+          <span class="lane-tag c">C</span>
+          <span class="lane-title">Kejadian Hilang</span>
+          <span class="lane-sub">tidak ada di rumah warga tanpa proses pengembalian</span>
+        </div>
+        <div class="chain">
+          <span class="n n-coral">Hilang</span>
+          <span class="ar">▶</span>
+          <span class="n n-green">tetap dijemput</span>
+          <span class="ar">▶</span>
+          <span class="n n-out">keluar cakupan penempatan</span>
+          <span class="ar">▶</span>
+          <span class="n n-aksi">tindakan: beri kaleng baru</span>
+        </div>
+        <div class="notes">
+          <span class="note">PPK <b>tetap menjemput</b> — donatur masih bisa menyerahkan donasi <b>langsung ke PPK</b> tanpa kaleng, sama seperti kaleng rusak.</span>
+          <span class="note">Rumahnya keluar dari <b>cakupan penempatan</b>, tapi angkanya pindah ke <b>cakupan hilang</b> — tidak hilang dari pandangan.</span>
+          <span class="note ok">Kaleng baru diberikan → kembali Aktif, cakupan hilang berkurang. Kalau kaleng lamanya ditemukan, ia jadi unit cadangan.</span>
+        </div>
+      </div>
+
+      <!-- LANE D -->
+      <div class="lane">
+        <div class="lane-head">
+          <span class="lane-tag d">D</span>
+          <span class="lane-title">Non-Aktif — hasil hitungan, bukan pilihan manual</span>
+          <span class="lane-sub">naik dari 6× penjemputan kosong berturut-turut</span>
+        </div>
+        <div class="chain">
+          <span class="n n-teal">Non-Aktif</span>
+          <span class="ar">▶</span>
+          <span class="n n-gray">tidak dapat tugas</span>
+          <span class="ar">▶</span>
+          <span class="n n-green">tetap dikunjungi — verifikasi</span>
+          <span class="ar">▶</span>
+          <span class="n n-aksi">tindakan: dikembalikan</span>
+        </div>
+        <div class="notes">
+          <span class="note">Tetap masuk <b>cakupan penempatan</b> — kalengnya masih ada, hanya berhenti diisi. Sistem memberi tahu admin ada yang perlu ditindak.</span>
+          <span class="note">Kunjungan verifikasi <b>bukan penjemputan</b> — kalau dicatat sebagai penjemputan, hitungan kosongnya bertambah palsu.</span>
+          <span class="note ok">Terisi lagi → <b>kembali Aktif</b>, hitungan <b>diulang dari nol</b>. Naik lagi perlu 6× kosong baru.</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ STRIP BAWAH ============ -->
+  <div class="strip">
+
+    <div class="endwrap">
+      <div class="lbl">Ujung dari cabang<br><b>B dan D</b></div>
+      <div class="endbox">
+        <div class="et">DIKEMBALIKAN — ujung dari alur ini</div>
+        <div class="ed">
+          Kaleng ditarik dari rumah warga dan kembali ke tangan PPK. Dianggap selesai, <b>tidak dilacak lagi</b>, keluar dari cakupan penempatan.
+          Alasan wajib dipilih: <b>permintaan pemilik · kaleng non-aktif · kaleng rusak</b>.
+        </div>
+      </div>
+    </div>
+
+    <div class="figs">
+      <div class="fig">
+        <div class="k">Cakupan penempatan</div>
+        <div class="v"><b>Aktif + Non-Aktif + Rusak</b></div>
+      </div>
+      <div class="fig">
+        <div class="k">Cakupan hilang</div>
+        <div class="v"><b>Hilang</b> — dihitung tersendiri</div>
+      </div>
+      <div class="fig">
+        <div class="k">Angka dikembalikan</div>
+        <div class="v"><b>Dua angka</b> — bulan ini &amp; total</div>
+      </div>
+      <div class="fig">
+        <div class="k">Perlu tindakan admin</div>
+        <div class="v"><b>Non-Aktif + Rusak + Hilang</b></div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    <span>Alur Status Kaleng · Lazisnu — ringkasan satu halaman, 26 keputusan Pion 12 September 2026</span>
+    <span>Rincian: alur-status-kaleng.html · pohon-alur-status-kaleng.html · rancangan-skema-status-kaleng-2026-09-12.md</span>
+  </footer>
+
+</div>
+</body>
+</html>
