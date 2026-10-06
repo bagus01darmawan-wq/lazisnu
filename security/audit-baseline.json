@@ -1,12 +1,12 @@
 {
   "_caraPakai": "Daftar kerentanan yang sudah dikenal dan diterima. Gerbang CI gagal hanya bila muncul id yang BELUM ada di sini. Perbarui dengan: node scripts/audit-baseline.mjs --update",
-  "updatedAt": "2026-09-02T13:20:06.153Z",
+  "updatedAt": "2026-10-06T05:46:18.105Z",
   "advisories": {
     "GHSA-5p2g-fcmc-qvqq": {
       "module": "image-size",
       "severity": "high",
       "url": "https://github.com/advisories/GHSA-5p2g-fcmc-qvqq",
-      "patched": "<0.0.0"
+      "patched": ">=2.0.3"
     },
     "GHSA-67mh-4wv8-2f99": {
       "module": "esbuild",
@@ -14,17 +14,47 @@
       "url": "https://github.com/advisories/GHSA-67mh-4wv8-2f99",
       "patched": ">=0.25.0"
     },
+    "GHSA-86w9-cpqp-85rv": {
+      "module": "node-forge",
+      "severity": "high",
+      "url": "https://github.com/advisories/GHSA-86w9-cpqp-85rv",
+      "patched": "<0.0.0"
+    },
+    "GHSA-f596-whhp-79r4": {
+      "module": "@grpc/grpc-js",
+      "severity": "low",
+      "url": "https://github.com/advisories/GHSA-f596-whhp-79r4",
+      "patched": ">=1.13.6"
+    },
     "GHSA-gh4j-gqv2-49f6": {
       "module": "fast-xml-parser",
       "severity": "moderate",
       "url": "https://github.com/advisories/GHSA-gh4j-gqv2-49f6",
       "patched": ">=5.7.0"
     },
+    "GHSA-hp3w-g68c-fv3c": {
+      "module": "sprintf-js",
+      "severity": "moderate",
+      "url": "https://github.com/advisories/GHSA-hp3w-g68c-fv3c",
+      "patched": "<0.0.0"
+    },
+    "GHSA-m9gg-hp2v-232j": {
+      "module": "@grpc/grpc-js",
+      "severity": "high",
+      "url": "https://github.com/advisories/GHSA-m9gg-hp2v-232j",
+      "patched": ">=1.13.6"
+    },
+    "GHSA-vfj7-8cjw-p6xm": {
+      "module": "braces",
+      "severity": "high",
+      "url": "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+      "patched": "<0.0.0"
+    },
     "GHSA-w3rx-r6r6-pgpr": {
       "module": "image-size",
       "severity": "high",
       "url": "https://github.com/advisories/GHSA-w3rx-r6r6-pgpr",
-      "patched": "<0.0.0"
+      "patched": ">=2.0.3"
     },
     "GHSA-w5hq-g745-h8pq": {
       "module": "uuid",

@@ -3,6 +3,9 @@
   "version": "1.1.0",
   "description": "Lazisnu Collector Backend API",
   "main": "dist/index.js",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/index.ts",
     "dev:clean": "tsx watch --no-cache --clear-screen=false src/index.ts",
@@ -38,8 +41,8 @@
     "bullmq": "^6.3.3",
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.45.2",
-    "fastify": "^5.12.1",
-    "firebase-admin": "^13.8.0",
+    "fastify": "^5.12.5",
+    "firebase-admin": "^14.5.0",
     "ioredis": "^5.4.1",
     "pdf-lib": "^1.17.1",
     "pino": "^10.3.1",

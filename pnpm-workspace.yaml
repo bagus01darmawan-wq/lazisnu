@@ -15,7 +15,7 @@ allowBuilds:
 overrides:
   '@babel/core@7.29.0': 7.29.7 # <=7.29.0 (GHSA-4x5r-pxfx-6jf8) — via mobile; 7.29.7 di tree aman
   '@babel/plugin-transform-modules-systemjs': 7.29.7
-  '@grpc/grpc-js@>=1.14.0 <1.14.4': 1.14.4 # GHSA-xxxx — 1.9.16 di tree tetap
+  '@grpc/grpc-js@>=1.14.0 <1.14.5': 1.14.5 # GHSA-xxxx — 1.9.16 di tree tetap (EXP 2026-10-06: 1.14.4 rentan GHSA-m9gg/f596, uji patch)
   '@tootallnate/once@<2.0.1': 2.0.1 # <2.0.1 (GHSA-vpq2-c234-7xj6) — via dev tooling
   # '@types/react': 18.2.79 — dilepas: override global ini memaksa apps/web
   # (React 19) memakai tipe React 18.2.79, penyebab 3 error typecheck web.
@@ -27,9 +27,9 @@ overrides:
   '@xmldom/xmldom@<0.9.0': 0.8.15 # GHSA-6gmq-8vp8-gcm6 — jalur @expo/plist 0.x
   '@xmldom/xmldom@>=0.9.0 <0.9.12': 0.9.12 # GHSA-6gmq-8vp8-gcm6 — jalur plist 0.9.x
   'ajv@8': 8.20.0 # >=7.0.0-alpha.0 <8.18.0 (GHSA-xxxx) — dulu via eas-cli (dihapus 2026-09-02) dkk; ajv@6 tetap
-  'brace-expansion@<2': 1.1.18 # 1.x <1.1.16/17/18 (GHSA-xxxx)
-  'brace-expansion@>=2 <5': 2.1.4 # 2.x <2.1.4 (GHSA-xxxx)
-  'brace-expansion@>=5': 5.0.9 # >=3 <5.0.9 (GHSA-xxxx); 5.0.5 di tree rentan
+  'brace-expansion@<2': 1.1.21 # 1.x <1.1.16/17/18 (GHSA-xxxx) (EXP 2026-10-06: uji patch GHSA-6j4f/qhr7/q2hr)
+  'brace-expansion@>=2 <5': 2.1.7 # 2.x <2.1.4 (GHSA-xxxx) (EXP 2026-10-06: 2.1.4 rentan GHSA-6j4f/qhr7/q2hr via jest, uji patch)
+  'brace-expansion@>=5': 5.0.12 # >=3 <5.0.9 (GHSA-xxxx); 5.0.5 di tree rentan (EXP 2026-10-06: 5.0.9 rentan GHSA-6j4f/qhr7/q2hr, uji patch)
   'cacache@18': 19.0.1 #   tidak ada patched 6.x; major bump 6→7 untuk build-tooling
   'decode-uri-component': 0.5.0
   'diff@7': 8.0.3 # >=6.0.0 <8.0.3 (GHSA-xxxx) — dulu via eas-cli (dihapus 2026-09-02); diff 8 API kompatibel
@@ -37,7 +37,7 @@ overrides:
   'fast-xml-builder': 1.1.7 # <=1.1.6 (GHSA-xxxx) — 1.1.5 di tree
   'form-data@<2.5.6': 2.5.6 # 2.x <2.5.6 (GHSA-xxxx) — 2.5.5 di tree
   'form-data@>=4.0.0 <4.0.6': 4.0.6 # 4.x <4.0.6 (GHSA-xxxx) — 4.0.5 di tree; 3.x tetap
-  'joi': 17.13.7 # >=17.13.4 <17.13.6 (GHSA-6w3j-5fw6-r9vr, GHSA-gg4h-3hg2-grpc) — via RN cli-config
+  'joi': 17.13.8 # >=17.13.4 <17.13.6 (GHSA-6w3j-5fw6-r9vr, GHSA-gg4h-3hg2-grpc) — via RN cli-config (EXP 2026-10-06: 17.13.7 rentan GHSA-wr44, uji patch)
   'js-yaml@3': 3.15.2
   'js-yaml@4': 4.3.2
   'minimatch@5': 5.1.8 # 5.x <5.1.8 (GHSA-xxxx) — @9/@10 di tree tetap
