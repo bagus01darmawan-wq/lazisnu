@@ -2,19 +2,26 @@ import axios, { AxiosRequestConfig } from 'axios';
 import { authHelper } from './auth';
 import { toCamelCase } from './caseConverter';
 
-const defaultApiUrl = process.env.NODE_ENV === 'production' 
+const defaultApiUrl = process.env.NODE_ENV === 'production'
   ? (typeof window !== 'undefined' ? window.location.origin : '')
   : 'http://localhost:3001';
 
-// Client-side fail-fast warning in production
-if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_API_URL) {
-  console.warn(
-    '[LAZISNU WARNING] NEXT_PUBLIC_API_URL is not defined in production environment. ' +
-    'Falling back to window.location.origin, which might cause API requests to fail if the backend is hosted on a different domain.'
-  );
+/**
+ * Normalisasi basis URL menjadi alamat LENGKAP (dengan `http://`).
+ *
+ * `axios.create({ baseURL })` menerima string apa adanya; bila nilainya
+ * mis. `192.168.1.11` (tanpa skema, mudah terjadi dari set variabel
+ * lingkungan di terminal), setiap permintaan gagal dengan pesan membingungkan
+ * "Failed to construct 'URL': Invalid URL" — bukan pesan "tidak bisa konek".
+ * Karena itu dinormalkan sekali di sini.
+ */
+function normalkanBasisUrl(nilai: string | undefined, bawaan: string): string {
+  const mentah = (nilai || '').trim();
+  if (!mentah) return bawaan;
+  return /^https?:\/\//i.test(mentah) ? mentah.replace(/\/+$/, '') : `http://${mentah.replace(/^\/+/, '').replace(/\/+$/, '')}`;
 }
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL || defaultApiUrl) + '/v1';
+const API_URL = normalkanBasisUrl(process.env.NEXT_PUBLIC_API_URL, defaultApiUrl) + '/v1';
 
 const apiInstance = axios.create({
   baseURL: API_URL,
