@@ -106,6 +106,13 @@
       "when": 1790430000000,
       "tag": "0014_officer_dukuh",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1791605726095,
+      "tag": "0015_collections_assignment_integrity",
+      "breakpoints": true
     }
   ]
 }
