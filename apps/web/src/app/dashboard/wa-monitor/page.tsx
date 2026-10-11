@@ -215,13 +215,22 @@ export default function WAMonitorPage() {
   const [dbStats, setDbStats] = React.useState<WaSummaryStats | null>(null);
   const [dailyTrends, setDailyTrends] = React.useState<WaDailyTrend[]>([]);
   const [dbLoading, setDbLoading] = React.useState(true);
+  /**
+   * Satu sumber kebenaran untuk kondisi filter daftar log saat halaman pertama
+   * dibuka. Deklarasi `useState` dan handler Reset membaca nilai yang SAMA,
+   * jadi Reset tidak mungkin mengembalikan ke keadaan berbeda dari pembukaan
+   * halaman. `period` TIDAK diikutkan — itu penyaring kartu statistik historis,
+   * bukan filter daftar log yang di-reset bersama pencarian.
+   */
+  const FILTER_AWAL = { search: '', page: 1, pageSize: 20 };
+
   const [period, setPeriod] = React.useState<'today' | 'week' | 'month' | 'all'>('month');
-  
-  const [page, setPage] = React.useState(1);
-  const [pageSize, setPageSize] = React.useState(20);
+
+  const [page, setPage] = React.useState(FILTER_AWAL.page);
+  const [pageSize, setPageSize] = React.useState(FILTER_AWAL.pageSize);
   const [totalItems, setTotalItems] = React.useState(0);
   const [totalPages, setTotalPages] = React.useState(1);
-  const [search, setSearch] = React.useState('');
+  const [search, setSearch] = React.useState(FILTER_AWAL.search);
 
   const fetchWAStatus = async (currentPage = page, searchQuery = search, limit = pageSize) => {
     setLoading(true);
@@ -368,9 +377,9 @@ export default function WAMonitorPage() {
   };
 
   const handleReset = () => {
-    setSearch('');
-    setPage(1);
-    void fetchWAStatus(1, '', pageSize);
+    setSearch(FILTER_AWAL.search);
+    setPageSize(FILTER_AWAL.pageSize);
+    setPage(FILTER_AWAL.page);
   };
 
   const columns: ColumnDef<WaLogItem>[] = [
@@ -449,42 +458,32 @@ export default function WAMonitorPage() {
             </div>
           </div>
 
-          <Button
-            onClick={() => { void fetchWAStatus(page, search, pageSize); void fetchFailedJobs(); }}
-            className="h-[35px] px-4 rounded-xl text-[11px] font-bold bg-[#EAD19B] text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 hover:bg-[#EAD19B]/90 transition-all active:scale-95 flex items-center gap-2"
-          >
-            <RefreshCw size={14} strokeWidth={3} className={cn(loading && "animate-spin")} />
-            Refresh Status
-          </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <DropdownFilter
+              options={[
+                { label: 'Hari Ini', value: 'today' },
+                { label: '7 Hari', value: 'week' },
+                { label: 'Bulan Ini', value: 'month' },
+                { label: 'Semua', value: 'all' }
+              ]}
+              value={period}
+              onChange={(val) => {
+                setPeriod(val as 'today' | 'week' | 'month' | 'all');
+              }}
+              className="h-[35px] min-w-[120px]"
+              showSearch={false}
+            />
+            <Button
+              onClick={() => { void fetchWAStatus(page, search, pageSize); void fetchFailedJobs(); }}
+              className="h-[35px] px-4 rounded-xl text-[11px] font-bold bg-[#EAD19B] text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 hover:bg-[#EAD19B]/90 transition-all active:scale-95 flex items-center gap-2"
+            >
+              <RefreshCw size={14} strokeWidth={3} className={cn(loading && "animate-spin")} />
+              Refresh Status
+            </Button>
+          </div>
         </div>
 
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 bg-[#F4F1EA]/5 backdrop-blur-md rounded-2xl border border-[#F4F1EA]/10">
-            <div className="flex items-center gap-3">
-              <MessageSquare className="text-[#EAD19B]" size={20} />
-              <div>
-                <p className="text-xs font-bold text-[#F4F1EA]/50 uppercase tracking-widest">Statistik Historis (Database)</p>
-                <p className="text-xs text-[#F4F1EA]/40">Data kumulatif dari tabel notifications, tidak hilang saat restart Redis</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-[#F4F1EA]/50">Periode:</span>
-              <DropdownFilter
-                options={[
-                  { label: 'Hari Ini', value: 'today' },
-                  { label: '7 Hari', value: 'week' },
-                  { label: 'Bulan Ini', value: 'month' },
-                  { label: 'Semua', value: 'all' }
-                ]}
-                value={period}
-                onChange={(val) => {
-                  setPeriod(val as 'today' | 'week' | 'month' | 'all');
-                }}
-                className="h-[36px] min-w-[120px]"
-                showSearch={false}
-              />
-            </div>
-          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card variant="glass" className="relative overflow-hidden group border-white/5">

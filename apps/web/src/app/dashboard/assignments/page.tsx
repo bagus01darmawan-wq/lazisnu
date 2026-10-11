@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { useRouter } from 'next/navigation';
 import { ClipboardList } from 'lucide-react';
-import { PeriodPicker } from '@/components/ui/PeriodPicker';
 import { RegionCards } from '@/components/region/RegionCards';
 
 /**
@@ -13,13 +12,7 @@ import { RegionCards } from '@/components/region/RegionCards';
  */
 export default function AssignmentsPage() {
   const router = useRouter();
-  const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth() + 1;
-  const [filter, setFilter] = useState<{ year: number; month: number; months: number[] }>({
-    year: currentYear,
-    month: currentMonth,
-    months: [currentMonth],
-  });
+  const now = new Date();
 
   return (
     <div className="space-y-6">
@@ -32,23 +25,13 @@ export default function AssignmentsPage() {
             <p className="text-[#F4F1EA]/60 text-sm font-medium">Pilih wilayah untuk melihat penugasan</p>
           </div>
         </div>
-
-        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-          <PeriodPicker
-            months={filter.months}
-            year={filter.year}
-            onChange={(m, y) => {
-              setFilter({ year: y, month: m[0] || currentMonth, months: m });
-            }}
-          />
-        </div>
       </div>
 
       {/* Kartu wilayah — klik beralih halaman ke detail */}
       <RegionCards
         page="assignments"
-        year={filter.year}
-        month={filter.month}
+        year={now.getFullYear()}
+        month={now.getMonth() + 1}
         selectedId={null}
         onSelect={(r) => {
           const params = new URLSearchParams({

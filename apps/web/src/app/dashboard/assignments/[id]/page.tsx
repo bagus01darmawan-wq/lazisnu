@@ -142,20 +142,30 @@ export default function AssignmentsDetailPage({ params, searchParams }: { params
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
 
-  const [filter, setFilter] = useState<{ year: number; month: number; months: number[] }>({
-    year: currentYear,
-    month: currentMonth,
-    months: [currentMonth],
+  /**
+   * Satu sumber kebenaran untuk kondisi filter saat halaman pertama dibuka.
+   * Deklarasi `useState` dan handler Reset membaca nilai yang SAMA, jadi Reset
+   * tidak mungkin mengembalikan ke keadaan berbeda dari pembukaan halaman.
+   * Wilayah TIDAK diikutkan — itu dikunci dari URL, bukan filter yang bisa
+   * di-reset oleh pengguna.
+   */
+  const filterAwal = () => ({
+    filter: { year: currentYear, month: currentMonth, months: [currentMonth] },
+    search: '',
+    currentPage: 1,
+    pageSize: 10,
   });
-  const [search, setSearch] = useState('');
+
+  const [filter, setFilter] = useState<{ year: number; month: number; months: number[] }>(filterAwal().filter);
+  const [search, setSearch] = useState(filterAwal().search);
   // Wilayah dikunci dari URL (hasil klik kartu di halaman index):
   // kartu ranting menyaring branch_id, kartu dukuh menyaring dukuh_id.
   const regionQuery = regionKind === 'dukuh'
     ? { dukuh_id: regionId }
     : { branch_id: regionId };
   const [totalItems, setTotalItems] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [currentPage, setCurrentPage] = useState(filterAwal().currentPage);
+  const [pageSize, setPageSize] = useState(filterAwal().pageSize);
 
   // Halaman detail: wilayah selalu terkunci dari URL, tidak ada state kartu.
 
@@ -690,10 +700,11 @@ export default function AssignmentsDetailPage({ params, searchParams }: { params
 
           <button
             onClick={() => {
-              setSearch('');
-              setFilter({ year: currentYear, month: currentMonth, months: [currentMonth] });
-              setCurrentPage(1);
-              setPageSize(10);
+              const awal = filterAwal();
+              setSearch(awal.search);
+              setFilter(awal.filter);
+              setCurrentPage(awal.currentPage);
+              setPageSize(awal.pageSize);
             }}
             className="h-[36px] bg-[#F4F1EA]/10 backdrop-blur-md border border-[#F4F1EA]/20 rounded-2xl px-5 flex items-center gap-2 text-xs font-bold text-white/90 hover:bg-[#F4F1EA]/20 transition-all duration-300 active:scale-95 shadow-lg shadow-black/5"
           >

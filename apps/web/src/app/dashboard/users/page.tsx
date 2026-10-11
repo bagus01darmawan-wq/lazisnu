@@ -85,15 +85,30 @@ const officerSchema = z.object({
 
 type OfficerFormValues = z.infer<typeof officerSchema>;
 
+/**
+ * Satu sumber kebenaran untuk kondisi filter saat halaman pertama dibuka.
+ * Deklarasi `useState` dan handler Reset membaca nilai yang SAMA, jadi Reset
+ * tidak mungkin mengembalikan ke keadaan yang berbeda dari pembukaan halaman.
+ * (Sebelumnya reset menulis 'ACTIVE' padangkan nilai awal 'ALL' — akun
+ * non-aktif seolah hilang begitu Reset ditekan.)
+ */
+const FILTER_AWAL = {
+  search: '',
+  branchFilter: '',
+  statusFilter: 'ALL',
+  currentPage: 1,
+  pageSize: 10,
+};
+
 export default function UsersPage() {
   const [data, setData] = useState<OfficerExtended[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [branchFilter, setBranchFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [search, setSearch] = useState(FILTER_AWAL.search);
+  const [branchFilter, setBranchFilter] = useState(FILTER_AWAL.branchFilter);
+  const [statusFilter, setStatusFilter] = useState(FILTER_AWAL.statusFilter);
   const [totalItems, setTotalItems] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [currentPage, setCurrentPage] = useState(FILTER_AWAL.currentPage);
+  const [pageSize, setPageSize] = useState(FILTER_AWAL.pageSize);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingOfficer, setEditingOfficer] = useState<OfficerExtended | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -565,13 +580,13 @@ export default function UsersPage() {
             showSearch={false}
           />
 
-          <button 
+          <button
             onClick={() => {
-              setSearch('');
-              setBranchFilter('');
-              setStatusFilter('ACTIVE');
-              setCurrentPage(1);
-              setPageSize(10);
+              setSearch(FILTER_AWAL.search);
+              setBranchFilter(FILTER_AWAL.branchFilter);
+              setStatusFilter(FILTER_AWAL.statusFilter);
+              setCurrentPage(FILTER_AWAL.currentPage);
+              setPageSize(FILTER_AWAL.pageSize);
             }}
             className="h-[36px] bg-[#F4F1EA]/10 backdrop-blur-md border border-[#F4F1EA]/20 rounded-2xl px-5 flex items-center gap-2 text-xs font-bold text-white/90 hover:bg-[#F4F1EA]/20 transition-all duration-300 active:scale-95 shadow-lg shadow-black/5"
           >

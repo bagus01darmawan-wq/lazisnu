@@ -9,6 +9,27 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import FilterDropdown from './FilterDropdown';
 import ExportButton from './ExportButton';
 
+/**
+ * Basis URL backend yang SELALU absolut.
+ *
+ * `new URL()` melempar "Failed to construct 'URL': Invalid URL" bila string
+ * awal bukan alamat lengkap (tanpa `http://`). Nilai dari lingkungan bisa
+ * seperti itu — misal `API_URL=192.168.1.11` hasil setidaknya sekali di
+ * terminal. Karena itu dinormalkan di sini, bukan di tiap pemanggil.
+ *
+ * Urutan: API_URL (server) → NEXT_PUBLIC_API_URL (klien/bawaan) →
+ * localhost:3001 (dev). Sejalan dengan lib/api.ts.
+ */
+function apiBaseUrl(): string {
+  const raw = (process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001').trim();
+  return /^https?:\/\//i.test(raw) ? raw.replace(/\/+$/, '') : `http://${raw.replace(/^\/+/, '')}`;
+}
+
+/** Buat URL lengkap untuk endpoint backend tanpa risiko galat Invalid URL. */
+function apiUrl(path: string): URL {
+  return new URL(path, apiBaseUrl());
+}
+
 async function getStatsData(month: string, months: string, year: string, branch: string, officer: string) {
   const cookieStore = await cookies();
   const token = cookieStore.get('lazisnu_token')?.value;
@@ -16,8 +37,7 @@ async function getStatsData(month: string, months: string, year: string, branch:
   if (!token) return null;
 
   try {
-    const API_URL = process.env.API_URL || 'http://localhost:3001';
-    const url = new URL(`${API_URL}/v1/bendahara/reports/summary`);
+    const url = apiUrl('/v1/bendahara/reports/summary');
     url.searchParams.append('year', year);
     if (months) url.searchParams.append('months', months);
     else if (month) url.searchParams.append('month', month);
@@ -45,8 +65,7 @@ async function getAdditionalStats(month: string, months: string, year: string, b
   if (!token) return null;
 
   try {
-    const API_URL = process.env.API_URL || 'http://localhost:3001';
-    const url = new URL(`${API_URL}/v1/bendahara/reports/stats`);
+    const url = apiUrl('/v1/bendahara/reports/stats');
     url.searchParams.append('year', year);
     if (months) url.searchParams.append('months', months);
     else if (month) url.searchParams.append('month', month);
@@ -76,7 +95,7 @@ async function TransactionList({ month, months, year, branch, officer, search, p
   let paginationData: ReportPagination | undefined;
 
   try {
-    const API_URL = process.env.API_URL || 'http://localhost:3001';
+    const url = apiUrl('/v1/bendahara/collections');
 
     let startDate: string;
     let endDate: string;
@@ -98,7 +117,6 @@ async function TransactionList({ month, months, year, branch, officer, search, p
       endDate = new Date(Number(year), 12, 0, 23, 59, 59, 999).toISOString();
     }
 
-    const url = new URL(`${API_URL}/v1/bendahara/collections`);
     url.searchParams.append('start_date', startDate);
     url.searchParams.append('end_date', endDate);
     url.searchParams.append('limit', limit);
@@ -207,11 +225,13 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
                 <Wallet size={20} />
               </div>
             </div>
-            <div className="mt-6 flex items-center gap-3">
+            <div className="mt-6 flex flex-wrap items-center gap-3">
               <span className="flex items-center text-[10px] font-black text-[#F4F1EA]/40 bg-white/5 px-2.5 py-1.5 rounded-xl border border-white/5 uppercase tracking-wider">
-                Total Penarikan
+                jumlah penjemputan (n) kaleng
               </span>
-              <span className="text-xs text-[#EAD19B] font-bold">{totalCount} Kali</span>
+              <span className="text-xs text-[#EAD19B] font-bold">
+                {totalCount} kali &#183; {totalCollectedCans} kaleng
+              </span>
             </div>
           </div>
         </Card>
@@ -297,9 +317,9 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
             </div>
             <div className="mt-6 flex items-center gap-3">
               <span className="flex items-center text-[10px] font-black text-[#F4F1EA]/40 bg-white/5 px-2.5 py-1.5 rounded-xl border border-white/5 uppercase tracking-wider">
-                Status Terlewat
+                Tidak dijemput
               </span>
-              <span className="text-xs text-[#F59E0B] font-bold">{uncollectedCount} dari {totalAssignments} kaleng aktif</span>
+              <span className="text-xs text-[#F59E0B] font-bold">{uncollectedCount} dari {totalAssignments} penugasan</span>
             </div>
           </div>
         </Card>

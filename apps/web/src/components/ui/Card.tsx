@@ -21,13 +21,22 @@ const Card = ({ className, title, footer, children, variant = 'default', content
       {...props}
     >
       {title && (
-        <div className="px-6 py-4 border-b border-[var(--border)] bg-[var(--hover)]">
-          <h3 className="text-sm font-bold text-[var(--surface-ink)]">{title}</h3>
+        <div className={cn(
+          'px-6 py-4 border-b border-[var(--border)] bg-[var(--hover)]',
+          // Judul harus mengikuti varian kartunya: kaca = teks terang di atas
+          // canvas gelap. Sebelumnya permukaan terang di bawah judul kaca
+          // membuat judul tetap gelap walau latarnya diubah ke terang.
+          variant === 'glass' ? 'bg-transparent' : ''
+        )}>
+          <h3 className={cn('text-sm font-bold', variant === 'glass' ? 'text-[var(--glass-ink)]' : 'text-[var(--surface-ink)]')}>{title}</h3>
         </div>
       )}
       <div className={cn('p-6', contentClassName)}>{children}</div>
       {footer && (
-        <div className="px-6 py-4 border-t border-[var(--border)] bg-[var(--hover)]">
+        <div className={cn(
+          'px-6 py-4 border-t border-[var(--border)]',
+          variant === 'glass' ? 'bg-transparent' : 'bg-[var(--hover)]'
+        )}>
           {footer}
         </div>
       )}

@@ -214,28 +214,6 @@ export default function OfficerDetailPage({ params }: { params: Promise<{ id: st
             <p className="text-[#F4F1EA]/60 text-sm font-medium">Profil dan performa kerja petugas</p>
           </div>
         </div>
-
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            onClick={() => setIsEditModalOpen(true)}
-            className="gap-2 border-white/10 bg-white/5 text-[#F4F1EA]/80 hover:text-[#F4F1EA] hover:bg-white/10"
-          >
-            <Edit size={16} className="text-[#EAD19B]" />
-            Edit
-          </Button>
-          <Button
-            variant={officer.isActive ? 'danger' : 'primary'}
-            onClick={handleToggleActive}
-            className="gap-2"
-          >
-            {officer.isActive ? (
-              <><UserX size={16} /> Nonaktifkan</>
-            ) : (
-              <><UserCheck size={16} /> Aktifkan</>
-            )}
-          </Button>
-        </div>
       </div>
 
       {/* Profile */}
@@ -243,15 +221,17 @@ export default function OfficerDetailPage({ params }: { params: Promise<{ id: st
 
       {/* Period Filter */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <h2 className="text-sm font-black text-[#F4F1EA] uppercase tracking-widest flex items-center gap-2">
-          <CalendarDays size={16} className="text-[#EAD19B]" />
-          Periode Laporan
-        </h2>
-        <PeriodPicker
-          months={selectedMonths.length > 0 ? selectedMonths : [new Date().getMonth() + 1]}
-          year={selectedYear}
-          onChange={handlePeriodChange}
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-sm font-black text-[#F4F1EA] uppercase tracking-widest flex items-center gap-2">
+            <CalendarDays size={16} className="text-[#EAD19B]" />
+            Periode Laporan
+          </h2>
+          <PeriodPicker
+            months={selectedMonths.length > 0 ? selectedMonths : [new Date().getMonth() + 1]}
+            year={selectedYear}
+            onChange={handlePeriodChange}
+          />
+        </div>
       </div>
 
       {/* Stats */}
@@ -277,6 +257,29 @@ export default function OfficerDetailPage({ params }: { params: Promise<{ id: st
 
       {/* Chart */}
       <MonthlyChart data={officer.stats.monthlyBreakdown} />
+
+      {/* Aksi petugas — dipindahkan ke bawah agar tidak bersaing dengan header */}
+      <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center sm:justify-end gap-3">
+        <Button
+          variant="outline"
+          onClick={() => setIsEditModalOpen(true)}
+          className="gap-2 border-white/10 bg-white/5 text-[#F4F1EA]/80 hover:text-[#F4F1EA] hover:bg-white/10"
+        >
+          <Edit size={16} className="text-[#EAD19B]" />
+          Edit
+        </Button>
+        <Button
+          variant={officer.isActive ? 'danger' : 'primary'}
+          onClick={handleToggleActive}
+          className="gap-2"
+        >
+          {officer.isActive ? (
+            <><UserX size={16} /> Nonaktifkan</>
+          ) : (
+            <><UserCheck size={16} /> Aktifkan</>
+          )}
+        </Button>
+      </div>
 
       {/* Edit Modal */}
       <Modal

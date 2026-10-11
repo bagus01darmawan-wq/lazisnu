@@ -36,16 +36,23 @@ const formatDate = (value?: string | null) => {
   return format(new Date(value), 'dd MMM yyyy, HH:mm', { locale: id });
 };
 
+/**
+ * Satu sumber kebenaran untuk kondisi filter saat halaman pertama dibuka.
+ * Deklarasi `useState` dan handler Reset membaca nilai yang SAMA, jadi Reset
+ * tidak mungkin mengembalikan ke keadaan berbeda dari pembukaan halaman.
+ * PAGE_SIZE mengikuti SUMBER yang sama agar jumlah baris ikut konsisten.
+ */
+const FILTER_AWAL = { search: '', page: 1 };
+const PAGE_SIZE = 20;
+
 export default function ResubmitPage() {
   const [data, setData] = useState<ResubmitTrackerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState(FILTER_AWAL.search);
+  const [page, setPage] = useState(FILTER_AWAL.page);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-
-  const PAGE_SIZE = 20;
 
   const fetchResubmits = async (searchQuery = search, currentPage = page, limit = PAGE_SIZE) => {
     setLoading(true);
@@ -81,9 +88,9 @@ export default function ResubmitPage() {
   }, [search]);
 
   const handleReset = () => {
-    setSearch('');
-    setPage(1);
-    void fetchResubmits('', 1, PAGE_SIZE);
+    setSearch(FILTER_AWAL.search);
+    setPage(FILTER_AWAL.page);
+    void fetchResubmits(FILTER_AWAL.search, FILTER_AWAL.page, PAGE_SIZE);
   };
 
   const handlePageChange = (nextPage: number) => {

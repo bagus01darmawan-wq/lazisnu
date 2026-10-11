@@ -12,12 +12,34 @@ interface StatsCardsProps {
     completedAssignments: number;
     activeAssignments: number;
     uncollectedAssignments: number;
+    /** Dipindahkan ke petugas lain — ikut masuk total tetapi sering tak tampil. */
+    reassignedAssignments?: number;
     completionRate: number;
     averagePerCollection: number;
   };
 }
 
+/**
+ * Label manusiawi untuk setiap status. Kontrak metrik (taskMetrics.ts) memasukkan
+ * REASSIGNED ke dalam task_total, jadi rincian harus menampilkannya juga —
+ * kalau tidak, angka besar dan jumlah rincian bisa berbeda (petugas boris:
+ * besar 53, rincian "0 selesai · 0 aktif · 0 terlewat") dan terbaca seperti bug.
+ */
+const RINCIAN_STATUS: ReadonlyArray<{ key: keyof StatsCardsProps['stats']; label: string }> = [
+  { key: 'completedAssignments', label: 'selesai' },
+  { key: 'activeAssignments', label: 'aktif' },
+  { key: 'uncollectedAssignments', label: 'terlewat' },
+  { key: 'reassignedAssignments', label: 'dipindah' },
+];
+
 export function StatsCards({ stats }: StatsCardsProps) {
+  // Hanya status yang berjumlah > 0 yang ditampilkan supaya rincian tidak
+  // memuat angka nol yang mengganggu pembacaan.
+  const rincian = RINCIAN_STATUS
+    .filter(({ key }) => Number(stats[key] ?? 0) > 0)
+    .map(({ key, label }) => `${stats[key]} ${label}`)
+    .join(' · ');
+
   const cards = [
     {
       label: 'Total Penjemputan',
@@ -38,7 +60,7 @@ export function StatsCards({ stats }: StatsCardsProps) {
     {
       label: 'Total Tugas',
       value: stats.totalAssignments.toLocaleString('id-ID'),
-      sub: `${stats.completedAssignments} selesai · ${stats.activeAssignments} aktif · ${stats.uncollectedAssignments} terlewat`,
+      sub: rincian || 'belum ada penugasan',
       icon: CheckCircle,
       color: 'text-[#DE6F4A]',
       bg: 'bg-[#DE6F4A]/10',

@@ -141,16 +141,29 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // Pagination & Filter states
-  const [search, setSearch] = useState('');
+  /**
+   * Satu sumber kebenaran untuk kondisi filter saat halaman pertama dibuka.
+   * Deklarasi `useState` dan handler Reset membaca nilai yang SAMA, jadi Reset
+   * tidak mungkin mengembalikan ke keadaan berbeda dari pembukaan halaman.
+   * Wilayah TIDAK diikutkan — itu dikunci dari URL, bukan filter yang bisa
+   * di-reset oleh pengguna.
+   */
+  const FILTER_AWAL = {
+    search: '',
+    statusFilter: 'ALL',
+    currentPage: 1,
+    pageSize: 10,
+  };
+  const [search, setSearch] = useState(FILTER_AWAL.search);
   // Wilayah dikunci dari URL (hasil klik kartu di halaman index).
   // Kartu ranting menyaring branch_id, kartu dukuh menyaring dukuh_id.
   const regionQuery = regionKind === 'dukuh'
     ? { dukuh_id: regionId }
     : { branch_id: regionId };
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState(FILTER_AWAL.statusFilter);
   const [totalItems, setTotalItems] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [currentPage, setCurrentPage] = useState(FILTER_AWAL.currentPage);
+  const [pageSize, setPageSize] = useState(FILTER_AWAL.pageSize);
 
   // Halaman detail: wilayah selalu terkunci dari URL, tidak ada state kartu.
 
@@ -855,10 +868,10 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
 
           <button
             onClick={() => {
-              setSearch('');
-              setStatusFilter('ACTIVE');
-              setCurrentPage(1);
-              setPageSize(10);
+              setSearch(FILTER_AWAL.search);
+              setStatusFilter(FILTER_AWAL.statusFilter);
+              setCurrentPage(FILTER_AWAL.currentPage);
+              setPageSize(FILTER_AWAL.pageSize);
             }}
             className="h-[36px] bg-[#F4F1EA]/10 backdrop-blur-md border border-[#F4F1EA]/20 rounded-2xl px-5 flex items-center gap-2 text-xs font-bold text-white/90 hover:bg-[#F4F1EA]/20 transition-all duration-300 active:scale-95 shadow-lg shadow-black/5"
           >

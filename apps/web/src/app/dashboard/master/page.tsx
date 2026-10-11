@@ -833,7 +833,7 @@ export default function MasterDataPage() {
       </Card>
 
       {/* Backup Database — pindahan dari overview */}
-      <Card className="border-white/5">
+      <Card variant="glass" className="border-white/5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             <div className={`p-3 rounded-xl ${backupActive ? 'bg-[#1F8243]/10 text-[#1F8243]' : 'bg-[#F4F1EA]/5 text-[#F4F1EA]/40'}`}>

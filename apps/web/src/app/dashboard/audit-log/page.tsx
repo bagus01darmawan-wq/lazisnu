@@ -52,18 +52,39 @@ function mapAuditLog(log: AuditLogResponse): IAuditLog {
   };
 }
 
+/**
+ * Satu sumber kebenaran untuk kondisi filter saat halaman pertama dibuka.
+ * Deklarasi `useState` dan handler Reset membaca nilai yang SAMA, jadi Reset
+ * tidak mungkin mengembalikan ke keadaan berbeda dari pembukaan halaman.
+ * Bulan/tahun dipatok ke "hari ini" karena itu memang nilai awal halaman.
+ * Berupa fungsi (bukan objek) supaya tanggal dinamis: hasilnya dievaluasi saat
+ * dipakai, tidak sekali saat modul dimuat.
+ */
+const filterAwal = () => {
+  const sekarang = new Date();
+  const bulanIni = sekarang.getMonth() + 1;
+  return {
+    search: '',
+    page: 1,
+    pageSize: 20,
+    month: bulanIni,
+    year: sekarang.getFullYear(),
+    months: [bulanIni],
+  };
+};
+
 export default function AuditLogPage() {
   const [logs, setLogs] = useState<IAuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLog, setSelectedLog] = useState<IAuditLog | null>(null);
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState(filterAwal().search);
+  const [page, setPage] = useState(filterAwal().page);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
-  const [pageSize, setPageSize] = useState(20);
-  const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
-  const [year, setYear] = useState<number>(new Date().getFullYear());
-  const [months, setMonths] = useState<number[]>([new Date().getMonth() + 1]);
+  const [pageSize, setPageSize] = useState(filterAwal().pageSize);
+  const [month, setMonth] = useState<number>(filterAwal().month);
+  const [year, setYear] = useState<number>(filterAwal().year);
+  const [months, setMonths] = useState<number[]>(filterAwal().months);
 
   const fetchLogs = async (currentPage = page, searchQuery = search, m = month, y = year, limit = pageSize) => {
     try {
@@ -102,10 +123,13 @@ export default function AuditLogPage() {
   }, [search, month, year, pageSize]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleReset = () => {
-    setSearch('');
-    setMonth(new Date().getMonth() + 1);
-    setYear(new Date().getFullYear());
-    setPage(1);
+    const awal = filterAwal();
+    setSearch(awal.search);
+    setMonth(awal.month);
+    setYear(awal.year);
+    setMonths(awal.months);
+    setPage(awal.page);
+    setPageSize(awal.pageSize);
   };
 
   const handlePageChange = (newPage: number) => {

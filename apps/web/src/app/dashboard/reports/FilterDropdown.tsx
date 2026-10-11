@@ -14,6 +14,23 @@ interface OfficerExtended extends Omit<Officer, 'full_name' | 'branch_id'> {
   branchId: string;
 }
 
+/**
+ * Satu sumber kebenaran untuk kondisi filter saat halaman pertama dibuka.
+ * Berbeda dari halaman lain: filter Reports RAWAN DIBAGIKAN karena ditulis ke
+ * URL, jadi yang jadi "patok awal" di sini adalah nilai URL default (bukan
+ * keadaan yang mungkin sudah terisi orang lain di tautan yang Anda buka).
+ * `handleReset` dan pembacaan nilai awal sama-sama memakai konstanta ini.
+ */
+const FILTER_AWAL = () => {
+  const sekarang = new Date();
+  return {
+    tahun: sekarang.getFullYear().toString(),
+    bulanAktif: (sekarang.getMonth() + 1).toString(),
+    months: [sekarang.getMonth() + 1],
+    search: '',
+  };
+};
+
 export default function FilterDropdown() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -118,10 +135,14 @@ export default function FilterDropdown() {
   };
 
   const handleReset = () => {
-    setSearchTerm('');
+    const awal = FILTER_AWAL();
+    setSearchTerm(awal.search);
+    setDebouncedSearchTerm(awal.search);
+    setSelectedMonths(awal.months);
+    setSelectedYear(parseInt(awal.tahun));
     const params = new URLSearchParams();
-    params.set('year', new Date().getFullYear().toString());
-    params.set('month', (new Date().getMonth() + 1).toString());
+    params.set('year', awal.tahun);
+    params.set('month', awal.bulanAktif);
     router.push(`?${params.toString()}`);
   };
 

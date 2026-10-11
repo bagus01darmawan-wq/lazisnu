@@ -9,18 +9,8 @@ import { Modal } from '@/components/ui/Modal';
 import { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
 import { FileSignature, Download, RefreshCcw, FileCog, Eye, TriangleAlert } from 'lucide-react';
-import { DropdownFilter } from '@/components/ui/DropdownFilter';
+import { PeriodPicker } from '@/components/ui/PeriodPicker';
 import { c1Api, type BranchSubmissionDetail, type BaVersion, type BranchBaText } from '@/lib/c1';
-
-const MONTHS = [
-  { label: 'Januari', value: '1' }, { label: 'Februari', value: '2' },
-  { label: 'Maret', value: '3' }, { label: 'April', value: '4' },
-  { label: 'Mei', value: '5' }, { label: 'Juni', value: '6' },
-  { label: 'Juli', value: '7' }, { label: 'Agustus', value: '8' },
-  { label: 'September', value: '9' }, { label: 'Oktober', value: '10' },
-  { label: 'November', value: '11' }, { label: 'Desember', value: '12' },
-];
-const YEARS = ['2024', '2025', '2026', '2027'].map((y) => ({ label: y, value: y }));
 
 /**
  * Label Indonesia untuk `ppk_submission_status` (schema.ts:17 —
@@ -204,23 +194,23 @@ export default function SetoranPage() {
     {
       id: 'period',
       header: 'Periode',
-      cell: ({ row }) => <span className="font-semibold text-slate-900">{row.original.period}</span>,
+      cell: ({ row }) => <span className="font-semibold text-[#F4F1EA]">{row.original.period}</span>,
     },
     {
       id: 'total',
       header: 'Total',
-      cell: ({ row }) => <span className="text-slate-900">Rp {Number(row.original.totalAmount).toLocaleString('id-ID')}</span>,
+      cell: ({ row }) => <span className="text-[#F4F1EA]">Rp {Number(row.original.totalAmount).toLocaleString('id-ID')}</span>,
     },
     {
       id: 'share',
       header: 'Share MWC',
-      cell: ({ row }) => <span className="text-slate-900">Rp {Number(row.original.shareMwc).toLocaleString('id-ID')}</span>,
+      cell: ({ row }) => <span className="text-[#F4F1EA]">Rp {Number(row.original.shareMwc).toLocaleString('id-ID')}</span>,
     },
     {
       id: 'status',
       header: 'Status BA',
       cell: ({ row }) => (
-        <Badge variant={isIssued(row.original.status) ? 'success' : 'pending'}>
+        <Badge variant={isIssued(row.original.status) ? 'success' : 'pending'} className="text-[#F4F1EA]">
           {isIssued(row.original.status) ? 'Sudah diterbitkan' : 'Belum diterbitkan'}
         </Badge>
       ),
@@ -233,7 +223,7 @@ export default function SetoranPage() {
           <Button
             variant="outline"
             size="sm"
-            className="h-8 px-3 text-xs font-bold rounded-lg hover:bg-green-50 hover:text-green-600 hover:border-green-200 transition-all border-slate-200"
+            className="h-8 px-3 text-xs font-bold rounded-lg border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-white/10 hover:text-[#F4F1EA] transition-all"
             onClick={() => openDetail(row.original.id)}>
             Rincian
           </Button>
@@ -241,7 +231,7 @@ export default function SetoranPage() {
             <Button
               variant="outline"
               size="sm"
-              className="h-8 px-3 text-xs font-bold rounded-lg hover:bg-[#EAD19B]/20 hover:text-[#2C473E] transition-all border-slate-200"
+              className="h-8 px-3 text-xs font-bold rounded-lg border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-[#EAD19B]/10 hover:text-[#EAD19B] transition-all"
               onClick={() => void openBa(row.original)}>
               <Eye size={13} className="mr-1" />
               Lihat BA
@@ -264,9 +254,14 @@ export default function SetoranPage() {
             </p>
           </div>
         </div>
-        <div className="flex bg-[#F4F1EA]/10 backdrop-blur-md p-1 rounded-2xl border border-[#F4F1EA]/20 shadow-sm">
+      </div>
+
+      <div className="flex flex-col lg:flex-row gap-4 items-center justify-between bg-transparent p-4 md:p-5 border-none shadow-none">
+        <div className="hidden lg:block lg:flex-1" aria-hidden="true" />
+        <div className="flex flex-wrap items-center justify-end gap-3 w-full lg:w-auto">
+          <PeriodPicker months={[Number(month)]} year={Number(year)} onChange={(m, y) => { setMonth(String(m[0] ?? month)); setYear(String(y)); }} />
           <button
-            className="px-4 py-2 rounded-xl text-[11px] font-bold text-[#EAD19B] hover:bg-[#EAD19B]/10 transition-all active:scale-95 flex items-center gap-2"
+            className="px-4 py-2 h-[36px] rounded-xl text-[11px] font-bold text-[#EAD19B] bg-[#F4F1EA]/10 backdrop-blur-md border border-[#F4F1EA]/20 hover:bg-[#EAD19B]/10 transition-all active:scale-95 flex items-center gap-2"
             onClick={fetchData}>
             <RefreshCcw size={14} strokeWidth={2.5} />
             Muat Ulang
@@ -274,40 +269,33 @@ export default function SetoranPage() {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-4 items-center justify-between bg-[#6B9E9F] p-4 md:p-5 rounded-2xl border border-[#6B9E9F] shadow-sm">
-        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-          <DropdownFilter label="Bulan" options={MONTHS} value={month} onChange={(v) => setMonth(v)} className="h-[36px]" />
-          <DropdownFilter label="Tahun" options={YEARS} value={year} onChange={(v) => setYear(v)} className="h-[36px]" />
-        </div>
-      </div>
-
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden w-full max-w-full">
-        <div className="overflow-x-auto w-full scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+      <Card variant="glass" className="p-0 border-white/5 shadow-2xl overflow-hidden w-full max-w-full transition-all duration-700">
+        <div className="overflow-x-auto w-full custom-scrollbar">
           <div className="min-w-[800px] w-full">
-            <Table columns={columns} data={rows} loading={loading} />
+            <Table columns={columns} data={rows} loading={loading} variant="glass" />
           </div>
         </div>
-      </div>
+      </Card>
 
       {selected ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Card title="Rincian Setoran">
-            <p className="text-sm text-slate-600">Total Rp {Number(selected.totalAmount).toLocaleString('id-ID')} • Bisyaroh Rp {Number(selected.bisyarohTotal).toLocaleString('id-ID')} • Bersih Rp {Number(selected.netAmount).toLocaleString('id-ID')}</p>
-            <p className="text-sm text-slate-600 mt-1">Ekspektasi share Rp {Number(selected.expectedShare).toLocaleString('id-ID')} • Selisih Rp {Number(selected.shareVariance).toLocaleString('id-ID')}
+          <Card variant="glass" title="Rincian Setoran">
+            <p className="text-sm text-[#F4F1EA]/80">Total Rp {Number(selected.totalAmount).toLocaleString('id-ID')} • Bisyaroh Rp {Number(selected.bisyarohTotal).toLocaleString('id-ID')} • Bersih Rp {Number(selected.netAmount).toLocaleString('id-ID')}</p>
+            <p className="text-sm text-[#F4F1EA]/80 mt-1">Ekspektasi share Rp {Number(selected.expectedShare).toLocaleString('id-ID')} • Selisih Rp {Number(selected.shareVariance).toLocaleString('id-ID')}
               {selected.varianceReason ? ` • Alasan: ${selected.varianceReason}` : ''}</p>
             <div className="mt-3 space-y-1">
               {(selected.ppkPenyusun || []).map((p) => (
-                <p key={p.officerName} className="text-sm text-slate-700">{p.officerName} — Rp {Number(p.total).toLocaleString('id-ID')} ({PPK_STATUS_LABEL[p.status] ?? p.status})</p>
+                <p key={p.officerName} className="text-sm text-[#F4F1EA]/70">{p.officerName} — Rp {Number(p.total).toLocaleString('id-ID')} ({PPK_STATUS_LABEL[p.status] ?? p.status})</p>
               ))}
             </div>
           </Card>
-          <Card title={`Riwayat BA (${versions.length})`}>
+          <Card variant="glass" title={`Riwayat BA (${versions.length})`}>
             {versions.map((v) => (
-              <p key={v.version} className="text-sm text-slate-700">
+              <p key={v.version} className="text-sm text-[#F4F1EA]/70">
                 v{v.version} • {v.status}{v.isCurrent ? ' • berlaku' : ''} • {v.pdfHash ? 'berkas tersimpan' : 'belum dibuat'}
               </p>
             ))}
-            {versions.length === 0 ? <p className="text-sm text-slate-400">Belum ada riwayat.</p> : null}
+            {versions.length === 0 ? <p className="text-sm text-[#F4F1EA]/40">Belum ada riwayat.</p> : null}
           </Card>
         </div>
       ) : null}
