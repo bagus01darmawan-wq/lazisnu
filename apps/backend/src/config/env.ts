@@ -54,6 +54,15 @@ const envSchema = z.object({
   // Internal API Key (for scheduler/internal routes)
   INTERNAL_API_KEY: z.string().optional(),
 
+  // Worker WhatsApp (BullMQ). Kosong = nyala hanya di luar development.
+  // Alasan: di dev, proses API tidak perlu meneruskan notifikasi WhatsApp,
+  // tetapi worker yang hidup tetap memanggil Redis tanpa henti. Mesin dev bisa
+  // menunjuk ke Redis berkuota (Upstash), dan polling worker itu sendiri cukup
+  // menghabiskan kuota 500.000/bulan dalam beberapa jam.
+  // Aktifkan di dev hanya bila memang ingin menguji aliran notifikasi:
+  //   WHATSAPP_WORKER_ENABLED=true
+  WHATSAPP_WORKER_ENABLED: z.string().optional(),
+
   // Rollbar
   ROLLBAR_ACCESS_TOKEN: z.string().optional(),
 
@@ -73,3 +82,17 @@ export const config = parseResult.data;
 export const isProduction = config.NODE_ENV === 'production';
 export const isDevelopment = config.NODE_ENV === 'development';
 export const corsOrigins = config.CORS_ORIGINS.split(',').map(s => s.trim());
+
+/**
+ * Worker WhatsApp dipakai hanya bila di luar development, kecuali diminta
+ * eksplisit lewat WHATSAPP_WORKER_ENABLED. Nilai yang dianggap "mati":
+ * kosong tak sengaja, 'false', '0', 'no', 'off'.
+ */
+export const whatsappWorkerEnabled = (() => {
+  const raw = config.WHATSAPP_WORKER_ENABLED?.trim().toLowerCase();
+  if (!raw) {
+    // Tidak diisi: nyala hanya di luar development.
+    return !isDevelopment;
+  }
+  return !['false', '0', 'no', 'off'].includes(raw);
+})();
