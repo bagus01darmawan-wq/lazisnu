@@ -292,6 +292,20 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       if (body.notes !== undefined) updateData.notes = body.notes;
 
       const updated = await db.update(schema.assignments).set(updateData).where(eq(schema.assignments.id, id)).returning();
+      // Jejak SEBELUM/SESUDAH wajib: tanpa ini 67 perubahan penugasan di
+      // history tercatat null, sehingga tidak bisa direkonstruksi siapa
+      // mengubah status tugas apa (laporan penelusuran 2026-10-09).
+      request.auditContext = {
+        oldData: {
+          id: existing.id,
+          kaleng: existing.canId,
+          petugas: existing.officerId,
+          periode: `${existing.periodYear}-${String(existing.periodMonth).padStart(2, '0')}`,
+          status: existing.status,
+          catatan: existing.notes ?? null,
+        },
+        newData: updated[0],
+      };
       return sendSuccess(reply, updated[0]);
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
@@ -405,6 +419,20 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       if (user.role === 'ADMIN_RANTING' && existing.can.branchId !== user.branchId) {
         return sendError(reply, 403, 'FORBIDDEN', 'Penugasan ini bukan milik ranting Anda');
       }
+
+      // Jejak SEBELUM dihapus wajib: barisnya hilang dari database begitu
+      // perintah ini jalan, jadi tanpa mencatat dulu tidak ada cara memastikan
+      // PENUGASAN apa yang terhapus (laporan penelusuran 2026-10-09 — 182
+      // penghapusan penugasan tercatat null, tak bisa direkonstruksi).
+      request.auditContext = {
+        oldData: {
+          id: existing.id,
+          kaleng: existing.canId,
+          petugas: existing.officerId,
+          periode: `${existing.periodYear}-${String(existing.periodMonth).padStart(2, '0')}`,
+          status: existing.status,
+        },
+      };
 
       await db.delete(schema.assignments).where(eq(schema.assignments.id, id));
       return sendSuccess(reply, { message: 'Penugasan berhasil dihapus' });
