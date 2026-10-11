@@ -232,7 +232,7 @@ export default function WAMonitorPage() {
   const [totalPages, setTotalPages] = React.useState(1);
   const [search, setSearch] = React.useState(FILTER_AWAL.search);
 
-  const fetchWAStatus = async (currentPage = page, searchQuery = search, limit = pageSize) => {
+  const fetchWAStatus = React.useCallback(async (currentPage: number, searchQuery: string, limit: number) => {
     setLoading(true);
     try {
       const response = await api.get('/admin/wa/logs', {
@@ -268,9 +268,9 @@ export default function WAMonitorPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchWASummary = async (selectedPeriod: 'today' | 'week' | 'month' | 'all' = period) => {
+  const fetchWASummary = React.useCallback(async (selectedPeriod: 'today' | 'week' | 'month' | 'all') => {
     setDbLoading(true);
     try {
       const response = await api.get('/admin/wa/summary', {
@@ -285,13 +285,13 @@ export default function WAMonitorPage() {
     } finally {
       setDbLoading(false);
     }
-  };
+  }, []);
 
   const [failedJobs, setFailedJobs] = useState<FailedJob[]>([]);
   const [failedJobsLoading, setFailedJobsLoading] = useState(false);
   const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
 
-  const fetchFailedJobs = async () => {
+  const fetchFailedJobs = React.useCallback(async () => {
     setFailedJobsLoading(true);
     try {
       const response = await api.get('/admin/wa/failed') as unknown as ApiResponse<FailedJobsResponse>;
@@ -303,7 +303,7 @@ export default function WAMonitorPage() {
     } finally {
       setFailedJobsLoading(false);
     }
-  };
+  }, []);
 
   const handleRetry = async (jobId: string) => {
     setRetryingIds(prev => new Set(prev).add(jobId));
@@ -353,7 +353,7 @@ export default function WAMonitorPage() {
       if (response.success) {
         toast.success('Antrean berhasil dibersihkan');
         setFailedJobs([]);
-        void fetchWAStatus();
+        void fetchWAStatus(page, search, pageSize);
       }
     } catch {
       toast.error('Gagal membersihkan antrean');
@@ -368,7 +368,7 @@ export default function WAMonitorPage() {
       void fetchFailedJobs();
     }, 500);
     return () => clearTimeout(timer);
-  }, [search, pageSize, period]);
+  }, [search, pageSize, period, fetchWAStatus, fetchWASummary, fetchFailedJobs]);
 
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || newPage > totalPages) return;
