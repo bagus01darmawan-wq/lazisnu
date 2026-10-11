@@ -25,6 +25,11 @@ logs/
 npm-debug.log*
 scratch/
 
+# Scratch lokal di tmp/ (log, skrip sekali pakai, salinan berkas) — bukan untuk git.
+# Aset yang memang sengaja disimpan (tmp/imagegen/) tetap ikut.
+tmp/*
+!tmp/imagegen/
+
 # OS files
 .DS_Store
 Thumbs.db
