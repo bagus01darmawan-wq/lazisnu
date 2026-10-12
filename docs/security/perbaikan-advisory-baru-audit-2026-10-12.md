@@ -126,12 +126,18 @@ keadaan saat itu.
 
 ## 6. Tindak lanjut yang belum dikerjakan
 
-### P2 — dua alert yang patch-nya ada tapi ditahan
+**Penting:** ketujuh alert Dependabot yang tersisa **belum diperbaiki** —
+pekerjaan di §2 hanya menyembunyikannya dari CI lewat basis, bukan menghapus
+paketnya dari tree. Data di bawah terverifikasi 2026-10-12 via
+`gh api .../dependabot/alerts?state=open`: 7 alert terbuka (5 high,
+1 medium, 1 low), persis seperti yang dilaporkan GitHub saat push.
 
-| Paket | Terpasang → Target | Jalur | Status |
-|---|---|---|---|
-| `@grpc/grpc-js` | 1.9.16 → 1.14.6 | `@react-native-firebase/app > firebase > @firebase/firestore` (mobile) | ditahan |
-| `image-size` | 1.2.1 → 2.0.4 (mayor) | `@react-native/metro-config > metro` (mobile) | ditahan |
+### P2 — empat alert yang patch-nya ada tapi ditahan
+
+| Severity | Paket | Terpasang | Min. patch | Jalur | Status |
+|---|---|---|---|---|---|
+| high + low | `@grpc/grpc-js` | 1.9.16 | 1.13.6 | `@react-native-firebase/app > firebase > @firebase/firestore` (mobile) | ditahan |
+| high ×2 | `image-size` | 1.2.1 | 2.0.3 | `@react-native/metro-config > metro` (mobile) | ditahan |
 
 Keduanya **berbenturan dengan keputusan terdokumentasi**:
 
@@ -160,7 +166,10 @@ karena membalik keputusan terdokumentasi. Bila nanti disetujui, urutannya:
 1. Di `pnpm-workspace.yaml`: ganti
    `'@grpc/grpc-js@>=1.14.0 <1.14.5': 1.14.5` menjadi `'@grpc/grpc-js': 1.14.6`
    (menaikkan 1.9.16 dan 1.14.5 sekaligus; keduanya upgrade, bukan downgrade),
-   dan tambahkan `'image-size': 2.0.4`.
+   dan tambahkan `'image-size': 2.0.4`. Minimum patch sebenarnya hanya
+   `1.13.6` dan `2.0.3`; target di atas dipilih agar menyatu dengan pin yang
+   sudah ada di tree. Bila ingin lompatan terkecil, cukup pakai `1.13.6`
+   (empat minor, bukan lima).
 2. `pnpm install`, lalu **wajib** `node scripts/audit-baseline.mjs --update`
    — keempat ID itu (`GHSA-m9gg-hp2v-232j`, `GHSA-f596-whhp-79r4`,
    `GHSA-w3rx-r6r6-pgpr`, `GHSA-5p2g-fcmc-qvqq`) akan menjadi BASIS USANG.
@@ -174,9 +183,16 @@ karena membalik keputusan terdokumentasi. Bila nanti disetujui, urutannya:
 
 ### P3 — tiga alert tanpa patch
 
-`braces` 3.0.3, `node-forge` 1.4.0, `sprintf-js` 1.1.3 — versi terpasang
-**sama dengan versi terbaru npm**, jadi memang tidak ada yang bisa
-di-upgrade. Tindakannya dokumentasi, bukan kode:
+| Severity | Paket | Terpasang | Versi terbaru npm | GHSA |
+|---|---|---|---|---|
+| high | `braces` | 3.0.3 | **3.0.3** (sama) | `GHSA-vfj7-8cjw-p6xm` |
+| high | `node-forge` | 1.4.0 | **1.4.0** (sama) | `GHSA-86w9-cpqp-85rv` |
+| medium | `sprintf-js` | 1.1.3 | **1.1.3** (sama) | `GHSA-hp3w-g68c-fv3c` |
+
+Versi terpasang **sama dengan versi terbaru npm** (diverifikasi via
+`npm view <paket> version`), jadi memang tidak ada yang bisa di-upgrade —
+alert ini tidak akan hilang lewat bump biasa. Tindakannya dokumentasi atau
+dismiss, bukan kode:
 
 - Tulis justifikasi permanen (preseden sudah ada di `pnpm-workspace.yaml`
   baris komentar `Transitive rentan — diblokir dependabot
