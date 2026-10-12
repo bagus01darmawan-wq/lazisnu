@@ -38,6 +38,7 @@ overrides:
   'fast-xml-builder': 1.1.7 # <=1.1.6 (GHSA-xxxx) — 1.1.5 di tree
   'form-data@<2.5.6': 2.5.6 # 2.x <2.5.6 (GHSA-xxxx) — 2.5.5 di tree
   'form-data@>=4.0.0 <4.0.6': 4.0.6 # 4.x <4.0.6 (GHSA-xxxx) — 4.0.5 di tree; 3.x tetap
+  'handlebars': 4.7.10 # <=4.7.9 (GHSA-8r5x-fm3f-whwj, GHSA-p8wg-vrv2-v86f, GHSA-xw65-4hp5-5hc7) — via ts-jest (test)
   'joi': 17.13.8 # >=17.13.4 <17.13.6 (GHSA-6w3j-5fw6-r9vr, GHSA-gg4h-3hg2-grpc) — via RN cli-config (EXP 2026-10-06: 17.13.7 rentan GHSA-wr44, uji patch)
   'js-yaml@3': 3.15.2
   'js-yaml@4': 4.3.2
@@ -53,12 +54,11 @@ overrides:
   'qs@6': 6.16.0 # >=6.11.1 <=6.15.1 (GHSA-xxxx) — via superagent (test)
   'send@0.18': 0.19.2 # <0.19.0 (GHSA-xxxx) — via @expo/cli; bump minor tooling
   'sharp': 0.35.5 # <0.35.5 (GHSA-wq5f-xc86-pv6w) — next>sharp (runtime prod) + mobile
-  'shell-quote': 1.9.0
+  'shell-quote': 1.11.0 # <1.11.0 (GHSA-pqg4-j6r4-53mv) — via RN CLI; pin 1.9.0 sudah tertinggal
   'tar@6': 7.5.22 # tar@6 dari @expo/cli (dependency langsung, bukan via cacache);
   # ===== VULNERABILITY CLEANUP (106 Dependabot alerts) — 2026-09-01 =====
   # US1: Critical & High — override transitive. Selector per-major agar versi
   # yang sudah aman di tree TIDAK di-downgrade/diubah.
-  # shell-quote <=1.8.4 (CVE-2026-XXXXX) — naik dari 1.8.4 (di atas)
   'tar@7': 7.5.22 # tar <=7.5.20 (GHSA-xxxx) — dulu via eas-cli (dihapus 2026-09-02) dll
   'tmp': 0.2.7 # <0.2.7 (GHSA-7c78-jf6q-g5cm) — 0.2.5/0.2.6 di tree rentan
   'uuid@11': 11.1.1 # <11.1.1 (GHSA-xxxx) — via firebase-admin; uuid 7/8/9 di tree TETAP
