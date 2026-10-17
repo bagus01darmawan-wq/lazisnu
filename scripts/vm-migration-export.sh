@@ -22,9 +22,11 @@ if [[ "${1:-}" == "--with-data" ]]; then
   INCLUDE_DATA=1
 fi
 
-ENV_FILE="/opt/lazisnu/secrets/env.backup-2026-07-27"
+# Env sumber kredensial R2 (prod). Override via EXPORT_ENV_FILE bila lokasinya beda.
+ENV_FILE="${EXPORT_ENV_FILE:-/opt/lazisnu/.env.backup}"
 if [[ ! -r "$ENV_FILE" ]]; then
   echo "Env file tidak terbaca: $ENV_FILE" >&2
+  echo "Set EXPORT_ENV_FILE=/path/ke/env bila lokasinya berbeda." >&2
   exit 1
 fi
 

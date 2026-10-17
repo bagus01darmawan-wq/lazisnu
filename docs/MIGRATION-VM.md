@@ -8,8 +8,12 @@
 
 ## 0. PRASYARAT KRITIS (sebelum mulai)
 
-- [ ] **Kredensial EAS/Expo** (email + password + kode 2FA/backup codes) disimpan di password manager.
-      Keystore APK production ada di server EAS — tanpa akses akun ini, **tidak bisa rilis update app**.
+- [ ] **Akses GitHub Secrets keystore** (repo → Settings → Secrets and variables → Actions):
+      `KEYSTORE_BASE64`, `KEYSTORE_STORE_PASSWORD`, `KEYSTORE_KEY_ALIAS`, `KEYSTORE_KEY_PASSWORD`.
+      Tanpa ini, **tidak bisa rilis update APK** — build rilis via GitHub Actions + Gradle
+      (`.github/workflows/release.yml`), bukan EAS. Keystore + password WAJIB juga punya
+      cadangan terenkripsi di password manager + 1 salinan offline (lihat Bab 5.6 di
+      `docs/ci/mobile-standards.md`). Keystore hilang = aplikasi tidak bisa di-update.
       (APK signing TIDAK ikut migrasi VM — tidak terpengaruh.)
 - [ ] Akun Supabase (2 project), Cloudflare R2, Rollbar, Hookdeck, Fonnte, Uptime Kuma — akses login tersimpan.
 - [ ] **SSH key `lazisnu_vm`** ada di laptop (sudah ada di `~/.ssh/`).
@@ -102,17 +106,24 @@ docker compose -f docker-compose.staging.yml up -d   # staging (auto juga via CI
 
 ## 4. DNS
 
-Update 5 record di **Hostinger** (domain `lazisnu.site`) → IP baru:
+DNS domain `lazisnu.site` dikelola di **Cloudflare** (nameserver
+`dell.ns.cloudflare.com` / `tanner.ns.cloudflare.com`) — **bukan** di Hostinger.
+Ubah 7 record A berikut dari IP lama ke **IP baru**, mode **DNS only (awan abu-abu)** —
+jangan di-proxy (arsitektur ini pakai nginx + certbot sendiri):
 
-| Record | Target |
-|---|---|
-| `api` | IP baru |
-| `dashboard` | IP baru |
-| `staging` | IP baru |
-| `staging-api` | IP baru |
-| `status` | IP baru |
+| Record | Tipe | Target |
+|---|---|---|
+| `api` | A | IP baru |
+| `dashboard` | A | IP baru |
+| `staging` | A | IP baru |
+| `staging-api` | A | IP baru |
+| `status` | A | IP baru |
+| `grafana` | A | IP baru |
+| `png` | A | IP baru |
 
-Set **TTL rendah (60s)** sehari sebelum cutover biar propagation cepat; kembalikan TTL normal setelah stabil.
+TTL saat ini **300s** → berlaku ±5 menit. Pastikan sudah tersimpan di Cloudflare
+sebelum lanjut dengan cek ke server otoritatif:
+`nslookup api.lazisnu.site dell.ns.cloudflare.com` (harus menunjuk IP baru).
 
 ---
 
@@ -163,8 +174,12 @@ Hanya setelah **48-72 jam stabil** di VM baru:
 
 ---
 
-## Catatan EAS / APK Signing
+## Catatan APK Signing (bukan EAS)
 
-- Keystore production **tidak pernah keluar dari EAS** — tidak perlu dipindah.
-- Satu-satunya risiko: kehilangan akses akun EAS → **simpan kredensial + backup codes 2FA di password manager**.
-- `eas.json` + `projectId` (app.json) sudah di git → clone repo langsung bisa `eas build`.
+- Build rilis via GitHub Actions + Gradle (`release.yml`) — EAS/Expo sudah **TIDAK** dipakai
+  untuk build maupun OTA update sejak `eas-cli` dihapus (2026-09-02).
+- Keystore production tersimpan sebagai **GitHub Secrets** (dipulihkan saat build) — bukan di EAS,
+  jadi tidak perlu dipindah, tapi WAJIB dicadangkan.
+- Risiko utama: kehilangan akses GitHub Secrets dan/atau cadangan keystore →
+  **simpan keystore + password di password manager + 1 salinan offline terenkripsi**.
+- Sisa `extra.eas.projectId` di `apps/mobile/app.json` hanya peninggalan — tidak butuh akun EAS.
