@@ -129,7 +129,7 @@ User/pengurus/admin cabang saat ini harus chat admin untuk tanya "apakah sistem 
 ### Prasyarat
 
 - ✅ Uptime Kuma sudah berjalan (Lapis 1-2 selesai)
-- ✅ Subdomain `status.lazisnu.site` tersedia (DNS di **Hostinger** — nameserver `*.dns-parking.com`, BUKAN Cloudflare)
+- ✅ Subdomain `status.lazisnu.site` tersedia (DNS di **Cloudflare** — nameserver `dell.ns.cloudflare.com` / `tanner.ns.cloudflare.com`)
 - ✅ nginx + certbot sudah setup (sudah untuk `api.lazisnu.site` dan `dashboard.lazisnu.site`)
 - ✅ SSL certificate akan otomatis ter-generate oleh certbot untuk subdomain baru
 
@@ -231,10 +231,10 @@ Certbot akan otomatis edit config nginx untuk tambah SSL + redirect HTTP → HTT
 
 #### Step 4: DNS — tambah A record
 
-Di **Hostinger** dashboard (bukan Cloudflare — nameserver `*.dns-parking.com`):
+Di **Cloudflare** dashboard (nameserver `dell.ns.cloudflare.com` / `tanner.ns.cloudflare.com`):
 - Type: `A`
 - Name: `status`
-- Content: `<IP-VM>` (mis. `43.128.98.52`)
+- Content: `<IP-VM>` (mis. `168.110.198.70`)
 - TTL: Auto
 
 #### Step 5: Verifikasi

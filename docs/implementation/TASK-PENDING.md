@@ -28,14 +28,14 @@
 | A3 | Tambah crontab entry (`0 3 * * * bash /opt/lazisnu/scripts/backup-kuma.sh`) | ✅ |
 | A4 | Migrate container `uptime-kuma` dari `docker run` standalone → `docker-compose.yml` | ✅ (healthy, 4 monitor intact, port `127.0.0.1:3002`) |
 | A5 | Enable Status Page (slug `lazisnu`, expose 4 monitor) | ✅ via SQL script `kuma-setup-status-page.sh` (tanpa UI) |
-| A6 | Certbot SSL untuk `status.lazisnu.site` (DNS di Hostinger, bukan Cloudflare) | ✅ (expires 2026-10-29) |
+| A6 | Certbot SSL untuk `status.lazisnu.site` (DNS kini di Cloudflare) | ✅ (expires 2026-10-29) |
 | A7 | Test alert real flow (trigger DOWN → notifikasi Discord) | ✅ **SELESAI 2026-08-01** — monitor TEST-DOWN (url mati) → DOWN terdeteksi (`ECONNREFUSED`) → alert Discord masuk 00:26 WIB → monitor temp dihapus |
 
 **Catatan hasil eksekusi (2026-08-01):**
 - **Fix bug `backup-kuma.sh`**: `mkdir -p` dipindah sebelum `log START` (sebelumnya tee gagal karena dir belum ada → `set -e` exit 1)
 - **Fix `docker-compose.yml`**: (1) hapus `user: "1000:1000"` — image Kuma startup `chown` butuh root/CAP_CHOWN, non-root → restart loop; (2) healthcheck ganti `wget` → `curl` (wget tidak ada di image)
 - **Script baru**: `scripts/kuma-setup-status-page.sh` — idempotent setup status page (status_page + group + monitor_group)
-- **Konteks unik**: DNS domain di Hostinger (bukan Cloudflare); nginx container lama baca inode nginx.conf lama → butuh recreate container (bukan sekadar reload) — konsisten dgn backlog #6 mount bind-file
+- **Konteks unik**: saat itu DNS domain masih di Hostinger (kini sudah pindah ke Cloudflare); nginx container lama baca inode nginx.conf lama → butuh recreate container (bukan sekadar reload) — konsisten dgn backlog #6 mount bind-file
 - ✅ **Pending kecil SELESAI** — cleanup volume named lama `uptime-kuma-data` (≈2.7MB duplikat, data sudah di bind mount): **sudah dihapus** (Sesi 05 line 51 + verifikasi 2026-08-07: `docker volume ls` kosong, container `uptime-kuma` up 6 days healthy). ⚠️ Catatan: JANGAN `docker rm uptime-kuma` — container lama sudah dihapus saat migrasi; nama itu dipakai container compose aktif. Commit+push perubahan kode (dulu "nanti saja") sudah tuntas di sesi-sesi berikutnya (PR #39, runbook migrasi, dsb — working tree bersih)
 
 ---

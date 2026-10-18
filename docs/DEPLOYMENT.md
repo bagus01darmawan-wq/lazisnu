@@ -1,11 +1,11 @@
 # Deployment Guide — Lazisnu
 
-> Terakhir diperbarui: 2026-07-29
+> Terakhir diperbarui: 2026-10-17
 
 ## Arsitektur
 
 ```
-Tencent Cloud CVM (Singapore) — 43.128.98.52
+Oracle Cloud (Batam, ap-batam-1) — 168.110.198.70
 ├── nginx:alpine (SSL termination + reverse proxy, ports 80/443)
 │   ├── api.lazisnu.site        → backend:3001
 │   ├── dashboard.lazisnu.site  → web:3000  (+ /v1/ → backend:3001)
@@ -23,7 +23,7 @@ Tencent Cloud CVM (Singapore) — 43.128.98.52
 Supabase (PostgreSQL)    — Database production + staging
 Cloudflare R2            — Object storage (file upload + backup)
 Fonnte                   — WhatsApp API (OTP + notifikasi)
-Hostinger                — DNS (api/dashboard/staging.lazisnu.site → 43.128.98.52)
+Cloudflare               — DNS (api/dashboard/staging/status/grafana/png → 168.110.198.70)
 ```
 
 ---
@@ -104,17 +104,17 @@ User ──→ nginx ──→ backend_active ──→ blue-backend (port 3001)
 
 | Setting | Value |
 |---------|-------|
-| Provider | Tencent Cloud |
-| Region | Singapore |
-| OS | Ubuntu 22.04 LTS |
-| Instance | 2 vCPU, 4 GB RAM (minimal) |
-| Disk | 40 GB SSD |
+| Provider | Oracle Cloud (OCI) |
+| Region | Batam (`ap-batam-1`) |
+| OS | Ubuntu 24.04 LTS |
+| Instance | 2 OCPU, 8 GB RAM (`VM.Standard.E5.Flex`) |
+| Disk | 100 GB (boot volume) |
 | Firewall | Open 22, 80, 443 |
 
 ### 2. SSH ke VM
 
 ```bash
-ssh ubuntu@43.128.98.52
+ssh -i ~/.ssh/lazisnu_vm ubuntu@168.110.198.70
 ```
 
 ### 3. Install prasyarat

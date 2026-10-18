@@ -1,10 +1,12 @@
 # Visualisasi Struktur VM — Lazisnu Production
 
-> Server: `43.128.98.52` — Tencent Cloud (hostname `VM-0-6-ubuntu`)
-> OS: Ubuntu 22.04.5 LTS (GNU/Linux 5.15.0-181 x86_64)
-> Docker: 29.6.2 · Compose v5.3.1
-> User SSH: `ubuntu`
-> Terakhir diperbarui: 2026-08-08 (audit ulang langsung dari VM)
+> Server: `168.110.198.70` — Oracle Cloud (Batam `ap-batam-1`, display-name `lazisnu-prod`)
+> OS: Ubuntu 24.04 LTS (x86_64, AMD EPYC — 2 OCPU / 8 GB RAM)
+> User SSH: `ubuntu` (key `~/.ssh/lazisnu_vm`)
+> Terakhir diperbarui: 2026-10-17
+>
+> ⚠️ Snapshot struktur rinci di bawah berasal dari VM lama (Tencent, 2026-08-08).
+> Infrastruktur kini di Oracle Batam — kondisi terkini: `docs/MIGRASI-ORACLE-2026-10-17.md`.
 
 ---
 
@@ -318,8 +320,8 @@ HOST (/)
 │  Rollbar (error tracking)           │
 │  └── Backend & web (Sentry dihapus) │
 │                                     │
-│  Hostinger (DNS)                    │
-│  ├── api.lazisnu.site → 43.128.98.52│
+│  Cloudflare (DNS)                   │
+│  ├── api.lazisnu.site→168.110.198.70│
 │  ├── dashboard.lazisnu.site → ...   │
 │  ├── staging*.lazisnu.site → ...    │
 │  └── status.lazisnu.site → ...      │
