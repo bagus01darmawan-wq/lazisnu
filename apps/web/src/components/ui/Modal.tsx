@@ -27,6 +27,14 @@ const Modal = ({
   const modalRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
+  // Keep the latest onClose in a ref so the open/close effect below does not
+  // depend on its (usually inline, unstable) identity. Without this, every
+  // parent re-render — e.g. typing in a form field — re-runs the effect,
+  // restores focus to the trigger, and steals the caret out of the input.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -42,7 +50,7 @@ const Modal = ({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        onCloseRef.current();
         return;
       }
       // Tab trap: cycle focus within modal so keyboard users can't escape
@@ -76,7 +84,7 @@ const Modal = ({
       previouslyFocused.current?.focus();
       previouslyFocused.current = null;
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
