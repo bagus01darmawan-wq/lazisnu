@@ -35,6 +35,11 @@ export async function getSafeWhatsAppQueueStats(request: FastifyRequest) {
 
 export async function waRoutes(fastify: FastifyInstance) {
   const adminOnly = authorize('ADMIN_KECAMATAN', 'ADMIN_RANTING');
+  // DLQ WhatsApp = fitur infrastruktur MWC. Antrean BullMQ bersifat GLOBAL
+  // (tidak di-scope per ranting), sehingga melihat, meretry, dan membersihkan
+  // job gagal hanya untuk ADMIN_KECAMATAN — sejajar dengan halaman WA Monitor
+  // yang menyembunyikan panel DLQ dari role lain.
+  const kecamatanOnly = authorize('ADMIN_KECAMATAN');
 
   // GET /admin/wa/logs - Real Notification Logs from DB
   fastify.get('/wa/logs', { preHandler: [adminOnly] }, async (request: FastifyRequest, reply: FastifyReply) => {
@@ -95,7 +100,7 @@ export async function waRoutes(fastify: FastifyInstance) {
   });
 
   // GET /admin/wa/failed
-  fastify.get('/wa/failed', { preHandler: [authorize('ADMIN_KECAMATAN')] }, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/wa/failed', { preHandler: [kecamatanOnly] }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const queue = getWhatsAppQueue();
       const failedJobs = await queue.getFailed();
@@ -120,7 +125,7 @@ export async function waRoutes(fastify: FastifyInstance) {
   });
 
   // POST /admin/wa/retry/:id
-  fastify.post('/wa/retry/:id', { preHandler: [adminOnly] }, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/wa/retry/:id', { preHandler: [kecamatanOnly] }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
       const queue = getWhatsAppQueue();
@@ -147,7 +152,7 @@ export async function waRoutes(fastify: FastifyInstance) {
   });
 
   // POST /admin/wa/flush-failed
-  fastify.post('/wa/flush-failed', { preHandler: [adminOnly] }, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/wa/flush-failed', { preHandler: [kecamatanOnly] }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const queue = getWhatsAppQueue();
       await queue.clean(0, 1000, 'failed'); // Clean failed jobs older than 0ms, limit 1000

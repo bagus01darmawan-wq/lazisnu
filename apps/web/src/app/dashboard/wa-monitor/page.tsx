@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ColumnDef } from '@tanstack/react-table';
 import api from '@/lib/api';
+import { useAuthStore } from '@/store/useAuthStore';
 import {
   MessageSquare,
   Search,
@@ -205,6 +206,15 @@ function DailyTrendsChart({ data }: { data: WaDailyTrend[] }) {
 }
 
 export default function WAMonitorPage() {
+  /**
+   * Panel "Antrean Gagal (DLQ)" hanya untuk ADMIN_KECAMATAN — antrean BullMQ
+   * bersifat global (tak di-scope per ranting), dan backend membatasi
+   * /wa/failed + retry + flush ke role yang sama. Halaman tetap bisa dibuka
+   * ADMIN_RANTING untuk daftar log & ringkasan, tanpa memanggil endpoint DLQ.
+   */
+  const user = useAuthStore((state) => state.user);
+  const isDistrictAdmin = user?.role === 'ADMIN_KECAMATAN';
+
   const [data, setData] = React.useState<WaLogItem[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [stats, setStats] = React.useState({
@@ -292,6 +302,7 @@ export default function WAMonitorPage() {
   const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
 
   const fetchFailedJobs = React.useCallback(async () => {
+    if (!isDistrictAdmin) return;
     setFailedJobsLoading(true);
     try {
       const response = await api.get('/admin/wa/failed') as unknown as ApiResponse<FailedJobsResponse>;
@@ -303,7 +314,7 @@ export default function WAMonitorPage() {
     } finally {
       setFailedJobsLoading(false);
     }
-  }, []);
+  }, [isDistrictAdmin]);
 
   const handleRetry = async (jobId: string) => {
     setRetryingIds(prev => new Set(prev).add(jobId));
@@ -706,6 +717,7 @@ export default function WAMonitorPage() {
           )}
         </Card>
 
+        {isDistrictAdmin && (
         <div className="bg-[#DE6F4A]/10 backdrop-blur-md p-6 rounded-3xl border border-[#DE6F4A]/20 shadow-xl">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
             <div className="flex items-center gap-4">
@@ -789,6 +801,7 @@ export default function WAMonitorPage() {
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   );
