@@ -62,7 +62,12 @@ export default function OfficerDetailPage({ params }: { params: Promise<{ id: st
   const [error, setError] = useState<string | null>(null);
 
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [selectedMonths, setSelectedMonths] = useState<number[]>([]);
+  // Default = seluruh tahun berjalan (12 bulan). Sebelumnya state kosong `[]`,
+  // yang di backend berarti "setahun penuh" juga, tetapi picker menampilkan
+  // bulan berjalan → label dan angka tidak sinkron.
+  const [selectedMonths, setSelectedMonths] = useState<number[]>(
+    () => Array.from({ length: 12 }, (_, i) => i + 1),
+  );
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -109,6 +114,10 @@ export default function OfficerDetailPage({ params }: { params: Promise<{ id: st
   }, [officer, reset]);
 
   const handlePeriodChange = useCallback((months: number[], year: number) => {
+    // PeriodPicker bisa melepas semua bulan; months kosong akan jatuh ke
+    // default backend (12 bulan) sementara label kembali ke bulan berjalan.
+    // Abaikan agar label & data tetap konsisten (pola sama dengan overview).
+    if (months.length === 0) return;
     setSelectedMonths(months);
     setSelectedYear(year);
   }, []);
@@ -227,7 +236,7 @@ export default function OfficerDetailPage({ params }: { params: Promise<{ id: st
             Periode Laporan
           </h2>
           <PeriodPicker
-            months={selectedMonths.length > 0 ? selectedMonths : [new Date().getMonth() + 1]}
+            months={selectedMonths}
             year={selectedYear}
             onChange={handlePeriodChange}
           />

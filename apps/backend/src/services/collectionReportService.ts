@@ -89,7 +89,12 @@ export async function getReportStats(params: {
 
   const startDate = `${year}-${String(monthList[0]).padStart(2, '0')}-01`;
   const lastMonth = monthList[monthList.length - 1];
-  const endDate = new Date(year, lastMonth, 0).toISOString().split('T')[0];
+  // Hari terakhir bulan terpilih dihitung dalam UTC (Date.UTC) agar tidak
+  // bergeser mundur sehari oleh konversi `toISOString` (WIB UTC+7: 31 Okt →
+  // "30 Okt"). Batas atas pakai akhir hari 23:59:59.999 supaya jemputan pada
+  // hari terakhir ikut terhitung — collected_at bertipe timestamp, bukan date.
+  const lastDayIso = new Date(Date.UTC(year, lastMonth, 0)).toISOString().slice(0, 10);
+  const endDate = `${lastDayIso} 23:59:59.999`;
 
   let branchScopeCondition: any = undefined;
   let officerScopeCondition: any = undefined;

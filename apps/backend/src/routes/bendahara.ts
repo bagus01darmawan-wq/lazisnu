@@ -180,9 +180,14 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
       const user = request.currentUser!;
       const scope = getCollectionScope(user.role, user.branchId, user.districtId);
 
-      const startDate = `${year}-${String(monthList[0]).padStart(2, '0')}-01`;
+      const startDate = `${year}-${String(monthList[0]).padStart(2, '0')}-01 00:00:00`;
       const lastMonth = monthList[monthList.length - 1];
-      const endDate = new Date(year, lastMonth, 0).toISOString().split('T')[0];
+      // Hari terakhir dihitung dalam UTC (Date.UTC) agar tidak bergeser mundur
+      // sehari oleh `toISOString` (WIB UTC+7). Kedua batas memakai waktu lokal
+      // penuh (tanggal + jam) agar `new Date(...)` di buildCollectionsQuery
+      // membacanya konsisten: awal hari 00:00:00 s/d akhir hari 23:59:59.999.
+      const lastDayIso = new Date(Date.UTC(year, lastMonth, 0)).toISOString().slice(0, 10);
+      const endDate = `${lastDayIso} 23:59:59.999`;
 
       const { whereClause, emptyResult } = await buildCollectionsQuery({
         startDate,
