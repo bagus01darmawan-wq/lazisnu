@@ -217,7 +217,8 @@ docker compose restart nginx
 # Auto-renewal (cron, setiap Senin jam 03:00)
 # Tidak menghentikan nginx: challenge memakai webroot, lalu nginx di-reload graceful.
 chmod +x /opt/lazisnu/scripts/certbot-renew-safe.sh
-# 0 3 * * 1 /usr/bin/flock -n /run/lock/lazisnu-certbot-renew.lock /usr/bin/timeout --foreground 15m /opt/lazisnu/scripts/certbot-renew-safe.sh
+# Jangan bungkus dengan flock tambahan — script sudah memakai flock internal.
+# 0 3 * * 1 /usr/bin/timeout --foreground 15m /opt/lazisnu/scripts/certbot-renew-safe.sh
 ```
 
 ### 9. Setup backup cron

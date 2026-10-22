@@ -74,6 +74,7 @@ if ! timeout --foreground "$RENEW_TIMEOUT" docker run --rm \
   --webroot \
   -w /var/www/certbot \
   --non-interactive \
+  --no-random-sleep-on-renew \
   --quiet >> "$LOG_FILE" 2>&1; then
   fail "$STAGE" "certbot_renew_failed_or_timed_out"
 fi
