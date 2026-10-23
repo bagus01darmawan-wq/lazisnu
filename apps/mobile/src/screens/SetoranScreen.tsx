@@ -97,11 +97,7 @@ export const SetoranScreen: React.FC = () => {
 
   return (
     <SafeAreaView edges={['bottom']} style={styles.container}>
-      <AppHeader
-        variant="stack"
-        title="Setoran Saya"
-        onBack={() => navigation.goBack()}
-      />
+      <AppHeader variant="stack" title="Setoran Saya" onBack={() => navigation.goBack()} />
       <ScrollView
         contentContainerStyle={styles.body}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} />}>

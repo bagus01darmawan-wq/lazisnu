@@ -84,12 +84,7 @@ export const SignSheet: React.FC<SignSheetProps> = ({
   };
 
   return (
-    <Modal
-      visible
-      transparent
-      animationType="slide"
-      statusBarTranslucent
-      onRequestClose={onClose}>
+    <Modal visible transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <View
           accessibilityViewIsModal

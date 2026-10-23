@@ -5,7 +5,7 @@
  *   - petugas dari kecamatan lain ditolak.
  */
 import { randomUUID } from 'crypto';
-import { eq, inArray, or } from 'drizzle-orm';
+import { and, eq, inArray, or } from 'drizzle-orm';
 import { getApp, closeApp } from './helpers/app-helper';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
@@ -27,6 +27,26 @@ const IDS = {
 };
 
 let token = '';
+
+async function waitForAuditLog(actionTypes: string[]): Promise<void> {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const rows = await db
+      .select({ id: schema.activityLogs.id })
+      .from(schema.activityLogs)
+      .where(
+        and(
+          eq(schema.activityLogs.userId, IDS.adminUser),
+          inArray(schema.activityLogs.actionType, actionTypes)
+        )
+      )
+      .limit(1);
+
+    if (rows.length > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+
+  throw new Error('Audit log security event tidak muncul sebelum cleanup');
+}
 
 describe('POST /v1/admin/assignments/bulk-cans', () => {
   beforeAll(async () => {
@@ -145,7 +165,11 @@ describe('POST /v1/admin/assignments/bulk-cans', () => {
       .delete(schema.activityLogs)
       .where(
         or(
-          eq(schema.activityLogs.userId, IDS.adminUser),
+          inArray(schema.activityLogs.userId, [
+            IDS.adminUser,
+            IDS.officerUser,
+            IDS.otherOfficerUser,
+          ]),
           inArray(schema.activityLogs.officerId, [IDS.officer, IDS.otherOfficer])
         )
       );
@@ -234,5 +258,9 @@ describe('POST /v1/admin/assignments/bulk-cans', () => {
 
     expect(response.statusCode).toBe(403);
     expect(response.json().error.code).toBe('FORBIDDEN_SCOPE');
+
+    // onResponse audit logger berjalan setelah inject selesai; tunggu tulisannya
+    // sebelum afterAll menghapus user agar tidak melanggar FK activity_logs.
+    await waitForAuditLog(['AUTH_FAILED', 'OWNERSHIP_DENIED']);
   });
 });
