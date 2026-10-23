@@ -7,11 +7,14 @@ import { authorize } from '../../middleware/auth';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { getPaginationParams, formatPaginatedResponse } from '../../utils/pagination';
 import { getRoleScope } from '../../utils/role-scope';
+import { assertBranchAccess } from '../../middleware/ownership';
 import { createAssignmentSchema } from './schemas';
 import { z } from 'zod';
 import { insertAssignments } from '../../services/assignmentGenerator';
 import * as regionCardService from '../../services/regionCardService';
 import { ASSIGNABLE_CONDITIONS } from '../../services/conditionRules';
+import { getAssignmentWorkQueue } from '../../services/assignmentWorkQueueService';
+import { isAppError } from '../../utils/AppError';
 
 const rantingOrKec = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
 
@@ -29,6 +32,26 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // Ruang kerja tab "Kelola": summary + queue + beban petugas dalam satu request.
+  fastify.get('/assignments/work-queue', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = request.currentUser!;
+      const query = request.query as {
+        year?: string;
+        month?: string;
+        branch_id?: string;
+        dukuh_id?: string;
+      };
+      const workQueue = await getAssignmentWorkQueue(user, query);
+      return sendSuccess(reply, workQueue);
+    } catch (error) {
+      if (isAppError(error)) {
+        return sendError(reply, error.statusCode, error.code, error.message);
+      }
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
   fastify.get('/assignments', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const query = request.query as { 
@@ -38,6 +61,7 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
         branch_id?: string;
         dukuh_id?: string;
         search?: string;
+        status?: string;
         page?: string; 
         limit?: string 
       };
@@ -52,6 +76,15 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       if (query.year) conditions.push(eq(schema.assignments.periodYear, parseInt(query.year)));
       if (query.month) conditions.push(eq(schema.assignments.periodMonth, parseInt(query.month)));
       if (query.officer_id) conditions.push(eq(schema.assignments.officerId, query.officer_id));
+      if (query.status) {
+        const status = z
+          .enum(['ACTIVE', 'COMPLETED', 'REASSIGNED', 'UNCOLLECTED'])
+          .safeParse(query.status);
+        if (!status.success) {
+          return sendError(reply, 400, 'VALIDATION_ERROR', 'Status tidak valid');
+        }
+        conditions.push(eq(schema.assignments.status, status.data));
+      }
       
       // Filter by specific branch
       if (query.branch_id) {
@@ -179,16 +212,19 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
         branch_id: z.string().uuid(),
         officer_id: z.string().uuid(),
         dukuh_ids: z.array(z.string().uuid()).optional().nullable(),
+        period_year: z.number().int().min(2020).max(2100).optional(),
+        period_month: z.number().int().min(1).max(12).optional(),
       }).parse(request.body);
 
       const user = request.currentUser!;
+      await assertBranchAccess(user, body.branch_id);
       if (user.role === 'ADMIN_RANTING' && body.branch_id !== user.branchId) {
         return sendError(reply, 403, 'FORBIDDEN', 'Anda hanya dapat membuat penugasan massal untuk ranting sendiri');
       }
 
       const now = new Date();
-      const currentYear = now.getFullYear();
-      const currentMonth = now.getMonth() + 1;
+      const currentYear = body.period_year ?? now.getFullYear();
+      const currentMonth = body.period_month ?? now.getMonth() + 1;
 
       const conditions: any[] = [
         eq(schema.cans.branchId, body.branch_id),
@@ -250,6 +286,105 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
         return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+      }
+      if (isAppError(error)) {
+        return sendError(reply, error.statusCode, error.code, error.message);
+      }
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  /**
+   * Assign sebagian kaleng (subset RT/pemilik) pada scope dukuh. Dipakai tab
+   * Kelola ketika queue berisi grup RT/kaleng, bukan dukuh utuh.
+   */
+  fastify.post('/assignments/bulk-cans', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const body = z.object({
+        officer_id: z.string().uuid(),
+        can_ids: z.array(z.string().uuid()).min(1).max(500),
+        period_year: z.number().int().min(2020).max(2100).optional(),
+        period_month: z.number().int().min(1).max(12).optional(),
+      }).parse(request.body);
+
+      const user = request.currentUser!;
+      const uniqueCanIds = Array.from(new Set(body.can_ids));
+
+      const officer = await db.query.officers.findFirst({
+        where: eq(schema.officers.id, body.officer_id),
+        columns: { id: true, branchId: true, isActive: true },
+      });
+      if (!officer) return sendError(reply, 404, 'OFFICER_NOT_FOUND', 'Petugas tidak ditemukan');
+      if (!officer.isActive) return sendError(reply, 400, 'OFFICER_INACTIVE', 'Petugas non-aktif');
+      await assertBranchAccess(user, officer.branchId);
+      if (user.role === 'ADMIN_RANTING' && officer.branchId !== user.branchId) {
+        return sendError(reply, 403, 'FORBIDDEN', 'Petugas bukan anggota ranting Anda');
+      }
+
+      const cans = await db.query.cans.findMany({
+        where: inArray(schema.cans.id, uniqueCanIds),
+        columns: { id: true, branchId: true, isActive: true, condition: true },
+      });
+
+      if (cans.length !== uniqueCanIds.length) {
+        return sendError(reply, 403, 'FORBIDDEN', 'Satu atau lebih kaleng tidak ditemukan atau bukan milik wilayah Anda');
+      }
+      if (cans.some((can) => can.branchId !== officer.branchId)) {
+        return sendError(reply, 400, 'BRANCH_MISMATCH', 'Petugas dan kaleng harus berada di ranting yang sama');
+      }
+      if (user.role === 'ADMIN_RANTING' && cans.some((can) => can.branchId !== user.branchId)) {
+        return sendError(reply, 403, 'FORBIDDEN', 'Kaleng bukan milik ranting Anda');
+      }
+
+      const now = new Date();
+      const currentYear = body.period_year ?? now.getFullYear();
+      const currentMonth = body.period_month ?? now.getMonth() + 1;
+
+      const assignedRows = await db
+        .select({ canId: schema.assignments.canId })
+        .from(schema.assignments)
+        .where(
+          and(
+            inArray(schema.assignments.canId, uniqueCanIds),
+            eq(schema.assignments.periodYear, currentYear),
+            eq(schema.assignments.periodMonth, currentMonth)
+          )
+        );
+      const assignedCanIds = new Set(assignedRows.map((row) => row.canId));
+
+      const eligible = cans.filter(
+        (can) =>
+          can.isActive &&
+          (ASSIGNABLE_CONDITIONS as string[]).includes(can.condition) &&
+          !assignedCanIds.has(can.id)
+      );
+
+      if (eligible.length === 0) {
+        return sendError(reply, 400, 'ALREADY_ASSIGNED', 'Semua kaleng yang dipilih sudah memiliki jadwal penugasan untuk bulan ini');
+      }
+
+      const newAssignments = eligible.map((can) => ({
+        canId: can.id,
+        officerId: body.officer_id,
+        periodYear: currentYear,
+        periodMonth: currentMonth,
+        status: 'ACTIVE' as const,
+      }));
+
+      await insertAssignments(newAssignments);
+
+      request.auditContext = { newData: newAssignments };
+      return sendSuccess(reply, {
+        assigned_count: eligible.length,
+        skipped_count: uniqueCanIds.length - eligible.length,
+        period: `${currentMonth}/${currentYear}`,
+      }, 201);
+    } catch (error: unknown) {
+      if (error instanceof z.ZodError) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+      }
+      if (isAppError(error)) {
+        return sendError(reply, error.statusCode, error.code, error.message);
       }
       return sendInternalError(reply, error, fastify.log);
     }

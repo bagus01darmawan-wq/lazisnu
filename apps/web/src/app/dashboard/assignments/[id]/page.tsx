@@ -1,468 +1,374 @@
 'use client';
-// Force rebuild - updating auth store import
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ColumnDef } from '@tanstack/react-table';
+import {
+  ArrowLeft,
+  Calendar,
+  CheckCircle2,
+  ClipboardList,
+  MapPin,
+  Repeat,
+  RotateCcw,
+  Search,
+  Trash2,
+  UserCheck,
+  Users,
+} from 'lucide-react';
+import api from '@/lib/api';
+import { toast } from 'sonner';
+import { useAuthStore } from '@/store/useAuthStore';
 import { Table } from '@/components/ui/Table';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
-import { ColumnDef } from '@tanstack/react-table';
-import api from '@/lib/api';
-import { toast } from 'sonner';
-import {
-  ClipboardList,
-  Plus,
-  Calendar,
-  Box,
-  Search,
-  CheckCircle2,
-  Clock,
-  Repeat,
-  Trash2,
-  MapPin,
-  RotateCcw,
-  UserCheck,
-  CheckSquare,
-  Square,
-  ArrowLeft
-} from 'lucide-react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useAuthStore } from '@/store/useAuthStore';
-import * as z from 'zod';
-import { DropdownFilter } from '@/components/ui/DropdownFilter';
 import { GlassSelect } from '@/components/ui/GlassSelect';
 import { PeriodPicker } from '@/components/ui/PeriodPicker';
 import { ConfirmToast } from '@/components/ui/ConfirmToast';
+import { AssignmentCoverage } from '@/components/assignments/AssignmentCoverage';
+import { UnassignedQueue } from '@/components/assignments/UnassignedQueue';
+import { AssignmentActionBar } from '@/components/assignments/AssignmentActionBar';
+import { OfficerPickerSheet } from '@/components/assignments/OfficerPickerSheet';
+import { AssignmentConfirmSheet } from '@/components/assignments/AssignmentConfirmSheet';
+import { AssignmentTabs } from '@/components/assignments/AssignmentTabs';
+import { AssignmentHistoryCard } from '@/components/assignments/AssignmentHistoryCard';
+import { AssignmentEmptyState } from '@/components/assignments/AssignmentEmptyState';
+import { useAssignmentWorkQueue } from '@/components/assignments/useAssignmentWorkQueue';
+import {
+  MONTH_NAMES,
+  statusLabel,
+  statusStyle,
+  type AssignmentHistoryItem,
+  type AssignmentStatus,
+  type AssignmentTab,
+  type RegionKind,
+} from '@/components/assignments/types';
 
-const assignmentSchema = z.object({
-  branch_id: z.string().uuid('Pilih ranting'),
-  officer_id: z.string().uuid('Pilih petugas'),
-  dukuh_ids: z.array(z.string().uuid()).min(1, 'Pilih minimal satu dukuh'),
-});
-
-type AssignmentFormValues = z.infer<typeof assignmentSchema>;
-
-interface Branch {
-  id: string;
-  name: string;
+interface AssignmentPageQuery {
+  kind?: string;
+  name?: string;
+  branch?: string;
+  tab?: string;
+  year?: string;
+  month?: string;
 }
 
-interface Officer {
-  id: string;
-  fullName: string;
-  employeeCode?: string;
-  branchId?: string;
-  branchName?: string;
-}
-
-interface Dukuh {
-  id: string;
-  name: string;
-}
-
-interface AssignmentItem {
-  id: string;
-  canId: string;
-  officerId: string;
-  periodMonth: number;
-  periodYear: number;
-  status: string;
-  assignedAt: string;
-  can: {
-    qrCode: string;
-    ownerName: string;
-    branchName?: string;
-    dukuhName?: string;
-    dukuh?: string;
-    rt?: string;
-    rw?: string;
-    branchId: string;
-  };
-  officer: {
-    fullName: string;
-    employeeCode?: string;
-    branchName?: string;
-  };
-}
-
-interface TransferAssignment {
-  id: string;
-  officerId: string;
-  newOfficerId?: string;
-  officer: { fullName: string };
-  can: { qrCode: string; branchId: string };
-}
-
-interface ApiListResponse {
+interface HistoryResponse {
   success: boolean;
-  data?: { items?: AssignmentItem[]; pagination?: { page: number; limit: number; total: number; totalPages: number } };
-  items?: AssignmentItem[];
+  data?: {
+    items?: AssignmentHistoryItem[];
+    pagination?: { page: number; limit: number; total: number; totalPages: number };
+  };
+  items?: AssignmentHistoryItem[];
   pagination?: { page: number; limit: number; total: number; totalPages: number };
+}
+
+interface BulkResponse {
+  success: boolean;
   assignedCount?: number;
+  skippedCount?: number;
   period?: string;
 }
 
-interface DropdownApiResponse {
-  success: boolean;
-  data?: Branch[] | { items?: Officer[] };
-  items?: Officer[];
-}
+const currentYear = new Date().getFullYear();
+const currentMonth = new Date().getMonth() + 1;
 
-interface DukuhListResponse {
-  success: boolean;
-  data?: Dukuh[];
-}
-
-export default function AssignmentsDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams?: Promise<{ kind?: string; name?: string; branch?: string }> }) {
+export default function AssignmentsDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<AssignmentPageQuery>;
+}) {
   const router = useRouter();
   const { user } = useAuthStore();
   const routeParams = React.use(params);
   const query = searchParams ? React.use(searchParams) : {};
   const regionId = routeParams.id;
-  const regionKind = query.kind === 'dukuh' ? 'dukuh' : 'branch';
+  const regionKind: RegionKind = query.kind === 'dukuh' ? 'dukuh' : 'branch';
   const regionName = query.name ? decodeURIComponent(query.name) : '';
   const regionBranchName = query.branch ? decodeURIComponent(query.branch) : '';
-  const [data, setData] = useState<AssignmentItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
-  const [transferringAssignment, setTransferringAssignment] = useState<TransferAssignment | null>(null);
+
+  const initialYear = query.year ? parseInt(query.year, 10) : currentYear;
+  const initialMonth = query.month ? parseInt(query.month, 10) : currentMonth;
+  const initialTab: AssignmentTab = query.tab === 'riwayat' ? 'riwayat' : 'kelola';
+
+  const [activeTab, setActiveTab] = useState<AssignmentTab>(initialTab);
+  const [period, setPeriod] = useState({
+    year: Number.isNaN(initialYear) ? currentYear : initialYear,
+    month: Number.isNaN(initialMonth) ? currentMonth : initialMonth,
+  });
+
+  const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
+  const [selectedOfficerId, setSelectedOfficerId] = useState('');
+  const [isOfficerSheetOpen, setIsOfficerSheetOpen] = useState(false);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [isBulkReassignModalOpen, setIsBulkReassignModalOpen] = useState(false);
-  const [bulkReassignOfficerId, setBulkReassignOfficerId] = useState('');
 
-  const [officers, setOfficers] = useState<Officer[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [modalDukuhs, setModalDukuhs] = useState<Dukuh[]>([]);
-  const [fetchingDukuhs, setFetchingDukuhs] = useState(false);
+  const [historyItems, setHistoryItems] = useState<AssignmentHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyLimit] = useState(10);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [officerFilter, setOfficerFilter] = useState('');
+  const [historyReloadKey, setHistoryReloadKey] = useState(0);
 
-  const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth() + 1;
+  const [transferring, setTransferring] = useState<AssignmentHistoryItem | null>(null);
+  const [transferOfficerId, setTransferOfficerId] = useState('');
 
-  /**
-   * Satu sumber kebenaran untuk kondisi filter saat halaman pertama dibuka.
-   * Deklarasi `useState` dan handler Reset membaca nilai yang SAMA, jadi Reset
-   * tidak mungkin mengembalikan ke keadaan berbeda dari pembukaan halaman.
-   * Wilayah TIDAK diikutkan — itu dikunci dari URL, bukan filter yang bisa
-   * di-reset oleh pengguna.
-   */
-  const filterAwal = () => ({
-    filter: { year: currentYear, month: currentMonth, months: [currentMonth] },
-    search: '',
-    currentPage: 1,
-    pageSize: 10,
-  });
+  const { data: queue, loading: queueLoading, error: queueError, reload: reloadQueue } =
+    useAssignmentWorkQueue({
+      regionId,
+      regionKind,
+      year: period.year,
+      month: period.month,
+    });
 
-  const [filter, setFilter] = useState<{ year: number; month: number; months: number[] }>(filterAwal().filter);
-  const [search, setSearch] = useState(filterAwal().search);
-  // Wilayah dikunci dari URL (hasil klik kartu di halaman index):
-  // kartu ranting menyaring branch_id, kartu dukuh menyaring dukuh_id.
-  const regionQuery = regionKind === 'dukuh'
-    ? { dukuh_id: regionId }
-    : { branch_id: regionId };
-  const [totalItems, setTotalItems] = useState(0);
-  const [currentPage, setCurrentPage] = useState(filterAwal().currentPage);
-  const [pageSize, setPageSize] = useState(filterAwal().pageSize);
+  const groups = useMemo(() => queue?.groups ?? [], [queue]);
+  const officers = useMemo(() => queue?.officers ?? [], [queue]);
+  const summary = queue?.summary ?? null;
 
-  // Halaman detail: wilayah selalu terkunci dari URL, tidak ada state kartu.
+  const selectedGroups = useMemo(
+    () => groups.filter((group) => selectedGroupIds.has(group.id)),
+    [groups, selectedGroupIds]
+  );
+  const selectedCans = selectedGroups.reduce((sum, group) => sum + group.unassignedCans, 0);
+  const selectedOfficer = officers.find((officer) => officer.id === selectedOfficerId) ?? null;
 
-  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<AssignmentFormValues>({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    resolver: zodResolver(assignmentSchema as any),
-    defaultValues: {
-      dukuh_ids: []
-    }
-  });
+  // Prune grup yang hilang setelah refetch/ganti periode.
+  useEffect(() => {
+    // react-hooks/set-state-in-effect (React Hooks v6): lihat persetujuan.
+    void Promise.resolve().then(() => {
+      setSelectedGroupIds((previous) => {
+        const validIds = new Set(groups.map((group) => group.id));
+        const next = new Set(Array.from(previous).filter((id) => validIds.has(id)));
+        return next.size === previous.size ? previous : next;
+      });
+    });
+  }, [groups]);
 
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const selectedBranchId = watch('branch_id');
+  // Simpan tab + periode di URL agar refresh/back konsisten.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const next = new URLSearchParams();
+    next.set('kind', regionKind);
+    if (regionName) next.set('name', regionName);
+    if (regionBranchName) next.set('branch', regionBranchName);
+    next.set('tab', activeTab);
+    next.set('year', String(period.year));
+    next.set('month', String(period.month));
+    window.history.replaceState(null, '', `/dashboard/assignments/${regionId}?${next.toString()}`);
+  }, [activeTab, period.year, period.month, regionId, regionKind, regionName, regionBranchName]);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchHistory = useCallback(async () => {
+    setHistoryLoading(true);
     try {
-      const response = await api.get('/admin/assignments', {
+      const response = (await api.get('/admin/assignments', {
         params: {
-          ...filter,
-          search,
-          ...regionQuery,
-          page: currentPage,
-          limit: pageSize
-        }
-      }) as unknown as ApiListResponse;
+          year: period.year,
+          month: period.month,
+          search: search || undefined,
+          status: statusFilter || undefined,
+          officer_id: officerFilter || undefined,
+          ...(regionKind === 'dukuh' ? { dukuh_id: regionId } : { branch_id: regionId }),
+          page: historyPage,
+          limit: historyLimit,
+        },
+      })) as unknown as HistoryResponse;
+
       if (response.success) {
-        setData(response.data?.items || response.items || []);
-        setTotalItems(response.data?.pagination?.total || response.pagination?.total || 0);
+        setHistoryItems(response.data?.items || response.items || []);
+        setHistoryTotal(
+          response.data?.pagination?.total || response.pagination?.total || 0
+        );
       }
-    } catch (_error) {
-      console.error('Failed to fetch assignments:', _error);
+    } catch (error) {
+      const message =
+        (error as { error?: { message?: string }; message?: string })?.error?.message ||
+        (error as { message?: string })?.message ||
+        'Gagal memuat riwayat penugasan';
+      toast.error(message);
     } finally {
-      setLoading(false);
+      setHistoryLoading(false);
     }
+  }, [
+    period.year,
+    period.month,
+    search,
+    statusFilter,
+    officerFilter,
+    regionKind,
+    regionId,
+    historyPage,
+    historyLimit,
+  ]);
+
+  useEffect(() => {
+    if (activeTab !== 'riwayat') return;
+    // react-hooks/set-state-in-effect (React Hooks v6): lihat persetujuan.
+    void Promise.resolve().then(fetchHistory);
+  }, [activeTab, fetchHistory, historyReloadKey]);
+
+  const changePeriod = (month: number, year: number) => {
+    setPeriod({ year, month });
+    setSelectedGroupIds(new Set());
+    setSelectedOfficerId('');
+    setHistoryPage(1);
   };
 
-  const fetchDropdowns = async () => {
-    try {
-      const branchesRes = await api.get('/admin/branches') as unknown as DropdownApiResponse;
-      if (branchesRes.success) setBranches(branchesRes.data as Branch[] || []);
-      const officersRes = await api.get('/admin/officers', { params: { limit: 300, is_active: true } }) as unknown as DropdownApiResponse;
-      if (officersRes.success) {
-        const officersData = officersRes.data as { items?: Officer[] } || {};
-        setOfficers(officersData.items || officersRes.items || []);
+  const toggleGroup = (groupId: string) => {
+    setSelectedGroupIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  };
+
+  const toggleAllGroups = () => {
+    setSelectedGroupIds((previous) => {
+      if (groups.length > 0 && groups.every((group) => previous.has(group.id))) {
+        return new Set();
       }
-    } catch (_error) {
-      console.error('Failed to fetch dropdown data:', _error);
-    }
+      return new Set(groups.map((group) => group.id));
+    });
   };
 
-  const fetchDukuhsModal = async (branchId: string) => {
-    if (!branchId || branchId === '') {
-      setModalDukuhs([]);
+  const openConfirm = () => {
+    if (selectedGroups.length === 0 || !selectedOfficer) {
+      toast.error('Pilih grup dan petugas terlebih dahulu');
       return;
     }
-
-    setModalDukuhs([]);
-    setFetchingDukuhs(true);
-
-    try {
-      const response = await api.get('/admin/dukuhs', {
-        params: {
-          branch_id: branchId,
-          filter_assigned: true
-        }
-      }) as unknown as DukuhListResponse;
-
-      if (response.success) {
-        setModalDukuhs(response.data || []);
-      }
-    } catch (_error) {
-      console.error('Failed to fetch dukuhs for modal:', _error);
-    } finally {
-      setFetchingDukuhs(false);
-    }
+    setIsConfirmOpen(true);
   };
 
-  useEffect(() => {
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, search, regionId, regionKind, currentPage, pageSize]);
-
-  useEffect(() => {
-    fetchDropdowns();
-  }, []);
-
-  useEffect(() => {
-    if (isModalOpen) {
-      fetchDukuhsModal(selectedBranchId);
-    }
-  }, [selectedBranchId, isModalOpen]);
-
-  const selectedOfficerId = watch('officer_id');
-
-  useEffect(() => {
-    if (selectedOfficerId) {
-      const officer = officers.find((o: Officer) => o.id === selectedOfficerId);
-      if (officer && officer.branchId) {
-        setValue('branch_id', officer.branchId, { shouldValidate: true });
-      }
-    } else {
-      setValue('branch_id', '', { shouldValidate: true });
-    }
-  }, [selectedOfficerId, officers, setValue]);
-
-  useEffect(() => {
-    setValue('dukuh_ids', []);
-  }, [selectedBranchId, setValue]);
-
-  const onSubmit = async (values: AssignmentFormValues) => {
+  const submitAssignment = async () => {
+    if (!queue || !selectedOfficer) return;
     setSubmitting(true);
+    let assignedTotal = 0;
+
     try {
-      const response = await api.post('/admin/assignments/bulk-branch', values) as unknown as ApiListResponse;
-      if (response.success) {
-        reset();
-        setIsModalOpen(false);
-        fetchData();
-        toast.success(`Berhasil! ${response.assignedCount} kaleng telah ditugaskan untuk periode ${response.period}`);
+      const dukuhIds = selectedGroups.filter((group) => group.kind === 'dukuh').map((group) => group.id);
+      const canIds = selectedGroups.flatMap((group) => group.canIds ?? []);
+
+      if (dukuhIds.length > 0) {
+        const response = (await api.post('/admin/assignments/bulk-branch', {
+          branch_id: queue.region.branchId,
+          officer_id: selectedOfficer.id,
+          dukuh_ids: dukuhIds,
+          period_year: period.year,
+          period_month: period.month,
+        })) as unknown as BulkResponse;
+        assignedTotal += response.assignedCount || 0;
       }
-    } catch (_error) {
-      const err = _error as { response?: { data?: { error?: { message?: string } } }; message?: string };
-      console.error('Failed to create bulk assignment:', err.response?.data || _error);
-      toast.error(err.response?.data?.error?.message || err.message || 'Gagal menyimpan penugasan massal');
+
+      if (canIds.length > 0) {
+        const response = (await api.post('/admin/assignments/bulk-cans', {
+          officer_id: selectedOfficer.id,
+          can_ids: Array.from(new Set(canIds)),
+          period_year: period.year,
+          period_month: period.month,
+        })) as unknown as BulkResponse;
+        assignedTotal += response.assignedCount || 0;
+      }
+
+      setIsConfirmOpen(false);
+      setSelectedGroupIds(new Set());
+      setHistoryReloadKey((key) => key + 1);
+      reloadQueue();
+      toast.success(
+        `${assignedTotal} kaleng berhasil ditugaskan ke ${selectedOfficer.fullName} untuk ${MONTH_NAMES[period.month - 1]} ${period.year}`
+      );
+    } catch (error) {
+      const message =
+        (error as { error?: { message?: string }; message?: string })?.error?.message ||
+        (error as { message?: string })?.message ||
+        'Gagal menyimpan penugasan';
+      if (assignedTotal > 0) {
+        setSelectedGroupIds(new Set());
+        reloadQueue();
+      }
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleTransfer = async (values: { officer_id: string }) => {
-    if (!transferringAssignment) return;
+  const handleTransfer = async () => {
+    if (!transferring || !transferOfficerId) return;
     setSubmitting(true);
     try {
-      const response = await api.put(`/admin/assignments/${transferringAssignment.id}`, {
-        officer_id: values.officer_id,
-        status: 'REASSIGNED'
-      }) as unknown as { success: boolean };
+      const response = (await api.post(`/admin/assignments/${transferring.id}/transfer`, {
+        officer_id: transferOfficerId,
+      })) as unknown as { success: boolean };
       if (response.success) {
-        setIsTransferModalOpen(false);
-        setTransferringAssignment(null);
-        fetchData();
-        toast.success('Penugasan berhasil ditransfer!');
+        setTransferring(null);
+        setTransferOfficerId('');
+        fetchHistory();
+        reloadQueue();
+        toast.success('Penugasan berhasil ditransfer');
       }
-    } catch (_error) {
-      console.error('Failed to transfer assignment:', _error);
-      toast.error('Gagal mentransfer penugasan');
+    } catch (error) {
+      const message =
+        (error as { error?: { message?: string }; message?: string })?.error?.message ||
+        (error as { message?: string })?.message ||
+        'Gagal mentransfer penugasan';
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const toggleSelectAll = () => {
-    if (data.length === 0) return;
-    if (selectedIds.length === data.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(data.map((item: AssignmentItem) => item.id));
-    }
-  };
-
-  const toggleSelectId = (item: AssignmentItem) => {
-    setSelectedIds(prev =>
-      prev.includes(item.id) ? prev.filter(i => i !== item.id) : [...prev, item.id]
+  const handleDelete = (id: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (toast as any).custom(
+      (t: string | number) => (
+        <ConfirmToast
+          id={t}
+          title="Hapus Penugasan?"
+          description="Jadwal penjemputan kaleng ini pada periode berjalan akan dibatalkan."
+          confirmLabel="Ya, Hapus"
+          onConfirm={async () => {
+            try {
+              const response = (await api.delete(`/admin/assignments/${id}`)) as unknown as {
+                success: boolean;
+              };
+              if (response.success) {
+                fetchHistory();
+                reloadQueue();
+                toast.success('Penugasan berhasil dihapus');
+              }
+            } catch (error) {
+              const message =
+                (error as { error?: { message?: string }; message?: string })?.error?.message ||
+                (error as { message?: string })?.message ||
+                'Gagal menghapus penugasan';
+              toast.error(message);
+            }
+          }}
+          variant="danger"
+        />
+      ),
+      { duration: 5000 }
     );
   };
 
-  const handleBulkDeleteAssignment = async () => {
-    if (selectedIds.length === 0) return;
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (toast as any).custom((t: string | number) => (
-      <ConfirmToast
-        id={t}
-        title="Hapus Massal?"
-        description={`Hapus ${selectedIds.length} penugasan terpilih?`}
-        confirmLabel="Ya, Hapus"
-        onConfirm={async () => {
-          toast.loading('Menghapus...');
-          try {
-            await Promise.all(selectedIds.map(id => api.delete(`/admin/assignments/${id}`)));
-            toast.dismiss();
-            toast.success(`Berhasil menghapus ${selectedIds.length} penugasan`);
-            setSelectedIds([]);
-            fetchData();
-          } catch {
-            toast.dismiss();
-            toast.error('Gagal menghapus beberapa penugasan');
-          }
-        }}
-        variant="danger"
-      />
-    ), { duration: 5000 });
-  };
-
-  const handleBulkReassign = async () => {
-    if (selectedIds.length === 0 || !bulkReassignOfficerId) return;
-    setSubmitting(true);
-    try {
-      const results = await Promise.allSettled(
-        selectedIds.map(id =>
-          api.put(`/admin/assignments/${id}`, {
-            officer_id: bulkReassignOfficerId,
-            status: 'REASSIGNED'
-          })
-        )
-      );
-      const successCount = results.filter(r => r.status === 'fulfilled').length;
-      toast.success(`Berhasil re-assign ${successCount} dari ${selectedIds.length} penugasan`);
-      setIsBulkReassignModalOpen(false);
-      setBulkReassignOfficerId('');
-      setSelectedIds([]);
-      fetchData();
-    } catch {
-      toast.error('Gagal melakukan re-assign massal');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDeleteAssignment = (id: string) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (toast as any).custom((t: string | number) => (
-      <ConfirmToast
-        id={t}
-        title="Hapus Penugasan?"
-        description="Tindakan ini akan membatalkan jadwal penjemputan untuk kaleng tersebut di bulan berjalan."
-        confirmLabel="Ya, Hapus"
-        onConfirm={() => {
-          toast.promise(
-            api.delete(`/admin/assignments/${id}`).then((_res) => {
-              fetchData();
-              return _res;
-            }),
-            {
-              loading: 'Sedang menghapus...',
-              success: 'Berhasil dihapus',
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              error: (err: any) => err.response?.data?.error?.message || 'Gagal menghapus',
-            }
-          );
-        }}
-      />
-    ), { duration: 5000 });
-  };
-
-  const months = [
-    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
-  ];
-
-  const columns: ColumnDef<AssignmentItem>[] = [
-    {
-      id: 'selection',
-      header: () => {
-        const isAllSelected = data.length > 0 && selectedIds.length === data.length;
-        return (
-          <button
-            onClick={toggleSelectAll}
-            disabled={data.length === 0}
-            className="p-1 hover:bg-[#1F8243]/30 rounded transition-colors disabled:opacity-30"
-          >
-            {isAllSelected ? (
-              <CheckSquare size={18} className="text-[#1F8243]" />
-            ) : (
-              <Square size={18} className="text-[#F4F1EA]/30" />
-            )}
-          </button>
-        );
-      },
-      cell: ({ row }) => (
-        <button
-          onClick={() => toggleSelectId(row.original)}
-          className="p-1 hover:bg-[#1F8243]/30 rounded transition-colors"
-        >
-          {selectedIds.includes(row.original.id) ? (
-            <CheckSquare size={18} className="text-[#1F8243]" />
-          ) : (
-            <Square size={18} className="text-[#F4F1EA]/30" />
-          )}
-        </button>
-      ),
-    },
+  const columns: ColumnDef<AssignmentHistoryItem>[] = [
     {
       accessorKey: 'can',
       header: () => (
         <div className="flex items-center gap-1.5">
-          <Box size={12} className="text-[#EAD19B]" />
-          <span>Kaleng / Pemilik</span>
+          <ClipboardList size={12} className="text-[#EAD19B]" />
+          <span>Pemilik / Kaleng</span>
         </div>
       ),
       cell: ({ row }) => (
         <div className="flex flex-col">
-          <p className="font-bold text-[#F4F1EA] tracking-tight">{row.original.can.ownerName}</p>
-          <p className="text-[10px] text-[#EAD19B]/60 font-bold uppercase tracking-widest mt-0.5">
-            {row.original.can.branchName?.replace(/ranting/gi, '').trim() || 'PUSAT'}
-          </p>
-          <p className="text-[10px] text-[#F4F1EA]/40 font-bold tracking-tight mt-1">
+          <p className="font-bold tracking-tight text-[#F4F1EA]">{row.original.can.ownerName}</p>
+          <p className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-[#EAD19B]/60">
             #{row.original.can.qrCode}
           </p>
         </div>
@@ -473,13 +379,15 @@ export default function AssignmentsDetailPage({ params, searchParams }: { params
       header: () => (
         <div className="flex items-center gap-1.5">
           <MapPin size={12} className="text-[#EAD19B]" />
-          <span>DUSUN</span>
+          <span>Dukuh</span>
         </div>
       ),
       cell: ({ row }) => (
         <div className="flex flex-col text-xs font-medium text-[#F4F1EA]/60">
-          <span className="uppercase tracking-tight">{row.original.can.dukuhName || row.original.can.dukuh || '-'}</span>
-          <span className="text-[10px] opacity-50 font-bold uppercase tracking-widest mt-0.5">
+          <span className="uppercase tracking-tight">
+            {row.original.can.dukuhName || row.original.can.dukuh || '-'}
+          </span>
+          <span className="mt-0.5 text-[10px] font-bold uppercase tracking-widest opacity-50">
             RT {row.original.can.rt || '-'} / RW {row.original.can.rw || '-'}
           </span>
         </div>
@@ -490,16 +398,11 @@ export default function AssignmentsDetailPage({ params, searchParams }: { params
       header: () => (
         <div className="flex items-center gap-1.5">
           <UserCheck size={12} className="text-[#EAD19B]" />
-          <span>Petugas Lapangan</span>
+          <span>Petugas</span>
         </div>
       ),
       cell: ({ row }) => (
-        <div className="flex flex-col">
-          <span className="font-bold text-[#F4F1EA]">{row.original.officer.fullName}</span>
-          <span className="text-[10px] text-[#F4F1EA]/40 font-bold uppercase tracking-widest mt-0.5">
-            {row.original.officer.branchName?.replace(/ranting/gi, '').trim() || 'PUSAT'}
-          </span>
-        </div>
+        <span className="font-bold text-[#F4F1EA]">{row.original.officer.fullName}</span>
       ),
     },
     {
@@ -511,14 +414,9 @@ export default function AssignmentsDetailPage({ params, searchParams }: { params
         </div>
       ),
       cell: ({ row }) => (
-        <div className="flex flex-col gap-0.5">
-          <span className="text-xs font-medium uppercase tracking-tight text-[#F4F1EA]/60">
-            {months[row.original.periodMonth - 1]}
-          </span>
-          <span className="text-[10px] text-[#F4F1EA]/40 font-bold tracking-[0.2em]">
-            {row.original.periodYear}
-          </span>
-        </div>
+        <span className="text-xs font-medium uppercase tracking-tight text-[#F4F1EA]/60">
+          {MONTH_NAMES[row.original.periodMonth - 1]} {row.original.periodYear}
+        </span>
       ),
     },
     {
@@ -529,20 +427,15 @@ export default function AssignmentsDetailPage({ params, searchParams }: { params
           <span>Status</span>
         </div>
       ),
-      cell: ({ row }) => {
-        const statuses = {
-          ACTIVE: { label: 'ASSIGNED', color: 'text-[#DE6F4A]' },
-          COMPLETED: { label: 'SELESAI', color: 'text-[#1F8243]' },
-          REASSIGNED: { label: 'RE-ASSIGN', color: 'text-[#EAD19B]' },
-          UNCOLLECTED: { label: 'TERLEWAT', color: 'text-[#F59E0B]' },
-        };
-        const s = statuses[row.original.status as keyof typeof statuses] || statuses.ACTIVE;
-        return (
-          <span className={`text-[10px] font-bold uppercase tracking-widest ${s.color}`}>
-            {s.label}
-          </span>
-        );
-      },
+      cell: ({ row }) => (
+        <span
+          className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${statusStyle(
+            row.original.status
+          )}`}
+        >
+          {statusLabel(row.original.status)}
+        </span>
+      ),
     },
     {
       id: 'actions',
@@ -552,23 +445,27 @@ export default function AssignmentsDetailPage({ params, searchParams }: { params
           <Button
             variant="outline"
             size="sm"
-            className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-white/10 transition-all duration-300 group"
-            title="Transfer Penugasan"
+            disabled={row.original.status !== 'ACTIVE'}
+            className="group h-8 w-8 rounded-lg border-white/10 bg-white/5 p-0 text-[#F4F1EA]/60 transition-all hover:bg-white/10 hover:text-[#F4F1EA] disabled:cursor-not-allowed disabled:opacity-30"
+            title={
+              row.original.status === 'ACTIVE'
+                ? 'Transfer Penugasan'
+                : 'Hanya penugasan aktif yang dapat ditransfer'
+            }
             onClick={() => {
-              setTransferringAssignment(row.original);
-              setIsTransferModalOpen(true);
+              setTransferring(row.original);
+              setTransferOfficerId('');
             }}
           >
             <Repeat size={14} className="text-[#EAD19B]" />
           </Button>
-
           {user?.role === 'ADMIN_KECAMATAN' && (
             <Button
               variant="outline"
               size="sm"
-              className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#D97A76] hover:bg-red-500/10 hover:border-red-500/20 transition-all duration-300 group"
+              className="group h-8 w-8 rounded-lg border-white/10 bg-white/5 p-0 text-[#F4F1EA]/60 transition-all hover:border-red-500/20 hover:bg-red-500/10 hover:text-[#D97A76]"
               title="Hapus Penugasan"
-              onClick={() => handleDeleteAssignment(row.original.id)}
+              onClick={() => handleDelete(row.original.id)}
             >
               <Trash2 size={14} className="text-[#F4F1EA]/40 group-hover:text-[#D97A76]" />
             </Button>
@@ -578,135 +475,224 @@ export default function AssignmentsDetailPage({ params, searchParams }: { params
     },
   ];
 
-  return (
-    <div className="space-y-6">
-      {/* Header Section — pola detail users/[id]: tombol Kembali + judul wilayah */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => router.push('/dashboard/assignments')}
-            aria-label="Kembali ke daftar wilayah"
-            className="h-9 w-9 shrink-0 p-0 rounded-xl border border-white/10 bg-white/5 text-[#F4F1EA]/70 hover:text-[#F4F1EA] hover:bg-white/10 transition-all active:scale-95 flex items-center justify-center"
-          >
-            <ArrowLeft size={16} />
-          </button>
-          <ClipboardList className="text-[#EAD19B]" size={28} />
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold text-[#F4F1EA] tracking-tight truncate">
-              {regionName ? regionName.replace(/ranting|dukuh/gi, '').trim().toUpperCase() : 'Penugasan Rutin'}
-            </h1>
-            <p className="text-[#F4F1EA]/60 text-sm font-medium truncate">
-              {regionBranchName
-                ? regionBranchName.replace(/ranting/gi, '').trim().toUpperCase()
-                : 'Jadwal pengambilan infaq bulanan petugas'}
-            </p>
-          </div>
-        </div>
+  const displayName = (queue?.region.name || regionName || 'Penugasan Rutin')
+    .replace(/ranting/gi, '')
+    .trim()
+    .toUpperCase();
 
-        <div className="flex items-center gap-4">
-          {/* Bulk Action Pill Wrapper */}
-          {selectedIds.length > 0 && (
-            <div className="flex bg-[#F4F1EA]/10 backdrop-blur-md p-1 rounded-2xl border border-[#F4F1EA]/20 shadow-sm">
-              <div className="bg-[#1F8243]/5 backdrop-blur-sm rounded-xl border border-[#1F8243]/10">
-                <button
-                  onClick={() => setIsBulkReassignModalOpen(true)}
-                  className="h-[33px] px-4 rounded-xl text-[11px] font-bold text-[#F4F1EA] hover:bg-[#1F8243]/10 transition-all active:scale-95 flex items-center gap-2"
-                >
-                  <Repeat size={14} strokeWidth={3} />
-                  Re-Assign ({selectedIds.length})
-                </button>
+  const totalHistoryPages = Math.max(1, Math.ceil(historyTotal / historyLimit));
+
+  const renderKelola = () => {
+    if (queueError) {
+      return (
+        <AssignmentEmptyState
+          variant="error"
+          title="Gagal memuat ruang kerja"
+          description={queueError}
+          primaryLabel="Coba lagi"
+          onPrimary={reloadQueue}
+        />
+      );
+    }
+
+    if (!queueLoading && summary) {
+      if (summary.totalCans === 0) {
+        return (
+          <AssignmentEmptyState
+            variant="no-cans"
+            title="Belum ada kaleng terdaftar"
+            description="Wilayah ini belum memiliki kaleng. Tambahkan kaleng terlebih dahulu agar bisa ditugaskan."
+            primaryLabel="Buka Kelola Kaleng"
+            onPrimary={() => router.push('/dashboard/cans')}
+          />
+        );
+      }
+
+      if (summary.assignableCans === 0) {
+        return (
+          <AssignmentEmptyState
+            variant="no-cans"
+            title="Tidak ada kaleng yang dapat ditugaskan"
+            description={`${summary.nonAssignableCans} kaleng di wilayah ini berstatus non-aktif atau dikembalikan, sehingga tidak ikut penugasan.`}
+            primaryLabel="Buka Kelola Kaleng"
+            onPrimary={() => router.push('/dashboard/cans')}
+          />
+        );
+      }
+
+      if (summary.activeOfficerCount === 0) {
+        return (
+          <AssignmentEmptyState
+            variant="no-officers"
+            title="Belum ada petugas aktif"
+            description="Tambahkan petugas aktif di wilayah ini sebelum mulai menugaskan kaleng."
+            primaryLabel="Buka Data Petugas"
+            onPrimary={() => router.push('/dashboard/users')}
+          />
+        );
+      }
+
+      if (summary.unassignedAssignableCans === 0) {
+        return (
+          <AssignmentEmptyState
+            variant="all-assigned"
+            title="Semua sudah ditugaskan"
+            description={`${summary.assignableCans} kaleng di ${displayName} sudah punya petugas untuk ${MONTH_NAMES[period.month - 1]} ${period.year}.`}
+            primaryLabel="Lihat Riwayat"
+            onPrimary={() => setActiveTab('riwayat')}
+            secondaryLabel="Ganti Periode"
+            onSecondary={() => {
+              const nextMonth = period.month === 12 ? 1 : period.month + 1;
+              const nextYear = period.month === 12 ? period.year + 1 : period.year;
+              changePeriod(nextMonth, nextYear);
+            }}
+          />
+        );
+      }
+    }
+
+    return (
+      <>
+        <AssignmentCoverage summary={summary} loading={queueLoading} />
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <UnassignedQueue
+            groups={groups}
+            selectedIds={selectedGroupIds}
+            onToggle={toggleGroup}
+            onToggleAll={toggleAllGroups}
+            loading={queueLoading}
+            error={queueError}
+            onRetry={reloadQueue}
+          />
+
+          <aside className="hidden lg:block">
+            <div className="rounded-2xl border border-white/10 bg-white/5">
+              <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
+                <Users size={14} className="text-[#EAD19B]" />
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/50">
+                  Petugas & beban kerja
+                </p>
               </div>
-              {user?.role === 'ADMIN_KECAMATAN' && (
-                <button
-                  onClick={handleBulkDeleteAssignment}
-                  className="h-[33px] px-4 rounded-xl text-[11px] font-bold transition-all active:scale-95 flex items-center gap-2 text-[#D97A76] hover:bg-[#D97A76]/10"
-                >
-                  <Trash2 size={14} strokeWidth={3} />
-                  Hapus ({selectedIds.length})
-                </button>
+              {officers.length === 0 ? (
+                <p className="px-4 py-6 text-center text-xs text-[#F4F1EA]/40">
+                  Belum ada petugas aktif
+                </p>
+              ) : (
+                <ul className="max-h-[420px] space-y-1 overflow-y-auto p-2">
+                  {officers.map((officer) => {
+                    const selected = officer.id === selectedOfficerId;
+                    return (
+                      <li key={officer.id}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOfficerId(officer.id)}
+                          className={`w-full rounded-xl border px-3 py-2.5 text-left transition-all ${
+                            selected
+                              ? 'border-[#EAD19B]/60 bg-[#EAD19B]/10'
+                              : 'border-transparent hover:bg-white/5'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate text-xs font-bold text-[#F4F1EA]">
+                              {officer.fullName}
+                            </span>
+                            <span className="shrink-0 text-[10px] font-black text-[#EAD19B]">
+                              {officer.assignedCount}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 truncate text-[10px] text-[#F4F1EA]/40">
+                            {officer.completedCount} selesai · {officer.uncollectedCount} terlewat
+                            {officer.dukuhName ? ` · ${officer.dukuhName}` : ''}
+                          </p>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </div>
-          )}
-
-          {/* Primary Action Button */}
-          <Button
-            onClick={() => {
-              reset({
-                branch_id: '',
-                officer_id: '',
-                dukuh_ids: []
-              });
-              setIsModalOpen(true);
-            }}
-            className="h-[35px] px-4 rounded-xl text-[11px] font-bold bg-[#EAD19B] text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 hover:bg-[#EAD19B]/90 transition-all active:scale-95 flex items-center gap-2"
-          >
-            <Plus size={14} strokeWidth={3} />
-            Tugaskan Petugas
-          </Button>
+          </aside>
         </div>
-      </div>
 
-      {/* Tabel wilayah — halaman detail, wilayah terkunci dari URL. */}
-      <div className="flex flex-col gap-4">
+        <AssignmentActionBar
+          selectedGroups={selectedGroups.length}
+          selectedCans={selectedCans}
+          officer={selectedOfficer}
+          hasOfficers={officers.length > 0}
+          submitting={submitting}
+          onOpenOfficer={() => setIsOfficerSheetOpen(true)}
+          onSubmit={openConfirm}
+        />
+      </>
+    );
+  };
 
-      {/* Transparent Filter Toolbar */}
-      <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center justify-between bg-transparent p-4 md:p-5 border-none shadow-none">
-        <div className="relative w-full lg:w-80 group">
-          <div className="flex h-[35px] items-center bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1 transition-all duration-500 group-focus-within:ring-2 group-focus-within:ring-[#F4F1EA]/20 group-focus-within:border-[#F4F1EA]/30 shadow-lg shadow-black/5">
+  const renderRiwayat = () => (
+    <>
+      <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 md:flex-row md:items-center md:p-5">
+        <div className="group relative w-full lg:w-80">
+          <div className="flex h-[35px] items-center rounded-2xl border border-white/20 bg-white/10 p-1 backdrop-blur-md transition-all duration-500 group-focus-within:border-[#F4F1EA]/30 group-focus-within:ring-2 group-focus-within:ring-[#F4F1EA]/20">
             <div className="pl-2 pr-1 transition-transform group-focus-within:scale-110">
               <Search size={14} strokeWidth={3} className="text-[#DE6F4A]" />
             </div>
             <input
               type="text"
-              placeholder="Cari..."
+              placeholder="Cari pemilik / QR / petugas..."
               value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setCurrentPage(1);
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setHistoryPage(1);
               }}
-              className="bg-transparent w-full px-4 py-1 text-sm font-bold text-white placeholder-[#F4F1EA]/60 focus:outline-none"
+              className="w-full bg-transparent px-3 py-1 text-sm font-bold text-white placeholder-[#F4F1EA]/60 focus:outline-none"
             />
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-          <PeriodPicker
-            months={filter.months}
-            year={filter.year}
-            onChange={(m, y) => {
-              setFilter({ year: y, month: m[0] || currentMonth, months: m });
-              setCurrentPage(1);
+        <div className="flex flex-wrap items-center gap-2 md:ml-auto">
+          <GlassSelect
+            value={statusFilter}
+            onChange={(value) => {
+              setStatusFilter(value);
+              setHistoryPage(1);
             }}
+            placeholder="Semua status"
+            className="w-full sm:w-[170px]"
+            options={[
+              { label: 'SEMUA STATUS', value: '' },
+              { label: 'ASSIGNED', value: 'ACTIVE' satisfies AssignmentStatus },
+              { label: 'SELESAI', value: 'COMPLETED' satisfies AssignmentStatus },
+              { label: 'RE-ASSIGN', value: 'REASSIGNED' satisfies AssignmentStatus },
+              { label: 'TERLEWAT', value: 'UNCOLLECTED' satisfies AssignmentStatus },
+            ]}
           />
 
-          {/* Filter ranting dihapus: layer kartu sudah menyaring otomatis. */}
-          <DropdownFilter
-            options={[
-              { label: '10', value: '10' },
-              { label: '20', value: '20' },
-              { label: '50', value: '50' },
-              { label: '100', value: '100' }
-            ]}
-            value={pageSize.toString()}
-            onChange={(val) => {
-              setPageSize(Number(val));
-              setCurrentPage(1);
+          <GlassSelect
+            value={officerFilter}
+            onChange={(value) => {
+              setOfficerFilter(value);
+              setHistoryPage(1);
             }}
-            className="min-w-[80px]! h-[36px]"
-            popoverWidth="w-full"
-            showSearch={false}
+            placeholder="Semua petugas"
+            className="w-full sm:w-[190px]"
+            options={[
+              { label: 'SEMUA PETUGAS', value: '' },
+              ...officers.map((officer) => ({
+                label: officer.fullName,
+                value: officer.id,
+              })),
+            ]}
           />
 
           <button
+            type="button"
             onClick={() => {
-              const awal = filterAwal();
-              setSearch(awal.search);
-              setFilter(awal.filter);
-              setCurrentPage(awal.currentPage);
-              setPageSize(awal.pageSize);
+              setSearch('');
+              setStatusFilter('');
+              setOfficerFilter('');
+              setHistoryPage(1);
             }}
-            className="h-[36px] bg-[#F4F1EA]/10 backdrop-blur-md border border-[#F4F1EA]/20 rounded-2xl px-5 flex items-center gap-2 text-xs font-bold text-white/90 hover:bg-[#F4F1EA]/20 transition-all duration-300 active:scale-95 shadow-lg shadow-black/5"
+            className="flex h-[36px] items-center gap-2 rounded-2xl border border-[#F4F1EA]/20 bg-[#F4F1EA]/10 px-5 text-xs font-bold text-white/90 backdrop-blur-md transition-all duration-300 hover:bg-[#F4F1EA]/20 active:scale-95"
           >
             <RotateCcw size={14} strokeWidth={3} className="text-[#EAD19B]" />
             Reset
@@ -714,298 +700,218 @@ export default function AssignmentsDetailPage({ params, searchParams }: { params
         </div>
       </div>
 
-      {/* Table & Pagination Container wrapped in Glass Card */}
-      <Card variant="glass" className="p-0 border-white/5 shadow-2xl overflow-hidden w-full max-w-full transition-all duration-700">
-        <div className="overflow-x-auto w-full custom-scrollbar">
-          <Table columns={columns} data={data} loading={loading} variant="glass" />
+      {historyLoading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div
+              key={index}
+              className="h-24 animate-pulse rounded-2xl border border-white/10 bg-white/5"
+            />
+          ))}
         </div>
+      ) : historyItems.length === 0 ? (
+        <AssignmentEmptyState
+          variant="no-groups"
+          title="Belum ada riwayat"
+          description="Tidak ada penugasan yang cocok dengan periode dan filter ini."
+        />
+      ) : (
+        <>
+          <div className="space-y-3 md:hidden">
+            {historyItems.map((item) => (
+              <AssignmentHistoryCard
+                key={item.id}
+                item={item}
+                canDelete={user?.role === 'ADMIN_KECAMATAN'}
+                onTransfer={(selected) => {
+                  setTransferring(selected);
+                  setTransferOfficerId('');
+                }}
+                onDelete={handleDelete}
+              />
+            ))}
+          </div>
 
-        {/* Smart Pagination Control - Standardized with Audit Log */}
-        {!loading && totalItems > 0 && (
-          <div className="px-6 py-5 bg-white/5 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
-            {/* Left: Summary Info Badge */}
-            <div className="flex items-center gap-2 bg-white/5 p-1 rounded-2xl border border-white/10 shadow-sm px-4 h-10">
-              <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">Menampilkan</span>
-              <div className="min-w-[24px] h-6 px-1.5 flex items-center justify-center bg-[#EAD19B]/10 rounded-lg">
-                <span className="text-xs font-black text-[#EAD19B]">{data.length}</span>
-              </div>
-              <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">dari</span>
-              <div className="min-w-[32px] h-6 px-1.5 flex items-center justify-center bg-[#F4F1EA]/5 rounded-lg border border-white/10">
-                <span className="text-xs font-black text-[#F4F1EA]">{totalItems}</span>
-              </div>
-              <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight ml-1">Tugas</span>
+          <Card
+            variant="glass"
+            className="hidden overflow-hidden border-white/5 p-0 shadow-2xl md:block"
+          >
+            <div className="w-full overflow-x-auto custom-scrollbar">
+              <Table columns={columns} data={historyItems} loading={false} variant="glass" />
             </div>
+          </Card>
+        </>
+      )}
 
-            {/* Right: Smart Control Pill */}
-            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-2xl border border-white/10 shadow-sm transition-all hover:shadow-md">
-              {/* Page Info Badge */}
-              <div className="px-4 flex items-center gap-1.5 min-w-[140px] justify-center">
-                <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">Halaman</span>
-                <div className="w-6 h-6 flex items-center justify-center bg-[#EAD19B]/10 rounded-lg">
-                  <span className="text-xs font-black text-[#EAD19B]">{currentPage}</span>
-                </div>
-                <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-tight">dari</span>
-                <div className="min-w-[24px] h-6 px-1.5 flex items-center justify-center bg-[#F4F1EA]/5 rounded-lg border border-white/10">
-                  <span className="text-xs font-black text-[#F4F1EA]">{Math.ceil(totalItems / pageSize)}</span>
-                </div>
-              </div>
-
-              {/* Navigation Arrows */}
-              <div className="flex items-center gap-1 pl-2 border-l border-white/5">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(prev => prev - 1)}
-                  className="w-10 h-10 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
-                >
-                  <div className="w-full h-full flex items-center justify-center">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
-                  </div>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={currentPage >= Math.ceil(totalItems / pageSize)}
-                  onClick={() => setCurrentPage(prev => prev + 1)}
-                  className="w-10 h-10 p-0 rounded-xl hover:bg-white/10 text-[#F4F1EA] transition-colors disabled:opacity-10"
-                >
-                  <div className="w-full h-full flex items-center justify-center">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
-                  </div>
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-      </Card>
-      </div>
-
-      {/* Modal Penugasan */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="Penugasan"
-        variant="glass"
-      >
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-          <div className="bg-[#1F8243]/10 p-4 rounded-2xl border border-[#1F8243]/20 flex gap-3 text-[#F4F1EA] mb-2">
-            <Clock size={20} className="shrink-0 text-[#1F8243]" />
-            <div className="text-xs text-[#F4F1EA]/60">
-              <p className="font-bold mb-0.5 uppercase tracking-wider">Periode Berjalan</p>
-              Penugasan akan otomatis dibuat untuk bulan <span className="font-bold text-[#EAD19B]">{months[currentMonth - 1]} {currentYear}</span>.
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih Petugas Lapangan</label>
-            <GlassSelect
-              value={watch('officer_id') || ''}
-              onChange={(val) => setValue('officer_id', val)}
-              placeholder="-- Pilih Petugas --"
-              options={officers.map((o: Officer) => ({
-                label: `${o.fullName} (${o.employeeCode})`,
-                value: o.id
-              }))}
-              error={errors.officer_id?.message}
-              searchable
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih Ranting (Desa)</label>
-            <GlassSelect
-              value={watch('branch_id') || ''}
-              onChange={(val) => setValue('branch_id', val)}
-              placeholder="-- Deteksi Ranting Otomatis --"
-              options={branches.map((b: Branch) => ({
-                label: b.name.replace(/ranting/gi, '').trim().toUpperCase(),
-                value: b.id
-              }))}
-              error={errors.branch_id?.message}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih Dukuh (Bisa lebih dari satu)</label>
-            <div className="border border-white/10 rounded-xl p-3 bg-white/[0.03] space-y-2">
-              {selectedBranchId ? (
-                <>
-                  <div className="flex items-center gap-2 pb-2 border-b border-white/10 mb-2">
-                    <input
-                      type="checkbox"
-                      id="selectAllDukuh"
-                      className="w-4 h-4 rounded border-white/20 text-[#EAD19B] focus:ring-[#EAD19B]/30"
-                      checked={modalDukuhs.length > 0 && watch('dukuh_ids').length === modalDukuhs.length}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setValue('dukuh_ids', modalDukuhs.map(d => d.id));
-                        } else {
-                          setValue('dukuh_ids', []);
-                        }
-                      }}
-                    />
-                    <label htmlFor="selectAllDukuh" className="text-xs font-bold text-[#F4F1EA]/60 cursor-pointer">PILIH SEMUA DUKUH</label>
-                  </div>
-                  <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
-                    {modalDukuhs.map((d: Dukuh) => (
-                      <div key={d.id} className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id={`dukuh-${d.id}`}
-                          value={d.id}
-                          className="w-4 h-4 rounded border-white/20 text-[#EAD19B] focus:ring-[#EAD19B]/30"
-                          {...register('dukuh_ids')}
-                        />
-                        <label htmlFor={`dukuh-${d.id}`} className="text-sm text-[#F4F1EA] cursor-pointer">{d.name}</label>
-                      </div>
-                    ))}
-                    {modalDukuhs.length === 0 && !fetchingDukuhs && (
-                      <p className="text-xs text-[#F4F1EA]/40 italic">Tidak ada data dukuh di ranting ini</p>
-                    )}
-                    {fetchingDukuhs && <p className="text-xs text-[#F4F1EA]/40">Memuat data...</p>}
-                  </div>
-                </>
-              ) : (
-                <p className="text-xs text-[#F4F1EA]/40 italic">Pilih petugas terlebih dahulu untuk deteksi ranting & dukuh</p>
-              )}
-            </div>
-            {errors.dukuh_ids && <p className="text-xs font-medium text-red-400">{errors.dukuh_ids.message}</p>}
-          </div>
-
-          <div className="flex gap-3 pt-4">
+      {!historyLoading && historyTotal > 0 && (
+        <div className="flex flex-col items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 sm:flex-row">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/40">
+            Menampilkan {historyItems.length} dari {historyTotal}
+          </p>
+          <div className="flex items-center gap-2">
             <Button
-              type="button"
-              variant="secondary"
-              className="flex-1 border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-white/10 hover:text-[#F4F1EA]"
-              onClick={() => setIsModalOpen(false)}
+              variant="outline"
+              size="sm"
+              disabled={historyPage <= 1}
+              onClick={() => setHistoryPage((page) => Math.max(1, page - 1))}
+              className="h-9 rounded-xl border-white/10 text-xs font-bold"
             >
-              Batal
+              Sebelumnya
             </Button>
+            <span className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/60">
+              {historyPage} / {totalHistoryPages}
+            </span>
             <Button
-              type="submit"
-              className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] font-bold rounded-xl h-11 shadow-lg shadow-[#EAD19B]/20"
-              isLoading={submitting}
+              variant="outline"
+              size="sm"
+              disabled={historyPage >= totalHistoryPages}
+              onClick={() => setHistoryPage((page) => page + 1)}
+              className="h-9 rounded-xl border-white/10 text-xs font-bold"
             >
-              Simpan Penugasan
+              Selanjutnya
             </Button>
           </div>
-        </form>
-      </Modal>
+        </div>
+      )}
+    </>
+  );
 
-      {/* Modal Transfer Penugasan */}
-      <Modal
-        isOpen={isTransferModalOpen}
-        onClose={() => setIsTransferModalOpen(false)}
-        title="Transfer Penugasan"
-        variant="glass"
-      >
-        {transferringAssignment && (
-          <div className="space-y-6">
-            <div className="bg-white/[0.03] p-4 rounded-2xl border border-white/10 space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase">Kaleng / Pemilik</span>
-                <span className="text-xs font-bold text-[#F4F1EA]">{transferringAssignment.can.qrCode}</span>
-              </div>
-              <div className="flex justify-between items-center border-t border-white/10 pt-3">
-                <span className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase">Petugas Saat Ini</span>
-                <span className="text-xs font-bold text-[#D97A76]">{transferringAssignment.officer.fullName}</span>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih Petugas Pengganti</label>
-                <GlassSelect
-                  value={transferringAssignment.newOfficerId || ''}
-                  onChange={(val) => setTransferringAssignment({ ...transferringAssignment, newOfficerId: val })}
-                  placeholder="-- Pilih Petugas Baru --"
-                  options={officers
-                    .filter((o: Officer) => o.id !== transferringAssignment.officerId && o.branchId === transferringAssignment.can.branchId)
-                    .map((o: Officer) => ({
-                      label: `${o.fullName} (${o.employeeCode})`,
-                      value: o.id
-                    }))}
-                  searchable
-                />
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <Button
-                  variant="secondary"
-                  className="flex-1 border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-white/10 hover:text-[#F4F1EA]"
-                  onClick={() => setIsTransferModalOpen(false)}
-                >
-                  Batal
-                </Button>
-                <Button
-                  className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] font-bold rounded-xl h-11 shadow-lg shadow-[#EAD19B]/20"
-                  isLoading={submitting}
-                  disabled={!transferringAssignment.newOfficerId}
-                  onClick={() => transferringAssignment.newOfficerId && handleTransfer({ officer_id: transferringAssignment.newOfficerId })}
-                >
-                  Konfirmasi Transfer
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      {/* Modal Bulk Re-Assign */}
-      <Modal
-        isOpen={isBulkReassignModalOpen}
-        onClose={() => {
-          setIsBulkReassignModalOpen(false);
-          setBulkReassignOfficerId('');
-        }}
-        title="Re-Assign Massal"
-        variant="glass"
-      >
-        <div className="space-y-6">
-          <div className="bg-white/[0.03] p-4 rounded-2xl border border-white/10">
-            <p className="text-sm text-[#F4F1EA]/60">
-              Akan memindahkan <span className="font-bold text-[#EAD19B]">{selectedIds.length}</span> penugasan ke petugas baru.
+  return (
+    <div className="space-y-4 pb-28 md:space-y-6 lg:pb-0">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={() => router.push('/dashboard/assignments')}
+            aria-label="Kembali ke daftar wilayah"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-[#F4F1EA]/70 transition-all hover:bg-white/10 hover:text-[#F4F1EA] active:scale-95"
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <ClipboardList className="hidden shrink-0 text-[#EAD19B] sm:block" size={28} />
+          <div className="min-w-0">
+            <h1 className="truncate text-xl font-bold tracking-tight text-[#F4F1EA] md:text-2xl">
+              {displayName}
+            </h1>
+            <p className="truncate text-xs font-medium text-[#F4F1EA]/60 md:text-sm">
+              {activeTab === 'kelola'
+                ? `Kelola penugasan · ${summary?.totalCans ?? 0} kaleng · ${summary?.activeOfficerCount ?? 0} petugas`
+                : 'Riwayat penugasan'}
             </p>
           </div>
+        </div>
 
+        <div className="flex items-center justify-between gap-2 md:justify-end">
+          <PeriodPicker
+            months={[period.month]}
+            year={period.year}
+            onChange={(months, year) => changePeriod(months[0] || period.month, year)}
+          />
+        </div>
+      </div>
+
+      <AssignmentTabs
+        activeTab={activeTab}
+        onChange={setActiveTab}
+        historyCount={historyTotal}
+      />
+
+      <div
+        role="tabpanel"
+        id={`assignment-panel-${activeTab}`}
+        aria-labelledby={`assignment-tab-${activeTab}`}
+        className="space-y-4 md:space-y-6"
+      >
+        {activeTab === 'kelola' ? renderKelola() : renderRiwayat()}
+      </div>
+
+      <OfficerPickerSheet
+        open={isOfficerSheetOpen}
+        officers={officers}
+        selectedId={selectedOfficerId}
+        onSelect={setSelectedOfficerId}
+        onClose={() => setIsOfficerSheetOpen(false)}
+      />
+
+      <AssignmentConfirmSheet
+        open={isConfirmOpen}
+        regionName={displayName}
+        year={period.year}
+        month={period.month}
+        groupCount={selectedGroups.length}
+        canCount={selectedCans}
+        officer={selectedOfficer}
+        submitting={submitting}
+        onConfirm={submitAssignment}
+        onClose={() => setIsConfirmOpen(false)}
+      />
+
+      <Modal
+        isOpen={!!transferring}
+        onClose={() => {
+          setTransferring(null);
+          setTransferOfficerId('');
+        }}
+        title="Transfer Penugasan"
+        variant="glass"
+        position="bottom"
+      >
+        {transferring && (
           <div className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih Petugas Pengganti</label>
-              <GlassSelect
-                value={bulkReassignOfficerId}
-                onChange={(val) => setBulkReassignOfficerId(val)}
-                placeholder="-- Pilih Petugas Baru --"
-                options={officers.map((o: Officer) => ({
-                  label: `${o.fullName} (${o.employeeCode})`,
-                  value: o.id
-                }))}
-                searchable
-              />
+            <div className="space-y-2 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/40">
+                  Kaleng / Pemilik
+                </span>
+                <span className="truncate text-xs font-bold text-[#F4F1EA]">
+                  {transferring.can.ownerName} · #{transferring.can.qrCode}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2 border-t border-white/10 pt-2">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/40">
+                  Petugas saat ini
+                </span>
+                <span className="truncate text-xs font-bold text-[#D97A76]">
+                  {transferring.officer.fullName}
+                </span>
+              </div>
             </div>
 
-            <div className="flex gap-3 pt-2">
-              <Button
-                variant="secondary"
-                className="flex-1 border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-white/10 hover:text-[#F4F1EA]"
+            <GlassSelect
+              value={transferOfficerId}
+              onChange={setTransferOfficerId}
+              placeholder="-- Pilih Petugas Pengganti --"
+              label="Petugas Pengganti"
+              options={officers
+                .filter((officer) => officer.id !== transferring.officerId)
+                .map((officer) => ({
+                  label: `${officer.fullName} (${officer.employeeCode})`,
+                  value: officer.id,
+                }))}
+            />
+
+            <div className="flex gap-3 pt-1">
+              <button
+                type="button"
                 onClick={() => {
-                  setIsBulkReassignModalOpen(false);
-                  setBulkReassignOfficerId('');
+                  setTransferring(null);
+                  setTransferOfficerId('');
                 }}
+                className="h-11 flex-1 rounded-xl border border-white/10 bg-white/5 text-xs font-bold text-[#F4F1EA]/70 transition-all hover:bg-white/10 active:scale-95"
               >
                 Batal
-              </Button>
-              <Button
-                className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] font-bold rounded-xl h-11 shadow-lg shadow-[#EAD19B]/20"
-                isLoading={submitting}
-                disabled={!bulkReassignOfficerId}
-                onClick={handleBulkReassign}
+              </button>
+              <button
+                type="button"
+                onClick={handleTransfer}
+                disabled={!transferOfficerId || submitting}
+                className="h-11 flex-1 rounded-xl bg-[#EAD19B] text-xs font-black text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 transition-all hover:bg-[#EAD19B]/90 active:scale-95 disabled:opacity-40"
               >
-                Konfirmasi Re-Assign
-              </Button>
+                Konfirmasi Transfer
+              </button>
             </div>
           </div>
-        </div>
+        )}
       </Modal>
     </div>
   );

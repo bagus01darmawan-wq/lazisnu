@@ -2,6 +2,7 @@ import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { JWTPayload } from '../middleware/auth';
+import { ASSIGNABLE_CONDITIONS } from './conditionRules';
 
 /**
  * Ringkasan per wilayah untuk layer kartu (halaman Cans & Assignments).
@@ -44,6 +45,18 @@ export interface RegionSummary {
    * menampilkan dua angka berbeda tanpa saling menimpa.
    */
   assignmentTotal: number;
+  /**
+   * Kaleng yang benar-benar bisa menerima tugas (aktif + kondisi
+   * AKTIF/RUSAK/HILANG). Angka ini yang harus dipakai halaman Kelola supaya
+   * sama dengan hasil `bulk-branch`.
+   */
+  assignableCans: number;
+  /** Kaleng assignable yang sudah punya penugasan pada periode ini. */
+  assignedAssignableCans: number;
+  /** Kaleng assignable yang belum punya penugasan pada periode ini. */
+  unassignedAssignableCans: number;
+  /** Kaleng NON_AKTIF + DIKEMBALIKAN yang tidak ikut penugasan. */
+  nonAssignableCans: number;
   breakdown: Record<string, number>;
   nonActive: number;
   assigned: number;
@@ -142,6 +155,10 @@ function emptyRegion(over: Partial<RegionSummary>): RegionSummary {
     branchCode: null,
     total: 0,
     assignmentTotal: 0,
+    assignableCans: 0,
+    assignedAssignableCans: 0,
+    unassignedAssignableCans: 0,
+    nonAssignableCans: 0,
     breakdown: emptyBreakdown(),
     nonActive: 0,
     assigned: 0,
@@ -170,11 +187,16 @@ async function aggregate(
   period: { year: number; month: number } | null
 ) {
   const regionFilter = inArray(schema.cans[regionColumn], regionIds);
+  const assignableFilter = sql`${schema.cans.isActive} = true AND ${schema.cans.condition} IN (${sql.join(
+    ASSIGNABLE_CONDITIONS.map((condition) => sql`${condition}`),
+    sql`, `
+  )})`;
 
   const canRows = await db
     .select({
       regionId: schema.cans[regionColumn],
       total: sql<number>`count(*)`,
+      assignable: sql<number>`count(*) FILTER (WHERE ${assignableFilter})`,
       aktif: sql<number>`count(*) FILTER (WHERE ${schema.cans.condition} = 'AKTIF')`,
       rusak: sql<number>`count(*) FILTER (WHERE ${schema.cans.condition} = 'RUSAK')`,
       hilang: sql<number>`count(*) FILTER (WHERE ${schema.cans.condition} = 'HILANG')`,
@@ -197,6 +219,7 @@ async function aggregate(
       // "jumlah yang sudah ditugaskan". Rasio alokasi terhadap kaleng
       // dihitung di service dari dua aggregate terpisah, bukan dari sini.
       assignmentTotal: sql<number>`count(*)`,
+      assignedAssignable: sql<number>`count(DISTINCT ${schema.cans.id}) FILTER (WHERE ${assignableFilter})`,
       completed: sql<number>`count(*) FILTER (WHERE ${schema.assignments.status} = 'COMPLETED')`,
       uncollected: sql<number>`count(*) FILTER (WHERE ${schema.assignments.status} = 'UNCOLLECTED')`,
     })
@@ -281,6 +304,11 @@ async function buildBranchCards(
           }
         : emptyBreakdown();
       const assignmentTotal = a ? Number(a.assignmentTotal) : 0;
+      const assignableCans = c ? Number(c.assignable) : 0;
+      const assignedAssignableCans = Math.min(
+        a ? Number(a.assignedAssignable) : 0,
+        assignableCans
+      );
       const completed = a ? Number(a.completed) : 0;
       return emptyRegion({
         kind: 'branch',
@@ -292,6 +320,10 @@ async function buildBranchCards(
         branchCode: b.code,
         total,
         assignmentTotal,
+        assignableCans,
+        assignedAssignableCans,
+        unassignedAssignableCans: Math.max(assignableCans - assignedAssignableCans, 0),
+        nonAssignableCans: Math.max(total - assignableCans, 0),
         breakdown,
         nonActive: breakdown.NON_AKTIF,
         // `assigned` = kaleng yang sudah punya baris penugasan. Di staging
@@ -370,6 +402,11 @@ async function buildDukuhCards(
         }
       : emptyBreakdown();
     const assignmentTotal = a ? Number(a.assignmentTotal) : 0;
+    const assignableCans = c ? Number(c.assignable) : 0;
+    const assignedAssignableCans = Math.min(
+      a ? Number(a.assignedAssignable) : 0,
+      assignableCans
+    );
     return emptyRegion({
       kind: 'dukuh',
       isFallback: false,
@@ -380,6 +417,10 @@ async function buildDukuhCards(
       branchCode: branch.code,
       total,
       assignmentTotal,
+      assignableCans,
+      assignedAssignableCans,
+      unassignedAssignableCans: Math.max(assignableCans - assignedAssignableCans, 0),
+      nonAssignableCans: Math.max(total - assignableCans, 0),
       breakdown,
       nonActive: breakdown.NON_AKTIF,
       assigned: Math.min(assignmentTotal, total),

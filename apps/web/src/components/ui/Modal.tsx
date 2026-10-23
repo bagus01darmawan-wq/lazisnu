@@ -13,6 +13,11 @@ interface ModalProps {
   footer?: React.ReactNode;
   className?: string;
   variant?: 'default' | 'glass';
+  /**
+   * `bottom` menempelkan dialog ke bawah pada layar kecil (bottom sheet),
+   * lalu kembali ke tengah pada layar `sm` ke atas.
+   */
+  position?: 'center' | 'bottom';
 }
 
 const Modal = ({
@@ -23,6 +28,7 @@ const Modal = ({
   footer,
   className,
   variant = 'default',
+  position = 'center',
 }: ModalProps) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -89,7 +95,12 @@ const Modal = ({
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      className={cn(
+        'fixed inset-0 z-50 flex justify-center',
+        position === 'bottom' ? 'items-end p-0 sm:items-center sm:p-4' : 'items-center p-4'
+      )}
+    >
       {/* Overlay */}
       <div
         className={cn(
@@ -108,7 +119,10 @@ const Modal = ({
         aria-modal="true"
         aria-labelledby={title ? 'modal-title' : undefined}
         className={cn(
-          'relative z-10 w-full max-w-2xl transform rounded-2xl shadow-2xl transition-all flex flex-col max-h-[90vh]',
+          'relative z-10 w-full max-w-2xl transform shadow-2xl transition-all flex flex-col max-h-[90vh]',
+          position === 'bottom'
+            ? 'rounded-t-2xl rounded-b-none sm:rounded-2xl max-h-[85vh]'
+            : 'rounded-2xl',
           variant === 'glass'
             ? 'bg-[var(--glass)] text-[var(--glass-ink)] backdrop-blur-2xl border border-[var(--border)] shadow-[0_20px_50px_rgba(0,0,0,0.4)]'
             : 'bg-[var(--surface)] text-[var(--surface-ink)]',
@@ -150,7 +164,12 @@ const Modal = ({
         </div>
 
         {/* Body */}
-        <div className="p-4 md:p-6 overflow-y-auto flex-1">
+        <div
+          className={cn(
+            'p-4 md:p-6 overflow-y-auto flex-1',
+            position === 'bottom' && 'pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6'
+          )}
+        >
           {children}
         </div>
 

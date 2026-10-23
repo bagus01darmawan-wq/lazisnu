@@ -22,7 +22,7 @@ export default function AssignmentsPage() {
           <ClipboardList className="text-[#EAD19B]" size={28} />
           <div>
             <h1 className="text-2xl font-bold text-[#F4F1EA] tracking-tight">Penugasan Rutin</h1>
-            <p className="text-[#F4F1EA]/60 text-sm font-medium">Pilih wilayah untuk melihat penugasan</p>
+            <p className="text-[#F4F1EA]/60 text-sm font-medium">Pilih wilayah untuk mengelola penugasan</p>
           </div>
         </div>
       </div>

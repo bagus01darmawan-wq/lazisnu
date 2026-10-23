@@ -30,6 +30,14 @@ export interface RegionSummary {
    * Respons API dinormalisasi ke camelCase oleh interceptor (caseConverter).
    */
   assignmentTotal: number;
+  /** Kaleng yang benar-benar bisa menerima tugas pada periode ini. */
+  assignableCans: number;
+  /** Kaleng assignable yang sudah punya penugasan. */
+  assignedAssignableCans: number;
+  /** Kaleng assignable yang belum punya penugasan. */
+  unassignedAssignableCans: number;
+  /** Kaleng NON_AKTIF + DIKEMBALIKAN. */
+  nonAssignableCans: number;
   breakdown: Record<string, number>;
   nonActive: number;
   assigned: number;
@@ -210,17 +218,23 @@ function RegionCard({
   // Bar progres ikut halaman yang sama supaya tidak ada dua angka "64" yang
   // berarti berbeda dalam satu kartu.
   const isAssignments = page === 'assignments';
-  const headline = isAssignments ? region.assignmentTotal : region.total;
+  // Halaman Assignments menjawab "apa yang belum ditugaskan", jadi angka
+  // utama dan progresnya memakai kaleng assignable — aturan yang sama dengan
+  // bulk-branch, bukan total kaleng mentah.
+  const assignable = region.assignableCans ?? region.total;
+  const assignedAssignable = region.assignedAssignableCans ?? region.assigned;
+  const unassignedAssignable = region.unassignedAssignableCans ?? region.unassigned;
+  const headline = isAssignments ? unassignedAssignable : region.total;
   const barPct = isAssignments
-    ? region.assignmentTotal === 0
+    ? assignable === 0
       ? 0
-      : Math.round((region.completed / region.assignmentTotal) * 100)
+      : Math.round((assignedAssignable / assignable) * 100)
     : region.total === 0
       ? 0
       : Math.round((region.assigned / region.total) * 100);
-  const barLabel = isAssignments ? 'penugasan selesai' : 'ditugaskan';
+  const barLabel = isAssignments ? 'coverage penugasan' : 'ditugaskan';
   const barValue = isAssignments
-    ? `${region.completed}/${region.assignmentTotal}`
+    ? `${assignedAssignable}/${assignable}`
     : `${region.assigned}/${region.total}`;
 
   return (
@@ -276,16 +290,23 @@ function RegionCard({
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-bold uppercase tracking-tight">
         <span className="text-[#F4F1EA]/40">
-          {isAssignments ? 'kaleng' : 'penugasan'}{' '}
+          {isAssignments ? 'dapat ditugaskan' : 'penugasan'}{' '}
           <span className="text-[#F4F1EA]/80">
-            {isAssignments ? region.total : region.assignmentTotal}
+            {isAssignments ? assignable : region.assignmentTotal}
           </span>
         </span>
         <span className="text-[#F4F1EA]/40">
-          {isAssignments ? 'belum ditugaskan' : 'belum'}{' '}
-          <span className="text-[#F4F1EA]/80">{region.unassigned}</span>
+          belum{' '}
+          <span className="text-[#F4F1EA]/80">
+            {isAssignments ? unassignedAssignable : region.unassigned}
+          </span>
         </span>
-        {region.nonActive > 0 && (
+        {isAssignments && (region.nonAssignableCans ?? 0) > 0 && (
+          <span className="text-[#F4F1EA]/40">
+            non-aktif <span className="text-[#DE6F4A]">{region.nonAssignableCans}</span>
+          </span>
+        )}
+        {!isAssignments && region.nonActive > 0 && (
           <span className="text-[#F4F1EA]/40">
             non-aktif <span className="text-[#DE6F4A]">{region.nonActive}</span>
           </span>
