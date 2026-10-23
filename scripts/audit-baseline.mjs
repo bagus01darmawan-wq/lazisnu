@@ -172,6 +172,38 @@ if (MODE_UPDATE) {
       patched: v.patched,
     };
   }
+
+  // Bila set advisory identik dengan basis yang ada, jangan tulis ulang:
+  // menulis hanya akan menggeser updatedAt dan memancing commit kosong
+  // dari langkah self-heal di setiap run terjadwal.
+  if (existsSync(BASELINE_PATH)) {
+    try {
+      const lama = JSON.parse(readFileSync(BASELINE_PATH, 'utf8')).advisories || {};
+      const idLama = Object.keys(lama);
+      const idBaru = Object.keys(isi);
+      const identik =
+        idLama.length === idBaru.length &&
+        idBaru.every((id) => {
+          const a = isi[id];
+          const b = lama[id];
+          return (
+            b &&
+            a.module === b.module &&
+            a.severity === b.severity &&
+            a.url === b.url &&
+            a.patched === b.patched
+          );
+        });
+      if (identik) {
+        console.log(
+          `ℹ️  Set advisory tidak berubah (${idBaru.length}) — basis tidak ditulis ulang.`
+        );
+        process.exit(0);
+      }
+    } catch {
+      // basis rusak/tak terbaca → lanjut tulis ulang daripada membiarkan rusak
+    }
+  }
   mkdirSync(dirname(BASELINE_PATH), { recursive: true });
   writeFileSync(
     BASELINE_PATH,
