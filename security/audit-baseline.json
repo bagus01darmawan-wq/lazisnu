@@ -1,6 +1,6 @@
 {
   "_caraPakai": "Daftar kerentanan yang sudah dikenal dan diterima. Gerbang CI gagal hanya bila muncul id yang BELUM ada di sini. Perbarui dengan: node scripts/audit-baseline.mjs --update",
-  "updatedAt": "2026-10-23T20:09:21.155Z",
+  "updatedAt": "2026-10-23T20:26:22.558Z",
   "advisories": {
     "GHSA-2464-fhr4-w9xw": {
       "module": "next",
@@ -13,12 +13,6 @@
       "severity": "low",
       "url": "https://github.com/advisories/GHSA-389g-gv7q-r4x8",
       "patched": ">=5.12.6"
-    },
-    "GHSA-587h-7wmj-h5pm": {
-      "module": "vite",
-      "severity": "high",
-      "url": "https://github.com/advisories/GHSA-587h-7wmj-h5pm",
-      "patched": ">=7.3.7"
     },
     "GHSA-5p2g-fcmc-qvqq": {
       "module": "image-size",
@@ -38,29 +32,11 @@
       "url": "https://github.com/advisories/GHSA-67mh-4wv8-2f99",
       "patched": ">=0.25.0"
     },
-    "GHSA-698v-4r3x-3vcv": {
-      "module": "vite",
-      "severity": "moderate",
-      "url": "https://github.com/advisories/GHSA-698v-4r3x-3vcv",
-      "patched": ">=7.3.7"
-    },
     "GHSA-86w9-cpqp-85rv": {
       "module": "node-forge",
       "severity": "high",
       "url": "https://github.com/advisories/GHSA-86w9-cpqp-85rv",
       "patched": "<0.0.0"
-    },
-    "GHSA-8r9p-f939-6h3c": {
-      "module": "follow-redirects",
-      "severity": "high",
-      "url": "https://github.com/advisories/GHSA-8r9p-f939-6h3c",
-      "patched": ">=1.16.1"
-    },
-    "GHSA-9jrq-w75r-8gcw": {
-      "module": "vite",
-      "severity": "low",
-      "url": "https://github.com/advisories/GHSA-9jrq-w75r-8gcw",
-      "patched": ">=7.3.7"
     },
     "GHSA-f596-whhp-79r4": {
       "module": "@grpc/grpc-js",
@@ -86,29 +62,11 @@
       "url": "https://github.com/advisories/GHSA-p3m5-59mp-jv5r",
       "patched": ">=16.4.1"
     },
-    "GHSA-q3jh-wrc6-jgq8": {
-      "module": "follow-redirects",
-      "severity": "high",
-      "url": "https://github.com/advisories/GHSA-q3jh-wrc6-jgq8",
-      "patched": ">=1.16.1"
-    },
     "GHSA-qxg6-89mg-rqv8": {
       "module": "@vitest/mocker",
       "severity": "moderate",
       "url": "https://github.com/advisories/GHSA-qxg6-89mg-rqv8",
       "patched": ">=4.1.12"
-    },
-    "GHSA-r825-w8mm-5pxw": {
-      "module": "vite",
-      "severity": "moderate",
-      "url": "https://github.com/advisories/GHSA-r825-w8mm-5pxw",
-      "patched": ">=7.3.7"
-    },
-    "GHSA-rq7h-c2jc-7f22": {
-      "module": "vite",
-      "severity": "moderate",
-      "url": "https://github.com/advisories/GHSA-rq7h-c2jc-7f22",
-      "patched": ">=7.3.7"
     },
     "GHSA-rxp7-6hxx-x8q5": {
       "module": "ip-address",
