@@ -30,6 +30,7 @@ overrides:
   'brace-expansion@<2': 1.1.21 # 1.x <1.1.16/17/18 (GHSA-xxxx) (EXP 2026-10-06: uji patch GHSA-6j4f/qhr7/q2hr)
   'brace-expansion@>=2 <5': 2.1.7 # 2.x <2.1.4 (GHSA-xxxx) (EXP 2026-10-06: 2.1.4 rentan GHSA-6j4f/qhr7/q2hr via jest, uji patch)
   'brace-expansion@>=5': 5.0.12 # >=3 <5.0.9 (GHSA-xxxx); 5.0.5 di tree rentan (EXP 2026-10-06: 5.0.9 rentan GHSA-6j4f/qhr7/q2hr, uji patch)
+  'cookie@>=2.0.0': 1.1.1 # cookie 2 ESM-only — light-my-request@6.8 (via fastify 5.12.6) dibaca jest CJS (test integration); lepas saat test backend ESM-native
   'cacache@18': 19.0.1 #   tidak ada patched 6.x; major bump 6→7 untuk build-tooling
   'decode-uri-component': 0.5.0
   'diff@7': 8.0.3 # >=6.0.0 <8.0.3 (GHSA-xxxx) — dulu via eas-cli (dihapus 2026-09-02); diff 8 API kompatibel
