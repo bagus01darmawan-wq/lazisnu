@@ -1,13 +1,7 @@
 {
   "_caraPakai": "Daftar kerentanan yang sudah dikenal dan diterima. Gerbang CI gagal hanya bila muncul id yang BELUM ada di sini. Perbarui dengan: node scripts/audit-baseline.mjs --update",
-  "updatedAt": "2026-10-23T22:32:43.736Z",
+  "updatedAt": "2026-10-23T22:41:05.983Z",
   "advisories": {
-    "GHSA-2464-fhr4-w9xw": {
-      "module": "next",
-      "severity": "critical",
-      "url": "https://github.com/advisories/GHSA-2464-fhr4-w9xw",
-      "patched": ">=16.4.1"
-    },
     "GHSA-389g-gv7q-r4x8": {
       "module": "fastify",
       "severity": "low",
@@ -19,12 +13,6 @@
       "severity": "high",
       "url": "https://github.com/advisories/GHSA-5p2g-fcmc-qvqq",
       "patched": ">=2.0.3"
-    },
-    "GHSA-673q-mjm6-r5xr": {
-      "module": "next",
-      "severity": "critical",
-      "url": "https://github.com/advisories/GHSA-673q-mjm6-r5xr",
-      "patched": ">=16.4.1"
     },
     "GHSA-67mh-4wv8-2f99": {
       "module": "esbuild",
@@ -61,12 +49,6 @@
       "severity": "high",
       "url": "https://github.com/advisories/GHSA-mrhx-c7xc-m3w5",
       "patched": ">=4.6.6"
-    },
-    "GHSA-p3m5-59mp-jv5r": {
-      "module": "next",
-      "severity": "high",
-      "url": "https://github.com/advisories/GHSA-p3m5-59mp-jv5r",
-      "patched": ">=16.4.1"
     },
     "GHSA-qxg6-89mg-rqv8": {
       "module": "@vitest/mocker",
