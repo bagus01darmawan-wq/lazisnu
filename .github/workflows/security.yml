@@ -106,6 +106,10 @@ jobs:
       (github.event_name != 'pull_request' || needs.changes.outputs.deps != 'false')
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      # Hanya langkah self-heal di bawah yang push (non-PR). Di PR langkah
+      # itu skip, jadi write tidak terpakai.
+      contents: write
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -135,9 +139,36 @@ jobs:
         # di antaranya (image-size via metro) TANPA patch (patched <0.0.0).
         # Gerbang sengaja TIDAK memakai `|| true` — itu mematikan alarm
         # sepenuhnya (temuan lama maupun baru sama-sama lolos).
-        # Skrip ini gagal (exit 1) HANYA bila muncul advisory baru di luar
-        # security/audit-baseline.json; --strict juga menggagalkan CI bila
-        # ada entri basis yang sudah tidak muncul lagi (mencegah basis
-        # menumpuk sampah).
-        # Perbarui basis: node scripts/audit-baseline.mjs --update
-        run: node scripts/audit-baseline.mjs --strict
+        # Skrip ini gagal (exit 1) bila muncul advisory baru di luar
+        # security/audit-baseline.json. Entri basis usang (advisory yang
+        # sudah hilang dari audit) hanya diberitahukan — dulu --strict
+        # menggagalkannya, tapi itu justru memblokir PR Dependabot yang
+        # memperbaiki advisory (Security merah justru karena PR makin aman).
+        # Pemangkasan basis kini otomatis via langkah self-heal di bawah.
+        # Perbarui basis manual: node scripts/audit-baseline.mjs --update
+        run: node scripts/audit-baseline.mjs
+
+      - name: Self-heal basis audit (pangkas entri usang)
+        # Hanya non-PR (push/schedule/dispatch): tulis ulang basis lalu
+        # commit bila isinya berubah — entri usang tidak menumpuk tanpa
+        # perlu aksi manusia. Push GITHUB_TOKEN tidak memicu workflow baru,
+        # jadi tidak ada loop. Langkah ini tidak jalan bila gerbang di atas
+        # gagal: advisory BARU tidak boleh otomatis diterima ke basis.
+        if: github.event_name != 'pull_request'
+        run: |
+          node scripts/audit-baseline.mjs --update
+          if git diff --quiet security/audit-baseline.json; then
+            echo "Basis sudah mutakhir — tidak ada perubahan."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add security/audit-baseline.json
+            git commit -m "chore(security): pangkas entri basis audit usang (otomatis)"
+            if git push; then
+              echo "Entri basis usang dipangkas dan di-commit ulang."
+            else
+              # Race dengan push lain bukan kegagalan keamanan; run
+              # berikutnya akan memangkas ulang.
+              echo "::warning::Push basis gagal (mungkin race dengan push lain); diulang run berikutnya."
+            fi
+          fi
