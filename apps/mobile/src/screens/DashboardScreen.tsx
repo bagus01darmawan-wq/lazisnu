@@ -326,21 +326,6 @@ const DashboardScreen: React.FC = () => {
 
           <AppPressable
             accessibilityRole={'button'}
-            accessibilityLabel={'Buka statistik rekap rentang tanggal'}
-            onPress={() => navigation.navigate('RangeStats')}
-            style={styles.rekapRow}>
-            <View style={styles.rekapIcon}>
-              <Icon name={'chart-bar'} size={20} color={Colors.brand.accentGold} />
-            </View>
-            <View style={styles.rekapTextWrap}>
-              <Text style={styles.rekapTitle}>Lihat Rekap Lengkap</Text>
-              <Text style={styles.rekapSub}>Statistik per rentang tanggal</Text>
-            </View>
-            <Icon name={'chevron-right'} size={24} color={Colors.text.secondary} />
-          </AppPressable>
-          <PeriodChip info={periodInfo} />
-          <AppPressable
-            accessibilityRole={'button'}
             accessibilityLabel={'Buka setoran dan tanda tangan'}
             onPress={() => navigation.navigate('Setoran')}
             style={styles.rekapRow}>
@@ -350,6 +335,21 @@ const DashboardScreen: React.FC = () => {
             <View style={styles.rekapTextWrap}>
               <Text style={styles.rekapTitle}>Setoran &amp; TTD</Text>
               <Text style={styles.rekapSub}>Status setoran, BA, riwayat versi</Text>
+            </View>
+            <Icon name={'chevron-right'} size={24} color={Colors.text.secondary} />
+          </AppPressable>
+          <PeriodChip info={periodInfo} />
+          <AppPressable
+            accessibilityRole={'button'}
+            accessibilityLabel={'Buka statistik rekap rentang tanggal'}
+            onPress={() => navigation.navigate('RangeStats')}
+            style={styles.rekapRow}>
+            <View style={styles.rekapIcon}>
+              <Icon name={'chart-bar'} size={20} color={Colors.brand.accentGold} />
+            </View>
+            <View style={styles.rekapTextWrap}>
+              <Text style={styles.rekapTitle}>Lihat Rekap Lengkap</Text>
+              <Text style={styles.rekapSub}>Statistik per rentang tanggal</Text>
             </View>
             <Icon name={'chevron-right'} size={24} color={Colors.text.secondary} />
           </AppPressable>

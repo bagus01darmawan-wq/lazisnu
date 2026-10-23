@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {useNavigation} from '@react-navigation/native';
 import {
   c1Service,
   type BaVersionDto,
@@ -34,7 +35,7 @@ const statusTone = (status: string): StatusBadgeStatus => {
 };
 
 export const SetoranScreen: React.FC = () => {
-  const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
   const role = normalizeRole(useAuthStore(state => state.user?.role));
   const [submission, setSubmission] = useState<PpkSubmissionDto | null>(null);
   const [periodInfo, setPeriodInfo] = useState<PeriodInfoDto | null>(null);
@@ -95,8 +96,12 @@ export const SetoranScreen: React.FC = () => {
   };
 
   return (
-    <View style={[styles.container, {paddingTop: insets.top}]}>
-      <AppHeader title="Setoran Saya" variant="main" />
+    <SafeAreaView edges={['bottom']} style={styles.container}>
+      <AppHeader
+        variant="stack"
+        title="Setoran Saya"
+        onBack={() => navigation.goBack()}
+      />
       <ScrollView
         contentContainerStyle={styles.body}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} />}>
@@ -165,7 +170,7 @@ export const SetoranScreen: React.FC = () => {
         ) : null}
         {isLoading && !submission ? <ActivityIndicator size="large" /> : null}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 

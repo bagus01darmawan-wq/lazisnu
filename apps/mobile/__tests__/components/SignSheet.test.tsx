@@ -1,20 +1,28 @@
 import React from 'react';
 import renderer, {act} from 'react-test-renderer';
+import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {SignSheet} from '../../src/components/SignSheet';
+
+const safeAreaMetrics = {
+  frame: {x: 0, y: 0, width: 390, height: 844},
+  insets: {top: 47, left: 0, right: 0, bottom: 34},
+};
 
 function renderSheet(props?: Partial<React.ComponentProps<typeof SignSheet>>) {
   let tree: renderer.ReactTestRenderer;
   act(() => {
     tree = renderer.create(
-      <SignSheet
-        title="Tanda tangan PPK"
-        submitLabel="Tanda Tangani"
-        submitting={false}
-        serverError={null}
-        onSubmit={() => {}}
-        onClose={() => {}}
-        {...props}
-      />,
+      <SafeAreaProvider initialMetrics={safeAreaMetrics}>
+        <SignSheet
+          title="Tanda tangan PPK"
+          submitLabel="Tanda Tangani"
+          submitting={false}
+          serverError={null}
+          onSubmit={() => {}}
+          onClose={() => {}}
+          {...props}
+        />
+      </SafeAreaProvider>,
     );
   });
   return tree!;

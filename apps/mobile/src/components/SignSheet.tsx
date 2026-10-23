@@ -1,5 +1,6 @@
 import React, {useRef, useState} from 'react';
-import {View, Text, StyleSheet} from 'react-native';
+import {Modal, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {AppButton} from './ui/AppButton';
 import {AppPressable} from './ui/AppPressable';
 import {SignaturePad} from './SignaturePad';
@@ -58,6 +59,7 @@ export const SignSheet: React.FC<SignSheetProps> = ({
   baLoading,
   children,
 }) => {
+  const insets = useSafeAreaInsets();
   const signature = useRef('');
   const [hasContent, setHasContent] = useState(false);
   const [consent, setConsent] = useState(false);
@@ -82,55 +84,90 @@ export const SignSheet: React.FC<SignSheetProps> = ({
   };
 
   return (
-    <View style={styles.sheet}>
-      <Text style={styles.title}>{title}</Text>
-      {baLoading ? <Text style={styles.hint}>Memuat isi berita acara…</Text> : null}
-      {baText && baText.length > 0 ? (
-        <View style={styles.baText}>
-          {baNumber ? <Text style={styles.baNumber}>Nomor: {baNumber}</Text> : null}
-          {baText.map((line, i) => (
-            <Text key={`${i}-${line.slice(0, 12)}`} style={styles.baLine}>
-              {line}
-            </Text>
-          ))}
+    <Modal
+      visible
+      transparent
+      animationType="slide"
+      statusBarTranslucent
+      onRequestClose={onClose}>
+      <View style={styles.backdrop}>
+        <View
+          accessibilityViewIsModal
+          style={[styles.sheet, {paddingBottom: Math.max(insets.bottom, Spacing.md)}]}>
+          <ScrollView
+            style={styles.sheetScroll}
+            contentContainerStyle={styles.sheetScrollBody}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}>
+            <Text style={styles.title}>{title}</Text>
+            {baLoading ? <Text style={styles.hint}>Memuat isi berita acara…</Text> : null}
+            {baText && baText.length > 0 ? (
+              <View style={styles.baText}>
+                {baNumber ? <Text style={styles.baNumber}>Nomor: {baNumber}</Text> : null}
+                {baText.map((line, i) => (
+                  <Text key={`${i}-${line.slice(0, 12)}`} style={styles.baLine}>
+                    {line}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+            {children}
+          </ScrollView>
+          <View style={styles.signArea}>
+            <SignaturePad
+              onChange={(base64, content) => {
+                signature.current = base64;
+                setHasContent(content && base64.length > 0);
+                if (content) setLocalError(null);
+              }}
+            />
+            <AppPressable
+              accessibilityRole="checkbox"
+              accessibilityState={{checked: consent}}
+              accessibilityLabel="Persetujuan eksplisit tanda tangan"
+              onPress={() => setConsent(v => !v)}
+              style={styles.consentRow}>
+              <View style={[styles.box, consent && styles.boxOn]}>
+                {consent ? <Text style={styles.check}>✓</Text> : null}
+              </View>
+              <Text style={styles.consentText}>Saya menyetujui berita acara ini</Text>
+            </AppPressable>
+            {localError ? <Text style={styles.error}>{localError}</Text> : null}
+            {serverError ? <Text style={styles.error}>{serverError}</Text> : null}
+            <View style={styles.actions}>
+              <AppButton label="Batal" onPress={onClose} disabled={submitting} />
+              <AppButton
+                label={submitting ? 'Mengirim…' : submitLabel}
+                onPress={submit}
+                disabled={submitting || !hasContent || !consent}
+                loading={submitting}
+              />
+            </View>
+          </View>
         </View>
-      ) : null}
-      {children}
-      <SignaturePad
-        onChange={(base64, content) => {
-          signature.current = base64;
-          setHasContent(content && base64.length > 0);
-          if (content) setLocalError(null);
-        }}
-      />
-      <AppPressable
-        accessibilityRole="checkbox"
-        accessibilityState={{checked: consent}}
-        accessibilityLabel="Persetujuan eksplisit tanda tangan"
-        onPress={() => setConsent(v => !v)}
-        style={styles.consentRow}>
-        <View style={[styles.box, consent && styles.boxOn]}>
-          {consent ? <Text style={styles.check}>✓</Text> : null}
-        </View>
-        <Text style={styles.consentText}>Saya menyetujui berita acara ini</Text>
-      </AppPressable>
-      {localError ? <Text style={styles.error}>{localError}</Text> : null}
-      {serverError ? <Text style={styles.error}>{serverError}</Text> : null}
-      <View style={styles.actions}>
-        <AppButton label="Batal" onPress={onClose} disabled={submitting} />
-        <AppButton
-          label={submitting ? 'Mengirim…' : submitLabel}
-          onPress={submit}
-          disabled={submitting || !hasContent || !consent}
-          loading={submitting}
-        />
       </View>
-    </View>
+    </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  sheet: {gap: Spacing.md},
+  backdrop: {flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end'},
+  sheet: {
+    maxHeight: '92%',
+    backgroundColor: Colors.surface.page,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.lg,
+  },
+  sheetScroll: {flexShrink: 1},
+  sheetScrollBody: {gap: Spacing.md, paddingBottom: Spacing.md},
+  signArea: {
+    gap: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.border.warm,
+  },
   title: {...Typography.heading3},
   hint: {...Typography.caption, color: Colors.text.muted},
   baText: {gap: Spacing.xs},
