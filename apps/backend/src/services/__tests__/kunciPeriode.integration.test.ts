@@ -172,7 +172,6 @@ describe('C1-T6 kunci berlapis MWC (DB, R2 mock)', () => {
       userId: uPpk2, districtId: dt6, branchId: bR2, employeeCode: 'EMP-T6-2', fullName: 'Petugas T6-2', phone: '084000000601',
     }).returning();
     const uKeuR2 = await mkUser('keur2-t6@test.com', '084000000602', 'STAF_KEUANGAN', bR2, null);
-    const uAdminR2 = await mkUser('adminr2-t6@test.com', '084000000603', 'ADMIN_RANTING', bR2, null);
     const uKeuMwc = await mkUser('keumwc-t6@test.com', '084000000604', 'STAF_KEUANGAN', null, dt6);
     const uAdminKec = await mkUser('adminkec-t6@test.com', '084000000605', 'ADMIN_KECAMATAN', null, dt6);
     await mkUser('adminkec2-t6@test.com', '084000000606', 'ADMIN_KECAMATAN', null, dt6b);
