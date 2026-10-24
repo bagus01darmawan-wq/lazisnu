@@ -14,8 +14,8 @@ describe('createCanSchema', () => {
   it('menerima body dengan semua field opsional', () => {
     const result = createCanSchema.safeParse({
       ...validBody,
-      branch_id: '00000000-0000-0000-0000-000000000001',
-      dukuh_id: '00000000-0000-0000-0000-000000000002',
+      branch_id: '00000000-0000-4000-8000-000000000001',
+      dukuh_id: '00000000-0000-4000-8000-000000000002',
       rt: '01',
       rw: '02',
       owner_address: 'Jl. Merdeka No. 1',
@@ -99,8 +99,8 @@ describe('createCanSchema', () => {
 describe('createAssignmentSchema', () => {
   it('menerima body valid', () => {
     const result = createAssignmentSchema.safeParse({
-      can_id: '00000000-0000-0000-0000-000000000001',
-      officer_id: '00000000-0000-0000-0000-000000000002',
+      can_id: '00000000-0000-4000-8000-000000000001',
+      officer_id: '00000000-0000-4000-8000-000000000002',
       period_year: 2026,
       period_month: 5,
     });
@@ -109,9 +109,9 @@ describe('createAssignmentSchema', () => {
 
   it('menerima dengan backup_officer_id', () => {
     const result = createAssignmentSchema.safeParse({
-      can_id: '00000000-0000-0000-0000-000000000001',
-      officer_id: '00000000-0000-0000-0000-000000000002',
-      backup_officer_id: '00000000-0000-0000-0000-000000000003',
+      can_id: '00000000-0000-4000-8000-000000000001',
+      officer_id: '00000000-0000-4000-8000-000000000002',
+      backup_officer_id: '00000000-0000-4000-8000-000000000003',
       period_year: 2026,
       period_month: 5,
     });
@@ -120,8 +120,8 @@ describe('createAssignmentSchema', () => {
 
   it('menolak period_year di bawah 2020', () => {
     const result = createAssignmentSchema.safeParse({
-      can_id: '00000000-0000-0000-0000-000000000001',
-      officer_id: '00000000-0000-0000-0000-000000000002',
+      can_id: '00000000-0000-4000-8000-000000000001',
+      officer_id: '00000000-0000-4000-8000-000000000002',
       period_year: 2019,
       period_month: 5,
     });
@@ -130,8 +130,8 @@ describe('createAssignmentSchema', () => {
 
   it('menolak period_month di luar 1-12', () => {
     const result = createAssignmentSchema.safeParse({
-      can_id: '00000000-0000-0000-0000-000000000001',
-      officer_id: '00000000-0000-0000-0000-000000000002',
+      can_id: '00000000-0000-4000-8000-000000000001',
+      officer_id: '00000000-0000-4000-8000-000000000002',
       period_year: 2026,
       period_month: 13,
     });

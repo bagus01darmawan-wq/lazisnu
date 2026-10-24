@@ -57,7 +57,7 @@ export async function cansRoutes(fastify: FastifyInstance) {
       return sendSuccess(reply, newCan, 201);
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
       if (error instanceof AppError) {
          return sendError(reply, error.statusCode, error.code, error.message);
@@ -97,7 +97,7 @@ export async function cansRoutes(fastify: FastifyInstance) {
       return sendSuccess(reply, can);
     } catch (error) {
        if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
        if (error instanceof AppError) {
         return sendError(reply, error.statusCode, error.code, error.message);

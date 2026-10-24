@@ -57,7 +57,7 @@ export async function districtRoutes(fastify: FastifyInstance) {
       return sendSuccess(reply, newBranch);
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
       if (getPostgresError(error)?.code === '23505') {
         return sendError(reply, 400, 'DUPLICATE_CODE', 'Kode ranting sudah digunakan');
@@ -96,7 +96,7 @@ export async function districtRoutes(fastify: FastifyInstance) {
       return sendSuccess(reply, updatedBranch);
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
       return sendInternalError(reply, error, fastify.log);
     }
@@ -139,7 +139,7 @@ export async function districtRoutes(fastify: FastifyInstance) {
       return sendSuccess(reply, newDukuh);
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
       return sendInternalError(reply, error, fastify.log);
     }
@@ -166,7 +166,7 @@ export async function districtRoutes(fastify: FastifyInstance) {
       return sendSuccess(reply, updatedDukuh);
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
       return sendInternalError(reply, error, fastify.log);
     }

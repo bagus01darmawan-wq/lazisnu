@@ -242,7 +242,7 @@ describe('C1-T9 peran mobile server (DB, R2 mock)', () => {
     const row = await db.query.users.findFirst({ where: eq(schema.users.id, users[0].id), columns: { fcmToken: true } });
     expect(row?.fcmToken).toBe('fcm-token-abc');
     await expect(saveDeviceToken(users[0].id, '')).rejects.toMatchObject({ code: ErrorCode.VALIDATION_ERROR });
-    await expect(saveDeviceToken('00000000-0000-0000-0000-000000000000', 'x')).rejects.toMatchObject({
+    await expect(saveDeviceToken('00000000-0000-4000-8000-000000000000', 'x')).rejects.toMatchObject({
       code: ErrorCode.VALIDATION_ERROR,
     });
   });

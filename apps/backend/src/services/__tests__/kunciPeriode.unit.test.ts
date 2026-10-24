@@ -42,7 +42,7 @@ describe('C1-T6 F4 — body ber-signer_id harus 400 (.strict())', () => {
     const r = signSubmissionSchema.safeParse({
       signature_png: 'x'.repeat(100),
       consent: true,
-      ppk_signer_id: '00000000-0000-0000-0000-000000000000',
+      ppk_signer_id: '00000000-0000-4000-8000-000000000000',
     });
     expect(r.success).toBe(false);
   });
@@ -52,7 +52,7 @@ describe('C1-T6 F4 — body ber-signer_id harus 400 (.strict())', () => {
       signature_png: 'x'.repeat(100),
       consent: true,
       share_mwc: 0,
-      ranting_signer_id: '00000000-0000-0000-0000-000000000000',
+      ranting_signer_id: '00000000-0000-4000-8000-000000000000',
     });
     expect(r.success).toBe(false);
   });

@@ -962,7 +962,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           : 'Tindakan NON_AKTIF berhasil dicatat',
       }, 201);
     } catch (error: unknown) {
-      if (error instanceof z.ZodError) return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+      if (error instanceof z.ZodError) return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       if (isAppError(error)) return sendError(reply, error.statusCode, error.code, error.message);
       return sendInternalError(reply, error, fastify.log);
     }
@@ -1035,7 +1035,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         collection_id: collection.id,
       }, 201);
     } catch (error: unknown) {
-      if (error instanceof z.ZodError) return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+      if (error instanceof z.ZodError) return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       if (isAppError(error)) return sendError(reply, error.statusCode, error.code, error.message);
       return sendInternalError(reply, error, fastify.log);
     }

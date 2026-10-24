@@ -26,7 +26,7 @@ describe('GET /v1/verify/ba — publik & minimal', () => {
     mockedVerify.mockResolvedValue(true);
     const app = await getApp();
     const res = await request(app.server).get(
-      '/v1/verify/ba?type=ppk&id=00000000-0000-0000-0000-000000000001&version=1&hash=ab',
+      '/v1/verify/ba?type=ppk&id=00000000-0000-4000-8000-000000000001&version=1&hash=ab',
     );
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ success: true, data: { valid: true } });

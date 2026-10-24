@@ -229,7 +229,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       });
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
 
       return sendInternalError(reply, error, fastify.log);
@@ -299,7 +299,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       });
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
 
       return sendInternalError(reply, error, fastify.log);
@@ -450,7 +450,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       });
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
 
       return sendInternalError(reply, error, fastify.log);

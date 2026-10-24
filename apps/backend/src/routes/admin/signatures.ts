@@ -40,7 +40,7 @@ export async function signaturesRoutes(fastify: FastifyInstance) {
           return sendError(reply, error.statusCode, error.code, error.message, error.details);
         }
         if (error instanceof z.ZodError) {
-          return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+          return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
         }
         return sendInternalError(reply, error, fastify.log);
       }

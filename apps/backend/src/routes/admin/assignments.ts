@@ -200,7 +200,7 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       return sendSuccess(reply, inserted[0], 201);
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
       return sendInternalError(reply, error, fastify.log);
     }
@@ -285,7 +285,7 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       }, 201);
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
       if (isAppError(error)) {
         return sendError(reply, error.statusCode, error.code, error.message);
@@ -381,7 +381,7 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       }, 201);
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
       if (isAppError(error)) {
         return sendError(reply, error.statusCode, error.code, error.message);
@@ -535,7 +535,7 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       }, 201);
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
       return sendInternalError(reply, error, fastify.log);
     }

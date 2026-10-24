@@ -135,7 +135,7 @@ export async function canProposalsRoutes(fastify: FastifyInstance) {
       return sendSuccess(reply, proposal, 201);
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
       if (error instanceof AppError) {
         return sendError(reply, error.statusCode, error.code, error.message);
@@ -160,7 +160,7 @@ export async function canProposalsRoutes(fastify: FastifyInstance) {
       return sendSuccess(reply, { ...result, condition_label: CONDITION_LABELS[result.to_condition] });
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
       if (error instanceof AppError) {
         return sendError(reply, error.statusCode, error.code, error.message);
@@ -182,7 +182,7 @@ export async function canProposalsRoutes(fastify: FastifyInstance) {
       return sendSuccess(reply, updated);
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
       if (error instanceof AppError) {
         return sendError(reply, error.statusCode, error.code, error.message);
@@ -229,7 +229,7 @@ export async function canProposalsRoutes(fastify: FastifyInstance) {
       });
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
       if (error instanceof AppError) {
         return sendError(reply, error.statusCode, error.code, error.message);

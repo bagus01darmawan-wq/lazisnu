@@ -159,7 +159,7 @@ export async function userAccountsRoutes(fastify: FastifyInstance) {
       return sendSuccess(reply, created, 201);
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
       return sendInternalError(reply, error, fastify.log);
     }
@@ -230,7 +230,7 @@ export async function userAccountsRoutes(fastify: FastifyInstance) {
       return sendSuccess(reply, updated);
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
       return sendInternalError(reply, error, fastify.log);
     }

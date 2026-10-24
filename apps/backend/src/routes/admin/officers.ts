@@ -160,7 +160,7 @@ export async function officersRoutes(fastify: FastifyInstance) {
       return sendSuccess(reply, insertedOfficer, 201);
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
-        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
       
       // Handle Unique Constraint Violations (Postgres 23505)

@@ -43,8 +43,8 @@ describe('mobileSyncService syncCollectionsBatch', () => {
   const officerId = 'officer-123';
   const validItem = {
     offline_id: 'loc-1',
-    assignment_id: '00000000-0000-0000-0000-000000000001',
-    can_id: '00000000-0000-0000-0000-000000000002',
+    assignment_id: '00000000-0000-4000-8000-000000000001',
+    can_id: '00000000-0000-4000-8000-000000000002',
     nominal: 50000,
     condition: 'AKTIF' as const,
     collected_at: '2026-05-17T10:00:00.000Z',

@@ -173,7 +173,7 @@ export async function buildApp() {
         error: {
           code: 'VALIDATION_ERROR',
           message: 'Input tidak valid',
-          details: error.errors,
+          details: error.issues,
         },
       });
     }

@@ -409,7 +409,7 @@ describe('C1-T5 co-sign 2 HP + BA + PDF (DB, R2 mock)', () => {
     expect(await verifyBaRecord('ppk', sub1Id, row!.version, good)).toBe(true);
     expect(await verifyBaRecord('ppk', sub1Id, row!.version, '0'.repeat(64))).toBe(false);
     expect(await verifyBaRecord('ppk', sub1Id, 999, good)).toBe(false);
-    expect(await verifyBaRecord('ppk', '00000000-0000-0000-0000-000000000000', 1, good)).toBe(false);
+    expect(await verifyBaRecord('ppk', '00000000-0000-4000-8000-000000000000', 1, good)).toBe(false);
     expect(await verifyBaRecord('branch', sub1Id, row!.version, good)).toBe(false);
   });
 

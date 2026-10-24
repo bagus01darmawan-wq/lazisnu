@@ -171,7 +171,7 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
           message: 'Data sudah pernah di-submit',
         });
       }
-      if (error instanceof z.ZodError) return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+      if (error instanceof z.ZodError) return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       return sendInternalError(reply, error, fastify.log);
     }
   });
@@ -293,7 +293,7 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
         message: 'Koreksi data berhasil disimpan',
       });
     } catch (error: unknown) {
-      if (error instanceof z.ZodError) return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.errors);
+      if (error instanceof z.ZodError) return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       if (isAppError(error)) {
         return sendError(reply, error.statusCode, error.code, error.message);
       }

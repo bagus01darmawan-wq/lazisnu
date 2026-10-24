@@ -2,8 +2,8 @@ import { collectionSchema, resubmitSchema, batchCollectionSchema } from '../sche
 
 describe('collectionSchema', () => {
   const validBody = {
-    assignment_id: '00000000-0000-0000-0000-000000000001',
-    can_id: '00000000-0000-0000-0000-000000000002',
+    assignment_id: '00000000-0000-4000-8000-000000000001',
+    can_id: '00000000-0000-4000-8000-000000000002',
     nominal: 50000,
     condition: 'AKTIF',
           collected_at: '2026-05-17T10:00:00.000Z',
@@ -101,8 +101,8 @@ describe('batchCollectionSchema', () => {
       collections: [
         {
           offline_id: 'loc-1',
-          assignment_id: '00000000-0000-0000-0000-000000000001',
-          can_id: '00000000-0000-0000-0000-000000000002',
+          assignment_id: '00000000-0000-4000-8000-000000000001',
+          can_id: '00000000-0000-4000-8000-000000000002',
           nominal: 50000,
     condition: 'AKTIF',
           collected_at: '2026-05-17T10:00:00.000Z',
@@ -123,8 +123,8 @@ describe('batchCollectionSchema', () => {
       collections: [
         {
           offline_id: 'loc-1',
-          assignment_id: '00000000-0000-0000-0000-000000000001',
-          can_id: '00000000-0000-0000-0000-000000000002',
+          assignment_id: '00000000-0000-4000-8000-000000000001',
+          can_id: '00000000-0000-4000-8000-000000000002',
           nominal: 0,
     condition: 'AKTIF',
           collected_at: '2026-05-17T10:00:00.000Z',
@@ -139,8 +139,8 @@ describe('batchCollectionSchema', () => {
       collections: [
         {
           offline_id: 'loc-1',
-          assignment_id: '00000000-0000-0000-0000-000000000001',
-          can_id: '00000000-0000-0000-0000-000000000002',
+          assignment_id: '00000000-0000-4000-8000-000000000001',
+          can_id: '00000000-0000-4000-8000-000000000002',
           nominal: 50000,
     condition: 'AKTIF',
           collected_at: '2026-05-17T10:00:00.000Z',
@@ -161,8 +161,8 @@ describe('batchCollectionSchema', () => {
       collections: [
         {
           offline_id: 'loc-1',
-          assignment_id: '00000000-0000-0000-0000-000000000001',
-          can_id: '00000000-0000-0000-0000-000000000002',
+          assignment_id: '00000000-0000-4000-8000-000000000001',
+          can_id: '00000000-0000-4000-8000-000000000002',
           nominal: 50000,
     condition: 'AKTIF',
           collected_at: '2026-05-17T10:00:00.000Z',
@@ -177,8 +177,8 @@ describe('batchCollectionSchema', () => {
       collections: [
         {
           offline_id: 'loc-1',
-          assignment_id: '00000000-0000-0000-0000-000000000001',
-          can_id: '00000000-0000-0000-0000-000000000002',
+          assignment_id: '00000000-0000-4000-8000-000000000001',
+          can_id: '00000000-0000-4000-8000-000000000002',
           nominal: 50000,
     condition: 'AKTIF',
           collected_at: '2026-05-17T10:00:00.000Z',
@@ -193,8 +193,8 @@ describe('batchCollectionSchema', () => {
       collections: [
         {
           offline_id: 'loc-1',
-          assignment_id: '00000000-0000-0000-0000-000000000001',
-          can_id: '00000000-0000-0000-0000-000000000002',
+          assignment_id: '00000000-0000-4000-8000-000000000001',
+          can_id: '00000000-0000-4000-8000-000000000002',
           nominal: 50000,
     condition: 'AKTIF',
           collected_at: '2026-05-17T10:00:00.000Z',
