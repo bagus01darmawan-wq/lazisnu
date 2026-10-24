@@ -15,7 +15,7 @@ allowBuilds:
 overrides:
   '@babel/core@7.29.0': 7.29.7 # <=7.29.0 (GHSA-4x5r-pxfx-6jf8) — via mobile; 7.29.7 di tree aman
   '@babel/plugin-transform-modules-systemjs': 7.29.7
-  '@grpc/grpc-js@>=1.14.0 <1.14.5': 1.14.5 # GHSA-xxxx — 1.9.16 di tree tetap (EXP 2026-10-06: 1.14.4 rentan GHSA-m9gg/f596, uji patch)
+  '@grpc/grpc-js@<1.14.5': 1.14.5 # GHSA-m9gg (high), GHSA-f596 (low) — advisory server-side; 1.9.16 (via @firebase/firestore ~1.9.0, pin ekosistem firebase) tidak pernah dieksekusi di repo ini: web hanya firebase/app+analytics+performance, mobile native-only, backend admin jalur 1.14.5. Pekas 2026-10-06: 1.14.4 masih rentan. Lepas saat firebase JS SDK naikkan pin grpc-js
   '@tootallnate/once@<2.0.1': 2.0.1 # <2.0.1 (GHSA-vpq2-c234-7xj6) — via dev tooling
   # '@types/react': 18.2.79 — dilepas: override global ini memaksa apps/web
   # (React 19) memakai tipe React 18.2.79, penyebab 3 error typecheck web.
