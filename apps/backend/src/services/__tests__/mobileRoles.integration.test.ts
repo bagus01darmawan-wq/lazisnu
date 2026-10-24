@@ -17,7 +17,6 @@ import { listBranchBaVersions, listPpkBaVersions } from '../baPdfService';
 import { ensurePpkSubmission, ensureBranchSubmission } from '../ppkSubmissions';
 import { submitCollection } from '../collectionSubmission';
 import {
-  countersignBranchSubmission,
   countersignPpkSubmission,
   getBaDownload,
   signBranchSubmission,

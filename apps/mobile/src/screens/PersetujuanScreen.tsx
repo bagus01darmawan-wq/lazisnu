@@ -14,7 +14,6 @@ import {AppButton} from '../components/ui/AppButton';
 import {AppCard} from '../components/ui/AppCard';
 import {AppHeader} from '../components/ui/AppHeader';
 import {StatusBadge} from '../components/ui/StatusBadge';
-import {PeriodChip} from '../components/PeriodChip';
 import {Colors, Spacing, Typography} from '../theme';
 import {getErrorMessage} from '../utils/error';
 import {reminderFor} from '../roles/roleMap';

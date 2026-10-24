@@ -205,7 +205,6 @@ export async function districtRoutes(fastify: FastifyInstance) {
         branchName = branch.name;
       }
 
-      const now = new Date();
       const period = parseOverviewPeriod(query.year, query.months);
       if (!period) {
         return sendError(reply, 400, 'VALIDATION_ERROR', 'Parameter year/months tidak valid');

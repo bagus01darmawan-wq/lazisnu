@@ -159,7 +159,7 @@ export function checkOperationalTimezone(at: Date = new Date()): {
   offsetMinutes: number;
 } {
   const expected = OPERATIONAL_TIMEZONE;
-  let serverTimeZone = 'unknown';
+  let serverTimeZone: string;
   try {
     serverTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'unknown';
   } catch {

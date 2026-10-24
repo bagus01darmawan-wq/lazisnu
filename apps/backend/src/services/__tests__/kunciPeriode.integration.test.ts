@@ -189,7 +189,6 @@ describe('C1-T6 kunci berlapis MWC (DB, R2 mock)', () => {
     });
     const ppkActor2 = { userId: uPpk2, role: 'PETUGAS', branchId: bR2, districtId: dt6, officerId: off2.id };
     const keuR2Actor = { userId: uKeuR2, role: 'STAF_KEUANGAN', branchId: bR2, districtId: dt6 };
-    const adminR2Actor = { userId: uAdminR2, role: 'ADMIN_RANTING', branchId: bR2, districtId: dt6 };
     const keuMwcActor = { userId: uKeuMwc, role: 'STAF_KEUANGAN', branchId: null, districtId: dt6 };
 
     const sPpk2 = await ensurePpkSubmission(off2.id, bR2, 2026, 9);

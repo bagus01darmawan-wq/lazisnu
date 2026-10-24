@@ -3,7 +3,7 @@
  * Hanya skenario yang BELUM dikunci tiket T0–T11; 17 lainnya dipetakan di
  * docs C1-T12 (uji penuh hijau = bukti). Pola fixture T6–T11.
  */
-import { db, closeDbConnection } from '../../config/database';
+import { db } from '../../config/database';
 import * as schema from '../../database/schema';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { ErrorCode } from '../../utils/errorCatalog';

@@ -275,7 +275,6 @@ export async function cansRoutes(fastify: FastifyInstance) {
     try {
       const { id } = request.params as { id: string };
       const user = request.currentUser!;
-      const can = await canService.getCanDetail(id, user);
       const [pending] = await db.query.canVisits.findMany({
         where: and(
           eq(schema.canVisits.canId, id),

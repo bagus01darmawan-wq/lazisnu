@@ -11,7 +11,7 @@
  */
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { and, eq, gte, inArray, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray } from 'drizzle-orm';
 import { insertActivityLog } from './auditLogService';
 import { sendFCMToDevice } from './fcm';
 import { addStaffTextJob } from './queues';

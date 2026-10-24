@@ -18,7 +18,6 @@ import {
   forceFinalizePpkSubmission,
   generateBaPdf,
   getBaDownload,
-  getBranchBeritaAcara,
   getPpkBeritaAcara,
   signPpkSubmission,
   type RequestContext,

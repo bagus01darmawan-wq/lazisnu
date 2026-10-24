@@ -33,7 +33,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -131,16 +131,16 @@ function kumpulkan(data) {
 }
 
 function muatBasis() {
-  if (!existsSync(BASELINE_PATH)) {
-    gagal(2, `Berkas basis belum ada: ${BASELINE_PATH}\n` +
-             `  Buat dulu dengan: node scripts/audit-baseline.mjs --update\n` +
-             `  Gerbang sengaja gagal bila basisnya hilang — jangan biarkan\n` +
-             `  pemeriksaan keamanan lolos hanya karena berkasnya tidak ada.`);
-  }
   try {
     const j = JSON.parse(readFileSync(BASELINE_PATH, 'utf8'));
     return { advisories: j.advisories || {}, updatedAt: j.updatedAt || '(tidak diketahui)' };
   } catch (e) {
+    if (e && e.code === 'ENOENT') {
+      gagal(2, `Berkas basis belum ada: ${BASELINE_PATH}\n` +
+               `  Buat dulu dengan: node scripts/audit-baseline.mjs --update\n` +
+               `  Gerbang sengaja gagal bila basisnya hilang — jangan biarkan\n` +
+               `  pemeriksaan keamanan lolos hanya karena berkasnya tidak ada.`);
+    }
     gagal(2, `Berkas basis rusak: ${e.message}`);
   }
 }
@@ -176,33 +176,31 @@ if (MODE_UPDATE) {
   // Bila set advisory identik dengan basis yang ada, jangan tulis ulang:
   // menulis hanya akan menggeser updatedAt dan memancing commit kosong
   // dari langkah self-heal di setiap run terjadwal.
-  if (existsSync(BASELINE_PATH)) {
-    try {
-      const lama = JSON.parse(readFileSync(BASELINE_PATH, 'utf8')).advisories || {};
-      const idLama = Object.keys(lama);
-      const idBaru = Object.keys(isi);
-      const identik =
-        idLama.length === idBaru.length &&
-        idBaru.every((id) => {
-          const a = isi[id];
-          const b = lama[id];
-          return (
-            b &&
-            a.module === b.module &&
-            a.severity === b.severity &&
-            a.url === b.url &&
-            a.patched === b.patched
-          );
-        });
-      if (identik) {
-        console.log(
-          `ℹ️  Set advisory tidak berubah (${idBaru.length}) — basis tidak ditulis ulang.`
+  try {
+    const lama = JSON.parse(readFileSync(BASELINE_PATH, 'utf8')).advisories || {};
+    const idLama = Object.keys(lama);
+    const idBaru = Object.keys(isi);
+    const identik =
+      idLama.length === idBaru.length &&
+      idBaru.every((id) => {
+        const a = isi[id];
+        const b = lama[id];
+        return (
+          b &&
+          a.module === b.module &&
+          a.severity === b.severity &&
+          a.url === b.url &&
+          a.patched === b.patched
         );
-        process.exit(0);
-      }
-    } catch {
-      // basis rusak/tak terbaca → lanjut tulis ulang daripada membiarkan rusak
+      });
+    if (identik) {
+      console.log(
+        `ℹ️  Set advisory tidak berubah (${idBaru.length}) — basis tidak ditulis ulang.`
+      );
+      process.exit(0);
     }
+  } catch {
+    // basis belum ada/rusak/tak terbaca → lanjut tulis ulang daripada membiarkan rusak
   }
   mkdirSync(dirname(BASELINE_PATH), { recursive: true });
   writeFileSync(

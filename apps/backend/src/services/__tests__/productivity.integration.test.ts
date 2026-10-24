@@ -10,7 +10,7 @@
  * Tanggal fixture eksplisit (Agu/Sep 2026) agar tidak tergantung tanggal
  * jalan test, kecuali yang memang dihitung sebagai "baru".
  */
-import { eq, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';

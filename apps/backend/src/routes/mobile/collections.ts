@@ -11,7 +11,7 @@ import { Errors } from '../../utils/errorCatalog';
 import { correctCollection } from '../../services/collectionCorrectionService';
 
 import { validateAssignmentForSubmit, submitCollection, getLatestCollectionCondition, assertCollectedAtInWindow } from '../../services/collectionSubmission';
-import { getPostgresError, getErrorMessage } from '../../utils/error-guards';
+import { getPostgresError } from '../../utils/error-guards';
 import { evaluateEmptyStreakForCan } from '../../services/conditionProposalService';
 import { insertActivityLog } from '../../services/auditLogService';
 

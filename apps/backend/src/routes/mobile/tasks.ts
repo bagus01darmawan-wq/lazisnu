@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { eq, and, desc, asc, gte, lte, or, sql } from 'drizzle-orm';
+import { eq, and, desc, asc, gte, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { isValidQRCode } from '../../utils/qr';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
@@ -12,8 +12,6 @@ import { parseStatsRange, computeMonthsCovered } from '../../utils/statsRange';
 import { computeTaskMetrics } from '../../services/taskMetrics';
 import {
   actionLabel,
-  conditionAfterReplacementVisit,
-  isTransitionAllowed,
   resolveNonActiveVisit,
   type CanVisitOutcomeValue,
 } from '../../services/conditionRules';
@@ -551,8 +549,6 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         const [y, m] = period.split('-').map(Number);
         return and(eq(schema.assignments.periodYear, y), eq(schema.assignments.periodMonth, m));
       });
-
-      const latestCollectionCondition = getLatestCollectionCondition();
 
       const [colRes, taskRows] = await Promise.all([
         // C1-T12 (§2.2): nominal per PERIODE assignment yang tersentuh rentang

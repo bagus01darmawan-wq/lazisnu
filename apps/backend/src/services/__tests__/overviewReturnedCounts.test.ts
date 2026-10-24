@@ -23,7 +23,6 @@
  * parameter bind, tanpa perlu database. Setiap parameter harus string (atau
  * number/buffer); objek Date mentah meniru persis kegagalan produksi.
  */
-import { getReturnedCounts } from '../overviewService.js';
 
 // Ambil parameter yang diteruskan driver postgres-js ke koneksi.
 const capturedQueries: { sql: string; params: unknown[] }[] = [];

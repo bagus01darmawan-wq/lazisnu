@@ -141,7 +141,7 @@ export const SetoranScreen: React.FC = () => {
                 <Text style={styles.hint}>Penandatanganan dilakukan bersama bendahara (2 HP).</Text>
               ) : null}
             </AppCard>
-            {signing && submission ? (
+            {signing ? (
               <SignSheet
                 title="Tanda tangan PPK"
                 submitLabel="Tanda Tangani"
