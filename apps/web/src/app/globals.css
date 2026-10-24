@@ -64,3 +64,17 @@ body {
   scrollbar-width: thin;
   scrollbar-color: rgba(244, 241, 234, 0.3) transparent !important;
 }
+
+/* Hormati preferensi pengguna yang meminta animasi dikurangi (rencana
+ * redesign halaman penugasan §12): matikan transisi/animasi dekoratif
+ * tanpa mematikan perubahan state-nya. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

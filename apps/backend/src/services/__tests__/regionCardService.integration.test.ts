@@ -27,6 +27,7 @@ const IDS = {
   officerFallback: randomUUID(),
   canInDukuh: randomUUID(),
   canInDukuh2: randomUUID(),
+  canNonAktif: randomUUID(),
   canInBranchNoDukuh: randomUUID(),
   assignment: randomUUID(),
 };
@@ -178,6 +179,19 @@ describe('regionCardService', () => {
         ownerWhatsapp: `6282203${TAG}`,
         isActive: true,
       },
+      {
+        // NON_AKTIF tetap isActive=true (invariant lifecycle) dan tidak boleh
+        // ikut angka "belum ditugaskan yang bisa ditugaskan".
+        id: IDS.canNonAktif,
+        branchId: IDS.branchWithDukuh,
+        dukuhId: IDS.dukuhA,
+        rt: '004',
+        rw: '004',
+        ownerName: 'Warga Non Aktif',
+        ownerWhatsapp: `6282204${TAG}`,
+        condition: 'NON_AKTIF',
+        isActive: true,
+      },
     ]);
 
     // Hanya SATU dari dua kaleng di dukuh A yang punya penugasan. Ini yang
@@ -200,7 +214,12 @@ describe('regionCardService', () => {
     await db
       .delete(schema.cans)
       .where(
-        inArray(schema.cans.id, [IDS.canInDukuh, IDS.canInDukuh2, IDS.canInBranchNoDukuh])
+        inArray(schema.cans.id, [
+          IDS.canInDukuh,
+          IDS.canInDukuh2,
+          IDS.canNonAktif,
+          IDS.canInBranchNoDukuh,
+        ])
       );
     await db
       .delete(schema.officers)
@@ -230,11 +249,16 @@ describe('regionCardService', () => {
     expect(res.regions.every((r) => r.kind === 'branch')).toBe(true);
 
     const withDukuh = res.regions.find((r) => r.id === IDS.branchWithDukuh)!;
-    // Dua kaleng di ranting ini: satu di dukuh A, satu lagi juga di dukuh A.
-    expect(withDukuh.total).toBe(2);
-    expect(withDukuh.nonActive).toBe(0);
+    // Tiga kaleng di ranting ini: dua di dukuh A (aktif), satu NON_AKTIF.
+    expect(withDukuh.total).toBe(3);
+    expect(withDukuh.nonActive).toBe(1);
     expect(withDukuh.officerCount).toBe(2);
     expect(withDukuh.activeOfficerCount).toBe(2);
+    // Angka assignable: yang bisa ditugaskan hanya kaleng aktif berkondisi
+    // AKTIF/RUSAK/HILANG — NON_AKTIF masuk nonAssignable, bukan "belum".
+    expect(withDukuh.assignableCans).toBe(2);
+    expect(withDukuh.unassignedAssignableCans).toBe(1);
+    expect(withDukuh.nonAssignableCans).toBe(1);
     // Scope branch: semua petugas sudah tercakup filter ranting.
     expect(res.unmappedOfficerCount).toBe(0);
   });
@@ -249,16 +273,22 @@ describe('regionCardService', () => {
       month: '9',
     });
 
-    // Dua kaleng, tapi hanya satu yang punya penugasan. Kalau kedua angka
-    // ini ditimpa diam-diam, test inilah yang pertama gagal.
-    expect(cans.regions[0].total).toBe(2);
+    // Tiga kaleng (satu NON_AKTIF), hanya satu yang punya penugasan. Kalau
+    // kedua angka ini ditimpa diam-diam, test inilah yang pertama gagal.
+    expect(cans.regions[0].total).toBe(3);
     expect(cans.regions[0].assignmentTotal).toBe(1);
-    expect(assignments.regions[0].total).toBe(2);
+    expect(assignments.regions[0].total).toBe(3);
     expect(assignments.regions[0].assignmentTotal).toBe(1);
 
     // `assigned`/`unassigned` tetap berbasis kaleng untuk bar progres.
     expect(cans.regions[0].assigned).toBe(1);
-    expect(cans.regions[0].unassigned).toBe(1);
+    expect(cans.regions[0].unassigned).toBe(2);
+
+    // Angka aksi tab Kelola memakai sumber assignable.
+    expect(assignments.regions[0].assignableCans).toBe(2);
+    expect(assignments.regions[0].assignedAssignableCans).toBe(1);
+    expect(assignments.regions[0].unassignedAssignableCans).toBe(1);
+    expect(assignments.regions[0].nonAssignableCans).toBe(1);
   });
 
   it('penugasan di luar periode tidak ikut dihitung', async () => {
@@ -267,9 +297,11 @@ describe('regionCardService', () => {
       month: '12',
     });
     // Kaleng tidak ikut berubah, tapi penugasan kosong karena beda periode.
-    expect(des.regions[0].total).toBe(2);
+    expect(des.regions[0].total).toBe(3);
     expect(des.regions[0].assignmentTotal).toBe(0);
-    expect(des.regions[0].unassigned).toBe(2);
+    expect(des.regions[0].unassigned).toBe(3);
+    // Yang "belum" versi assignable tidak menyentuh NON_AKTIF.
+    expect(des.regions[0].unassignedAssignableCans).toBe(2);
   });
 
   it('admin ranting melihat layer DUKUH', async () => {
@@ -284,8 +316,10 @@ describe('regionCardService', () => {
     expect(card.kind).toBe('dukuh');
     expect(card.id).toBe(IDS.dukuhA);
     expect(card.branchId).toBe(IDS.branchWithDukuh);
-    expect(card.total).toBe(2);
+    expect(card.total).toBe(3);
     expect(card.assignmentTotal).toBe(1);
+    expect(card.assignableCans).toBe(2);
+    expect(card.unassignedAssignableCans).toBe(1);
     expect(card.isFallback).toBe(false);
   });
 

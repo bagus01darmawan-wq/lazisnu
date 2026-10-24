@@ -27,6 +27,23 @@
  */
 export const OPERATIONAL_TIMEZONE = process.env.OPERATIONAL_TIMEZONE || 'Asia/Jakarta';
 
+/**
+ * Tahun & bulan operasional saat ini menurut zona operasional — bukan waktu
+ * lokal proses. Tanpa ini, server yang berjalan UTC menggeser periode default
+ * mundur satu bulan sepanjang 00:00–07:00 WIB tanggal 1.
+ */
+export function currentOperationalPeriod(at: Date = new Date()): { year: number; month: number } {
+  // en-CA memformat ke YYYY-MM-DD sehingga bagian tahun/bulan bisa dipecah aman.
+  const isoDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: OPERATIONAL_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(at);
+  const [year, month] = isoDate.split('-').map(Number);
+  return { year, month };
+}
+
 /** Offset menit zona operasional terhadap UTC pada waktu tertentu (default +7). */
 export function operationalOffsetMinutes(at: Date = new Date()): number {
   try {

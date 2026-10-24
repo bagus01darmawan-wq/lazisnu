@@ -4,7 +4,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { eq, and, gte, inArray, sql } from 'drizzle-orm';
+import { eq, and, gte, inArray, sql, asc } from 'drizzle-orm';
 import { config } from '../config/env';
 import { getLatestCollectionCondition } from '../services/collectionSubmission';
 import { findCansWithoutAssignment, buildFirstOfficerAssignments, insertAssignments } from '../services/assignmentGenerator';
@@ -68,12 +68,56 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
 
       const assignmentItems = buildFirstOfficerAssignments(cansToAssign, year, month);
 
-      const { created } = await insertAssignments(assignmentItems, true);
+      // Kunci kaleng lalu saring ulang yang masih belum ditugaskan di dalam
+      // transaksi yang sama. Jalur admin (bulk-branch/bulk-cans/transfer)
+      // memakai pola lock kaleng yang sama, sehingga scheduler tidak bisa
+      // menimpa penugasan yang baru dibuat admin dan membuat assignment
+      // ganda pada periode yang sama.
+      const { eligibleItems, skippedAlreadyAssigned } = await db.transaction(async (tx) => {
+        const itemCanIds = Array.from(new Set(assignmentItems.map((item) => item.canId)));
+        const lockedIds = new Set(
+          itemCanIds.length === 0
+            ? []
+            : (
+                await tx
+                  .select({ id: schema.cans.id })
+                  .from(schema.cans)
+                  .where(inArray(schema.cans.id, itemCanIds))
+                  .orderBy(asc(schema.cans.id))
+                  .for('update')
+              ).map((row) => row.id)
+        );
+
+        const stillAssigned =
+          lockedIds.size === 0
+            ? []
+            : await tx
+                .select({ canId: schema.assignments.canId })
+                .from(schema.assignments)
+                .where(
+                  and(
+                    inArray(schema.assignments.canId, Array.from(lockedIds)),
+                    eq(schema.assignments.periodYear, year),
+                    eq(schema.assignments.periodMonth, month)
+                  )
+                );
+        const assignedNow = new Set(stillAssigned.map((row) => row.canId));
+
+        const eligibleItems = assignmentItems.filter(
+          (item) => lockedIds.has(item.canId) && !assignedNow.has(item.canId)
+        );
+        await insertAssignments(eligibleItems, true, tx);
+        return {
+          eligibleItems,
+          skippedAlreadyAssigned: assignmentItems.length - eligibleItems.length,
+        };
+      });
 
       return sendSuccess(reply, {
-        total_assignments: created,
-        assigned_to_officers: new Set(assignmentItems.map((a: any) => a.officerId)).size,
+        total_assignments: eligibleItems.length,
+        assigned_to_officers: new Set(eligibleItems.map((item) => item.officerId)).size,
         skipped_no_officer: cansToAssign.length - assignmentItems.length,
+        skipped_already_assigned: skippedAlreadyAssigned,
         period: periodKey(year, month),
       });
     } catch (error: unknown) {

@@ -18,6 +18,13 @@ interface ModalProps {
    * lalu kembali ke tengah pada layar `sm` ke atas.
    */
   position?: 'center' | 'bottom';
+  /**
+   * false menutup jalur keluar implisit (Escape, overlay, tombol X) — dipakai
+   * saat proses di dalam dialog sedang berjalan (mis. submit) supaya sheet
+   * tidak tertutup di tengah operasi. Jalur eksplisit (tombol Batal/proses)
+   * tetap milik pemanggil.
+   */
+  dismissible?: boolean;
 }
 
 const Modal = ({
@@ -29,6 +36,7 @@ const Modal = ({
   className,
   variant = 'default',
   position = 'center',
+  dismissible = true,
 }: ModalProps) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -41,6 +49,12 @@ const Modal = ({
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
+  // dismissible juga bisa berubah saat dialog terbuka (mis. submitting),
+  // dan effect open/close tidak boleh ikut re-run setiap kali itu terjadi.
+  const dismissibleRef = useRef(dismissible);
+  useEffect(() => {
+    dismissibleRef.current = dismissible;
+  }, [dismissible]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -56,7 +70,7 @@ const Modal = ({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onCloseRef.current();
+        if (dismissibleRef.current) onCloseRef.current();
         return;
       }
       // Tab trap: cycle focus within modal so keyboard users can't escape
@@ -109,7 +123,7 @@ const Modal = ({
             ? 'bg-black/60 backdrop-blur-md'
             : 'bg-black/50 backdrop-blur-sm'
         )}
-        onClick={onClose}
+        onClick={dismissible ? onClose : undefined}
       />
 
       {/* Modal Content */}
@@ -129,6 +143,13 @@ const Modal = ({
           className
         )}
       >
+        {/* Handle bar bottom sheet (mobile saja; sm ke atas dialog kembali ke tengah) */}
+        {position === 'bottom' && (
+          <div className="flex justify-center pt-2.5 sm:hidden" aria-hidden="true">
+            <span className="h-1 w-10 rounded-full bg-current opacity-20" />
+          </div>
+        )}
+
         {/* Header */}
         <div
           className={cn(
@@ -147,20 +168,22 @@ const Modal = ({
           >
             {title || 'Detail'}
           </h3>
-          <button
-            ref={closeButtonRef}
-            type="button"
-            onClick={onClose}
-            aria-label="Tutup dialog"
-            className={cn(
-              'p-2 rounded-full transition-colors',
-              variant === 'glass'
-                ? 'text-[var(--glass-ink)]/40 hover:bg-[var(--hover)] hover:text-[var(--glass-ink)]'
-                : 'text-[var(--surface-ink)]/50 hover:bg-[var(--hover)] hover:text-[var(--surface-ink)]'
-            )}
-          >
-            <X size={20} aria-hidden="true" />
-          </button>
+          {dismissible && (
+            <button
+              ref={closeButtonRef}
+              type="button"
+              onClick={onClose}
+              aria-label="Tutup dialog"
+              className={cn(
+                'p-2 rounded-full transition-colors',
+                variant === 'glass'
+                  ? 'text-[var(--glass-ink)]/40 hover:bg-[var(--hover)] hover:text-[var(--glass-ink)]'
+                  : 'text-[var(--surface-ink)]/50 hover:bg-[var(--hover)] hover:text-[var(--surface-ink)]'
+              )}
+            >
+              <X size={20} aria-hidden="true" />
+            </button>
+          )}
         </div>
 
         {/* Body */}

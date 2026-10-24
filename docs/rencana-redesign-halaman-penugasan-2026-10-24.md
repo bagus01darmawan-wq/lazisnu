@@ -694,3 +694,13 @@ Sudah diimplementasikan di working tree (belum di-commit):
 - Verifikasi: typecheck backend/web, lint web (0 error), `vitest` web 45 test, integration `regionCardService` 8 test + `assignmentWorkQueueService` 5 test + route `bulk-cans` 3 test, dan `next build` lulus.
 
 Perbaikan sementara `ADMIN_RANTING` (branch dikunci dari JWT) tetap berlaku. Perubahan mobile di luar cakupan ini (`SignSheet.tsx`, `SetoranScreen.tsx`, `DashboardScreen.tsx`) masih belum di-commit.
+
+### Penindaklanjutan hasil audit (2026-10-24, sesudah commit e506472)
+
+Audit eksekusi menemukan dua bug dan beberapa penyimpangan kecil; semuanya sudah diperbaiki:
+
+- **Angka work-queue menggelembung saat kaleng pernah di-transfer** — `count(*)` di atas LEFT JOIN assignments diganti `count(DISTINCT cans.id)` (kaleng ter-transfer punya 2 baris pada periode yang sama: REASSIGNED + ACTIVE). Test regresi ditambahkan di `assignmentWorkQueueService.integration.test.ts`.
+- **Assignment ganda level DB** — semua jalur penulisan (`POST /assignments`, `bulk-branch`, `bulk-cans`, `transfer`, `PUT /assignments/:id`, `scheduler/generate-tasks`) kini mengunci baris kaleng `FOR UPDATE` di dalam transaksi dan memeriksa ulang assignment pada snapshot yang sama, sehingga request bersamaan menjadi serial (yang kedua melewati/menolak, bukan menduplikasi). Indeks unik parsial `(can_id, period)` sengaja TIDAK ditambahkan: data lama bisa melanggar (preseden migrasi 0015) dan butuh dedup data produksi. `PUT` juga menolak menghidupkan baris REASSIGNED saat penugasan berjalan lain ada (409). Test: `assignments-integrity.integration.test.ts`.
+- `GET /admin/assignments` memvalidasi `year`/`month` (400 bila tidak valid, bukan 500 NaN); periode default work-queue/bulk memakai `currentOperationalPeriod()` (Asia/Jakarta) di `operationalTimeZone.ts`.
+- Test `regionCardService` kini mengunci field assignable baru.
+- Web: `prefers-reduced-motion` dihormati, bottom sheet diberi handle bar + prop `dismissible` (sheet konfirmasi tidak tertutup Escape/overlay saat submit), tombol back menutup sheet lebih dulu (entri history ditumpuk saat sheet terbuka), fetch riwayat di-debounce 300 ms + stale-guard, kegagalan parsial bulk kini toast peringatan yang menjelaskan dan menyisakan grup gagal terpilih untuk diulang, dead export `Loader2` dihapus dari `RegionCards`.

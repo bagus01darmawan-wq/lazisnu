@@ -118,11 +118,16 @@ export function buildFirstOfficerAssignments(
 }
 
 /**
- * Batch insert assignments ke database
+ * Batch insert assignments ke database.
+ *
+ * `tx` opsional: bila dipakai di dalam transaksi (route assign massal yang
+ * mengunci baris kaleng), chunk dijalankan berurutan pada koneksi transaksi
+ * yang sama agar lock FOR UPDATE tetap berlaku sampai semua chunk selesai.
  */
 export async function insertAssignments(
   assignmentData: AssignmentInsert[],
-  useOnConflictDoNothing = false
+  useOnConflictDoNothing = false,
+  tx: Pick<typeof db, 'insert'> = db
 ) {
   if (assignmentData.length === 0) return { created: 0 };
 
@@ -132,15 +137,13 @@ export async function insertAssignments(
     chunks.push(assignmentData.slice(i, i + chunkSize));
   }
 
-  await Promise.all(
-    chunks.map((chunk) => {
-      if (useOnConflictDoNothing) {
-        return db.insert(schema.assignments).values(chunk as any).onConflictDoNothing();
-      } else {
-        return db.insert(schema.assignments).values(chunk as any);
-      }
-    })
-  );
+  for (const chunk of chunks) {
+    if (useOnConflictDoNothing) {
+      await tx.insert(schema.assignments).values(chunk as any).onConflictDoNothing();
+    } else {
+      await tx.insert(schema.assignments).values(chunk as any);
+    }
+  }
 
   return { created: assignmentData.length };
 }

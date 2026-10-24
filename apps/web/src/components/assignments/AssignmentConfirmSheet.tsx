@@ -44,6 +44,9 @@ export function AssignmentConfirmSheet({
       title="Konfirmasi Penugasan"
       variant="glass"
       position="bottom"
+      // Saat submit berjalan, tutup jalur implisit (Escape/overlay/X) agar
+      // sheet tidak hilang di tengah proses; tombol Batal sengaja disabled.
+      dismissible={!submitting}
     >
       <div className="space-y-4">
         <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">

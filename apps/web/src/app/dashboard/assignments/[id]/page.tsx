@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ColumnDef } from '@tanstack/react-table';
 import {
@@ -74,6 +74,16 @@ interface BulkResponse {
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth() + 1;
 
+/** Nilai yang baru berubah setelah pengguna berhenti mengubahnya selama delayMs. */
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
+}
+
 export default function AssignmentsDetailPage({
   params,
   searchParams,
@@ -111,13 +121,20 @@ export default function AssignmentsDetailPage({
   const [historyTotal, setHistoryTotal] = useState(0);
   const [historyPage, setHistoryPage] = useState(1);
   const [historyLimit] = useState(10);
-  const [search, setSearch] = useState('');
+  // Input pencarian di-buffer lokal; `search` yang men-trigger fetch di-debounce
+  // supaya tiap ketikan tidak mengirim request (dan respons lama tidak sempat
+  // saling menimpa).
+  const [searchInput, setSearchInput] = useState('');
+  const search = useDebouncedValue(searchInput, 300);
   const [statusFilter, setStatusFilter] = useState('');
   const [officerFilter, setOfficerFilter] = useState('');
   const [historyReloadKey, setHistoryReloadKey] = useState(0);
 
   const [transferring, setTransferring] = useState<AssignmentHistoryItem | null>(null);
   const [transferOfficerId, setTransferOfficerId] = useState('');
+
+  // Penomoran fetch riwayat untuk membuang respons basi (lihat fetchHistory).
+  const historyFetchIdRef = useRef(0);
 
   const { data: queue, loading: queueLoading, error: queueError, reload: reloadQueue } =
     useAssignmentWorkQueue({
@@ -163,7 +180,53 @@ export default function AssignmentsDetailPage({
     window.history.replaceState(null, '', `/dashboard/assignments/${regionId}?${next.toString()}`);
   }, [activeTab, period.year, period.month, regionId, regionKind, regionName, regionBranchName]);
 
+  // Tombol back (terutama Android) menutup sheet yang terbuka lebih dulu,
+  // bukan keluar dari halaman (rencana §9): saat sheet terbuka kita menumpuk
+  // satu entri history dan popstate menutup sheetnya. Penutupan lewat
+  // tombol/Escape/sukses membersihkan entri tumpukan itu sendiri.
+  const anySheetOpen = isOfficerSheetOpen || isConfirmOpen || !!transferring;
+  const submittingRef = useRef(submitting);
+  useEffect(() => {
+    submittingRef.current = submitting;
+  }, [submitting]);
+  useEffect(() => {
+    if (!anySheetOpen || typeof window === 'undefined') return;
+    window.history.pushState(
+      // Pertahankan state internal Next.js pada entri ini.
+      { ...(window.history.state ?? {}), assignmentSheetOpen: true },
+      ''
+    );
+    const handlePopState = () => {
+      if (submittingRef.current) {
+        // Submit sedang berjalan: sheet tidak boleh tertutup — kembalikan
+        // entri history yang baru tertelan.
+        window.history.pushState(
+          { ...(window.history.state ?? {}), assignmentSheetOpen: true },
+          ''
+        );
+        return;
+      }
+      setIsOfficerSheetOpen(false);
+      setIsConfirmOpen(false);
+      setTransferring(null);
+      setTransferOfficerId('');
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      // Ditutup bukan lewat Back: buang entri yang kita tumpuk agar Back
+      // berikutnya tidak mendarat di entri kosong.
+      if (window.history.state?.assignmentSheetOpen) {
+        window.history.back();
+      }
+    };
+  }, [anySheetOpen]);
+
   const fetchHistory = useCallback(async () => {
+    // Pengaman out-of-order: respons dari fetch yang sudah basi (terlampaui
+    // fetch lebih baru, mis. saat filter diganti cepat) dibuang, tidak
+    // menimpa hasil terbaru.
+    const fetchId = ++historyFetchIdRef.current;
     setHistoryLoading(true);
     try {
       const response = (await api.get('/admin/assignments', {
@@ -179,6 +242,7 @@ export default function AssignmentsDetailPage({
         },
       })) as unknown as HistoryResponse;
 
+      if (fetchId !== historyFetchIdRef.current) return;
       if (response.success) {
         setHistoryItems(response.data?.items || response.items || []);
         setHistoryTotal(
@@ -186,13 +250,16 @@ export default function AssignmentsDetailPage({
         );
       }
     } catch (error) {
+      if (fetchId !== historyFetchIdRef.current) return;
       const message =
         (error as { error?: { message?: string }; message?: string })?.error?.message ||
         (error as { message?: string })?.message ||
         'Gagal memuat riwayat penugasan';
       toast.error(message);
     } finally {
-      setHistoryLoading(false);
+      if (fetchId === historyFetchIdRef.current) {
+        setHistoryLoading(false);
+      }
     }
   }, [
     period.year,
@@ -288,10 +355,17 @@ export default function AssignmentsDetailPage({
         (error as { message?: string })?.message ||
         'Gagal menyimpan penugasan';
       if (assignedTotal > 0) {
-        setSelectedGroupIds(new Set());
+        // Sebagian berhasil: refetch akan otomatis mem-prune grup yang sudah
+        // ditugaskan; selection sengaja tidak dikosongkan supaya grup yang
+        // gagal bisa langsung diulang tanpa mencentang ulang.
+        setIsConfirmOpen(false);
         reloadQueue();
+        toast.warning(
+          `${assignedTotal} kaleng berhasil ditugaskan, sebagian gagal: ${message}`
+        );
+      } else {
+        toast.error(message);
       }
-      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -639,9 +713,9 @@ export default function AssignmentsDetailPage({
             <input
               type="text"
               placeholder="Cari pemilik / QR / petugas..."
-              value={search}
+              value={searchInput}
               onChange={(event) => {
-                setSearch(event.target.value);
+                setSearchInput(event.target.value);
                 setHistoryPage(1);
               }}
               className="w-full bg-transparent px-3 py-1 text-sm font-bold text-white placeholder-[#F4F1EA]/60 focus:outline-none"
@@ -687,7 +761,7 @@ export default function AssignmentsDetailPage({
           <button
             type="button"
             onClick={() => {
-              setSearch('');
+              setSearchInput('');
               setStatusFilter('');
               setOfficerFilter('');
               setHistoryPage(1);

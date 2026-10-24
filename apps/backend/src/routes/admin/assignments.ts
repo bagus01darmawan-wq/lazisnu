@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { eq, and, desc, inArray, or, ilike, sql } from 'drizzle-orm';
+import { eq, and, desc, inArray, or, ilike, sql, asc, ne } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { authorize } from '../../middleware/auth';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
@@ -14,7 +14,8 @@ import { insertAssignments } from '../../services/assignmentGenerator';
 import * as regionCardService from '../../services/regionCardService';
 import { ASSIGNABLE_CONDITIONS } from '../../services/conditionRules';
 import { getAssignmentWorkQueue } from '../../services/assignmentWorkQueueService';
-import { isAppError } from '../../utils/AppError';
+import { AppError, isAppError } from '../../utils/AppError';
+import { currentOperationalPeriod } from '../../utils/operationalTimeZone';
 
 const rantingOrKec = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
 
@@ -73,8 +74,22 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       const conditions: any[] = [];
       if (roleScope) conditions.push(roleScope);
       
-      if (query.year) conditions.push(eq(schema.assignments.periodYear, parseInt(query.year)));
-      if (query.month) conditions.push(eq(schema.assignments.periodMonth, parseInt(query.month)));
+      // Tanpa guard ini `?year=abc` menjadi binding NaN dan meledak sebagai
+      // 500 di database; batas rentang mengikuti skema periode endpoint lain.
+      if (query.year) {
+        const year = z.coerce.number().int().min(2020).max(2100).safeParse(query.year);
+        if (!year.success) {
+          return sendError(reply, 400, 'VALIDATION_ERROR', 'Tahun tidak valid');
+        }
+        conditions.push(eq(schema.assignments.periodYear, year.data));
+      }
+      if (query.month) {
+        const month = z.coerce.number().int().min(1).max(12).safeParse(query.month);
+        if (!month.success) {
+          return sendError(reply, 400, 'VALIDATION_ERROR', 'Bulan tidak valid');
+        }
+        conditions.push(eq(schema.assignments.periodMonth, month.data));
+      }
       if (query.officer_id) conditions.push(eq(schema.assignments.officerId, query.officer_id));
       if (query.status) {
         const status = z
@@ -182,20 +197,34 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
         }
       }
 
-      const existing = await db.query.assignments.findFirst({
-        where: and(eq(schema.assignments.canId, body.can_id), eq(schema.assignments.periodYear, body.period_year), eq(schema.assignments.periodMonth, body.period_month)),
-      });
-      if (existing) {
-        return sendError(reply, 409, 'CONFLICT', 'Kaleng sudah ditugaskan bulan ini');
-      }
-      const inserted = await db.insert(schema.assignments).values({
+      // Kunci baris kaleng lalu periksa ulang assignment di dalam transaksi
+      // yang sama: dua request bersamaan untuk kaleng yang sama menjadi
+      // serial — yang kedua melihat hasil yang pertama dan tertolak 409,
+      // bukan menghasilkan penugasan ganda pada periode yang sama.
+      const inserted = await db.transaction(async (tx) => {
+        await tx
+          .select({ id: schema.cans.id })
+          .from(schema.cans)
+          .where(eq(schema.cans.id, body.can_id))
+          .for('update');
+
+        const existing = await tx.query.assignments.findFirst({
+          where: and(eq(schema.assignments.canId, body.can_id), eq(schema.assignments.periodYear, body.period_year), eq(schema.assignments.periodMonth, body.period_month)),
+        });
+        if (existing) return null;
+
+        return tx.insert(schema.assignments).values({
           canId: body.can_id,
           officerId: body.officer_id,
           backupOfficerId: body.backup_officer_id,
           periodYear: body.period_year,
           periodMonth: body.period_month,
-      }).returning();
-      
+        }).returning();
+      });
+      if (!inserted) {
+        return sendError(reply, 409, 'CONFLICT', 'Kaleng sudah ditugaskan bulan ini');
+      }
+
       request.auditContext = { newData: inserted[0] };
       return sendSuccess(reply, inserted[0], 201);
     } catch (error: unknown) {
@@ -222,11 +251,11 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
         return sendError(reply, 403, 'FORBIDDEN', 'Anda hanya dapat membuat penugasan massal untuk ranting sendiri');
       }
 
-      const now = new Date();
-      const currentYear = body.period_year ?? now.getFullYear();
-      const currentMonth = body.period_month ?? now.getMonth() + 1;
+      const operational = currentOperationalPeriod();
+      const currentYear = body.period_year ?? operational.year;
+      const currentMonth = body.period_month ?? operational.month;
 
-      const conditions: any[] = [
+      const candidateConditions: any[] = [
         eq(schema.cans.branchId, body.branch_id),
         eq(schema.cans.isActive, true),
         // Hanya AKTIF, RUSAK, dan HILANG yang boleh menerima tugas penjemputan.
@@ -246,41 +275,59 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
           return sendError(reply, 400, 'INVALID_DUKUH', 'Satu atau lebih dukuh yang dipilih tidak terdaftar di ranting ini');
         }
 
-        conditions.push(inArray(schema.cans.dukuhId, body.dukuh_ids));
+        candidateConditions.push(inArray(schema.cans.dukuhId, body.dukuh_ids));
       }
 
-      const assignedSubquery = db
-        .select({ canId: schema.assignments.canId })
-        .from(schema.assignments)
-        .where(and(
-          eq(schema.assignments.periodYear, currentYear),
-          eq(schema.assignments.periodMonth, currentMonth)
-        ));
+      // Kunci kandidat kaleng (urut id agar urutan lock konsisten antar
+      // request), lalu periksa ulang assignment di dalam transaksi yang sama:
+      // dua assign bersamaan untuk kaleng yang sama menjadi serial, yang
+      // kedua melihat hasil yang pertama dan melewatinya — bukan menugaskan
+      // ulang. Pola lock yang sama dipakai bulk-cans, POST /assignments,
+      // transfer, dan scheduler/generate-tasks.
+      const { newAssignments, assignedCount } = await db.transaction(async (tx) => {
+        const candidates = await tx
+          .select({ id: schema.cans.id })
+          .from(schema.cans)
+          .where(and(...candidateConditions))
+          .orderBy(asc(schema.cans.id))
+          .for('update');
 
-      conditions.push(sql`${schema.cans.id} NOT IN (${assignedSubquery})`);
+        const candidateIds = candidates.map((can) => can.id);
+        const assignedRows =
+          candidateIds.length === 0
+            ? []
+            : await tx
+                .select({ canId: schema.assignments.canId })
+                .from(schema.assignments)
+                .where(
+                  and(
+                    inArray(schema.assignments.canId, candidateIds),
+                    eq(schema.assignments.periodYear, currentYear),
+                    eq(schema.assignments.periodMonth, currentMonth)
+                  )
+                );
+        const assignedCanIds = new Set(assignedRows.map((row) => row.canId));
+        const eligibleCanIds = candidateIds.filter((canId) => !assignedCanIds.has(canId));
 
-      const cansToAssign = await db.query.cans.findMany({
-        where: and(...conditions),
-        columns: { id: true },
+        if (eligibleCanIds.length === 0) {
+          throw new AppError('ALREADY_ASSIGNED', 'Semua kaleng di wilayah/dukuh yang dipilih sudah memiliki jadwal penugasan untuk bulan ini', 400);
+        }
+
+        const newAssignments = eligibleCanIds.map((canId) => ({
+          canId,
+          officerId: body.officer_id,
+          periodYear: currentYear,
+          periodMonth: currentMonth,
+          status: 'ACTIVE' as const,
+        }));
+
+        await insertAssignments(newAssignments, false, tx);
+        return { newAssignments, assignedCount: eligibleCanIds.length };
       });
 
-      if (cansToAssign.length === 0) {
-        return sendError(reply, 400, 'ALREADY_ASSIGNED', 'Semua kaleng di wilayah/dukuh yang dipilih sudah memiliki jadwal penugasan untuk bulan ini');
-      }
-
-      const newAssignments = cansToAssign.map(can => ({
-        canId: can.id,
-        officerId: body.officer_id,
-        periodYear: currentYear,
-        periodMonth: currentMonth,
-        status: 'ACTIVE' as const,
-      }));
-
-      await insertAssignments(newAssignments);
-
       request.auditContext = { newData: newAssignments };
-      return sendSuccess(reply, { 
-        assigned_count: cansToAssign.length,
+      return sendSuccess(reply, {
+        assigned_count: assignedCount,
         period: `${currentMonth}/${currentYear}`
       }, 201);
     } catch (error: unknown) {
@@ -336,47 +383,72 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
         return sendError(reply, 403, 'FORBIDDEN', 'Kaleng bukan milik ranting Anda');
       }
 
-      const now = new Date();
-      const currentYear = body.period_year ?? now.getFullYear();
-      const currentMonth = body.period_month ?? now.getMonth() + 1;
+      const operational = currentOperationalPeriod();
+      const currentYear = body.period_year ?? operational.year;
+      const currentMonth = body.period_month ?? operational.month;
 
-      const assignedRows = await db
-        .select({ canId: schema.assignments.canId })
-        .from(schema.assignments)
-        .where(
-          and(
-            inArray(schema.assignments.canId, uniqueCanIds),
-            eq(schema.assignments.periodYear, currentYear),
-            eq(schema.assignments.periodMonth, currentMonth)
-          )
+      // Kunci kaleng yang diminta, lalu hitung ulang kelayakan dan sisipkan
+      // di transaksi yang sama — pola yang sama dengan bulk-branch agar dua
+      // request bersamaan tidak menghasilkan penugasan ganda.
+      const { newAssignments, assignedCount, skippedCount } = await db.transaction(async (tx) => {
+        const lockedCans = await tx
+          .select({
+            id: schema.cans.id,
+            isActive: schema.cans.isActive,
+            condition: schema.cans.condition,
+          })
+          .from(schema.cans)
+          .where(inArray(schema.cans.id, uniqueCanIds))
+          .orderBy(asc(schema.cans.id))
+          .for('update');
+
+        if (lockedCans.length !== uniqueCanIds.length) {
+          throw new AppError('FORBIDDEN', 'Satu atau lebih kaleng tidak ditemukan atau bukan milik wilayah Anda', 403);
+        }
+
+        const assignedRows = await tx
+          .select({ canId: schema.assignments.canId })
+          .from(schema.assignments)
+          .where(
+            and(
+              inArray(schema.assignments.canId, uniqueCanIds),
+              eq(schema.assignments.periodYear, currentYear),
+              eq(schema.assignments.periodMonth, currentMonth)
+            )
+          );
+        const assignedCanIds = new Set(assignedRows.map((row) => row.canId));
+
+        const eligible = lockedCans.filter(
+          (can) =>
+            can.isActive &&
+            (ASSIGNABLE_CONDITIONS as string[]).includes(can.condition) &&
+            !assignedCanIds.has(can.id)
         );
-      const assignedCanIds = new Set(assignedRows.map((row) => row.canId));
 
-      const eligible = cans.filter(
-        (can) =>
-          can.isActive &&
-          (ASSIGNABLE_CONDITIONS as string[]).includes(can.condition) &&
-          !assignedCanIds.has(can.id)
-      );
+        if (eligible.length === 0) {
+          throw new AppError('ALREADY_ASSIGNED', 'Semua kaleng yang dipilih sudah memiliki jadwal penugasan untuk bulan ini', 400);
+        }
 
-      if (eligible.length === 0) {
-        return sendError(reply, 400, 'ALREADY_ASSIGNED', 'Semua kaleng yang dipilih sudah memiliki jadwal penugasan untuk bulan ini');
-      }
+        const newAssignments = eligible.map((can) => ({
+          canId: can.id,
+          officerId: body.officer_id,
+          periodYear: currentYear,
+          periodMonth: currentMonth,
+          status: 'ACTIVE' as const,
+        }));
 
-      const newAssignments = eligible.map((can) => ({
-        canId: can.id,
-        officerId: body.officer_id,
-        periodYear: currentYear,
-        periodMonth: currentMonth,
-        status: 'ACTIVE' as const,
-      }));
-
-      await insertAssignments(newAssignments);
+        await insertAssignments(newAssignments, false, tx);
+        return {
+          newAssignments,
+          assignedCount: eligible.length,
+          skippedCount: uniqueCanIds.length - eligible.length,
+        };
+      });
 
       request.auditContext = { newData: newAssignments };
       return sendSuccess(reply, {
-        assigned_count: eligible.length,
-        skipped_count: uniqueCanIds.length - eligible.length,
+        assigned_count: assignedCount,
+        skipped_count: skippedCount,
         period: `${currentMonth}/${currentYear}`,
       }, 201);
     } catch (error: unknown) {
@@ -426,7 +498,36 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       if (body.status !== undefined) updateData.status = body.status;
       if (body.notes !== undefined) updateData.notes = body.notes;
 
-      const updated = await db.update(schema.assignments).set(updateData).where(eq(schema.assignments.id, id)).returning();
+      // Kunci kaleng lalu, bila status diganti ke status berjalan (bukan
+      // REASSIGNED), pastikan tidak ada baris lain pada periode yang sama
+      // yang masih berjalan — PUT tidak boleh bisa menghasilkan dua
+      // penugasan berjalan untuk kaleng yang sama.
+      const updated = await db.transaction(async (tx) => {
+        await tx
+          .select({ id: schema.cans.id })
+          .from(schema.cans)
+          .where(eq(schema.cans.id, existing.canId))
+          .for('update');
+
+        if (body.status !== undefined && body.status !== 'REASSIGNED') {
+          const others = await tx
+            .select({ status: schema.assignments.status })
+            .from(schema.assignments)
+            .where(
+              and(
+                eq(schema.assignments.canId, existing.canId),
+                eq(schema.assignments.periodYear, existing.periodYear),
+                eq(schema.assignments.periodMonth, existing.periodMonth),
+                ne(schema.assignments.id, id)
+              )
+            );
+          if (others.some((row) => row.status !== 'REASSIGNED')) {
+            throw new AppError('CONFLICT', 'Kaleng ini sudah memiliki penugasan berjalan lain pada periode yang sama', 409);
+          }
+        }
+
+        return tx.update(schema.assignments).set(updateData).where(eq(schema.assignments.id, id)).returning();
+      });
       // Jejak SEBELUM/SESUDAH wajib: tanpa ini 67 perubahan penugasan di
       // history tercatat null, sehingga tidak bisa direkonstruksi siapa
       // mengubah status tugas apa (laporan penelusuran 2026-10-09).
@@ -442,7 +543,13 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
         newData: updated[0],
       };
       return sendSuccess(reply, updated[0]);
-    } catch (error) {
+    } catch (error: unknown) {
+      if (error instanceof z.ZodError) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
+      }
+      if (isAppError(error)) {
+        return sendError(reply, error.statusCode, error.code, error.message);
+      }
       return sendInternalError(reply, error, fastify.log);
     }
   });
@@ -491,21 +598,38 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
         return sendError(reply, 403, 'FORBIDDEN', 'Petugas bukan anggota ranting Anda');
       }
 
-      const duplicate = await db.query.assignments.findFirst({
-        where: and(
-          eq(schema.assignments.canId, existing.canId),
-          eq(schema.assignments.officerId, body.officer_id),
-          eq(schema.assignments.periodYear, existing.periodYear),
-          eq(schema.assignments.periodMonth, existing.periodMonth),
-        ),
-        columns: { id: true },
-      });
-      if (duplicate) {
-        return sendError(reply, 409, 'DUPLICATE_ASSIGNMENT', 'Kaleng ini sudah ditugaskan ke petugas tersebut pada periode yang sama');
-      }
-
       const now = new Date();
+      // Kunci kaleng lalu periksa ulang status & duplikat DI DALAM transaksi:
+      // tanpa ini, transfer yang bersamaan dengan assign massal pada kaleng
+      // yang sama bisa lolos dan menghasilkan dua penugasan berjalan.
       const result = await db.transaction(async (tx) => {
+        await tx
+          .select({ id: schema.cans.id })
+          .from(schema.cans)
+          .where(eq(schema.cans.id, existing.canId))
+          .for('update');
+
+        const [current] = await tx
+          .select({ status: schema.assignments.status })
+          .from(schema.assignments)
+          .where(eq(schema.assignments.id, id));
+        if (!current || current.status !== 'ACTIVE') {
+          throw new AppError('NOT_TRANSFERABLE', `Penugasan berstatus ${current?.status ?? 'tidak diketahui'} tidak dapat dipindahkan`, 409);
+        }
+
+        const duplicate = await tx.query.assignments.findFirst({
+          where: and(
+            eq(schema.assignments.canId, existing.canId),
+            eq(schema.assignments.officerId, body.officer_id),
+            eq(schema.assignments.periodYear, existing.periodYear),
+            eq(schema.assignments.periodMonth, existing.periodMonth),
+          ),
+          columns: { id: true },
+        });
+        if (duplicate) {
+          throw new AppError('DUPLICATE_ASSIGNMENT', 'Kaleng ini sudah ditugaskan ke petugas tersebut pada periode yang sama', 409);
+        }
+
         const [oldRow] = await tx.update(schema.assignments)
           .set({ status: 'REASSIGNED', notes: body.notes ?? existing.notes, updatedAt: now })
           .where(eq(schema.assignments.id, id))
@@ -536,6 +660,9 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
         return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
+      }
+      if (isAppError(error)) {
+        return sendError(reply, error.statusCode, error.code, error.message);
       }
       return sendInternalError(reply, error, fastify.log);
     }

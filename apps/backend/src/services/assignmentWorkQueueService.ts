@@ -5,6 +5,7 @@ import { JWTPayload } from '../middleware/auth';
 import { AppError } from '../utils/AppError';
 import { assertBranchAccess, assertDukuhAccess } from '../middleware/ownership';
 import { ASSIGNABLE_CONDITIONS } from './conditionRules';
+import { currentOperationalPeriod } from '../utils/operationalTimeZone';
 
 /**
  * Satu permintaan untuk seluruh kebutuhan tab "Kelola" halaman Penugasan:
@@ -75,10 +76,17 @@ export interface WorkQueueParams {
 }
 
 function parsePeriod(params: WorkQueueParams) {
-  const now = new Date();
-  const year = params.year ? parseInt(params.year, 10) : now.getFullYear();
-  const month = params.month ? parseInt(params.month, 10) : now.getMonth() + 1;
-  if (Number.isNaN(year) || Number.isNaN(month) || month < 1 || month > 12) {
+  const { year: currentYear, month: currentMonth } = currentOperationalPeriod();
+  const year = params.year ? parseInt(params.year, 10) : currentYear;
+  const month = params.month ? parseInt(params.month, 10) : currentMonth;
+  if (
+    Number.isNaN(year) ||
+    Number.isNaN(month) ||
+    year < 2020 ||
+    year > 2100 ||
+    month < 1 ||
+    month > 12
+  ) {
     throw new AppError('INVALID_PERIOD', 'Periode tidak valid', 400);
   }
   return { year, month };
@@ -147,7 +155,10 @@ async function buildBranchGroups(branchId: string, year: number, month: number) 
     .select({
       id: schema.cans.dukuhId,
       name: schema.dukuhs.name,
-      total: sql<number>`count(*) FILTER (WHERE ${assignableFilter})`,
+      // count(DISTINCT), bukan count(*): kaleng yang pernah di-transfer punya
+      // lebih dari satu baris assignment pada periode yang sama (baris lama
+      // REASSIGNED + baris baru ACTIVE), dan LEFT JOIN menggandakannya.
+      total: sql<number>`count(DISTINCT ${schema.cans.id}) FILTER (WHERE ${assignableFilter})`,
       assigned: sql<number>`count(DISTINCT ${schema.cans.id}) FILTER (WHERE ${assignableFilter} AND ${schema.assignments.id} IS NOT NULL)`,
     })
     .from(schema.cans)
@@ -277,8 +288,9 @@ export async function getAssignmentWorkQueue(
 
   const [canAggRow] = await db
     .select({
-      totalCans: sql<number>`count(*)`,
-      assignableCans: sql<number>`count(*) FILTER (WHERE ${assignableFilter})`,
+      // count(DISTINCT) juga di sini — alasan sama dengan buildBranchGroups.
+      totalCans: sql<number>`count(DISTINCT ${schema.cans.id})`,
+      assignableCans: sql<number>`count(DISTINCT ${schema.cans.id}) FILTER (WHERE ${assignableFilter})`,
       assignedAssignableCans: sql<number>`count(DISTINCT ${schema.cans.id}) FILTER (WHERE ${assignableFilter} AND ${schema.assignments.id} IS NOT NULL)`,
     })
     .from(schema.cans)

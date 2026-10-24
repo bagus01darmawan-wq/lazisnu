@@ -20,14 +20,19 @@ const IDS = {
   dukuh: randomUUID(),
   user: randomUUID(),
   officerUser: randomUUID(),
+  officer2User: randomUUID(),
   officer: randomUUID(),
+  officer2: randomUUID(),
   canAktif: randomUUID(),
   canRusak: randomUUID(),
   canHilang: randomUUID(),
   canNonAktif: randomUUID(),
   canDikembalikan: randomUUID(),
   canAssigned: randomUUID(),
+  canTransferred: randomUUID(),
   assignment: randomUUID(),
+  assignmentTransferredOld: randomUUID(),
+  assignmentTransferredNew: randomUUID(),
 };
 
 const TAG = randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase();
@@ -91,19 +96,42 @@ describe('assignmentWorkQueueService', () => {
         districtId: IDS.district,
         branchId: IDS.branch,
       },
+      {
+        id: IDS.officer2User,
+        email: `wq.officer2.${TAG}@example.test`,
+        passwordHash: 'x',
+        fullName: 'Petugas Transfer',
+        phone: `6283303${TAG}`,
+        role: 'PETUGAS',
+        districtId: IDS.district,
+        branchId: IDS.branch,
+      },
     ]);
 
-    await db.insert(schema.officers).values({
-      id: IDS.officer,
-      userId: IDS.officerUser,
-      employeeCode: `WQ${TAG}`,
-      fullName: 'Petugas Work Queue',
-      phone: `6283302${TAG}`,
-      districtId: IDS.district,
-      branchId: IDS.branch,
-      dukuhId: IDS.dukuh,
-      isActive: true,
-    });
+    await db.insert(schema.officers).values([
+      {
+        id: IDS.officer,
+        userId: IDS.officerUser,
+        employeeCode: `WQ${TAG}`,
+        fullName: 'Petugas Work Queue',
+        phone: `6283302${TAG}`,
+        districtId: IDS.district,
+        branchId: IDS.branch,
+        dukuhId: IDS.dukuh,
+        isActive: true,
+      },
+      {
+        id: IDS.officer2,
+        userId: IDS.officer2User,
+        employeeCode: `WR${TAG}`,
+        fullName: 'Petugas Transfer',
+        phone: `6283303${TAG}`,
+        districtId: IDS.district,
+        branchId: IDS.branch,
+        dukuhId: IDS.dukuh,
+        isActive: true,
+      },
+    ]);
 
     await db.insert(schema.cans).values([
       {
@@ -172,20 +200,59 @@ describe('assignmentWorkQueueService', () => {
         condition: 'AKTIF',
         isActive: true,
       },
+      {
+        id: IDS.canTransferred,
+        branchId: IDS.branch,
+        dukuhId: IDS.dukuh,
+        ownerName: 'Warga Pernah Transfer',
+        ownerWhatsapp: `6284407${TAG}`,
+        rt: '004',
+        rw: '001',
+        condition: 'AKTIF',
+        isActive: true,
+      },
     ]);
 
-    await db.insert(schema.assignments).values({
-      id: IDS.assignment,
-      canId: IDS.canAssigned,
-      officerId: IDS.officer,
-      periodYear: PERIOD.year,
-      periodMonth: PERIOD.month,
-      status: 'COMPLETED',
-    });
+    await db.insert(schema.assignments).values([
+      {
+        id: IDS.assignment,
+        canId: IDS.canAssigned,
+        officerId: IDS.officer,
+        periodYear: PERIOD.year,
+        periodMonth: PERIOD.month,
+        status: 'COMPLETED',
+      },
+      // Satu kaleng, dua baris pada periode yang sama — kondisi yang sah
+      // dihasilkan endpoint transfer: baris lama REASSIGNED, baris baru ACTIVE.
+      {
+        id: IDS.assignmentTransferredOld,
+        canId: IDS.canTransferred,
+        officerId: IDS.officer,
+        periodYear: PERIOD.year,
+        periodMonth: PERIOD.month,
+        status: 'REASSIGNED',
+      },
+      {
+        id: IDS.assignmentTransferredNew,
+        canId: IDS.canTransferred,
+        officerId: IDS.officer2,
+        periodYear: PERIOD.year,
+        periodMonth: PERIOD.month,
+        status: 'ACTIVE',
+      },
+    ]);
   });
 
   afterAll(async () => {
-    await db.delete(schema.assignments).where(eq(schema.assignments.id, IDS.assignment));
+    await db
+      .delete(schema.assignments)
+      .where(
+        inArray(schema.assignments.id, [
+          IDS.assignment,
+          IDS.assignmentTransferredOld,
+          IDS.assignmentTransferredNew,
+        ])
+      );
     await db
       .delete(schema.cans)
       .where(
@@ -196,12 +263,13 @@ describe('assignmentWorkQueueService', () => {
           IDS.canNonAktif,
           IDS.canDikembalikan,
           IDS.canAssigned,
+          IDS.canTransferred,
         ])
       );
-    await db.delete(schema.officers).where(eq(schema.officers.id, IDS.officer));
+    await db.delete(schema.officers).where(inArray(schema.officers.id, [IDS.officer, IDS.officer2]));
     await db
       .delete(schema.users)
-      .where(inArray(schema.users.id, [IDS.user, IDS.officerUser]));
+      .where(inArray(schema.users.id, [IDS.user, IDS.officerUser, IDS.officer2User]));
     await db.delete(schema.dukuhs).where(eq(schema.dukuhs.id, IDS.dukuh));
     await db
       .delete(schema.branches)
@@ -217,9 +285,9 @@ describe('assignmentWorkQueueService', () => {
     });
 
     expect(result.region.kind).toBe('branch');
-    expect(result.summary.totalCans).toBe(6);
-    expect(result.summary.assignableCans).toBe(4);
-    expect(result.summary.assignedAssignableCans).toBe(1);
+    expect(result.summary.totalCans).toBe(7);
+    expect(result.summary.assignableCans).toBe(5);
+    expect(result.summary.assignedAssignableCans).toBe(2);
     expect(result.summary.unassignedAssignableCans).toBe(3);
     expect(result.summary.nonAssignableCans).toBe(2);
     expect(result.summary.completed).toBe(1);
@@ -236,8 +304,29 @@ describe('assignmentWorkQueueService', () => {
     expect(groupTotal).toBe(result.summary.unassignedAssignableCans);
     expect(result.groups).toHaveLength(1);
     expect(result.groups[0].kind).toBe('dukuh');
-    expect(result.groups[0].totalCans).toBe(4);
-    expect(result.groups[0].assignedCans).toBe(1);
+    expect(result.groups[0].totalCans).toBe(5);
+    expect(result.groups[0].assignedCans).toBe(2);
+  });
+
+  it('kaleng yang pernah di-transfer tidak dihitung ganda oleh LEFT JOIN', async () => {
+    const result = await getAssignmentWorkQueue(rantingAdmin, {
+      year: String(PERIOD.year),
+      month: String(PERIOD.month),
+      branch_id: IDS.branch,
+    });
+
+    // canTransferred punya dua baris assignment pada periode yang sama
+    // (REASSIGNED + ACTIVE, persis hasil endpoint transfer), tetap dihitung
+    // satu kaleng: kalau count(*) dipakai, angka di bawah akan menggelembung
+    // dan kalengnya muncul phantom sebagai "belum ditugaskan".
+    expect(result.summary.assignableCans).toBe(5);
+    expect(result.summary.assignedAssignableCans).toBe(2);
+    expect(result.summary.unassignedAssignableCans).toBe(3);
+
+    const dukuhGroup = result.groups.find((group) => group.kind === 'dukuh');
+    expect(dukuhGroup?.totalCans).toBe(5);
+    expect(dukuhGroup?.assignedCans).toBe(2);
+    expect(dukuhGroup?.unassignedCans).toBe(3);
   });
 
   it('scope dukuh mengembalikan grup RT dengan canIds untuk bulk-cans', async () => {
@@ -264,10 +353,14 @@ describe('assignmentWorkQueueService', () => {
       branch_id: IDS.branch,
     });
 
-    expect(result.officers).toHaveLength(1);
-    expect(result.officers[0].assignedCount).toBe(1);
-    expect(result.officers[0].completedCount).toBe(1);
-    expect(result.officers[0].dukuhName).toBe('Dukuh Queue');
+    expect(result.officers).toHaveLength(2);
+    const officer = result.officers.find((row) => row.id === IDS.officer);
+    // Baris REASSIGNED milik petugas ini tidak dihitung sebagai beban.
+    expect(officer?.assignedCount).toBe(1);
+    expect(officer?.completedCount).toBe(1);
+    expect(officer?.dukuhName).toBe('Dukuh Queue');
+    const officer2 = result.officers.find((row) => row.id === IDS.officer2);
+    expect(officer2?.assignedCount).toBe(1);
   });
 
   it('ADMIN_RANTING dipaksa memakai ranting dari JWT', async () => {
@@ -278,6 +371,6 @@ describe('assignmentWorkQueueService', () => {
     });
 
     expect(result.region.branchId).toBe(IDS.branch);
-    expect(result.summary.totalCans).toBe(6);
+    expect(result.summary.totalCans).toBe(7);
   });
 });

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AlertTriangle, ChevronRight, Loader2, MapPin, Users } from 'lucide-react';
+import { AlertTriangle, ChevronRight, MapPin, Users } from 'lucide-react';
 import api from '@/lib/api';
 import { cleanBranchName } from '@/lib/formatters';
 import { Card } from '@/components/ui/Card';
@@ -368,4 +368,3 @@ function RegionCard({
   );
 }
 
-export { Loader2 };
