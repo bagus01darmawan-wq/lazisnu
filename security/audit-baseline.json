@@ -1,6 +1,6 @@
 {
   "_caraPakai": "Daftar kerentanan yang sudah dikenal dan diterima. Gerbang CI gagal hanya bila muncul id yang BELUM ada di sini. Perbarui dengan: node scripts/audit-baseline.mjs --update",
-  "updatedAt": "2026-10-23T23:46:50.979Z",
+  "updatedAt": "2026-10-24T00:54:55.786Z",
   "advisories": {
     "GHSA-5p2g-fcmc-qvqq": {
       "module": "image-size",
@@ -37,12 +37,6 @@
       "severity": "high",
       "url": "https://github.com/advisories/GHSA-m9gg-hp2v-232j",
       "patched": ">=1.13.6"
-    },
-    "GHSA-mrhx-c7xc-m3w5": {
-      "module": "zod",
-      "severity": "high",
-      "url": "https://github.com/advisories/GHSA-mrhx-c7xc-m3w5",
-      "patched": ">=4.6.6"
     },
     "GHSA-qxg6-89mg-rqv8": {
       "module": "@vitest/mocker",
