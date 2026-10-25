@@ -2,11 +2,11 @@
 //
 // In-memory fake MMKV untuk unit test. Tidak butuh native module.
 //
-// API yang di-cover harus sama dengan MMKV asli — termasuk `recrypt()`
-// (P4.3) dan `clearAll()`.
+// API yang di-cover harus sama dengan MMKV v4 asli — factory `createMMKV()`,
+// `remove()` (pengganti `delete()` di v4), `recrypt()` (P4.3) dan `clearAll()`.
 //
 // Cara kontrol test:
-//   const { storage, __setStorage } = require('react-native-mmkv');
+//   const { __setStorage } = require('react-native-mmkv');
 //   __setStorage({ key: 'value' });  // seed data
 //   storage.getString('key');         // 'value'
 
@@ -45,8 +45,12 @@ class MMKVMock {
     return key in data;
   }
 
-  delete(key: string): void {
+  remove(key: string): boolean {
+    if (!(key in data)) {
+      return false;
+    }
     delete data[key];
+    return true;
   }
 
   getAllKeys(): string[] {
@@ -82,4 +86,7 @@ export const __resetMock = () => {
   currentKey = undefined;
 };
 
-export {MMKVMock as MMKV};
+// mmkv v4 mengekspor factory createMMKV (kelas MMKV tidak lagi diekspor
+// sebagai value).
+export const createMMKV = (config?: {id?: string; encryptionKey?: string}) =>
+  new MMKVMock(config);

@@ -66,3 +66,7 @@ redis-data/
 # env berisi kredensial nyata — tidak boleh di-commit
 .env.staging
 .env.production
+
+# Build native C++ (CMake/ninja) — artefak lokap, jangan pernah di-commit
+apps/mobile/android/app/.cxx/
+apps/mobile/android/**/.cxx/

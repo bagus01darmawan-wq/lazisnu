@@ -84,7 +84,7 @@ const MainTabs = () => {
           component={TAB_COMPONENTS[name]}
           options={
             name === 'Scan'
-              ? {title: TAB_TITLES[name], headerShown: false, unmountOnBlur: true}
+              ? {title: TAB_TITLES[name], headerShown: false, popToTopOnBlur: true}
               : {title: TAB_TITLES[name]}
           }
         />
@@ -130,7 +130,7 @@ const AuthStack = () => {
 // Main App Navigator
 const AppNavigator = () => {
   const {isAuthenticated, isInitializing} = useAuthStore();
-  const appState = useRef<AppStateStatus>(AppState.currentState);
+  const appState = useRef<AppStateStatus>(AppState.currentState as AppStateStatus);
 
   // Cek pembaruan sekali setiap kali aplikasi dibuka (setelah login).
   // Senyap: modal hanya muncul bila memang ada versi lebih baru.

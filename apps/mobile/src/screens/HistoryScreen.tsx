@@ -273,7 +273,7 @@ const HistoryScreen: React.FC = () => {
                 Penjemputan yang selesai akan muncul di halaman ini.
               </Text>
             </View>
-          ) : null
+          ) : undefined
         }
         refreshControl={
           <RefreshControl
@@ -295,7 +295,7 @@ const HistoryScreen: React.FC = () => {
         ListFooterComponent={
           isLoading && page > 1 ? (
             <ActivityIndicator style={styles.loadingFooter} color={Colors.brand.emerald} />
-          ) : null
+          ) : undefined
         }
         showsVerticalScrollIndicator={false}
       />

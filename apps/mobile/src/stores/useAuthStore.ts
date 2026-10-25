@@ -125,7 +125,7 @@ function getCachedUser(): User | null {
 }
 
 function clearCachedUser(): void {
-  getAuthStorage().delete(CACHED_USER_KEY);
+  getAuthStorage().remove(CACHED_USER_KEY);
 }
 
 function resetAllClientState() {

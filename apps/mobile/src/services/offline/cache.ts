@@ -54,7 +54,7 @@ function safeSet(key: string, value: unknown): void {
 
 function safeDelete(key: string): void {
   try {
-    getOfflineStorage().delete(key);
+    getOfflineStorage().remove(key);
   } catch {
     /* abaikan */
   }
@@ -69,11 +69,11 @@ function ensureDashboardSchema(): void {
 
     // Versi lama dapat berisi hasil optimistis yang sudah menghitung queue.
     // Invalidate hanya cache turunan dashboard; queue transaksi tetap utuh.
-    storage.delete(KEY_DASHBOARD_TODAY_STATS);
-    storage.delete(KEY_DASHBOARD_WEEK_STATS);
-    storage.delete(KEY_DASHBOARD_MONTH_STATS);
-    storage.delete(KEY_DASHBOARD_PENDING_TASKS);
-    storage.delete(KEY_DASHBOARD_RECENT);
+    storage.remove(KEY_DASHBOARD_TODAY_STATS);
+    storage.remove(KEY_DASHBOARD_WEEK_STATS);
+    storage.remove(KEY_DASHBOARD_MONTH_STATS);
+    storage.remove(KEY_DASHBOARD_PENDING_TASKS);
+    storage.remove(KEY_DASHBOARD_RECENT);
     storage.set(KEY_DASHBOARD_SCHEMA_VERSION, DASHBOARD_SCHEMA_VERSION);
   } catch {
     // Storage yang belum siap akan dicoba lagi pada akses berikutnya.

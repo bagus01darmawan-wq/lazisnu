@@ -109,3 +109,17 @@ jest.mock('react-native-signature-canvas', () => {
     }),
   };
 });
+
+// react-test-renderer 19.3 melaporkan error tak tertangkap lewat
+// window.dispatchEvent; jest-preset RN 0.88 menyetel window = global, tetapi
+// sandbox jest (testEnvironment node) tidak menyediakan EventTarget, sehingga
+// tanpa ini pesan error asli tertelan "TypeError: window.dispatchEvent is not
+// a function". Cetak event-nya agar error render tetap terlihat.
+if (typeof global.window === 'undefined') {
+  global.window = global;
+}
+if (typeof global.window.dispatchEvent !== 'function') {
+  global.window.dispatchEvent = event => {
+    console.error('[window.dispatchEvent]', event && (event.error || event.message || event));
+  };
+}

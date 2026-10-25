@@ -279,7 +279,7 @@ const TasksScreen: React.FC = () => {
         ListFooterComponent={
           isLoading && page > 1 ? (
             <ActivityIndicator style={styles.loadingFooter} color={Colors.brand.emerald} />
-          ) : null
+          ) : undefined
         }
         showsVerticalScrollIndicator={false}
         maxToRenderPerBatch={10}

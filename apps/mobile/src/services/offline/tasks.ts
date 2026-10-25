@@ -61,8 +61,8 @@ export const taskCache = {
 
   clearTasks: (): void => {
     const storage = getOfflineStorage();
-    storage.delete(LEGACY_TASKS_KEY);
-    storage.delete(getTasksKey('ACTIVE'));
-    storage.delete(getTasksKey('COMPLETED'));
+    storage.remove(LEGACY_TASKS_KEY);
+    storage.remove(getTasksKey('ACTIVE'));
+    storage.remove(getTasksKey('COMPLETED'));
   },
 };

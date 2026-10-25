@@ -5,7 +5,9 @@
 // react-native-keychain & react-native-mmkv ada di __mocks__/.
 
 module.exports = {
-  preset: 'react-native',
+  // RN 0.88: preset tidak lagi diekspor dari paket `react-native` —
+  // gunakan @react-native/jest-preset (devDep eksplisit).
+  preset: '@react-native/jest-preset',
   setupFiles: ['./jest.setup.js'],
   // Mock module manual ada di __mocks__/ — auto-load oleh Jest
   testMatch: [
@@ -32,13 +34,12 @@ module.exports = {
     'node_modules/(?!(jest-)?react-native|@react-native|react-native-vector-icons)/',
     '\\.pnpm/(?!(jest-)?react-native|@react-native|react-native-vector-icons)/',
   ],
-  // Redirect @react-native/js-polyfills/error-guard ke mock karena file
-  // tersebut berisi Flow type syntax yang gagal di-transform oleh babel-jest
-  // di environment pnpm (symlink path tidak match transformIgnorePatterns).
+  // Redirect react-native-get-random-values ke mock — file aslinya Flow syntax
+  // dan butuh native module; crypto.getRandomValues di-setup di jest.setup.js.
+  // CATATAN upgrade RN 0.88: mock error-guard era 0.74 DIHAPUS — polyfill itu
+  // wajib utuh di 0.88 (pipeline error handling renderer bergantung padanya;
+  // mock blank membuat error render menjadi "uncaught" dan root ter-unmount).
   moduleNameMapper: {
-    '^@react-native/js-polyfills/error-guard$': '<rootDir>/__mocks__/error-guard-mock.js',
-    // react-native-get-random-values juga Flow syntax — di-mock sebagai no-op
-    // karena crypto.getRandomValues sudah di-setup di jest.setup.js
     '^react-native-get-random-values$': '<rootDir>/__mocks__/react-native-get-random-values.ts',
   },
   // Clear mocks otomatis sebelum tiap test

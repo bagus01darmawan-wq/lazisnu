@@ -13,7 +13,8 @@ const monorepoRoot = path.resolve(projectRoot, '../..');
 const config = {
   watchFolders: [monorepoRoot],
   resolver: {
-    unstable_enableSymlinks: true,
+    // Catatan upgrade RN 0.88: `unstable_enableSymlinks` dihapus — dukungan
+    // symlink kini default ON dan opsinya dibuang dari metro 0.87+.
     nodeModulesPaths: [
       path.resolve(projectRoot, 'node_modules'),
       path.resolve(monorepoRoot, 'node_modules'),

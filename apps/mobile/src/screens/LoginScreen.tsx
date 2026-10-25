@@ -107,7 +107,7 @@ const LoginScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar backgroundColor={Colors.brand.deepGreen} barStyle={'light-content'} />
+      <StatusBar barStyle={'light-content'} />
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>

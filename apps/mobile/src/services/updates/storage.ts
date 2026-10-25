@@ -1,4 +1,4 @@
-import {MMKV} from 'react-native-mmkv';
+import {createMMKV, type MMKV} from 'react-native-mmkv';
 
 /**
  * Penyimpanan pengaturan update — NON-SENSITIF (hanya version_code yang
@@ -11,7 +11,7 @@ let storage: MMKV | null = null;
 
 export function getUpdateStorage(): MMKV {
   if (!storage) {
-    storage = new MMKV({id: UPDATE_STORAGE_ID});
+    storage = createMMKV({id: UPDATE_STORAGE_ID});
   }
   return storage;
 }

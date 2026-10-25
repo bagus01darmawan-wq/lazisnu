@@ -89,7 +89,9 @@ class QrImageScannerModule(
       return
     }
 
-    val activity = currentActivity
+    // RN 0.88: getCurrentActivity() pada modul disembunyikan (deprecated 0.80) —
+    // ambil dari ReactApplicationContext.
+    val activity = reactContext.currentActivity
     if (activity == null) {
       promise.reject("QR_IMAGE_NO_ACTIVITY", "Layar aplikasi belum siap")
       return

@@ -25,7 +25,7 @@ const OTPScreen: React.FC = () => {
   const {verifyOTP, requestOTP, isLoading, error, clearError} = useAuthStore();
   const [digits, setDigits] = useState([...EMPTY_OTP]);
   const [countdown, setCountdown] = useState(300);
-  const inputs = useRef<(TextInput | null)[]>([]);
+  const inputs = useRef<Array<React.ComponentRef<typeof TextInput> | null>>([]);
 
   useEffect(() => {
     if (!countdown) {

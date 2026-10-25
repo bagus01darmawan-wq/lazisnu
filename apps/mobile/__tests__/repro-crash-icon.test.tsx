@@ -2,31 +2,42 @@ import React from 'react';
 import renderer from 'react-test-renderer';
 import {AppTextInput, AppButton} from '../src/components/ui';
 
+// React 19 + @react-native/jest-preset 0.88: create/update di luar act
+// membuat root ter-unmount sebelum asersi. Bungkus dalam act + async.
+const createAsync = async (element: React.ReactElement) => {
+  let instance!: renderer.ReactTestRenderer;
+  await renderer.act(async () => {
+    instance = renderer.create(element);
+  });
+  return instance;
+};
+
+
 describe('REPRO crash Icon — uji komponen dengan icon props seperti LoginScreen', () => {
-  it('AppTextInput icon=fingerprint', () => {
-    const tree = renderer.create(<AppTextInput placeholder="x" icon={'fingerprint'} />);
+  it('AppTextInput icon=fingerprint', async () => {
+    const tree = await createAsync(<AppTextInput placeholder="x" icon={'fingerprint'} />);
     expect(tree.toJSON()).not.toBeNull();
   });
 
-  it('AppTextInput icon=phone-outline + eye-outline', () => {
-    const tree = renderer.create(<AppTextInput placeholder="x" icon={'phone-outline'} />);
+  it('AppTextInput icon=phone-outline + eye-outline', async () => {
+    const tree = await createAsync(<AppTextInput placeholder="x" icon={'phone-outline'} />);
     expect(tree.toJSON()).not.toBeNull();
-    const tree2 = renderer.create(<AppTextInput placeholder="x" icon={'eye-outline'} />);
+    const tree2 = await createAsync(<AppTextInput placeholder="x" icon={'eye-outline'} />);
     expect(tree2.toJSON()).not.toBeNull();
   });
 
-  it('AppButton icon=fingerprint/login/whatsapp', () => {
-    const tree = renderer.create(
+  it('AppButton icon=fingerprint/login/whatsapp', async () => {
+    const tree = await createAsync(
       <AppButton label="Masuk" icon={'fingerprint'} onPress={jest.fn()} />,
     );
     expect(tree.toJSON()).not.toBeNull();
-    const tree2 = renderer.create(
+    const tree2 = await createAsync(
       <AppButton label="Masuk" icon={'whatsapp'} onPress={jest.fn()} />,
     );
     expect(tree2.toJSON()).not.toBeNull();
   });
 
-  it('LoginScreen penuh dengan mock env', () => {
+  it('LoginScreen penuh dengan mock env', async () => {
     // Mock global yang dipakai LoginScreen
     jest.doMock('@react-navigation/native', () => ({
       useNavigation: () => ({navigate: jest.fn(), replace: jest.fn(), reset: jest.fn()}),
@@ -51,7 +62,7 @@ describe('REPRO crash Icon — uji komponen dengan icon props seperti LoginScree
     }));
 
     const LoginScreen = require('../src/screens/LoginScreen').default;
-    const tree = renderer.create(<LoginScreen />);
+    const tree = await createAsync(<LoginScreen />);
     expect(tree.toJSON()).not.toBeNull();
   });
 });

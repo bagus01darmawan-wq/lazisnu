@@ -1,7 +1,7 @@
 // Mobile API Service - Lazisnu Collector App
 
 import 'react-native-get-random-values';
-import {MMKV} from 'react-native-mmkv';
+import {createMMKV, type MMKV} from 'react-native-mmkv';
 import {Platform} from 'react-native';
 import {
   ApiResponse,
@@ -31,7 +31,8 @@ const AUTH_STORAGE_ID = '@lazisnu/auth-token';
 let storage: MMKV | null = null;
 
 export function initializeAuthStorage(encryptionKey: string, migrateUnencrypted = false): MMKV {
-  const instance = new MMKV(
+  // mmkv v4 (Nitro): instansiasi lewat factory createMMKV, bukan `new MMKV`.
+  const instance = createMMKV(
     migrateUnencrypted ? {id: AUTH_STORAGE_ID} : {id: AUTH_STORAGE_ID, encryptionKey},
   );
 
@@ -87,8 +88,8 @@ export const setRefreshToken = (token: string): void => {
 };
 
 export const clearToken = async (): Promise<void> => {
-  getAuthStorage().delete('access_token');
-  getAuthStorage().delete('refresh_token');
+  getAuthStorage().remove('access_token');
+  getAuthStorage().remove('refresh_token');
 };
 
 // ── Device ID — identifikasi sesi per perangkat (Sub-bab 04 + 05) ─────────────

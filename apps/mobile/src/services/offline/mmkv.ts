@@ -1,10 +1,11 @@
-import {MMKV} from 'react-native-mmkv';
+import {createMMKV, type MMKV} from 'react-native-mmkv';
 
 const OFFLINE_STORAGE_ID = '@lazisnu/offline-queue';
 let storage: MMKV | null = null;
 
 export function initializeOfflineStorage(encryptionKey: string, migrateUnencrypted = false): MMKV {
-  const instance = new MMKV(
+  // mmkv v4 (Nitro): instansiasi lewat factory createMMKV, bukan `new MMKV`.
+  const instance = createMMKV(
     migrateUnencrypted ? {id: OFFLINE_STORAGE_ID} : {id: OFFLINE_STORAGE_ID, encryptionKey},
   );
 

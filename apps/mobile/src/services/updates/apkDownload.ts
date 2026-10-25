@@ -25,8 +25,8 @@ export async function downloadApk(
 
   const result = await ReactNativeBlobUtil.config({path})
     .fetch('GET', apkUrl)
-    .progress((received: string, total: string) => {
-      onProgress({received: Number(received), total: Number(total)});
+    .progress((received: number, total: number) => {
+      onProgress({received, total});
     });
 
   return result.path();

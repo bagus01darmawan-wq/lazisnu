@@ -320,14 +320,14 @@ export const offlineQueue = {
 
         // 5. Tulis active queue baru, baru bersihkan / update key lama
         storage.set(currentQueueKey, JSON.stringify(mergedActive));
-        storage.delete('collection_queue_failed');
+        storage.remove('collection_queue_failed');
       }
 
       if (stillFailed.length > 0) {
         const existingFailed = offlineQueue.getFailedPermanent();
         storage.set(getFailedQueueKey(), JSON.stringify([...existingFailed, ...stillFailed]));
       }
-      storage.delete('collection_queue_failed');
+      storage.remove('collection_queue_failed');
 
       // 6. Set version key
       storage.set(getSchemaVersionKey(), CURRENT_SCHEMA_VERSION);

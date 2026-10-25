@@ -86,7 +86,7 @@ const App = () => {
   if (!isStorageReady) {
     return (
       <GestureHandlerRootView style={styles.root}>
-        <StatusBar backgroundColor={Colors.brand.heroStart} barStyle={'light-content'} />
+        <StatusBar barStyle={'light-content'} />
         <View style={styles.splash}>
           <ActivityIndicator color={Colors.brand.emerald} />
         </View>
@@ -96,7 +96,7 @@ const App = () => {
 
   return (
     <GestureHandlerRootView style={styles.root}>
-      <StatusBar backgroundColor={Colors.brand.heroStart} barStyle={'light-content'} />
+      <StatusBar barStyle={'light-content'} />
       <SafeAreaProvider>
         <AppNavigator />
       </SafeAreaProvider>

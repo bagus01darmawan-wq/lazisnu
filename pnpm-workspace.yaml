@@ -76,3 +76,12 @@ overrides:
   #   karena 6.3.4 masih masuk rentang ^6.2.4 (plugin tetap kompatibel).
   # image-size <=2.0.2: NO-FIX — akan di-dismiss berjustifikasi.
 
+# Fix manifest cacat: draggable-flatlist 4.0.3 tidak mendeklarasikan react
+# sebagai peer — tanpa ini require('react') jatuh ke hidden-hoist yang bisa
+# memuat react versi web (19.2.4) dan membuat dua salinan React di app mobile.
+packageExtensions:
+  react-native-draggable-flatlist@4.0.3:
+    peerDependencies:
+      react: '*'
+onlyBuiltDependencies:
+  - '@parcel/watcher'

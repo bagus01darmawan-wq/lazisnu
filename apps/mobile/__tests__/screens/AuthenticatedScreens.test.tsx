@@ -136,6 +136,7 @@ jest.mock('../../src/services/api', () => ({
   },
 }));
 
+import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import DashboardScreen from '../../src/screens/DashboardScreen';
 import TasksScreen from '../../src/screens/TasksScreen';
 import HistoryScreen from '../../src/screens/HistoryScreen';
@@ -147,7 +148,13 @@ const mountedTrees = new Set<renderer.ReactTestRenderer>();
 const render = async (element: React.ReactElement) => {
   let tree!: renderer.ReactTestRenderer;
   await act(async () => {
-    tree = renderer.create(element);
+    // RNGH 3.x menegakkan GestureDetector wajib di dalam
+    // GestureHandlerRootView (TasksScreen memakai draggable-flatlist) —
+    // bungkus seperti yang dilakukan App.tsx.
+    tree = renderer.create(
+      // eslint-disable-next-line react-native/no-inline-styles
+      <GestureHandlerRootView style={{flex: 1}}>{element}</GestureHandlerRootView>,
+    );
     await Promise.resolve();
   });
   mountedTrees.add(tree);
