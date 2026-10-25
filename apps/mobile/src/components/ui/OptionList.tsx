@@ -84,6 +84,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 2,
     borderColor: Colors.border.warm,
+    // Titik indikator adalah child biasa — tanpa ini ia menempel pojok
+    // kiri-atas, bukan di tengah lingkaran.
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   radioOuterSelected: {
     borderColor: Colors.brand.emerald,

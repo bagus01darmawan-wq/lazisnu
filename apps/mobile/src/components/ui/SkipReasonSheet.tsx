@@ -103,21 +103,28 @@ export function SkipReasonSheet({
           </ScrollView>
 
           <View style={styles.actions}>
-            <AppButton
-              label="Batal"
-              variant="outline"
-              onPress={handleDismiss}
-              disabled={loading}
-              fullWidth
-            />
-            <AppButton
-              label="Simpan"
-              icon="check"
-              onPress={handleConfirm}
-              loading={loading}
-              disabled={!reasonCode || loading}
-              fullWidth
-            />
+            {/* fullWidth = width:'100%' — dua tombol langsung dalam baris row
+                membuat total 200% dan tombol Simpan meluber keluar layar.
+                Bungkus masing-masing dalam View flex:1 agar berbagi lebar. */}
+            <View style={styles.actionWrap}>
+              <AppButton
+                label="Batal"
+                variant="outline"
+                onPress={handleDismiss}
+                disabled={loading}
+                fullWidth
+              />
+            </View>
+            <View style={styles.actionWrap}>
+              <AppButton
+                label="Simpan"
+                icon="check"
+                onPress={handleConfirm}
+                loading={loading}
+                disabled={!reasonCode || loading}
+                fullWidth
+              />
+            </View>
           </View>
 
           {!reasonCode ? (
@@ -188,6 +195,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.md,
     marginTop: Spacing.lg,
+  },
+  actionWrap: {
+    flex: 1,
   },
   hint: {
     ...Typography.caption,

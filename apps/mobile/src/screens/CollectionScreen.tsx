@@ -198,23 +198,6 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
           </Text>
         </AppCard>
 
-        <Text style={styles.sectionTitle}>Kondisi Fisik Kaleng</Text>
-        <AppCard variant={'default'} style={styles.formCard}>
-          <Text style={styles.label}>Pilih kondisi yang dilihat PPK</Text>
-          <SegmentedControl
-            options={[
-              {label: 'Aktif', value: CanCondition.AKTIF},
-              {label: 'Rusak', value: CanCondition.RUSAK},
-              {label: 'Hilang', value: CanCondition.HILANG},
-            ]}
-            value={condition}
-            onChange={setCondition}
-          />
-          <Text style={styles.helperText}>
-            Kondisi ini adalah fakta lapangan, bukan persetujuan admin.
-          </Text>
-        </AppCard>
-
         <Text style={styles.sectionTitle}>Detail Kaleng</Text>
         <AppCard variant={'elevated'} style={styles.detailCard}>
           <View style={styles.detailRow}>
@@ -271,6 +254,30 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
               </View>
             </>
           )}
+        </AppCard>
+
+        <Text style={styles.sectionTitle}>Kondisi Fisik Kaleng</Text>
+        <AppCard variant={'default'} style={styles.formCard}>
+          <Text style={styles.label}>Pilih kondisi yang dilihat PPK</Text>
+          <SegmentedControl
+            options={[
+              {label: 'Aktif', value: CanCondition.AKTIF},
+              {
+                label: 'Rusak',
+                value: CanCondition.RUSAK,
+                activeColor: Colors.status.warning,
+                activeBackgroundColor: Colors.surface.warningSoft,
+              },
+              {
+                label: 'Hilang',
+                value: CanCondition.HILANG,
+                activeColor: Colors.status.error,
+                activeBackgroundColor: Colors.surface.errorSoft,
+              },
+            ]}
+            value={condition}
+            onChange={setCondition}
+          />
         </AppCard>
       </ScrollView>
 
@@ -367,6 +374,8 @@ const styles = StyleSheet.create({
   helperText: {...Typography.caption, color: Colors.text.muted, marginTop: -Spacing.sm},
   submitContainer: {
     padding: Spacing.md,
+    // Sisi bawah lebih tinggi: tombol terangkat dari gesture bar (edge-to-edge).
+    paddingBottom: Spacing.xxl,
     backgroundColor: Colors.surface.card,
     borderTopWidth: 1,
     borderTopColor: Colors.border.warm,

@@ -5,6 +5,10 @@ import {Colors, Radius, Spacing, Typography} from '../../theme';
 export type SegmentOption<T extends string> = {
   label: string;
   value: T;
+  /** Warna label saat segmen terpilih (mis. warning/error); default teks primer. */
+  activeColor?: string;
+  /** Warna latar segmen saat terpilih; default kartu putih. */
+  activeBackgroundColor?: string;
 };
 
 type SegmentedControlProps<T extends string> = {
@@ -27,12 +31,26 @@ export function SegmentedControl<T extends string>({
         return (
           <TouchableOpacity
             key={option.value}
-            style={[styles.segment, isSelected && styles.segmentSelected]}
+            style={[
+              styles.segment,
+              isSelected && styles.segmentSelected,
+              isSelected &&
+                option.activeBackgroundColor != null && {
+                  backgroundColor: option.activeBackgroundColor,
+                },
+            ]}
             onPress={() => onChange(option.value)}
             activeOpacity={0.8}
             accessibilityRole="tab"
             accessibilityState={{selected: isSelected}}>
-            <Text style={[styles.label, isSelected && styles.labelSelected]}>{option.label}</Text>
+            <Text
+              style={[
+                styles.label,
+                isSelected && styles.labelSelected,
+                isSelected && option.activeColor != null && {color: option.activeColor},
+              ]}>
+              {option.label}
+            </Text>
           </TouchableOpacity>
         );
       })}
