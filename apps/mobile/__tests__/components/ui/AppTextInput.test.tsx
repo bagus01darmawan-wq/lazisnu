@@ -17,10 +17,7 @@ const createAsync = async (element: React.ReactElement) => {
 // sebagai react.memo), jadi findAllByType(Pressable) tidak pernah cocok —
 // cari berdasarkan nama fungsi internalnya.
 const findPressables = (tree: renderer.ReactTestRenderer) =>
-  tree.root.findAll(
-    node => (node.type as {name?: string} | undefined)?.name === 'Pressable',
-  );
-
+  tree.root.findAll(node => (node.type as {name?: string} | undefined)?.name === 'Pressable');
 
 describe('AppTextInput', () => {
   it('keeps a decorative icon out of the accessibility tree', async () => {

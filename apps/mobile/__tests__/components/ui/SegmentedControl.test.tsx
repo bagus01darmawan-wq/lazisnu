@@ -13,7 +13,6 @@ const createAsync = async (element: React.ReactElement) => {
   return instance;
 };
 
-
 describe('SegmentedControl', () => {
   it('calls onChange with correct value', async () => {
     const onChangeMock = jest.fn();

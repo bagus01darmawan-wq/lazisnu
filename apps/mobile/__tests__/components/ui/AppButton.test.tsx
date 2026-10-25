@@ -13,7 +13,6 @@ const createAsync = async (element: React.ReactElement) => {
   return instance;
 };
 
-
 describe('AppButton', () => {
   it('calls onPress when clicked', async () => {
     const onPressMock = jest.fn();

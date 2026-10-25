@@ -88,5 +88,4 @@ export const __resetMock = () => {
 
 // mmkv v4 mengekspor factory createMMKV (kelas MMKV tidak lagi diekspor
 // sebagai value).
-export const createMMKV = (config?: {id?: string; encryptionKey?: string}) =>
-  new MMKVMock(config);
+export const createMMKV = (config?: {id?: string; encryptionKey?: string}) => new MMKVMock(config);

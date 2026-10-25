@@ -12,7 +12,6 @@ const createAsync = async (element: React.ReactElement) => {
   return instance;
 };
 
-
 describe('REPRO crash Icon — uji komponen dengan icon props seperti LoginScreen', () => {
   it('AppTextInput icon=fingerprint', async () => {
     const tree = await createAsync(<AppTextInput placeholder="x" icon={'fingerprint'} />);

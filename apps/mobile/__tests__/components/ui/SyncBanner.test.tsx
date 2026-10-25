@@ -13,7 +13,6 @@ const createAsync = async (element: React.ReactElement) => {
   return instance;
 };
 
-
 describe('SyncBanner', () => {
   it('renders default text for synced status', async () => {
     const component = await createAsync(<SyncBanner status="synced" />);

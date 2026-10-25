@@ -13,7 +13,6 @@ const createAsync = async (element: React.ReactElement) => {
   return instance;
 };
 
-
 describe('StatusBadge', () => {
   it('renders label correctly', async () => {
     const component = await createAsync(<StatusBadge status="success" label="Berhasil" />);

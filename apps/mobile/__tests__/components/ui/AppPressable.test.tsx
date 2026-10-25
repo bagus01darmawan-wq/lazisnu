@@ -8,9 +8,7 @@ import {AppPressable} from '../../../src/components/ui';
 // findAllByType(Pressable) tidak pernah cocok. Cari berdasarkan nama fungsi
 // internalnya.
 const findPressable = (tree: renderer.ReactTestRenderer) =>
-  tree.root.findAll(
-    node => (node.type as {name?: string} | undefined)?.name === 'Pressable',
-  )[0]!;
+  tree.root.findAll(node => (node.type as {name?: string} | undefined)?.name === 'Pressable')[0]!;
 
 describe('AppPressable', () => {
   it('merender anak & memanggil onPress', async () => {
