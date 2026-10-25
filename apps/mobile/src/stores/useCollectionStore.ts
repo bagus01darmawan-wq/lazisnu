@@ -120,6 +120,7 @@ export const useCollectionStore = create<CollectionState>(set => ({
         nominal: preparedData.nominal,
         collected_at: preparedData.collected_at,
         sync_status: SyncStatus.PENDING,
+        condition: preparedData.condition,
         can: {
           qr_code: task?.qr_code || 'Offline',
           owner_name: task?.owner_name || 'Kaleng Masukan QR',
@@ -207,6 +208,7 @@ function mapHistoryToCollection(item: HistoryItem): Collection {
     nominal: item.nominal,
     collected_at: item.collected_at,
     sync_status: item.sync_status,
+    condition: item.condition,
     offline_id: item.offline_id || undefined,
     submit_sequence: item.submit_sequence,
     can: {
@@ -235,6 +237,7 @@ export function mergeCollectionsWithQueues(
       nominal: item.nominal,
       collected_at: item.collected_at,
       sync_status: isFailed ? SyncStatus.FAILED : SyncStatus.PENDING,
+      condition: item.condition,
       offline_id: item.offline_id || undefined,
       retry_attempts: item.retry_attempts,
       error_message: item.error_message,
