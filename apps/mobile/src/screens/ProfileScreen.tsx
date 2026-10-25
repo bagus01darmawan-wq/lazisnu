@@ -120,7 +120,7 @@ const ProfileScreen: React.FC = () => {
     }
     Alert.alert(
       'Selesai Periode',
-      `Anda memiliki ${activeCount} kaleng yang belum dijemput. Tandai semua sebagai selesai dan lanjut ke periode berikutnya?`,
+      `Anda memiliki ${activeCount} tugas yang belum dijemput. Tandai semua sebagai selesai dan lanjut ke periode berikutnya?`,
       [
         {text: 'Batal', style: 'cancel'},
         {
@@ -133,8 +133,8 @@ const ProfileScreen: React.FC = () => {
               Alert.alert(
                 'Berhasil',
                 result.expiredClosed > 0
-                  ? `${result.skipped} kaleng periode berjalan + ${result.expiredClosed} kaleng kedaluwarsa ditandai tidak dijemput.`
-                  : `${result.skipped} kaleng ditandai tidak dijemput. Periode berjalan selesai.`,
+                  ? `${result.skipped} tugas bulan ini + ${result.expiredClosed} tugas sisa bulan-bulan sebelumnya ditandai tidak dijemput.\n\nTugas bulan ini masih bisa dibuka kembali lewat Riwayat → Tidak Dijemput.`
+                  : `${result.skipped} tugas ditandai tidak dijemput. Masih bisa dibuka kembali lewat Riwayat → Tidak Dijemput.`,
               );
             }
           },
