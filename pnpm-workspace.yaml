@@ -9,6 +9,8 @@ allowBuilds:
   protobufjs: true
   sharp: true
   unrs-resolver: true
+onlyBuiltDependencies:
+  - '@parcel/watcher'
 
 # Overrides dipindah dari package.json field "pnpm" (diabaikan sejak pnpm 10,
 # dihapus di pnpm 11). Di sini pin diterapkan aktif oleh pnpm 10+.
@@ -17,12 +19,6 @@ overrides:
   '@babel/plugin-transform-modules-systemjs': 7.29.7
   '@grpc/grpc-js@<1.14.5': 1.14.5 # GHSA-m9gg (high), GHSA-f596 (low) — advisory server-side; 1.9.16 (via @firebase/firestore ~1.9.0, pin ekosistem firebase) tidak pernah dieksekusi di repo ini: web hanya firebase/app+analytics+performance, mobile native-only, backend admin jalur 1.14.5. Pekas 2026-10-06: 1.14.4 masih rentan. Lepas saat firebase JS SDK naikkan pin grpc-js
   '@tootallnate/once@<2.0.1': 2.0.1 # <2.0.1 (GHSA-vpq2-c234-7xj6) — via dev tooling
-  # '@types/react': 18.2.79 — dilepas: override global ini memaksa apps/web
-  # (React 19) memakai tipe React 18.2.79, penyebab 3 error typecheck web.
-  # web kini scoped sendiri di bawah (@types/react ^19.3.0); apps/mobile
-  # tetap di 18.2.79 via devDependency ^18.2.79.
-  web>'@types/react': ^19.3.0
-  web>'@types/react-dom': ^19.3.0
   '@typescript-eslint/typescript-estree>minimatch': 9.0.7
   '@xmldom/xmldom@<0.9.0': 0.8.15 # GHSA-6gmq-8vp8-gcm6 — jalur @expo/plist 0.x
   '@xmldom/xmldom@>=0.9.0 <0.9.12': 0.9.12 # GHSA-6gmq-8vp8-gcm6 — jalur plist 0.9.x
@@ -30,8 +26,8 @@ overrides:
   'brace-expansion@<2': 1.1.21 # 1.x <1.1.16/17/18 (GHSA-xxxx) (EXP 2026-10-06: uji patch GHSA-6j4f/qhr7/q2hr)
   'brace-expansion@>=2 <5': 2.1.7 # 2.x <2.1.4 (GHSA-xxxx) (EXP 2026-10-06: 2.1.4 rentan GHSA-6j4f/qhr7/q2hr via jest, uji patch)
   'brace-expansion@>=5': 5.0.12 # >=3 <5.0.9 (GHSA-xxxx); 5.0.5 di tree rentan (EXP 2026-10-06: 5.0.9 rentan GHSA-6j4f/qhr7/q2hr, uji patch)
-  'cookie@>=2.0.0': 1.1.1 # cookie 2 ESM-only — light-my-request@6.8 (via fastify 5.12.6) dibaca jest CJS (test integration); lepas saat test backend ESM-native
   'cacache@18': 19.0.1 #   tidak ada patched 6.x; major bump 6→7 untuk build-tooling
+  'cookie@>=2.0.0': 1.1.1 # cookie 2 ESM-only — light-my-request@6.8 (via fastify 5.12.6) dibaca jest CJS (test integration); lepas saat test backend ESM-native
   'decode-uri-component': 0.5.0
   'diff@7': 8.0.3 # >=6.0.0 <8.0.3 (GHSA-xxxx) — dulu via eas-cli (dihapus 2026-09-02); diff 8 API kompatibel
   'esbuild@0.27': 0.28.2 # >=0.27.3 <0.28.1 (GHSA-xxxx) — via tsx/vite; bump patch minor
@@ -67,6 +63,12 @@ overrides:
   'tmp': 0.2.7 # <0.2.7 (GHSA-7c78-jf6q-g5cm) — 0.2.5/0.2.6 di tree rentan
   'uuid@11': 11.1.1 # <11.1.1 (GHSA-xxxx) — via firebase-admin; uuid 7/8/9 di tree TETAP
   'vite@>=7.0.0 <=7.3.6': 7.3.7 # GHSA-698v-4r3x-3vcv (moderate) — via vitest (test web); launch-editor escapeCmdArgs Windows
+  # '@types/react': 18.2.79 — dilepas: override global ini memaksa apps/web
+  # (React 19) memakai tipe React 18.2.79, penyebab 3 error typecheck web.
+  # web kini scoped sendiri di bawah (@types/react ^19.3.0); apps/mobile
+  # tetap di 18.2.79 via devDependency ^18.2.79.
+  web>'@types/react': ^19.3.0
+  web>'@types/react-dom': ^19.3.0
   'websocket-driver': 0.7.5 # <0.7.5 (GHSA-xxxx) — 0.7.4 di tree
   'ws@6': 6.2.6 # 6.x <6.2.4 (GHSA-xxxx) — 6.2.3 di tree
   'ws@7': 7.5.11 # 7.x <7.5.11 (GHSA-xxxx) — 7.5.10 di tree
@@ -76,12 +78,8 @@ overrides:
   #   karena 6.3.4 masih masuk rentang ^6.2.4 (plugin tetap kompatibel).
   # image-size <=2.0.2: NO-FIX — akan di-dismiss berjustifikasi.
 
-# Fix manifest cacat: draggable-flatlist 4.0.3 tidak mendeklarasikan react
-# sebagai peer — tanpa ini require('react') jatuh ke hidden-hoist yang bisa
-# memuat react versi web (19.2.4) dan membuat dua salinan React di app mobile.
-packageExtensions:
-  react-native-draggable-flatlist@4.0.3:
-    peerDependencies:
-      react: '*'
-onlyBuiltDependencies:
-  - '@parcel/watcher'
+  # react-native-draggable-flatlist DIHAPUS 2026-10-25 (dep + packageExtensions
+  # react-peer + patchedDependencies): tidak kompatibel reanimated 4 + RNGH 3 —
+  # scroll daftar mati total (diuji di perangkat). Penggantinya FlatList biasa
+  # + menu tekan-lama di TasksScreen. Bila upstream merilis versi yang cocok,
+  # kembalikan drag-reorder.

@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Clipboard,
+  FlatList,
   RefreshControl,
   StyleSheet,
   Text,
@@ -14,7 +15,6 @@ import {useNavigation} from '@react-navigation/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
-import DraggableFlatList, {RenderItemParams, ScaleDecorator} from 'react-native-draggable-flatlist';
 import type {Task} from '@lazisnu/shared-types';
 import {AssignmentStatus, CanCondition, VisitTask} from '@lazisnu/shared-types';
 import {collectionService} from '../services/api';
@@ -49,8 +49,6 @@ const TasksScreen: React.FC = () => {
     reorderTasks,
   } = useTasksStore();
   const [searchQuery, setSearchQuery] = useState('');
-  // Urutan pribadi hanya bermakna pada daftar penuh — saat mencari, drag dinonaktifkan.
-  const dragEnabled = !searchQuery.trim();
   const [issuesVisible, setIssuesVisible] = useState(false);
   const [visitRequired, setVisitRequired] = useState<VisitTask[]>([]);
 
@@ -96,19 +94,49 @@ const TasksScreen: React.FC = () => {
     );
   });
 
+  // Pengganti drag-reorder: react-native-draggable-flatlist 4.0.3 tidak
+  // kompatibel dengan reanimated 4 + gesture-handler 3 (scroll daftar mati
+  // total — diuji 2026-10-25; upstream tidak aktif sejak Mei 2025). Urutan
+  // pribadi kini dipindah lewat menu tekan-lama pada kartu tugas.
+  const showReorderMenu = useCallback(
+    (task: Task) => {
+      const {tasks} = useTasksStore.getState();
+      const index = tasks.findIndex(t => t.id === task.id);
+      if (index < 0) return;
+      const move = (to: number) => {
+        const next = [...tasks];
+        const [moved] = next.splice(index, 1);
+        if (moved) next.splice(to, 0, moved);
+        reorderTasks(next.map(t => t.id));
+      };
+      const buttons: Array<{
+        text: string;
+        onPress?: () => void;
+        style?: 'cancel' | 'default' | 'destructive';
+      }> = [];
+      if (index > 0) {
+        buttons.push({text: 'Naikkan', onPress: () => move(index - 1)});
+      }
+      if (index < tasks.length - 1) {
+        buttons.push({text: 'Turunkan', onPress: () => move(index + 1)});
+      }
+      buttons.push({text: 'Batal', style: 'cancel'});
+      Alert.alert(task.owner_name, 'Pindahkan urutan tugas ini?', buttons);
+    },
+    [reorderTasks],
+  );
+
   const renderTaskItem = useCallback(
-    ({item, drag, getIndex}: RenderItemParams<Task>) => (
-      <ScaleDecorator activeScale={1.05}>
-        <TaskItem
-          item={item}
-          index={getIndex() ?? 0}
-          onCopy={copyToClipboard}
-          onPress={task => navigation.navigate('TaskDetail', {task})}
-          onLongPressDrag={dragEnabled ? drag : undefined}
-        />
-      </ScaleDecorator>
+    ({item, index}: {item: Task; index: number}) => (
+      <TaskItem
+        item={item}
+        index={index}
+        onCopy={copyToClipboard}
+        onPress={task => navigation.navigate('TaskDetail', {task})}
+        onLongPressDrag={() => showReorderMenu(item)}
+      />
     ),
-    [copyToClipboard, navigation, dragEnabled],
+    [copyToClipboard, navigation, showReorderMenu],
   );
 
   const renderEmpty = () => (
@@ -241,11 +269,10 @@ const TasksScreen: React.FC = () => {
         </TouchableOpacity>
       )}
 
-      <DraggableFlatList
+      <FlatList
         data={filteredTasks}
         renderItem={renderTaskItem}
         keyExtractor={item => item.id}
-        onDragEnd={({data}) => reorderTasks(data.map(task => task.id))}
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           isLoading ? (
