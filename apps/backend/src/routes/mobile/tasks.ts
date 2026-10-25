@@ -21,6 +21,7 @@ import { assertCanAccess } from '../../services/canService';
 import { submitCollection } from '../../services/collectionSubmission';
 import { insertActivityLog } from '../../services/auditLogService';
 import { completeOfficerPeriod } from '../../services/periodComplete';
+import { currentOperationalPeriod } from '../../utils/operationalTimeZone';
 import { ErrorCode } from '../../utils/errorCatalog';
 import {
   classifyScan,
@@ -409,7 +410,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
     try {
       const user = request.currentUser!;
       const officerId = user.officerId;
-      const query = request.query as { status?: string; page?: string; limit?: string; year?: string; month?: string; all?: string };
+      const query = request.query as { status?: string; page?: string; limit?: string; year?: string; month?: string; all?: string; current_period?: string };
 
       if (!officerId) {
         return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
@@ -437,6 +438,14 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         const m = Number.isInteger(qMonth) && qMonth >= 1 && qMonth <= 12 ? qMonth : currentMonth;
         conditions.push(eq(schema.assignments.periodYear, y));
         conditions.push(eq(schema.assignments.periodMonth, m));
+      }
+      // Filter periode operasional berjalan eksplisit untuk status apa pun —
+      // dipakai tab "Tidak Dijemput"/hitungan filter Riwayat yang menurut
+      // kebijakan produk hanya menyentuh periode berjalan (2026-10-25).
+      if (query.current_period === 'true') {
+        const op = currentOperationalPeriod();
+        conditions.push(eq(schema.assignments.periodYear, op.year));
+        conditions.push(eq(schema.assignments.periodMonth, op.month));
       }
       const whereClause = and(...conditions);
 
@@ -502,6 +511,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           ? a.can.visits[0].id
           : null,
         status: a.status,
+        skip_reason_code: a.skipReasonCode,
         assigned_at: a.assignedAt,
         period: `${a.periodYear}-${String(a.periodMonth).padStart(2, '0')}`,
       }));
@@ -742,6 +752,100 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         status: 'UNCOLLECTED',
         reason_code: reasonCode,
         message: 'Kaleng ditandai tidak dijemput',
+      });
+    } catch (error) {
+      if (error instanceof AppError || isAppError(error)) {
+        return sendError(reply, (error as AppError).statusCode, (error as AppError).code, (error as AppError).message);
+      }
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  // POST /mobile/assignments/:id/reopen
+  //
+  // Membuka kembali tugas yang ditandai UNCOLLECTED pada periode operasional
+  // berjalan (keputusan produk 2026-10-25): mis. pemilik kaleng berubah
+  // pikiran sehari setelah petugas menandai "tidak dijemput". Aturan:
+  //   - hanya tugas milik petugas sendiri (officerId dari token);
+  //   - hanya dari status UNCOLLECTED (ACTIVE/COMPLETED/REASSIGNED ditolak);
+  //   - hanya periode berjalan — bulan ganti = tertutup permanen karena
+  //     scheduler membuat tugas baru pada periode berikutnya;
+  //   - transaksi + kunci baris assignment: dua reopen bersamaan tidak
+  //     menghasilkan dobel;
+  //   - jejak audit before/after wajib (pola perubahan penugasan admin);
+  //   - skipReasonCode dipertahankan sebagai riwayat; catatan penandaan
+  //     reopen ditambahkan ke `notes`; completedAt dikosongkan.
+  // Ledger tidak tersentuh — skip/reopen tidak melibatkan setoran.
+  fastify.post('/assignments/:id/reopen', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const user = request.currentUser!;
+      const officerId = user.officerId;
+
+      if (!officerId) {
+        return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
+      }
+
+      const op = currentOperationalPeriod();
+
+      const updated = await db.transaction(async (tx) => {
+        // Kunci baris assignment agar dua reopen bersamaan terserialisasi;
+        // pemeriksaan status dilakukan ulang pada snapshot yang terkunci.
+        const [existing] = await tx
+          .select()
+          .from(schema.assignments)
+          .where(eq(schema.assignments.id, id))
+          .for('update');
+
+        if (!existing || existing.officerId !== officerId) {
+          throw new AppError('ASSIGNMENT_INVALID', 'Tugas tidak ditemukan atau bukan milik Anda', 403);
+        }
+        if (existing.status !== 'UNCOLLECTED') {
+          throw new AppError(
+            'ASSIGNMENT_NOT_REOPENABLE',
+            'Hanya tugas yang ditandai tidak dijemput yang bisa dibuka kembali',
+            409,
+          );
+        }
+        if (existing.periodYear !== op.year || existing.periodMonth !== op.month) {
+          throw new AppError(
+            'PERIOD_CLOSED',
+            'Tugas ini sudah lewat periodenya dan tidak bisa dibuka kembali',
+            409,
+          );
+        }
+
+        const reopenNote = `Diaktifkan kembali oleh petugas pada ${new Date().toISOString()}`;
+        return tx
+          .update(schema.assignments)
+          .set({
+            status: 'ACTIVE',
+            completedAt: null,
+            updatedAt: new Date(),
+            notes: existing.notes ? `${existing.notes} | ${reopenNote}` : reopenNote,
+          })
+          .where(and(eq(schema.assignments.id, id), eq(schema.assignments.status, 'UNCOLLECTED')))
+          .returning();
+      });
+
+      if (!updated[0]) {
+        return sendError(reply, 409, 'ASSIGNMENT_NOT_REOPENABLE', 'Tugas sudah dibuka kembali sebelumnya');
+      }
+
+      request.auditContext = {
+        oldData: {
+          id,
+          kaleng: updated[0].canId,
+          petugas: officerId,
+          status: 'UNCOLLECTED',
+        },
+        newData: updated[0],
+      };
+
+      return sendSuccess(reply, {
+        id,
+        status: 'ACTIVE',
+        message: 'Tugas diaktifkan kembali',
       });
     } catch (error) {
       if (error instanceof AppError || isAppError(error)) {

@@ -548,6 +548,8 @@ export const tasksService = {
     status?: string;
     page?: number;
     limit?: number;
+    /** Scope paksa ke periode operasional berjalan (tab/hitungan Riwayat). */
+    current_period?: boolean;
   }): Promise<ApiResponse<TaskListResponse>> => {
     const queryParams = new URLSearchParams();
     if (params?.status) {
@@ -558,6 +560,9 @@ export const tasksService = {
     }
     if (params?.limit) {
       queryParams.append('limit', params.limit.toString());
+    }
+    if (params?.current_period) {
+      queryParams.append('current_period', 'true');
     }
 
     const query = queryParams.toString();
@@ -582,6 +587,19 @@ export const tasksService = {
     return apiRequest<ProposalStatusResponse>(
       `/mobile/assignments/${encodeURIComponent(assignmentId)}/proposal-status`,
     );
+  },
+
+  /**
+   * Buka kembali tugas yang ditandai "tidak dijemput" pada periode berjalan
+   * (mis. pemilik berubah pikiran). Backend menolak bila tugas bukan milik
+   * petugas, statusnya bukan UNCOLLECTED, atau periodenya sudah lewat.
+   */
+  reopenTask: async (
+    id: string,
+  ): Promise<ApiResponse<{id: string; status: string; message: string}>> => {
+    return apiRequest(`/mobile/assignments/${encodeURIComponent(id)}/reopen`, {
+      method: 'POST',
+    });
   },
 };
 

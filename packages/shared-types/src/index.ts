@@ -431,6 +431,8 @@ export interface Task {
   status: AssignmentStatus;
   assigned_at: string;
   period: string;
+  /** Kode alasan baku saat tugas berstatus UNCOLLECTED (dipakai tab Riwayat). */
+  skip_reason_code?: string | null;
   /**
    * C1-T2: true bila hasil scan berasal dari periode toleransi (bulan lalu,
    * masih dalam jendela s/d tgl 9). Dipakai chip "Toleransi" + countdown (T9).
