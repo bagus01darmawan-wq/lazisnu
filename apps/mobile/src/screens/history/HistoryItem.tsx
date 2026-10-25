@@ -25,6 +25,18 @@ const CONDITION_LABELS: Record<CanCondition, string> = {
 const getConditionLabel = (condition?: CanCondition): string =>
   condition ? CONDITION_LABELS[condition] : 'Aktif';
 
+/**
+ * Kondisi non-AKTIF ditampilkan sebagai teks berwarna tanpa pembungkus
+ * (QA 2026-10-25): Rusak = oranye warning, Hilang = merah error — selaras
+ * warna tombol kondisi di Input Penjemputan. AKTIF tidak berlabel, dan
+ * item tanpa informasi kondisi (entri optimistis pra-sinkron) juga tidak
+ * menampilkan apa pun agar tidak menyesatkan.
+ */
+const CONDITION_TEXT_COLORS: Partial<Record<CanCondition, string>> = {
+  RUSAK: Colors.status.warning,
+  HILANG: Colors.status.error,
+};
+
 /** Ikon status sinkronisasi tetap terpisah dari kondisi bisnis kaleng. */
 const getStatusIcon = (item: Collection): {name: string; color: string; label: string} => {
   if (item.sync_status === 'PENDING') {
@@ -94,9 +106,15 @@ export const HistoryItem = memo(
                 minimumFontScale={0.8}>
                 {formatCurrency(Number(item.nominal))}
               </Text>
-              <Text style={styles.conditionLabel}>
-                Kondisi saat ini: {getConditionLabel(item.condition)}
-              </Text>
+              {item.condition && CONDITION_TEXT_COLORS[item.condition] ? (
+                <Text
+                  style={[
+                    styles.conditionLabel,
+                    {color: CONDITION_TEXT_COLORS[item.condition], fontWeight: '700'},
+                  ]}>
+                  {getConditionLabel(item.condition)}
+                </Text>
+              ) : null}
             </View>
             {item.sync_status === 'FAILED' ? (
               <TouchableOpacity
