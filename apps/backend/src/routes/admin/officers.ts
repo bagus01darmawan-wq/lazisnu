@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { eq, and, desc, ilike, or, sql, inArray } from 'drizzle-orm';
+import { eq, and, desc, ilike, or, inArray } from 'drizzle-orm';
 import { authorize } from '../../middleware/auth';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { getPaginationParams, formatPaginatedResponse } from '../../utils/pagination';
@@ -12,6 +12,7 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { getPostgresError } from '../../utils/error-guards';
+import { buildNextEmployeeCode } from '../../utils/employee-code';
 
 const rantingOrKec = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
 
@@ -126,10 +127,26 @@ export async function officersRoutes(fastify: FastifyInstance) {
       }
 
       const { insertedOfficer } = await db.transaction(async (tx) => {
-        const countRes = await tx.select({ count: sql<number>`count(*)` }).from(schema.officers)
+        // Kunci baris ranting agar dua admin yang menyimpan bersamaan tidak
+        // membaca nomor terakhir yang sama lalu menghasilkan kode kembar.
+        await tx
+          .select({ id: schema.branches.id })
+          .from(schema.branches)
+          .where(eq(schema.branches.id, targetBranchId))
+          .for('update');
+
+        const existingCodes = await tx
+          .select({ employeeCode: schema.officers.employeeCode })
+          .from(schema.officers)
           .where(eq(schema.officers.branchId, targetBranchId));
-        const count = Number(countRes[0].count);
-        const employeeCode = `${branchRes.code || 'XX'}-${String(count + 1).padStart(4, '0')}`;
+
+        // Nomor dari suffix terakhir, bukan jumlah petugas: petugas yang pernah
+        // dihapus meninggalkan celah nomor, dan pola "jumlah + 1" akan menabrak
+        // kode yang masih ada.
+        const employeeCode = buildNextEmployeeCode(
+          branchRes.code,
+          existingCodes.map(row => row.employeeCode),
+        );
 
         const randomPassword = crypto.randomBytes(16).toString('hex');
         const hashedPassword = await bcrypt.hash(randomPassword, 10);
@@ -175,7 +192,10 @@ export async function officersRoutes(fastify: FastifyInstance) {
         } else if (detail.includes('email')) {
           message = 'Email (berdasarkan nomor HP) sudah terdaftar.';
         } else if (detail.includes('employee_code')) {
-          message = 'Kode petugas sudah terdaftar. Silakan coba simpan kembali.';
+          // Normalnya tidak tercapai: kode dibuat dari nomor terakhir di dalam
+          // transaksi yang dikunci. Kalau tetap terjadi, ini kegagalan sistem —
+          // mengulang simpan tidak akan mengubah hasil.
+          message = 'Gagal membuat kode petugas otomatis. Silakan hubungi admin sistem.';
         }
         
         return sendError(reply, 400, 'DUPLICATE_ERROR', message);
