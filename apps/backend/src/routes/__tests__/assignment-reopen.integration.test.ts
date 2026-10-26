@@ -209,6 +209,15 @@ describe('POST /mobile/assignments/:id/reopen', () => {
     await db.delete(schema.cans).where(
       inArray(schema.cans.id, [IDS.canCurrent, IDS.canOtherOfficer, IDS.canActive, IDS.canPast]),
     );
+    // Hapus ulang log audit tepat sebelum officers: hook onResponse bisa
+    // mendarat sesudah pembersihan pertama dan mengunci delete officers
+    // (FK activity_logs_officer_id — Flake CI 2026-10-27).
+    await db.delete(schema.activityLogs).where(
+      or(
+        inArray(schema.activityLogs.userId, [IDS.officerUser, IDS.otherUser]),
+        inArray(schema.activityLogs.officerId, [IDS.officer, IDS.officerOther]),
+      ),
+    );
     await db.delete(schema.officers).where(inArray(schema.officers.id, [IDS.officer, IDS.officerOther]));
     await db.delete(schema.users).where(inArray(schema.users.id, [IDS.officerUser, IDS.otherUser]));
     await db.delete(schema.dukuhs).where(eq(schema.dukuhs.id, IDS.dukuh));
