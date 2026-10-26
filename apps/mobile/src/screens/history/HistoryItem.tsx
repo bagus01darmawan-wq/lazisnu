@@ -31,11 +31,17 @@ const getConditionLabel = (condition?: CanCondition): string =>
  * warna tombol kondisi di Input Penjemputan. AKTIF tidak berlabel, dan
  * item tanpa informasi kondisi (entri optimistis pra-sinkron) juga tidak
  * menampilkan apa pun agar tidak menyesatkan.
+ *
+ * Gaya disiapkan lewat StyleSheet, bukan objek inline, agar lolos
+ * react-native/no-inline-styles.
  */
-const CONDITION_TEXT_COLORS: Partial<Record<CanCondition, string>> = {
-  RUSAK: Colors.status.warning,
-  HILANG: Colors.status.error,
-};
+const CONDITION_TEXT_STYLES = StyleSheet.create({
+  RUSAK: {color: Colors.status.warning, fontWeight: '700'},
+  HILANG: {color: Colors.status.error, fontWeight: '700'},
+});
+
+const getConditionTextStyle = (condition?: CanCondition) =>
+  condition === 'RUSAK' || condition === 'HILANG' ? CONDITION_TEXT_STYLES[condition] : undefined;
 
 /** Ikon status sinkronisasi tetap terpisah dari kondisi bisnis kaleng. */
 const getStatusIcon = (item: Collection): {name: string; color: string; label: string} => {
@@ -57,6 +63,7 @@ const getStatusIcon = (item: Collection): {name: string; color: string; label: s
 export const HistoryItem = memo(
   ({item, index, onCorrect, onViewFailureDetail}: HistoryItemProps) => {
     const statusIcon = getStatusIcon(item);
+    const conditionTextStyle = getConditionTextStyle(item.condition);
 
     return (
       <Animated.View
@@ -106,12 +113,8 @@ export const HistoryItem = memo(
                 minimumFontScale={0.8}>
                 {formatCurrency(Number(item.nominal))}
               </Text>
-              {item.condition && CONDITION_TEXT_COLORS[item.condition] ? (
-                <Text
-                  style={[
-                    styles.conditionLabel,
-                    {color: CONDITION_TEXT_COLORS[item.condition], fontWeight: '700'},
-                  ]}>
+              {conditionTextStyle ? (
+                <Text style={[styles.conditionLabel, conditionTextStyle]}>
                   {getConditionLabel(item.condition)}
                 </Text>
               ) : null}
