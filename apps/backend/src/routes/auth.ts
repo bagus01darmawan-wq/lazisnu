@@ -22,9 +22,16 @@ import { getPhoneLookupVariants } from '../utils/phone';
 // Request schemas
 const loginSchema = z.object({
   identifier: z.string().min(3),
-  password: z.string().min(6),
+  // Kebijakan proyek (2026-10-27): sandi bebas — panjang/karakter apa pun.
+  // Cukup non-kosong; hash bcrypt menyamarkan di kedua jalur (set & login).
+  password: z.string().min(1),
   device_id: z.string().optional(),
   device_label: z.string().max(100).optional(),
+});
+
+const setPasswordSchema = z.object({
+  otp: z.string().length(6),
+  new_password: z.string().min(1),
 });
 
 const requestOTPSchema = z.object({
@@ -52,7 +59,8 @@ export async function authRoutes(fastify: FastifyInstance) {
         required: ['identifier', 'password'],
         properties: {
           identifier: { type: 'string', minLength: 3 },
-          password: { type: 'string', minLength: 6 },
+          // Selaras setPasswordSchema: sandi bebas, cukup non-kosong.
+          password: { type: 'string', minLength: 1 },
         },
       },
     },
@@ -707,6 +715,175 @@ export async function authRoutes(fastify: FastifyInstance) {
 
       return reply.send(responseData);
     } catch (error: unknown) {
+      if (isJwtErrorLike(error) && (error.statusCode === 401 || error.code?.includes('JWT'))) {
+        return sendError(reply, 401, 'UNAUTHORIZED', 'Token tidak valid atau expired');
+      }
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  // ============ Kata Sandi Mandiri Petugas ============
+  // Petugas membuat/mengubah sandi sendiri setelah login OTP. Konfirmasi
+  // memakai OTP segar (bukan sandi lama) — OTP adalah faktor identitas utama
+  // petugas sekaligus jalur pemulihan, karena email petugas sintetis.
+
+  // GET /auth/password/status — apakah sandi sudah pernah dibuat user sendiri.
+  fastify.get('/password/status', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      await request.jwtVerify();
+      const decoded = request.user as any;
+
+      const userRes = await db
+        .select({ passwordSetAt: users.passwordSetAt })
+        .from(users)
+        .where(eq(users.id, decoded.userId))
+        .limit(1);
+
+      if (!userRes[0]) {
+        return sendError(reply, 404, 'USER_NOT_FOUND', 'User tidak ditemukan');
+      }
+
+      return sendSuccess(reply, {
+        password_set: userRes[0].passwordSetAt != null,
+        password_set_at: userRes[0].passwordSetAt
+          ? userRes[0].passwordSetAt.toISOString()
+          : null,
+      });
+    } catch (error: unknown) {
+      if (isJwtErrorLike(error) && (error.statusCode === 401 || error.code?.includes('JWT'))) {
+        return sendError(reply, 401, 'UNAUTHORIZED', 'Token tidak valid atau expired');
+      }
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  // POST /auth/password — buat/ubah sandi, dikonfirmasi OTP WhatsApp.
+  // Tidak ada batas panjang/karakter sandi (kebijakan 2026-10-27) dan tidak
+  // ada rate limit baru; percobaan OTP dibatasi penghitung OTP yang sudah ada
+  // (5 kali, sama dengan verify-otp).
+  fastify.post('/password', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      await request.jwtVerify();
+      const decoded = request.user as any;
+
+      // OTP dikirim ke nomor di tabel officers (request-otp melakukan lookup
+      // officers). Akun tansa officer tidak punya jalur OTP → tolak.
+      if (!decoded.officerId) {
+        return sendError(reply, 403, 'FORBIDDEN_ROLE', 'Fitur kata sandi mandiri khusus petugas');
+      }
+
+      const body = setPasswordSchema.parse(request.body);
+
+      const userRes = await db.select().from(users).where(eq(users.id, decoded.userId)).limit(1);
+      const user = userRes[0];
+
+      if (!user) {
+        return sendError(reply, 404, 'USER_NOT_FOUND', 'User tidak ditemukan');
+      }
+      if (!user.isActive) {
+        return sendError(reply, 403, 'ACCOUNT_DISABLED', 'Akun Anda tidak aktif');
+      }
+
+      const attemptKey = `otp:attempts:${user.phone}`;
+      const attemptCount = await redisConnection.get(attemptKey);
+      if (attemptCount && parseInt(attemptCount) >= 5) {
+        await otpService.delete(user.phone);
+        await redisConnection.del(attemptKey);
+        return sendError(reply, 429, 'OTP_TOO_MANY_ATTEMPTS', 'Terlalu banyak percobaan, minta OTP baru');
+      }
+
+      const isValidOtp = await otpService.verify(user.phone, body.otp);
+      if (!isValidOtp) {
+        const newCount = await redisConnection.incr(attemptKey);
+        if (newCount === 1) {
+          await redisConnection.expire(attemptKey, 300);
+        }
+        try {
+          await insertActivityLog({
+            actionType: 'FAILED_OTP',
+            userId: user.id,
+            officerId: decoded.officerId,
+            entityType: 'auth',
+            entityId: user.id,
+            newData: { reason: 'PASSWORD_CHANGE_INVALID_OTP' },
+            ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+            userAgent: (request.headers['user-agent'] as string) || null,
+          });
+        } catch (err) {
+          request.log.error({ err }, 'FAILED_OTP audit log failed');
+        }
+        return sendError(reply, 401, 'INVALID_OTP', 'OTP tidak valid atau sudah expired');
+      }
+
+      // Konsumsi OTP agar tidak bisa dipakai ulang.
+      await redisConnection.del(attemptKey);
+      await otpService.delete(user.phone);
+
+      const wasSetBefore = user.passwordSetAt != null;
+      const now = new Date();
+      const passwordHash = await bcrypt.hash(body.new_password, 10);
+      await db
+        .update(users)
+        .set({ passwordHash, passwordSetAt: now, updatedAt: now })
+        .where(eq(users.id, user.id));
+
+      // Cabut sesi perangkat LAIN; sesi yang membawa permintaan ini tetap
+      // hidup. Daftar perangkat diturunkan dari tabel user_sessions (bukan
+      // registry Redis) agar sesi yang tercatat sebelum Redis tersedia tetap
+      // ikut tercabut.
+      const currentDeviceId = decoded.did;
+      const activeSessions = await db
+        .select({ deviceId: userSessions.deviceId })
+        .from(userSessions)
+        .where(
+          and(eq(userSessions.userId, user.id), isNull(userSessions.revokedAt)),
+        );
+
+      let revokedCount = 0;
+      for (const row of activeSessions) {
+        const did = row.deviceId;
+        if (!did || did === currentDeviceId) {
+          continue;
+        }
+        // Denylist refresh token perangkat itu + tandai baris sesinya.
+        await revokeDeviceSession(user.id, did);
+        await db
+          .update(userSessions)
+          .set({ revokedAt: new Date() } as any)
+          .where(
+            and(
+              eq(userSessions.userId, user.id),
+              eq(userSessions.deviceId, did),
+              isNull(userSessions.revokedAt),
+            ),
+          )
+          .catch(() => {});
+        revokedCount += 1;
+      }
+
+      try {
+        await insertActivityLog({
+          actionType: wasSetBefore ? 'PASSWORD_CHANGED' : 'PASSWORD_SET',
+          userId: user.id,
+          officerId: decoded.officerId,
+          entityType: 'auth',
+          entityId: user.id,
+          newData: { method: 'otp', revoked_devices: revokedCount },
+          ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+          userAgent: (request.headers['user-agent'] as string) || null,
+        });
+      } catch (err) {
+        request.log.error({ err }, 'PASSWORD_SET audit log failed');
+      }
+
+      return sendSuccess(reply, {
+        message: 'Kata sandi tersimpan',
+        password_set_at: now.toISOString(),
+      });
+    } catch (error: unknown) {
+      if (error instanceof z.ZodError) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
+      }
       if (isJwtErrorLike(error) && (error.statusCode === 401 || error.code?.includes('JWT'))) {
         return sendError(reply, 401, 'UNAUTHORIZED', 'Token tidak valid atau expired');
       }

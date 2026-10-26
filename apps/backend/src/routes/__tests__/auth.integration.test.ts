@@ -136,13 +136,15 @@ describe('[POST] /v1/auth/login', () => {
     expect(res.body.error.code).toMatch(/VALIDATION_ERROR/i);
   });
 
-  it('should return 400 when password is too short', async () => {
+  it('should accept short password (kebijakan sandi bebas 2026-10-27) dan jatuh ke cek kredensial', async () => {
     const app = await getApp();
     const res = await request(app.server)
       .post('/v1/auth/login')
       .send({ identifier: 'test@test.com', password: '123' });
-    expect(res.status).toBe(400);
+    // Sandi pendek tidak lagi ditolak skema; kredensial salah → 401.
+    expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe('INVALID_CREDENTIALS');
   });
 
   it('should return 401 with wrong password', async () => {

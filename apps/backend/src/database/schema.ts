@@ -80,6 +80,10 @@ export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: varchar('email', { length: 255 }).unique().notNull(),
   passwordHash: varchar('password_hash', { length: 255 }).notNull(),
+  // Waktu sandi diset oleh user sendiri. Null = hash masih acak buatan server
+  // saat petugas dibuat (tidak diketahui siapa pun) → UI menampilkan "Buat
+  // kata sandi", bukan "Ubah".
+  passwordSetAt: timestamp('password_set_at'),
   fullName: varchar('full_name', { length: 100 }).notNull(),
   phone: varchar('phone', { length: 20 }).unique().notNull(),
   role: userRoleEnum('role').notNull(),

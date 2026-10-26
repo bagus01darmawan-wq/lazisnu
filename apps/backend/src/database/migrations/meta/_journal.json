@@ -113,6 +113,13 @@
       "when": 1791605726095,
       "tag": "0015_collections_assignment_integrity",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1793035783579,
+      "tag": "0016_user_password_set_at",
+      "breakpoints": true
     }
   ]
 }
