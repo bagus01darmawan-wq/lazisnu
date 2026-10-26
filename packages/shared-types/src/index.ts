@@ -606,6 +606,20 @@ export interface MeResponse {
   };
 }
 
+// GET /auth/password/status — apakah sandi sudah pernah dibuat user sendiri.
+// password_set=false berarti hash masih acak buatan server saat petugas
+// dibuat; UI menampilkan "Buat kata sandi", bukan "Ubah".
+export interface PasswordStatusResponse {
+  password_set: boolean;
+  password_set_at: string | null;
+}
+
+// POST /auth/password — buat/ubah sandi, dikonfirmasi OTP WhatsApp.
+export interface PasswordSetResponse {
+  message: string;
+  password_set_at: string;
+}
+
 // Dashboard response dari GET /mobile/dashboard
 export interface DashboardResponse {
   today_stats: TodayStats;

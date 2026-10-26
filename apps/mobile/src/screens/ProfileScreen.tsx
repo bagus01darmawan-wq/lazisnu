@@ -15,10 +15,11 @@ import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useAuthStore, useTasksStore, useUpdateStore} from '../stores';
 import {getBiometryType, isBiometricAvailable} from '../services/biometric';
-import {c1Service, type BranchSubmissionRowDto} from '../services/api';
+import {authService, c1Service, type BranchSubmissionRowDto} from '../services/api';
 import {isManager, normalizeRole} from '../roles/roleMap';
 import {APP_VERSION} from '../config/appConfig';
 import {AppButton, AppCard, StatusBadge} from '../components/ui';
+import {PasswordSheet} from '../components/PasswordSheet';
 import {Colors, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
 import {formatCurrency} from '../utils/format';
 import {getErrorMessage} from '../utils/error';
@@ -56,6 +57,39 @@ const ProfileScreen: React.FC = () => {
   const [baLoading, setBaLoading] = useState(false);
   const [baError, setBaError] = useState<string | null>(null);
   const [baBusyId, setBaBusyId] = useState<string | null>(null);
+
+  // Kata sandi mandiri (petugas): status menentukan label "Buat"/"Ubah".
+  // Endpoint konfirmasinya menuntut officer, jadi seksi hanya untuk PETUGAS.
+  const isPetugas = user?.role === 'PETUGAS';
+  const [passwordSet, setPasswordSet] = useState<boolean | null>(null);
+  const [passwordSheetVisible, setPasswordSheetVisible] = useState(false);
+
+  const loadPasswordStatus = useCallback(async () => {
+    try {
+      const res = await authService.getPasswordStatus();
+      if (res.success && res.data) {
+        setPasswordSet(res.data.password_set);
+      }
+    } catch {
+      // Status gagal dimuat — baris tetap tampil dengan label netral.
+      setPasswordSet(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isPetugas) {
+      loadPasswordStatus();
+    }
+  }, [isPetugas, loadPasswordStatus]);
+
+  const handlePasswordSaved = useCallback(() => {
+    setPasswordSheetVisible(false);
+    setPasswordSet(true);
+    Alert.alert(
+      'Kata Sandi Tersimpan',
+      'Kata sandi berhasil dibuat. Perangkat lain yang masih masuk akan diminta masuk ulang.',
+    );
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -343,6 +377,34 @@ const ProfileScreen: React.FC = () => {
         </>
       )}
 
+      {isPetugas && (
+        <>
+          <Text style={styles.sectionTitle}>Kata Sandi</Text>
+          <AppCard variant={'elevated'} style={styles.infoCard}>
+            <TouchableOpacity
+              accessibilityRole={'button'}
+              accessibilityLabel={passwordSet ? 'Ubah kata sandi' : 'Buat kata sandi'}
+              onPress={() => setPasswordSheetVisible(true)}
+              style={styles.passwordRow}>
+              <Icon name={'lock-reset'} size={22} color={Colors.brand.deepGreen} />
+              <View style={styles.biometricText}>
+                <Text style={styles.biometricLabel}>
+                  {passwordSet ? 'Ubah kata sandi' : 'Buat kata sandi'}
+                </Text>
+                <Text style={styles.biometricStatus}>
+                  {passwordSet === null
+                    ? 'Masuk alternatif selain OTP'
+                    : passwordSet
+                      ? 'Aktif — masuk tanpa OTP'
+                      : 'Belum dibuat — masuk masih via OTP'}
+                </Text>
+              </View>
+              <Icon name={'chevron-right'} size={22} color={Colors.text.muted} />
+            </TouchableOpacity>
+          </AppCard>
+        </>
+      )}
+
       <View style={styles.securityNotice}>
         <Icon name={'shield-check-outline'} size={22} color={Colors.brand.deepGreen} />
         <Text style={styles.securityText}>
@@ -412,6 +474,16 @@ const ProfileScreen: React.FC = () => {
         <Text style={styles.versionText}>Lazisnu Collector • Versi {APP_VERSION}</Text>
         <Text style={styles.checkUpdateText}>Periksa Pembaruan</Text>
       </TouchableOpacity>
+
+      {isPetugas && user?.phone ? (
+        <PasswordSheet
+          visible={passwordSheetVisible}
+          phone={user.phone}
+          passwordSet={passwordSet === true}
+          onDismiss={() => setPasswordSheetVisible(false)}
+          onSaved={handlePasswordSaved}
+        />
+      ) : null}
     </ScrollView>
   );
 };
@@ -607,6 +679,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    padding: Spacing.md,
+  },
+  passwordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
     padding: Spacing.md,
   },
   biometricLeft: {

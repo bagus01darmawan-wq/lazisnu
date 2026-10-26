@@ -7,6 +7,8 @@ import {
   ApiResponse,
   Task,
   AuthLoginResponse,
+  PasswordSetResponse,
+  PasswordStatusResponse,
   MeResponse,
   DashboardResponse,
   TaskListResponse,
@@ -465,6 +467,25 @@ export const authService = {
         device_id: getOrCreateDeviceId(),
         device_label: getDeviceLabel(),
       }),
+    });
+  },
+
+  // Apakah sandi sudah pernah dibuat user sendiri (vs hash acak buatan server
+  // saat petugas dibuat). Dipakai Profil untuk memilih label
+  // "Buat kata sandi" / "Ubah kata sandi".
+  getPasswordStatus: async (): Promise<ApiResponse<PasswordStatusResponse>> => {
+    return apiRequest<PasswordStatusResponse>('/auth/password/status', {method: 'GET'});
+  },
+
+  // Buat/ubah sandi, dikonfirmasi OTP yang dikirim ke nomor petugas sendiri
+  // (minta kode lewat requestOTP di atas). Sesi saat ini dipertahankan.
+  setPassword: async (
+    otp: string,
+    newPassword: string,
+  ): Promise<ApiResponse<PasswordSetResponse>> => {
+    return apiRequest<PasswordSetResponse>('/auth/password', {
+      method: 'POST',
+      body: JSON.stringify({otp, new_password: newPassword}),
     });
   },
 
