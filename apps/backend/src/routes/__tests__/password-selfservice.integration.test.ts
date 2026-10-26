@@ -23,7 +23,9 @@ const IDS = {
   officer: randomUUID(),
 };
 
-const PHONE = `6287401${TAG}`;
+// Nomor uji digits murni (13 digit): guard varian nomor membandingkan string
+// DB dengan varian digits-only, jadi TAG hex tak boleh ikut masuk nomor.
+const PHONE = `6287401${Math.floor(100000 + Math.random() * 900000)}`;
 const DEVICE_A = 'device-A';
 const DEVICE_B = 'device-B';
 
@@ -128,7 +130,7 @@ describe('Kata sandi mandiri petugas', () => {
       method: 'POST',
       url: '/v1/auth/password',
       headers: { authorization: `Bearer ${token}` },
-      payload: { otp: '000000', new_password: 'abc' },
+      payload: { phone: PHONE, otp: '000000', new_password: 'abc' },
     });
 
     expect(res.statusCode).toBe(401);
@@ -146,7 +148,7 @@ describe('Kata sandi mandiri petugas', () => {
       method: 'POST',
       url: '/v1/auth/password',
       headers: { authorization: `Bearer ${token}` },
-      payload: { otp, new_password: 'abc' },
+      payload: { phone: PHONE, otp, new_password: 'abc' },
     });
 
     expect(res.statusCode).toBe(200);
@@ -174,7 +176,7 @@ describe('Kata sandi mandiri petugas', () => {
       method: 'POST',
       url: '/v1/auth/password',
       headers: { authorization: `Bearer ${token}` },
-      payload: { otp, new_password: 'lain' },
+      payload: { phone: PHONE, otp, new_password: 'lain' },
     });
     expect(replay.statusCode).toBe(401);
 
@@ -186,5 +188,38 @@ describe('Kata sandi mandiri petugas', () => {
     });
     expect(login.statusCode).toBe(200);
     expect(login.json().data.access_token).toBeTruthy();
+  });
+
+  it('OTP yang diminta dengan varian format nomor (08xx) tetap cocok — regresi kunci Redis', async () => {
+    // Kasus nyata 2026-10-27: aplikasi menyimpan nomor persis seperti yang
+    // diketik petugas saat login (mis. 08xx), sedangkan users.phone 62xx.
+    // Verifikasi harus memakai string yang sama dengan request-otp.
+    const app = await getApp();
+    const phoneVarian = `0${PHONE.slice(2)}`;
+    const { otp } = await otpService.generateAndStore(phoneVarian);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/password',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { phone: phoneVarian, otp, new_password: 'sandi-varian' },
+    });
+
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('menolak nomor HP milik akun lain', async () => {
+    const app = await getApp();
+    await otpService.generateAndStore('628999999999');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/password',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { phone: '628999999999', otp: '123456', new_password: 'x' },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.code).toBe('PHONE_MISMATCH');
   });
 });

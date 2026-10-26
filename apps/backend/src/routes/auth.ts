@@ -30,6 +30,11 @@ const loginSchema = z.object({
 });
 
 const setPasswordSchema = z.object({
+  // Nomor persis seperti yang dikirim aplikasi ke request-otp. OTP disimpan
+  // Redis di bawah string ini (pola yang sama dengan verify-otp), jadi
+  // verifikasi HARUS memakai nilai yang sama — bukan users.phone, yang bisa
+  // berbeda varian format (08xx vs 62xx) dari yang diketik petugas saat login.
+  phone: z.string().min(10).max(15),
   otp: z.string().length(6),
   new_password: z.string().min(1),
 });
@@ -784,15 +789,22 @@ export async function authRoutes(fastify: FastifyInstance) {
         return sendError(reply, 403, 'ACCOUNT_DISABLED', 'Akun Anda tidak aktif');
       }
 
-      const attemptKey = `otp:attempts:${user.phone}`;
+      // OTP hanya boleh untuk akun yang sedang login: body.phone harus
+      // mengarah ke nomor user ini (varian 08xx/62xx diterima).
+      const phoneVariants = getPhoneLookupVariants(body.phone);
+      if (!phoneVariants.includes(user.phone)) {
+        return sendError(reply, 403, 'PHONE_MISMATCH', 'Nomor HP tidak cocok dengan akun ini');
+      }
+
+      const attemptKey = `otp:attempts:${body.phone}`;
       const attemptCount = await redisConnection.get(attemptKey);
       if (attemptCount && parseInt(attemptCount) >= 5) {
-        await otpService.delete(user.phone);
+        await otpService.delete(body.phone);
         await redisConnection.del(attemptKey);
         return sendError(reply, 429, 'OTP_TOO_MANY_ATTEMPTS', 'Terlalu banyak percobaan, minta OTP baru');
       }
 
-      const isValidOtp = await otpService.verify(user.phone, body.otp);
+      const isValidOtp = await otpService.verify(body.phone, body.otp);
       if (!isValidOtp) {
         const newCount = await redisConnection.incr(attemptKey);
         if (newCount === 1) {
@@ -817,7 +829,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
       // Konsumsi OTP agar tidak bisa dipakai ulang.
       await redisConnection.del(attemptKey);
-      await otpService.delete(user.phone);
+      await otpService.delete(body.phone);
 
       const wasSetBefore = user.passwordSetAt != null;
       const now = new Date();
