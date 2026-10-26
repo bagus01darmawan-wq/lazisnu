@@ -81,8 +81,7 @@ const DashboardScreen: React.FC = () => {
   const navigation = useNavigation<MainNavigationProp>();
   const insets = useSafeAreaInsets();
   const user = useAuthStore(state => state.user);
-  const {todayStats, weekStats, monthStats, fetchDashboard, isLoading, error} =
-    useDashboardStore();
+  const {todayStats, weekStats, monthStats, fetchDashboard, isLoading, error} = useDashboardStore();
   const {fetchStats} = useTasksStore();
   const {
     pendingCount,
