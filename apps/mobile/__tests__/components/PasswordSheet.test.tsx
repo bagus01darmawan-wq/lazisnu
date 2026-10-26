@@ -140,7 +140,7 @@ describe('PasswordSheet — buat/ubah kata sandi via OTP', () => {
       pressableWithText(tree, 'Simpan')?.props?.onPress?.();
     });
 
-    expect(mockSetPassword).toHaveBeenCalledWith('123456', 'sandi-bebas-apa-saja');
+    expect(mockSetPassword).toHaveBeenCalledWith('628123456789', '123456', 'sandi-bebas-apa-saja');
     expect(baseProps.onSaved).toHaveBeenCalledTimes(1);
     expect(baseProps.onDismiss).not.toHaveBeenCalled();
   });

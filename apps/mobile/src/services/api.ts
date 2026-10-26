@@ -479,13 +479,16 @@ export const authService = {
 
   // Buat/ubah sandi, dikonfirmasi OTP yang dikirim ke nomor petugas sendiri
   // (minta kode lewat requestOTP di atas). Sesi saat ini dipertahankan.
+  // `phone` wajib persis seperti yang dikirim ke requestOTP — server
+  // memverifikasi OTP di bawah string itu (pola verify-otp).
   setPassword: async (
+    phone: string,
     otp: string,
     newPassword: string,
   ): Promise<ApiResponse<PasswordSetResponse>> => {
     return apiRequest<PasswordSetResponse>('/auth/password', {
       method: 'POST',
-      body: JSON.stringify({otp, new_password: newPassword}),
+      body: JSON.stringify({phone, otp, new_password: newPassword}),
     });
   },
 

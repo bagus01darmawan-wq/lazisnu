@@ -1,9 +1,10 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   View,
   Text,
   Modal,
   StyleSheet,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -47,6 +48,25 @@ export function PasswordSheet({
   const [sending, setSending] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Android edge-to-edge (RN 0.88, targetSdk 36): ADJUST_RESIZE pada jendela
+  // Modal tidak lagi menggeser layout, jadi tinggi keyboard ditambahkan
+  // manual sebagai padding bawah overlay — sheet (flex-end) terangkat di atas
+  // keyboard. iOS tetap memakai KeyboardAvoidingView.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') {
+      return;
+    }
+    const show = Keyboard.addListener('keyboardDidShow', e =>
+      setKeyboardHeight(e.endCoordinates.height),
+    );
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   const reset = () => {
     setOtpSent(false);
@@ -82,7 +102,7 @@ export function PasswordSheet({
     setSubmitting(true);
     setError(null);
     try {
-      const res = await authService.setPassword(otp.trim(), password);
+      const res = await authService.setPassword(phone, otp.trim(), password);
       if (res.success) {
         reset();
         onSaved();
@@ -107,7 +127,7 @@ export function PasswordSheet({
       accessibilityViewIsModal>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.overlay}>
+        style={[styles.overlay, keyboardHeight > 0 && {paddingBottom: keyboardHeight}]}>
         <View style={styles.sheet}>
           <View style={styles.handle} />
 
