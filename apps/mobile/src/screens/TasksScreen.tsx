@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -22,7 +22,10 @@ import {useTasksStore, useSyncStore} from '../stores';
 import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
 import type {MainNavigationProp} from '../navigation/types';
 import {TaskItem, TaskSearchBar} from './tasks';
+import {SegmentedControl} from '../components/ui';
 import {SyncIssuesSheet} from '../components/SyncIssuesSheet';
+
+type TaskTab = 'aktif' | 'nonaktif';
 
 const TasksScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -51,6 +54,7 @@ const TasksScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [issuesVisible, setIssuesVisible] = useState(false);
   const [visitRequired, setVisitRequired] = useState<VisitTask[]>([]);
+  const [taskTab, setTaskTab] = useState<TaskTab>('aktif');
 
   const fetchVisitRequired = useCallback(async () => {
     try {
@@ -93,6 +97,43 @@ const TasksScreen: React.FC = () => {
       task.qr_code?.toLowerCase().includes(query)
     );
   });
+
+  // Kaleng NON_AKTIF tidak punya assignment asli — bentuk tugas ringkas dari
+  // data visit-required supaya layar detail bisa dipakai.
+  // B2: assignment_id dari backend (periode berjalan) bila sudah ada; kalau
+  // belum, id sintetis dipakai hanya sebagai key React — TaskDetailScreen tahu
+  // membedakannya via is_visit_task. Pencarian berlaku sama seperti tab aktif.
+  const visitTasks = useMemo<Task[]>(() => {
+    const query = searchQuery.toLowerCase().trim();
+    return visitRequired
+      .filter(v => {
+        if (!query) {
+          return true;
+        }
+        return (
+          v.owner_name?.toLowerCase().includes(query) ||
+          v.owner_address?.toLowerCase().includes(query) ||
+          v.qr_code?.toLowerCase().includes(query)
+        );
+      })
+      .map(v => ({
+        id: v.assignment_id ?? `visit-${v.can_id}`,
+        can_id: v.can_id,
+        qr_code: v.qr_code,
+        owner_name: v.owner_name,
+        owner_phone: '',
+        owner_address: v.owner_address ?? '',
+        latitude: v.latitude,
+        longitude: v.longitude,
+        condition: CanCondition.NON_AKTIF,
+        is_active: v.is_active,
+        status: AssignmentStatus.ACTIVE,
+        assigned_at: v.last_visit ?? new Date().toISOString(),
+        period: '',
+        is_visit_task: true,
+        assignment_status: (v.assignment_status as AssignmentStatus | null) ?? null,
+      }));
+  }, [searchQuery, visitRequired]);
 
   // Pengganti drag-reorder: react-native-draggable-flatlist 4.0.3 tidak
   // kompatibel dengan reanimated 4 + gesture-handler 3 (scroll daftar mati
@@ -139,6 +180,19 @@ const TasksScreen: React.FC = () => {
     [copyToClipboard, navigation, showReorderMenu],
   );
 
+  const renderVisitItem = useCallback(
+    ({item}: {item: Task}) => (
+      <TouchableOpacity
+        accessibilityRole={'button'}
+        accessibilityLabel={`Detail kaleng nonaktif ${item.qr_code}`}
+        activeOpacity={0.8}
+        onPress={() => navigation.navigate('TaskDetail', {task: item})}>
+        <TaskItem item={item} index={0} onCopy={copyToClipboard} />
+      </TouchableOpacity>
+    ),
+    [copyToClipboard, navigation],
+  );
+
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
       <View style={styles.emptyIcon}>
@@ -146,6 +200,16 @@ const TasksScreen: React.FC = () => {
       </View>
       <Text style={styles.emptyTitle}>Semua tugas selesai</Text>
       <Text style={styles.emptyText}>Tidak ada penjemputan yang masih menunggu.</Text>
+    </View>
+  );
+
+  const renderEmptyVisit = () => (
+    <View style={styles.emptyContainer}>
+      <View style={styles.emptyIcon}>
+        <Icon name={'package-variant-closed'} size={44} color={Colors.brand.deepGreen} />
+      </View>
+      <Text style={styles.emptyTitle}>Tidak ada kaleng non-aktif</Text>
+      <Text style={styles.emptyText}>Tidak ada kunjungan yang masih menunggu.</Text>
     </View>
   );
 
@@ -160,7 +224,9 @@ const TasksScreen: React.FC = () => {
             <Text style={styles.headerSubtitle}>
               {isLoading && page === 1
                 ? 'Memuat penugasan...'
-                : `${filteredTasks.length} tugas ditampilkan`}
+                : taskTab === 'aktif'
+                  ? `${filteredTasks.length} tugas ditampilkan`
+                  : `${visitTasks.length} kaleng non-aktif`}
             </Text>
           </View>
           <TouchableOpacity
@@ -206,56 +272,19 @@ const TasksScreen: React.FC = () => {
           onChangeText={setSearchQuery}
           onClear={() => setSearchQuery('')}
         />
-        <View style={styles.conditionSummary}>
-          <View style={[styles.conditionChip, styles.activeChip]}>
-            <Text style={styles.activeChipText}>Aktif ({filteredTasks.length})</Text>
-          </View>
-          <View style={[styles.conditionChip, styles.nonActiveChip]}>
-            <Text style={styles.nonActiveChipText}>Non-Aktif ({visitRequired.length})</Text>
-          </View>
-        </View>
       </LinearGradient>
 
-      <Text style={[styles.sectionTitle, styles.sectionTitleFirst]}>Perlu Dijemput</Text>
-
-      {/* B2: kaleng NON_AKTIF — bukan penjemputan, tapi kunjungan penyelesaian. */}
-      {visitRequired.length > 0 && (
-        <Text style={styles.sectionTitle}>Perlu Dikunjungi ({visitRequired.length})</Text>
-      )}
-      {visitRequired.map(v => {
-        // Kaleng NON_AKTIF tidak punya assignment asli — bentuk tugas ringkas
-        // dari data visit-required supaya layar detail bisa dipakai.
-        // B2: assignment_id dari backend (periode berjalan) bila sudah ada;
-        // kalau belum, id sintetis dipakai hanya sebagai key React —
-        // TaskDetailScreen tahu membedakannya via is_visit_task.
-        const visitTask: Task = {
-          id: v.assignment_id ?? `visit-${v.can_id}`,
-          can_id: v.can_id,
-          qr_code: v.qr_code,
-          owner_name: v.owner_name,
-          owner_phone: '',
-          owner_address: v.owner_address ?? '',
-          latitude: v.latitude,
-          longitude: v.longitude,
-          condition: CanCondition.NON_AKTIF,
-          is_active: v.is_active,
-          status: AssignmentStatus.ACTIVE,
-          assigned_at: v.last_visit ?? new Date().toISOString(),
-          period: '',
-          is_visit_task: true,
-          assignment_status: (v.assignment_status as AssignmentStatus | null) ?? null,
-        };
-        return (
-          <TouchableOpacity
-            key={v.can_id}
-            accessibilityRole={'button'}
-            accessibilityLabel={`Detail kaleng nonaktif ${v.qr_code}`}
-            activeOpacity={0.8}
-            onPress={() => navigation.navigate('TaskDetail', {task: visitTask})}>
-            <TaskItem item={visitTask} index={0} onCopy={copyToClipboard} />
-          </TouchableOpacity>
-        );
-      })}
+      {/* Filter tab — gaya pill yang sama dengan halaman Riwayat, di bawah hero. */}
+      <View style={styles.filterWrap}>
+        <SegmentedControl
+          options={[
+            {label: `Aktif (${filteredTasks.length})`, value: 'aktif'},
+            {label: `Non-Aktif (${visitTasks.length})`, value: 'nonaktif'},
+          ]}
+          value={taskTab}
+          onChange={setTaskTab}
+        />
+      </View>
 
       {!!error && !isLoading && (
         <TouchableOpacity
@@ -270,18 +299,26 @@ const TasksScreen: React.FC = () => {
       )}
 
       <FlatList
-        data={filteredTasks}
-        renderItem={renderTaskItem}
+        data={taskTab === 'aktif' ? filteredTasks : visitTasks}
+        renderItem={taskTab === 'aktif' ? renderTaskItem : renderVisitItem}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContainer}
+        ListHeaderComponent={
+          // B2: kaleng NON_AKTIF — bukan penjemputan, tapi kunjungan penyelesaian.
+          taskTab === 'nonaktif' && visitTasks.length > 0 ? (
+            <Text style={styles.listSectionTitle}>Perlu Dikunjungi ({visitTasks.length})</Text>
+          ) : undefined
+        }
         ListEmptyComponent={
           isLoading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size={'large'} color={Colors.brand.emerald} />
               <Text style={styles.loadingText}>Memuat tugas...</Text>
             </View>
-          ) : (
+          ) : taskTab === 'aktif' ? (
             renderEmpty
+          ) : (
+            renderEmptyVisit
           )
         }
         refreshControl={
@@ -298,7 +335,8 @@ const TasksScreen: React.FC = () => {
           />
         }
         onEndReached={() => {
-          if (!isLoading && page < totalPages) {
+          // Paginasi hanya untuk daftar tugas; visit-required datang sekaligus.
+          if (taskTab === 'aktif' && !isLoading && page < totalPages) {
             loadMore();
           }
         }}
@@ -374,33 +412,22 @@ const styles = StyleSheet.create({
     opacity: 0.86,
     marginTop: Spacing.xs,
   },
-  conditionSummary: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
+  filterWrap: {
+    paddingHorizontal: Layout.screenPadding,
     marginTop: Spacing.md,
+    marginBottom: Spacing.xs,
   },
-  conditionChip: {
-    borderRadius: Radius.pill,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-  },
-  activeChip: {backgroundColor: Colors.surface.successSubtle},
-  nonActiveChip: {backgroundColor: Colors.surface.warningSoft},
-  activeChipText: {...Typography.caption, color: Colors.brand.deepGreen, fontWeight: '700'},
-  nonActiveChipText: {...Typography.caption, color: Colors.status.warning, fontWeight: '700'},
   listContainer: {
     paddingHorizontal: Layout.screenPadding,
     paddingBottom: Spacing.xl,
     flexGrow: 1,
   },
-  sectionTitle: {
+  listSectionTitle: {
     ...Typography.heading3,
     color: Colors.brand.deepGreen,
-    marginHorizontal: Layout.screenPadding,
     marginTop: Spacing.lg,
     marginBottom: Spacing.sm,
   },
-  sectionTitleFirst: {marginTop: Spacing.md},
   errorBanner: {
     minHeight: 48,
     flexDirection: 'row',
