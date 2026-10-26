@@ -81,7 +81,7 @@ const DashboardScreen: React.FC = () => {
   const navigation = useNavigation<MainNavigationProp>();
   const insets = useSafeAreaInsets();
   const user = useAuthStore(state => state.user);
-  const {todayStats, weekStats, monthStats, yesterdayStats, fetchDashboard, isLoading, error} =
+  const {todayStats, weekStats, monthStats, fetchDashboard, isLoading, error} =
     useDashboardStore();
   const {fetchStats} = useTasksStore();
   const {
@@ -128,16 +128,6 @@ const DashboardScreen: React.FC = () => {
   const periodStats = period === 'today' ? todayStats : weekStats;
   const periodNominal = periodStats?.total_nominal || 0;
   const periodCollected = periodStats?.collected || 0;
-
-  // Chip tren: perbandingan nominal periode aktif terhadap nominal kemarin.
-  // Periode belum ada nominal atau tanpa data kemarin → 0% (konsisten antar
-  // segmen, tidak menampilkan -100% saat hari berjalan masih kosong).
-  const yesterdayNominal = yesterdayStats?.total_nominal || 0;
-  const chipPct =
-    periodNominal > 0 && yesterdayNominal > 0
-      ? Math.round(((periodNominal - yesterdayNominal) / yesterdayNominal) * 100)
-      : 0;
-  const chipUp = chipPct >= 0;
 
   const monthTaskTotal = monthStats?.task_total || 0;
   // Kontrak metrik final: selesai = COMPLETED + UNCOLLECTED.
@@ -247,16 +237,8 @@ const DashboardScreen: React.FC = () => {
                 minimumFontScale={0.72}>
                 {formatCurrency(periodNominal)}
               </Text>
-              <View
-                style={[styles.trendChip, !chipUp && {backgroundColor: Colors.surface.errorSoft}]}>
-                <Icon
-                  name={chipUp ? 'arrow-up' : 'arrow-down'}
-                  size={12}
-                  color={chipUp ? Colors.status.success : Colors.status.error}
-                />
-                <Text style={[styles.trendChipText, !chipUp && {color: Colors.status.error}]}>
-                  {chipPct}%
-                </Text>
+              <View style={styles.trendChip}>
+                <Text style={styles.trendChipText}>{periodCollected} penjemputan</Text>
               </View>
             </View>
             <View style={styles.metaRow}>
@@ -265,8 +247,8 @@ const DashboardScreen: React.FC = () => {
                   <Icon name={'hand-heart-outline'} size={18} color={Colors.brand.emerald} />
                 </View>
                 <View style={styles.metaTextWrap}>
-                  <Text style={styles.metaNum}>{periodCollected}</Text>
-                  <Text style={styles.metaTxt}>Kaleng dijemput</Text>
+                  <Text style={styles.metaNum}>{monthStats?.collected || 0}</Text>
+                  <Text style={styles.metaTxt}>penjemputan</Text>
                 </View>
               </View>
               <View style={styles.metaDivider} />
@@ -304,7 +286,7 @@ const DashboardScreen: React.FC = () => {
                 {formatCurrency(monthStats?.total_nominal || 0)}
               </Text>
               <Text style={styles.monthSub}>
-                {monthStats?.collected || 0} penjemputan · {monthTaskActive} belum ·{' '}
+                {monthTaskActive} belum dijemput{'\n'}
                 {monthTaskClosed} dari {monthTaskTotal} selesai
               </Text>
             </View>
