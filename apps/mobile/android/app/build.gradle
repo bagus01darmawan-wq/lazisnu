@@ -32,7 +32,16 @@ react {
     //   The list of variants to that are debuggable. For those we're going to
     //   skip the bundling of the JS bundle and the assets. By default is just 'debug'.
     //   If you add flavors like lite, prod, etc. you'll have to list your debuggableVariants.
-    // debuggableVariants = ["liteDebug", "prodDebug"]
+    //   Variant ber-flavor TIDAK masuk daftar default, sehingga stagingDebug ikut
+    //   membundel index.android.bundle dan aplikasi menjalankan JS hasil build —
+    //   bukan Metro — walau perangkat terhubung USB debug.
+    //   Daftar ini sengaja opt-in lewat -Pmetro=true (khusus dev lokal + fast
+    //   refresh). Tanpa flag, perilaku tetap seperti sebelumnya: JS dibundel ke
+    //   APK agar artifact CI bisa dipasang di HP tanpa Metro.
+    debuggableVariants =
+        project.hasProperty('metro') && project.getProperty('metro') == 'true'
+            ? ['stagingDebug', 'productionDebug']
+            : ['debug', 'debugOptimized']
 
     /* Bundling */
     //   A list containing the node command and its flags. Default is just 'node'.
