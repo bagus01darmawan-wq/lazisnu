@@ -25,7 +25,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:migrate:prod": "node dist/database/migrate-cli.js",
     "db:reset-test": "bash scripts/db-sync-test.sh",
-    "db:check-orphans": "node scripts/check-migration-orphans.js"
+    "db:check-orphans": "node scripts/check-migration-orphans.js",
+    "db:cek-nomor": "tsx scripts/cek-nomor-hp-timpang.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1156.0",

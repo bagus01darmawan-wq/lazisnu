@@ -235,7 +235,30 @@ export async function officersRoutes(fastify: FastifyInstance) {
         // Tanpa sinkron ini kedua tabel menyimpang: OTP pakai officers.phone,
         // login password pakai users.phone (kasus nyata 2026-10-27).
         if (body.phone && body.phone !== existing.phone) {
-          await tx.update(schema.users).set({ phone: body.phone }).where(eq(schema.users.id, existing.userId));
+          // Email akun petugas dibentuk dari nomor HP saat dibuat
+          // (`${phone}@petugas.lazisnu.id`, lihat POST /officers) dan kolomnya
+          // UNIQUE. Kalau tidak ikut diperbarui, nomor lama tetap "terkunci"
+          // oleh email itu: nomor tersebut tidak bisa dipakai petugas baru
+          // walau kolom phone-nya sudah kosong. Email hanya diganti bila
+          // nilainya memang pola hasil generate — email yang diubah manual
+          // tidak boleh ditimpa.
+          const [targetUser] = await tx
+            .select({ email: schema.users.email })
+            .from(schema.users)
+            .where(eq(schema.users.id, existing.userId))
+            .limit(1);
+          const emailTerbentuk = `${existing.phone}@petugas.lazisnu.id`;
+          const emailBaru =
+            targetUser?.email === emailTerbentuk ? `${body.phone}@petugas.lazisnu.id` : undefined;
+
+          await tx
+            .update(schema.users)
+            .set({
+              phone: body.phone,
+              updatedAt: new Date(),
+              ...(emailBaru ? { email: emailBaru } : {}),
+            })
+            .where(eq(schema.users.id, existing.userId));
         }
 
         return updatedOfficers;
@@ -249,6 +272,26 @@ export async function officersRoutes(fastify: FastifyInstance) {
       
       return sendSuccess(reply, updated);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
+      }
+
+      // Nomor HP dan email dikunci UNIQUE di `users` maupun `officers`. Sebelum
+      // ini bentrok nomor jatuh ke sendInternalError → pengguna melihat
+      // "kesalahan server" dan menyangka aplikasinya rusak, padahal datanya
+      // memang ditolak (transaksi rollback, nomor lama tetap terpakai).
+      // Hanya POST /officers yang punya penanganan 23505; jalur edit tidak.
+      const pgError = getPostgresError(error);
+      if (pgError && pgError.code === '23505') {
+        const detail = pgError.detail || '';
+        const message = detail.includes('phone')
+          ? 'Nomor HP sudah dipakai akun lain. Gunakan nomor lain.'
+          : detail.includes('email')
+            ? 'Email akun (dibentuk dari nomor HP) sudah dipakai akun lain.'
+            : 'Data petugas sudah terdaftar.';
+        return sendError(reply, 409, 'DUPLICATE', message);
+      }
+
       return sendInternalError(reply, error, fastify.log);
     }
   });
