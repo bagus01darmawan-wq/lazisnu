@@ -530,6 +530,10 @@ export const periodDraftItems = pgTable('period_draft_items', {
 }, (t) => ({
   draftCanUnq: uniqueIndex('period_draft_item_draft_can_unq').on(t.draftId, t.canId),
   draftItemsDraftIdx: index('period_draft_items_draft_idx').on(t.draftId),
+  // Guard hapus permanen mencari "kaleng ini masih di draft mana saja" lewat
+  // `can_id` saja (`canService.findDraftLocks`). Tanpa index ini, unik gabungan
+  // (draft_id, can_id) tidak bisa dipakai karena kolom depannya `draft_id`.
+  draftItemsCanIdx: index('period_draft_items_can_idx').on(t.canId),
 }));
 
 // Collection Summary

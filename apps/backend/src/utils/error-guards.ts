@@ -5,6 +5,14 @@ export type ErrorWithMessage = {
 export type PostgresErrorLike = ErrorWithMessage & {
   code: string;
   detail?: string;
+  /**
+   * Nama constraint yang dilanggar (diisi driver `postgres` untuk error
+   * 23503/23505/23514). Dipakai `translateDatabaseError` untuk memilih pesan
+   * yang tepat — tanpa ini, semua pelanggaran jadi satu kalimat generik.
+   */
+  constraint?: string;
+  table?: string;
+  column?: string;
 };
 
 export type HttpRouteErrorLike = {
