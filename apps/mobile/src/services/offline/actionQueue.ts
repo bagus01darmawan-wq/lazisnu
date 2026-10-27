@@ -117,9 +117,9 @@ export const actionQueue = {
 
   getRetryableActions: (): QueuedAction[] => {
     const now = Date.now();
-    return actionQueue.getQueue().filter(
-      item => !item.next_retry_at || Date.parse(item.next_retry_at) <= now,
-    );
+    return actionQueue
+      .getQueue()
+      .filter(item => !item.next_retry_at || Date.parse(item.next_retry_at) <= now);
   },
 
   incrementRetryAttempts: (offline_ids: string[]): void => {

@@ -198,12 +198,10 @@ describe('Sync Service (sync.ts)', () => {
 
     it('mereplay SKIP yang sukses dan mengosongkan antrean aksi', async () => {
       actionQueue.enqueue(skipAction('skip_ok'));
-      const skipSpy = jest
-        .spyOn(collectionService, 'skipAssignment')
-        .mockResolvedValueOnce({
-          success: true,
-          data: {id: 'asg_skip_ok', status: 'UNCOLLECTED', message: 'Kaleng ditandai tidak dijemput'},
-        });
+      const skipSpy = jest.spyOn(collectionService, 'skipAssignment').mockResolvedValueOnce({
+        success: true,
+        data: {id: 'asg_skip_ok', status: 'UNCOLLECTED', message: 'Kaleng ditandai tidak dijemput'},
+      });
 
       const result = await syncService.autoSyncActions();
 
@@ -267,18 +265,16 @@ describe('Sync Service (sync.ts)', () => {
         outcome: 'DIKEMBALIKAN',
         created_at: new Date().toISOString(),
       });
-      const visitSpy = jest
-        .spyOn(collectionService, 'recordCanVisit')
-        .mockResolvedValueOnce({
-          success: true,
-          data: {
-            id: 'v1',
-            can_id: 'can_visit_1',
-            outcome: 'DIKEMBALIKAN',
-            condition: 'AKTIF',
-            message: 'Tindakan kaleng tersimpan.',
-          },
-        });
+      const visitSpy = jest.spyOn(collectionService, 'recordCanVisit').mockResolvedValueOnce({
+        success: true,
+        data: {
+          id: 'v1',
+          can_id: 'can_visit_1',
+          outcome: 'DIKEMBALIKAN',
+          condition: 'AKTIF',
+          message: 'Tindakan kaleng tersimpan.',
+        },
+      });
 
       const result = await syncService.autoSyncActions();
 
@@ -308,16 +304,14 @@ describe('Sync Service (sync.ts)', () => {
 
     it('autoSync menjalankan aksi setelah antrean koleksi (badgenya ikut turun)', async () => {
       actionQueue.enqueue(skipAction('skip_via_autosync'));
-      jest
-        .spyOn(collectionService, 'skipAssignment')
-        .mockResolvedValue({
-          success: true,
-          data: {
-            id: 'asg_skip_via_autosync',
-            status: 'UNCOLLECTED',
-            message: 'Kaleng ditandai tidak dijemput',
-          },
-        });
+      jest.spyOn(collectionService, 'skipAssignment').mockResolvedValue({
+        success: true,
+        data: {
+          id: 'asg_skip_via_autosync',
+          status: 'UNCOLLECTED',
+          message: 'Kaleng ditandai tidak dijemput',
+        },
+      });
 
       const result = await syncService.autoSync();
 
