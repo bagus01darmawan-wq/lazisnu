@@ -125,15 +125,18 @@ describe('PasswordSheet — buat/ubah kata sandi via OTP', () => {
       pressableWithText(tree, 'Kirim Kode OTP')?.props?.onPress?.();
     });
 
-    const [otpInput, passwordInput] = textInputs(tree);
-    if (!otpInput || !passwordInput) {
-      throw new Error('input OTP dan sandi tidak ditemukan');
+    const [otpInput, passwordInput, confirmInput] = textInputs(tree);
+    if (!otpInput || !passwordInput || !confirmInput) {
+      throw new Error('input OTP, sandi, dan konfirmasi tidak ditemukan');
     }
     await act(async () => {
       otpInput.props.onChangeText('123456');
     });
     await act(async () => {
       passwordInput.props.onChangeText('sandi-bebas-apa-saja');
+    });
+    await act(async () => {
+      confirmInput.props.onChangeText('sandi-bebas-apa-saja');
     });
 
     await act(async () => {
@@ -156,15 +159,18 @@ describe('PasswordSheet — buat/ubah kata sandi via OTP', () => {
     await act(async () => {
       pressableWithText(tree, 'Kirim Kode OTP')?.props?.onPress?.();
     });
-    const [otpInput, passwordInput] = textInputs(tree);
-    if (!otpInput || !passwordInput) {
-      throw new Error('input OTP dan sandi tidak ditemukan');
+    const [otpInput, passwordInput, confirmInput] = textInputs(tree);
+    if (!otpInput || !passwordInput || !confirmInput) {
+      throw new Error('input OTP, sandi, dan konfirmasi tidak ditemukan');
     }
     await act(async () => {
       otpInput.props.onChangeText('999999');
     });
     await act(async () => {
       passwordInput.props.onChangeText('x');
+    });
+    await act(async () => {
+      confirmInput.props.onChangeText('x');
     });
     await act(async () => {
       pressableWithText(tree, 'Simpan')?.props?.onPress?.();
@@ -185,9 +191,9 @@ describe('PasswordSheet — buat/ubah kata sandi via OTP', () => {
     await act(async () => {
       pressableWithText(tree, 'Kirim Kode OTP')?.props?.onPress?.();
     });
-    const [otpInput, passwordInput] = textInputs(tree);
-    if (!otpInput || !passwordInput) {
-      throw new Error('input OTP dan sandi tidak ditemukan');
+    const [otpInput, passwordInput, confirmInput] = textInputs(tree);
+    if (!otpInput || !passwordInput || !confirmInput) {
+      throw new Error('input OTP, sandi, dan konfirmasi tidak ditemukan');
     }
     await act(async () => {
       otpInput.props.onChangeText('123');
@@ -195,8 +201,41 @@ describe('PasswordSheet — buat/ubah kata sandi via OTP', () => {
     await act(async () => {
       passwordInput.props.onChangeText('x');
     });
+    await act(async () => {
+      confirmInput.props.onChangeText('x');
+    });
 
     expect(pressableWithText(tree, 'Simpan')?.props?.disabled).toBe(true);
+    expect(mockSetPassword).not.toHaveBeenCalled();
+  });
+
+  it('menolak menyimpan saat konfirmasi sandi tidak sama', async () => {
+    mockRequestOTP.mockResolvedValue({success: true, data: {message: 'x', expires_in: 300}});
+    const tree = await renderSheet();
+
+    await act(async () => {
+      pressableWithText(tree, 'Kirim Kode OTP')?.props?.onPress?.();
+    });
+    const [otpInput, passwordInput, confirmInput] = textInputs(tree);
+    if (!otpInput || !passwordInput || !confirmInput) {
+      throw new Error('input OTP, sandi, dan konfirmasi tidak ditemukan');
+    }
+    await act(async () => {
+      otpInput.props.onChangeText('123456');
+    });
+    await act(async () => {
+      passwordInput.props.onChangeText('admin123');
+    });
+    await act(async () => {
+      confirmInput.props.onChangeText('admin124');
+    });
+
+    expect(pressableWithText(tree, 'Simpan')?.props?.disabled).toBe(true);
+    const teks = tree.root
+      .findAllByType(require('react-native').Text)
+      .map(n => String(n.props.children))
+      .join(' ');
+    expect(teks).toContain('Kata sandi belum sama');
     expect(mockSetPassword).not.toHaveBeenCalled();
   });
 });

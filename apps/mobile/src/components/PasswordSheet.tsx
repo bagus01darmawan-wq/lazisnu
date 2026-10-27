@@ -44,6 +44,9 @@ export function PasswordSheet({
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
   const [password, setPassword] = useState('');
+  // Konfirmasi ketik-ulang: mencegah sandi tersimpan berbeda dari yang
+  // dikira (kasus nyata 2026-10-27: petugas tidak yakin apakah typo).
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [sending, setSending] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -72,6 +75,7 @@ export function PasswordSheet({
     setOtpSent(false);
     setOtp('');
     setPassword('');
+    setConfirmPassword('');
     setShowPassword(false);
     setError(null);
   };
@@ -116,7 +120,8 @@ export function PasswordSheet({
     }
   };
 
-  const canSave = otp.trim().length === 6 && password.length > 0 && !submitting;
+  const canSave =
+    otp.trim().length === 6 && password.length > 0 && confirmPassword === password && !submitting;
 
   return (
     <Modal
@@ -186,6 +191,22 @@ export function PasswordSheet({
               }
               accessibilityLabel="Kata sandi baru"
             />
+
+            <Text style={styles.stepLabel}>4. Ulangi kata sandi</Text>
+            <AppTextInput
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              placeholder="Ketik ulang sandi yang sama"
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoComplete="new-password"
+              editable={otpSent}
+              accessibilityLabel="Ulangi kata sandi"
+            />
+            {confirmPassword.length > 0 && confirmPassword !== password ? (
+              <Text style={styles.mismatch}>Kata sandi belum sama.</Text>
+            ) : null}
+
             <Text style={styles.hint}>
               Sandi ini alternatif masuk selain OTP. Perangkat lain akan diminta masuk ulang setelah
               sandi diubah.
@@ -279,6 +300,11 @@ const styles = StyleSheet.create({
     color: Colors.status.error,
     marginTop: Spacing.sm,
     textAlign: 'center',
+  },
+  mismatch: {
+    ...Typography.caption,
+    color: Colors.status.error,
+    marginTop: Spacing.xs,
   },
   actions: {
     flexDirection: 'row',
