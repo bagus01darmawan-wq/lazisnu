@@ -208,6 +208,28 @@ describe('Kata sandi mandiri petugas', () => {
     expect(res.statusCode).toBe(200);
   });
 
+  it('nomor yang diubah admin (hanya officers.phone) tetap diterima — regresi users.phone menyimpang', async () => {
+    // Kasus nyata 2026-10-27: PUT /officers memperbarui officers.phone saja,
+    // users.phone tetap nomor lama. Guard harus mengacu ke officers.phone —
+    // target pengiriman OTP — bukan users.phone.
+    const app = await getApp();
+    const phoneBaru = `6288500${Math.floor(100000 + Math.random() * 900000)}`;
+    await db
+      .update(schema.officers)
+      .set({ phone: phoneBaru })
+      .where(eq(schema.officers.id, IDS.officer));
+
+    const { otp } = await otpService.generateAndStore(phoneBaru);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/password',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { phone: phoneBaru, otp, new_password: 'sandi-nomor-baru' },
+    });
+
+    expect(res.statusCode).toBe(200);
+  });
+
   it('menolak nomor HP milik akun lain', async () => {
     const app = await getApp();
     await otpService.generateAndStore('628999999999');

@@ -790,9 +790,17 @@ export async function authRoutes(fastify: FastifyInstance) {
       }
 
       // OTP hanya boleh untuk akun yang sedang login: body.phone harus
-      // mengarah ke nomor user ini (varian 08xx/62xx diterima).
+      // mengarah ke nomor petugas ini (varian 08xx/62xx diterima). Acuannya
+      // officers.phone — target pengiriman OTP — karena PUT /officers hanya
+      // memperbarui nomor di tabel officers, sehingga users.phone bisa
+      // menyimpang (kasus nyata: officer ...666 vs user ...333).
+      const officerRow = await db.query.officers.findFirst({
+        where: eq(officers.id, decoded.officerId),
+      });
       const phoneVariants = getPhoneLookupVariants(body.phone);
-      if (!phoneVariants.includes(user.phone)) {
+      const phoneIsAccountOwner =
+        !!officerRow && phoneVariants.includes(officerRow.phone);
+      if (!phoneIsAccountOwner && !phoneVariants.includes(user.phone)) {
         return sendError(reply, 403, 'PHONE_MISMATCH', 'Nomor HP tidak cocok dengan akun ini');
       }
 
