@@ -253,7 +253,8 @@ async function processSyncItem(
     db.query.officers.findFirst({ where: eq(schema.officers.id, officerId) }),
   ]);
 
-  if (can?.ownerWhatsapp) {
+  // Nominal Rp 0 tidak memicu WA ke pemilik — cukup dicatat sistem.
+  if (can?.ownerWhatsapp && item.nominal > 0) {
     try {
       await sendWhatsAppNotification(can.ownerWhatsapp, can.ownerName, item.nominal, officer?.fullName || 'Petugas Lazisnu', {
         collectionId: collection.id, 

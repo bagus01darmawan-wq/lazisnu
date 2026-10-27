@@ -72,6 +72,59 @@ describe('mobileSyncService syncCollectionsBatch', () => {
     });
   });
 
+  it('mengirim WA pemilik saat nominal > 0 dan pemilik punya nomor', async () => {
+    (db.query.collections.findFirst as jest.Mock).mockResolvedValue(null);
+    (db.query.cans.findFirst as jest.Mock).mockResolvedValue({
+      id: validItem.can_id,
+      ownerWhatsapp: '6281234567890',
+      ownerName: 'Bpk Tes',
+      branch: { name: 'Ranting Uji' },
+    });
+    (db.query.officers.findFirst as jest.Mock).mockResolvedValue({ fullName: 'Petugas Uji' });
+    (db.transaction as jest.Mock).mockImplementation(async (cb) => cb());
+    (validateAssignmentForSubmit as jest.Mock).mockResolvedValue({ periodYear: 2026, periodMonth: 5 });
+    (submitCollection as jest.Mock).mockResolvedValue({ id: 'srv-wa-1' });
+
+    const { sendWhatsAppNotification } = jest.requireMock('../whatsapp') as {
+      sendWhatsAppNotification: jest.Mock;
+    };
+
+    const result = await syncCollectionsBatch([validItem], officerId, 'user-123');
+
+    expect(result.succeeded).toBe(1);
+    expect(sendWhatsAppNotification).toHaveBeenCalledTimes(1);
+    expect(sendWhatsAppNotification).toHaveBeenCalledWith(
+      '6281234567890',
+      'Bpk Tes',
+      50000,
+      'Petugas Uji',
+      expect.objectContaining({ collectionId: 'srv-wa-1' }),
+    );
+  });
+
+  it('tidak mengirim WA pemilik saat nominal Rp 0 — cukup dicatat sistem', async () => {
+    (db.query.collections.findFirst as jest.Mock).mockResolvedValue(null);
+    (db.query.cans.findFirst as jest.Mock).mockResolvedValue({
+      id: validItem.can_id,
+      ownerWhatsapp: '6281234567890',
+      ownerName: 'Bpk Tes',
+      branch: { name: 'Ranting Uji' },
+    });
+    (db.query.officers.findFirst as jest.Mock).mockResolvedValue({ fullName: 'Petugas Uji' });
+    (db.transaction as jest.Mock).mockImplementation(async (cb) => cb());
+    (validateAssignmentForSubmit as jest.Mock).mockResolvedValue({ periodYear: 2026, periodMonth: 5 });
+    (submitCollection as jest.Mock).mockResolvedValue({ id: 'srv-wa-2' });
+
+    const { sendWhatsAppNotification } = jest.requireMock('../whatsapp') as {
+      sendWhatsAppNotification: jest.Mock;
+    };
+
+    const result = await syncCollectionsBatch([{ ...validItem, nominal: 0 }], officerId, 'user-123');
+
+    expect(result.succeeded).toBe(1);
+    expect(sendWhatsAppNotification).not.toHaveBeenCalled();
+  });
+
   it('memakai assignment kunjungan on-demand untuk visit_outcome ISI', async () => {
     const visitAssignment = {
       id: 'visit-assignment-1',

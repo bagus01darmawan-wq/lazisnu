@@ -10,6 +10,7 @@ import {
   PermissionsAndroid,
 } from 'react-native';
 import {CompositeNavigationProp, useIsFocused, useNavigation} from '@react-navigation/native';
+import NetInfo from '@react-native-community/netinfo';
 import type {BottomTabNavigationProp} from '@react-navigation/bottom-tabs';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -19,6 +20,7 @@ import {type CanVisitOutcome, type Task} from '@lazisnu/shared-types';
 import type {MainTabParamList, RootStackParamList} from '../navigation/types';
 import {collectionService} from '../services/api';
 import {pickAndDecodeQRCode} from '../services/qrImageScanner';
+import {actionQueue} from '../services/offline/actionQueue';
 import {AppHeader, SkipReasonSheet} from '../components/ui';
 import {Colors, Typography} from '../theme';
 import {getErrorMessage} from '../utils';
@@ -138,7 +140,13 @@ const ScanScreen: React.FC = () => {
       if (result.success) {
         setSkipSheetTask(null);
         handleReset();
-        if (result.proposalId) {
+        if (result.queued) {
+          Alert.alert(
+            'Tersimpan di Perangkat',
+            'Tandai tidak dijemput tercatat offline dan terkirim otomatis saat internet tersedia.',
+            [{text: 'OK', onPress: () => navigation.navigate('Tasks')}],
+          );
+        } else if (result.proposalId) {
           Alert.alert(
             'Usulan Terkirim',
             'Usulan perubahan status kaleng terkirim dan menunggu persetujuan admin.',
@@ -160,6 +168,26 @@ const ScanScreen: React.FC = () => {
     if (!scannedData) return;
     setVisiting(true);
     try {
+      // Offline-first: kunjungan NON_AKTIF diantrekan di perangkat dan
+      // direplay syncService saat internet kembali (pola sama dengan skip).
+      const netInfo = await NetInfo.fetch();
+      const isOnline = !!(netInfo.isConnected && netInfo.isInternetReachable);
+      if (!isOnline) {
+        actionQueue.enqueue({
+          kind: 'VISIT',
+          can_id: scannedData.can_id,
+          qr_code: scannedData.qr_code,
+          outcome,
+          created_at: new Date().toISOString(),
+        });
+        setVisiting(false);
+        Alert.alert(
+          'Tersimpan di Perangkat',
+          'Tindakan kaleng tercatat offline dan terkirim otomatis saat internet tersedia.',
+          [{text: 'OK', onPress: handleReset}],
+        );
+        return;
+      }
       const result = await collectionService.recordCanVisit(scannedData.can_id, outcome);
       if (!result.success) {
         Alert.alert('Gagal Mencatat', result.error?.message || 'Gagal menyimpan tindakan kaleng.');

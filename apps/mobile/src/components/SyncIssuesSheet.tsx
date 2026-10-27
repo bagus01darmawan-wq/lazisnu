@@ -5,6 +5,7 @@ import {AppButton, AppPressable} from './ui';
 import {Colors, Radius, Spacing, Typography} from '../theme';
 import {formatCurrency, formatDate} from '../utils';
 import {offlineQueue} from '../services/offline/queue';
+import {actionQueue} from '../services/offline/actionQueue';
 import {correctionQueue} from '../services/offline/corrections';
 import {taskCache} from '../services/offline/tasks';
 import {collectionsCache} from '../services/offline/cache';
@@ -92,6 +93,31 @@ export const SyncIssuesSheet: React.FC<SyncIssuesSheetProps> = ({visible, onClos
       });
     }
 
+    // ── Aksi offline menunggu kirim (skip tugas / kunjungan NON_AKTIF) ──
+    for (const action of actionQueue.getQueue()) {
+      const label = action.kind === 'SKIP' ? 'Tandai Tidak Dijemput' : 'Kunjungan Kaleng';
+      const attempts = action.retry_attempts || 0;
+      pending.push({
+        key: `ap-${action.offline_id}`,
+        title: label,
+        meta: `${action.qr_code || 'QR offline'} · ${formatDate(action.created_at)}`,
+        body:
+          attempts > 0
+            ? `Belum terkirim — aman tersimpan di perangkat. Sudah dicoba ${attempts}×, percobaan berikutnya otomatis saat internet tersedia.`
+            : 'Belum terkirim — aman tersimpan di perangkat. Terkirim otomatis saat internet tersedia, atau ketuk Kirim Sekarang.',
+        tone: 'pending',
+        actions: [
+          {
+            label: 'Kirim Sekarang',
+            onPress: () => {
+              useSyncStore.getState().triggerSync();
+              setRefreshKey(k => k + 1);
+            },
+          },
+        ],
+      });
+    }
+
     // ── Penjemputan gagal permanen (ditolak server / retry habis) ──
     // Pesan jujur: bedakan "masih ada harapan" (retry habis karena jaringan
     // — kirim ulang bermakna) vs "vonis server" (data ditolak permanen —
@@ -158,6 +184,36 @@ export const SyncIssuesSheet: React.FC<SyncIssuesSheetProps> = ({visible, onClos
             danger: true,
             onPress: () => {
               correctionQueue.removeFromFailedPermanent([corr.correction_id]);
+              setRefreshKey(k => k + 1);
+            },
+          },
+        ],
+      });
+    }
+
+    // ── Aksi ditolak server / retry habis ──
+    for (const action of actionQueue.getFailedPermanent()) {
+      const label = action.kind === 'SKIP' ? 'Tandai Tidak Dijemput' : 'Kunjungan Kaleng';
+      const reason = action.error_message || 'Server menolak aksi ini.';
+      failed.push({
+        key: `af-${action.offline_id}`,
+        title: label,
+        meta: `${action.qr_code || 'QR offline'} · ${formatDate(action.created_at)}`,
+        body: `${reason} Keadaan di server sudah berubah sejak aksi ini dibuat. Bila keadaannya kembali (mis. periode dibuka admin), ketuk Kirim Ulang; bila tidak, buang catatan ini.`,
+        tone: 'failed',
+        actions: [
+          {
+            label: 'Kirim Ulang',
+            onPress: () => {
+              actionQueue.retryFailedAction(action.offline_id);
+              setRefreshKey(k => k + 1);
+            },
+          },
+          {
+            label: 'Buang',
+            danger: true,
+            onPress: () => {
+              actionQueue.removeFromFailedPermanent([action.offline_id]);
               setRefreshKey(k => k + 1);
             },
           },

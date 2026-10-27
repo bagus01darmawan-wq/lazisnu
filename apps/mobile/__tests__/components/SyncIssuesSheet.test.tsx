@@ -45,6 +45,10 @@ import {SyncIssuesSheet} from '../../src/components/SyncIssuesSheet';
 const mockTriggerSync = jest.fn();
 const mockRetryFailed = jest.fn();
 const mockRemoveFailedCorr = jest.fn();
+const mockActionQueue = jest.fn();
+const mockActionFailed = jest.fn();
+const mockRemoveFailedAction = jest.fn();
+const mockRetryFailedAction = jest.fn();
 const mockCollectionQueue = jest.fn();
 const mockFailedQueue = jest.fn();
 const mockCorrQueue = jest.fn();
@@ -56,6 +60,15 @@ jest.mock('../../src/services/offline/queue', () => ({
   offlineQueue: {
     getQueue: () => mockCollectionQueue(),
     getFailedPermanent: () => mockFailedQueue(),
+  },
+}));
+
+jest.mock('../../src/services/offline/actionQueue', () => ({
+  actionQueue: {
+    getQueue: () => mockActionQueue(),
+    getFailedPermanent: () => mockActionFailed(),
+    removeFromFailedPermanent: (ids: string[]) => mockRemoveFailedAction(ids),
+    retryFailedAction: (id: string) => mockRetryFailedAction(id),
   },
 }));
 
@@ -153,6 +166,8 @@ beforeEach(() => {
       error_message: 'Hanya record terbaru yang bisa di-resubmit',
     },
   ]);
+  mockActionQueue.mockReturnValue([]);
+  mockActionFailed.mockReturnValue([]);
   mockTaskCache.mockReturnValue([
     {id: 'a1', qr_code: 'LZS-PT-2026-0842', owner_name: 'H. Ahmad Fauzi'},
     {id: 'a2', qr_code: 'LZS-PT-2026-0901', owner_name: 'Ibu Siti Aminah'},

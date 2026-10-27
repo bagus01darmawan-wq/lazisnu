@@ -135,7 +135,8 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
       const officer = await db.query.officers.findFirst({ where: eq(schema.officers.id, officerId) });
 
       let whatsappStatus = 'SKIPPED';
-      if (insertedCan?.ownerWhatsapp) {
+      // Nominal Rp 0 tidak memicu WA ke pemilik — cukup dicatat sistem.
+      if (insertedCan?.ownerWhatsapp && body.nominal > 0) {
         try {
           await sendWhatsAppNotification(
             insertedCan.ownerWhatsapp,
@@ -264,7 +265,8 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
       };
 
       let whatsappStatus = 'SKIPPED';
-      if (oldCollection.can?.ownerWhatsapp) {
+      // Koreksi ke nominal Rp 0 juga tidak memicu WA — cukup dicatat sistem.
+      if (oldCollection.can?.ownerWhatsapp && body.nominal > 0) {
         try {
           const officer = await db.query.officers.findFirst({ where: eq(schema.officers.id, officerId) });
           await sendWhatsAppNotification(

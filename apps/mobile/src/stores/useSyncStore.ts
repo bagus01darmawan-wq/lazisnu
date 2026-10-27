@@ -1,5 +1,6 @@
 import {create} from 'zustand';
 import {offlineQueue} from '../services/offline/queue';
+import {actionQueue} from '../services/offline/actionQueue';
 import {correctionQueue} from '../services/offline/corrections';
 import {syncService} from '../services/offline/sync';
 import {getErrorMessage} from '../utils/error';
@@ -12,7 +13,9 @@ export function getTotalSyncIssueCount(): number {
     offlineQueue.getQueueCount() +
     offlineQueue.getFailedPermanentCount() +
     correctionQueue.getQueueCount() +
-    correctionQueue.getFailedPermanentCount()
+    correctionQueue.getFailedPermanentCount() +
+    actionQueue.getQueueCount() +
+    actionQueue.getFailedPermanentCount()
   );
 }
 
@@ -21,6 +24,10 @@ interface SyncState {
   permanentFailedCount: number;
   pendingCorrectionsCount: number;
   failedCorrectionsCount: number;
+  /** Skip/kunjungan offline yang menunggu replay. */
+  pendingActionsCount: number;
+  /** Skip/kunjungan offline yang ditolak server / retry habis. */
+  failedActionsCount: number;
   isSyncing: boolean;
   progress: number;
   lastSyncAt: string | null;
@@ -49,6 +56,8 @@ export function refreshSyncCounts(): void {
       oldestPending: queue[0]?.collected_at ?? null,
       pendingCorrectionsCount: correctionQueue.getQueueCount(),
       failedCorrectionsCount: correctionQueue.getFailedPermanentCount(),
+      pendingActionsCount: actionQueue.getQueueCount(),
+      failedActionsCount: actionQueue.getFailedPermanentCount(),
     });
   } catch (error) {
     console.error('Failed to refresh sync counts:', error);
@@ -66,6 +75,8 @@ export const useSyncStore = create<SyncState>(set => ({
   permanentFailedCount: 0,
   pendingCorrectionsCount: 0,
   failedCorrectionsCount: 0,
+  pendingActionsCount: 0,
+  failedActionsCount: 0,
   isSyncing: false,
   progress: 0,
   lastSyncAt: null,
@@ -91,6 +102,8 @@ export const useSyncStore = create<SyncState>(set => ({
           permanentFailedCount: offlineQueue.getFailedPermanentCount(),
           pendingCorrectionsCount: correctionQueue.getQueueCount(),
           failedCorrectionsCount: correctionQueue.getFailedPermanentCount(),
+          pendingActionsCount: actionQueue.getQueueCount(),
+          failedActionsCount: actionQueue.getFailedPermanentCount(),
         });
         return {success: 0, failed: 0};
       }
@@ -116,6 +129,8 @@ export const useSyncStore = create<SyncState>(set => ({
         permanentFailedCount: offlineQueue.getFailedPermanentCount(),
         pendingCorrectionsCount: correctionQueue.getQueueCount(),
         failedCorrectionsCount: correctionQueue.getFailedPermanentCount(),
+        pendingActionsCount: actionQueue.getQueueCount(),
+        failedActionsCount: actionQueue.getFailedPermanentCount(),
       });
 
       return {success: result.synced, failed: result.failed};
@@ -131,6 +146,8 @@ export const useSyncStore = create<SyncState>(set => ({
         permanentFailedCount: currentFailed,
         pendingCorrectionsCount: correctionQueue.getQueueCount(),
         failedCorrectionsCount: correctionQueue.getFailedPermanentCount(),
+        pendingActionsCount: actionQueue.getQueueCount(),
+        failedActionsCount: actionQueue.getFailedPermanentCount(),
       });
       return {success: 0, failed: 0};
     }
@@ -141,4 +158,5 @@ export const useSyncStore = create<SyncState>(set => ({
 // Queue adalah source of truth. Setiap mutasi queue/quarantine langsung
 // menyegarkan state badge, termasuk mutasi dari auto-sync dan layar Riwayat.
 offlineQueue.subscribe(refreshSyncCounts);
+actionQueue.subscribe(refreshSyncCounts);
 correctionQueue.subscribe(refreshSyncCounts);
