@@ -230,6 +230,42 @@ describe('Kata sandi mandiri petugas', () => {
     expect(res.statusCode).toBe(200);
   });
 
+  it('login password tetap berhasil saat users.phone basi dan officers.phone sudah baru', async () => {
+    // Kasus nyata 2026-10-27 (akun PPK hara): nomor petugas diedit sebelum
+    // sinkronisasi ada → officers.phone nomor baru (OTP jalan), users.phone
+    // nomor lama (login password gagal "email/nomor hp atau password salah").
+    // Login harus mencocokkan lewat officers.phone juga.
+    const app = await getApp();
+    const phoneBaru = `6288600${Math.floor(100000 + Math.random() * 900000)}`;
+
+    // Siapkan kondisi: officers.phone = nomor baru, users.phone = nomor lama.
+    await db
+      .update(schema.officers)
+      .set({ phone: phoneBaru })
+      .where(eq(schema.officers.id, IDS.officer));
+
+    const { otp } = await otpService.generateAndStore(phoneBaru);
+    const setRes = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/password',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { phone: phoneBaru, otp, new_password: 'sandi-hara' },
+    });
+    expect(setRes.statusCode).toBe(200);
+
+    const userRow = await db.query.users.findFirst({ where: eq(schema.users.id, IDS.user) });
+    expect(userRow?.phone).not.toBe(phoneBaru);
+
+    const login = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: { identifier: phoneBaru, password: 'sandi-hara' },
+    });
+
+    expect(login.statusCode).toBe(200);
+    expect(login.json().data.access_token).toBeTruthy();
+  });
+
   it('menolak nomor HP milik akun lain', async () => {
     const app = await getApp();
     await otpService.generateAndStore('628999999999');

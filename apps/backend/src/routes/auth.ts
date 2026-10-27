@@ -87,9 +87,25 @@ export async function authRoutes(fastify: FastifyInstance) {
           }
         }
       }
-      const user = await db.query.users.findFirst({
+      const foundUser = await db.query.users.findFirst({
         where: or(...lookupConditions)
       });
+
+      // Cadangan: nomor petugas bisa berbeda dari users.phone (edit lama hanya
+      // memperbarui officers.phone). OTP selalu memakai officers.phone, jadi
+      // login pun harus bisa menemukan akun lewat sana agar kedua jalur
+      // konsisten — bukan hanya pada data yang sudah tersinkron.
+      let user = foundUser;
+      if (!user && /^\d{9,15}$/.test(body.identifier)) {
+        const officerByPhone = await db.query.officers.findFirst({
+          where: or(
+            ...getPhoneLookupVariants(body.identifier).map(p => eq(officers.phone, p)),
+          ),
+          with: { user: true },
+        });
+        user = officerByPhone?.user ?? undefined;
+      }
+
       let userOfficers: any[] = [];
       if (user) {
         userOfficers = await db.select().from(officers).where(eq(officers.userId, user.id));
