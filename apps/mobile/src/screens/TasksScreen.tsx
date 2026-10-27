@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import {useNavigation} from '@react-navigation/native';
+import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -67,12 +67,17 @@ const TasksScreen: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => {
-    fetchTasks();
-    fetchStats();
-    fetchVisitRequired();
-    checkStatus();
-  }, [checkStatus, fetchTasks, fetchStats, fetchVisitRequired]);
+  // Refetch setiap kali tab kembali fokus: layar tab tidak pernah di-unmount,
+  // dan aksi di layar lain (jemput, reopen dari Riwayat) mengubah data tugas —
+  // tanpa ini daftar basi sampai pengguna swipe-refresh sendiri.
+  useFocusEffect(
+    useCallback(() => {
+      fetchTasks();
+      fetchStats();
+      fetchVisitRequired();
+      checkStatus();
+    }, [checkStatus, fetchTasks, fetchStats, fetchVisitRequired]),
+  );
 
   const copyToClipboard = useCallback((text: string) => {
     Clipboard.setString(text);

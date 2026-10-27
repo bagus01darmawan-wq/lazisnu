@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -17,6 +17,7 @@ import type {CanVisitHistoryItem, Task} from '@lazisnu/shared-types';
 import {collectionService, tasksService} from '../services/api';
 import {correctionQueue, QueuedCorrection} from '../services/offline/corrections';
 import {useCollectionsStore, useSyncStore, useTasksStore} from '../stores';
+import {useFocusEffect} from '@react-navigation/native';
 import {Colors, ComponentSizes, Layout, Radius, Spacing, Typography} from '../theme';
 import {AppButton, SegmentedControl} from '../components/ui';
 import {SKIP_REASON_OPTIONS} from '../components/ui/SkipReasonSheet';
@@ -102,10 +103,26 @@ const HistoryScreen: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => {
-    fetchUncollected();
-    fetchRiwayatCounts();
-  }, [fetchUncollected, fetchRiwayatCounts]);
+  // Refetch setiap kali tab kembali fokus: layar tab tidak pernah di-unmount,
+  // dan aksi di Scan (tandai tidak dijemput) atau penjemputan baru mengubah
+  // angka filter dan daftar di sini — tanpa ini tampil basi sampai di-swipe.
+  useFocusEffect(
+    useCallback(() => {
+      fetchUncollected();
+      fetchRiwayatCounts();
+      fetchCollections();
+      checkStatus();
+      // Kunjungan non-penjemputan (gagal senyap — pelengkap, bukan penghalang).
+      collectionService
+        .getVisits(5)
+        .then(res => {
+          if (res.success && res.data) {
+            setVisits(res.data.items || []);
+          }
+        })
+        .catch(() => {});
+    }, [checkStatus, fetchCollections, fetchRiwayatCounts, fetchUncollected]),
+  );
 
   const handleReopen = useCallback(
     (task: Task) => {
@@ -153,20 +170,6 @@ const HistoryScreen: React.FC = () => {
   const openFailureDetail = useCallback((item: Collection) => {
     setFailureItem(item);
   }, []);
-
-  useEffect(() => {
-    fetchCollections();
-    checkStatus();
-    // Kunjungan non-penjemputan (gagal senyap — pelengkap, bukan penghalang).
-    collectionService
-      .getVisits(5)
-      .then(res => {
-        if (res.success && res.data) {
-          setVisits(res.data.items || []);
-        }
-      })
-      .catch(() => {});
-  }, [checkStatus, fetchCollections]);
 
   const openCorrection = useCallback((item: Collection) => {
     // Item dengan koreksi offline tertunda menampilkan nominal optimistis;

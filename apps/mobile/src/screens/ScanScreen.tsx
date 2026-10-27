@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   PermissionsAndroid,
 } from 'react-native';
-import {CompositeNavigationProp, useNavigation} from '@react-navigation/native';
+import {CompositeNavigationProp, useIsFocused, useNavigation} from '@react-navigation/native';
 import type {BottomTabNavigationProp} from '@react-navigation/bottom-tabs';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -51,6 +51,11 @@ const SERVER_MESSAGE_CODES = new Set(['QR_WRONG_PERIOD', 'QR_PERIOD_CLOSED']);
 const ScanScreen: React.FC = () => {
   const navigation = useNavigation<ScanNavigationProp>();
   const insets = useSafeAreaInsets();
+  // Kamera hanya saat layar fokus: layar tab yang berpindah tab tidak
+  // di-unmount melainkan di-detach, dan sesi kamera hasil reattach di
+  // perangkat ini berhenti mengirim frame (pemindai mati diam-diam).
+  // Unmount-mount ulang menjamin sesi kamera segar setiap kali tab dibuka.
+  const isFocused = useIsFocused();
   const [scannedData, setScannedData] = useState<Task | null>(null);
   const [isScanning, setIsScanning] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -275,15 +280,17 @@ const ScanScreen: React.FC = () => {
 
     return (
       <View style={styles.container}>
-        <Camera
-          style={StyleSheet.absoluteFill}
-          cameraType={CameraType.Back}
-          scanBarcode={!isLoading && !isManualInput && !isPickingImage}
-          onReadCode={(event: {nativeEvent: {codeStringValue: string}}) =>
-            processQRCode(event.nativeEvent.codeStringValue, 'CAMERA')
-          }
-          showFrame={false}
-        />
+        {isFocused && (
+          <Camera
+            style={StyleSheet.absoluteFill}
+            cameraType={CameraType.Back}
+            scanBarcode={!isLoading && !isManualInput && !isPickingImage}
+            onReadCode={(event: {nativeEvent: {codeStringValue: string}}) =>
+              processQRCode(event.nativeEvent.codeStringValue, 'CAMERA')
+            }
+            showFrame={false}
+          />
+        )}
 
         <ScanOverlay
           scanStatus={scanStatus}
