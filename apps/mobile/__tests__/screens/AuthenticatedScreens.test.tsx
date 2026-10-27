@@ -24,6 +24,14 @@ const mockTask = {
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({navigate: mockNavigate, goBack: mockGoBack}),
+  // Layar kini memakai useIsFocused (kamera) dan useFocusEffect (refetch tab).
+  // useFocusEffect ditiru dengan semantik mount lama (useEffect sekali) agar
+  // perilaku tes sama seperti sebelum perbaikan refetch-on-focus.
+  useIsFocused: () => true,
+  useFocusEffect: (mockCallback: () => void) => {
+    const mockUseEffect = require('react').useEffect;
+    mockUseEffect(mockCallback, []);
+  },
 }));
 
 jest.mock('react-native-safe-area-context', () => ({

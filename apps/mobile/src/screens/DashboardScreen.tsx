@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useCallback, useState} from 'react';
 import {
   Alert,
   Image,
@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import {useNavigation} from '@react-navigation/native';
+import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import Svg, {Circle} from 'react-native-svg';
@@ -100,17 +100,21 @@ const DashboardScreen: React.FC = () => {
   // PeriodChip tidak render — bukan 0 hari).
   const [periodInfo, setPeriodInfo] = useState<PeriodInfoDto | null>(null);
 
-  useEffect(() => {
-    fetchDashboard();
-    fetchStats();
-    checkStatus();
-    c1Service
-      .getPeriodInfo()
-      .then(res => {
-        if (res.success && res.data) setPeriodInfo(res.data);
-      })
-      .catch(() => {});
-  }, [checkStatus, fetchDashboard, fetchStats]);
+  // Refetch setiap kali tab kembali fokus: layar tab tidak pernah di-unmount,
+  // jadi statistik Beranda basi setelah aksi di layar lain sampai di-swipe.
+  useFocusEffect(
+    useCallback(() => {
+      fetchDashboard();
+      fetchStats();
+      checkStatus();
+      c1Service
+        .getPeriodInfo()
+        .then(res => {
+          if (res.success && res.data) setPeriodInfo(res.data);
+        })
+        .catch(() => {});
+    }, [checkStatus, fetchDashboard, fetchStats]),
+  );
 
   const refresh = () => {
     fetchDashboard();
