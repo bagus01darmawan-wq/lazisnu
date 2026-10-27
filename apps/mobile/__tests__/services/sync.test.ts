@@ -2,6 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 import {CanCondition} from '@lazisnu/shared-types';
 import {syncService} from '../../src/services/offline/sync';
 import {offlineQueue, QueuedCollection} from '../../src/services/offline/queue';
+import {actionQueue} from '../../src/services/offline/actionQueue';
 import {collectionService} from '../../src/services/api';
 import {initializeOfflineStorage, getOfflineStorage} from '../../src/services/offline/mmkv';
 
@@ -174,6 +175,154 @@ describe('Sync Service (sync.ts)', () => {
       const queue = offlineQueue.getQueue();
       expect(queue.length).toBe(1);
       expect(queue[0]!.retry_attempts).toBe(1);
+    });
+  });
+
+  describe('Aksi offline: skip tugas & kunjungan NON_AKTIF', () => {
+    const skipAction = (id: string, overrides: Record<string, unknown> = {}) => ({
+      kind: 'SKIP' as const,
+      assignment_id: `asg_${id}`,
+      can_id: `can_${id}`,
+      qr_code: `QR-${id}`,
+      reason_code: 'OWNER_NOT_HOME',
+      created_at: new Date().toISOString(),
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      (NetInfo.fetch as jest.Mock).mockResolvedValue({
+        isConnected: true,
+        isInternetReachable: true,
+      });
+    });
+
+    it('mereplay SKIP yang sukses dan mengosongkan antrean aksi', async () => {
+      actionQueue.enqueue(skipAction('skip_ok'));
+      const skipSpy = jest
+        .spyOn(collectionService, 'skipAssignment')
+        .mockResolvedValueOnce({
+          success: true,
+          data: {id: 'asg_skip_ok', status: 'UNCOLLECTED', message: 'Kaleng ditandai tidak dijemput'},
+        });
+
+      const result = await syncService.autoSyncActions();
+
+      expect(result.synced).toBe(1);
+      expect(result.failed).toBe(0);
+      expect(skipSpy).toHaveBeenCalledWith('asg_skip_ok', 'OWNER_NOT_HOME', undefined);
+      expect(actionQueue.getQueueCount()).toBe(0);
+    });
+
+    it('membuang SKIP yang dijawab ASSIGNMENT_INVALID (sudah diproses server)', async () => {
+      actionQueue.enqueue(skipAction('skip_stale'));
+      jest.spyOn(collectionService, 'skipAssignment').mockResolvedValueOnce({
+        success: false,
+        error: {code: 'ASSIGNMENT_INVALID', message: 'Assignment tidak valid'},
+      });
+
+      const result = await syncService.autoSyncActions();
+
+      expect(result.synced).toBe(1);
+      expect(actionQueue.getQueueCount()).toBe(0);
+      expect(actionQueue.getFailedPermanentCount()).toBe(0);
+    });
+
+    it('memindahkan SKIP yang ditolak periode FINAL ke gagal permanen', async () => {
+      actionQueue.enqueue(skipAction('skip_final'));
+      jest.spyOn(collectionService, 'skipAssignment').mockResolvedValueOnce({
+        success: false,
+        error: {code: 'QR_ALREADY_SUBMITTED', message: 'Setoran periode sudah FINAL'},
+      });
+
+      const result = await syncService.autoSyncActions();
+
+      expect(result.failed).toBe(1);
+      expect(actionQueue.getQueueCount()).toBe(0);
+      const failed = actionQueue.getFailedPermanent();
+      expect(failed.length).toBe(1);
+      expect(failed[0]!.kind).toBe('SKIP');
+      expect(failed[0]!.error_message).toContain('FINAL');
+    });
+
+    it('menaikkan retry_attempts saat replay gagal jaringan dan menahan item', async () => {
+      actionQueue.enqueue(skipAction('skip_net'));
+      jest
+        .spyOn(collectionService, 'skipAssignment')
+        .mockRejectedValueOnce(new Error('network down'));
+
+      const result = await syncService.autoSyncActions();
+
+      expect(result.synced).toBe(0);
+      expect(result.failed).toBe(0);
+      const queue = actionQueue.getQueue();
+      expect(queue.length).toBe(1);
+      expect(queue[0]!.retry_attempts).toBe(1);
+    });
+
+    it('mereplay VISIT yang sukses ke endpoint kunjungan', async () => {
+      actionQueue.enqueue({
+        kind: 'VISIT',
+        can_id: 'can_visit_1',
+        qr_code: 'QR-V1',
+        outcome: 'DIKEMBALIKAN',
+        created_at: new Date().toISOString(),
+      });
+      const visitSpy = jest
+        .spyOn(collectionService, 'recordCanVisit')
+        .mockResolvedValueOnce({
+          success: true,
+          data: {
+            id: 'v1',
+            can_id: 'can_visit_1',
+            outcome: 'DIKEMBALIKAN',
+            condition: 'AKTIF',
+            message: 'Tindakan kaleng tersimpan.',
+          },
+        });
+
+      const result = await syncService.autoSyncActions();
+
+      expect(result.synced).toBe(1);
+      expect(visitSpy).toHaveBeenCalledWith('can_visit_1', 'DIKEMBALIKAN', undefined);
+      expect(actionQueue.getQueueCount()).toBe(0);
+    });
+
+    it('membuang VISIT yang dijawab CAN_NOT_NON_ACTIVE (sudah diproses server)', async () => {
+      actionQueue.enqueue({
+        kind: 'VISIT',
+        can_id: 'can_visit_2',
+        outcome: 'KOSONG',
+        created_at: new Date().toISOString(),
+      });
+      jest.spyOn(collectionService, 'recordCanVisit').mockResolvedValueOnce({
+        success: false,
+        error: {code: 'CAN_NOT_NON_ACTIVE', message: 'Tindakan khusus hanya untuk NON_AKTIF'},
+      });
+
+      const result = await syncService.autoSyncActions();
+
+      expect(result.synced).toBe(1);
+      expect(actionQueue.getQueueCount()).toBe(0);
+      expect(actionQueue.getFailedPermanentCount()).toBe(0);
+    });
+
+    it('autoSync menjalankan aksi setelah antrean koleksi (badgenya ikut turun)', async () => {
+      actionQueue.enqueue(skipAction('skip_via_autosync'));
+      jest
+        .spyOn(collectionService, 'skipAssignment')
+        .mockResolvedValue({
+          success: true,
+          data: {
+            id: 'asg_skip_via_autosync',
+            status: 'UNCOLLECTED',
+            message: 'Kaleng ditandai tidak dijemput',
+          },
+        });
+
+      const result = await syncService.autoSync();
+
+      expect(result.actions_synced).toBe(1);
+      expect(actionQueue.getQueueCount()).toBe(0);
     });
   });
 });

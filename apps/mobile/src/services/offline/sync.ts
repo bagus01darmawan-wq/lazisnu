@@ -1,5 +1,6 @@
 import NetInfo from '@react-native-community/netinfo';
 import {offlineQueue, QueuedCollection} from './queue';
+import {actionQueue, QueuedAction} from './actionQueue';
 import {correctionQueue} from './corrections';
 import {collectionService} from '../api';
 import {BatchCollectionRequestItem, DeviceInfo} from '@lazisnu/shared-types';
@@ -47,6 +48,8 @@ export interface SyncOutcome {
 export interface AutoSyncResult extends SyncOutcome {
   corrections_synced?: number;
   corrections_failed?: number;
+  actions_synced?: number;
+  actions_failed?: number;
 }
 
 // Kode error server yang TIDAK akan sembuh dengan retry — koreksi langsung
@@ -60,6 +63,21 @@ const PERMANENT_CORRECTION_ERROR_CODES = new Set([
   'FORBIDDEN',
   'VALIDATION_ERROR',
 ]);
+
+// Aksi (skip/kunjungan): server menolak dengan kode ini berarti keadaan sudah
+// berubah dan aksi TIDAK akan pernah relevan lagi (assignment bukan lagi
+// ACTIVE milik petugas / kaleng bukan lagi NON_AKTIF / kaleng hilang) —
+// buang dari antrean sebagai selesai, jangan zombi.
+const DROP_ACTION_ERROR_CODES = new Set([
+  'ASSIGNMENT_INVALID',
+  'CAN_NOT_NON_ACTIVE',
+  'CAN_NOT_FOUND',
+  'FORBIDDEN',
+]);
+
+// Aksi yang ditolak aturan bisnis (mis. periode sudah FINAL) tetap muncul di
+// gagal permanen — petugas/admin yang memutuskan, bukan hilang diam-diam.
+const PERMANENT_ACTION_ERROR_CODES = new Set(['QR_ALREADY_SUBMITTED', 'VALIDATION_ERROR']);
 
 /**
  * Kirim semua koreksi offline yang layak retry, satu per satu.
@@ -130,6 +148,79 @@ const flushCorrectionsInternal = async (): Promise<{synced: number; failed: numb
 };
 
 export const syncService = {
+  // Aksi offline (skip tugas aktif + kunjungan kaleng NON_AKTIF): direplay
+  // satu per satu ke endpoint masing-masing. Kode yang berarti "sudah
+  // diproses server" dibuang sebagai selesai — replay ganda tidak boleh
+  // menggantung di antrean; sisanya backoff, penolakan bisnis (mis. periode
+  // FINAL) masuk gagal permanen agar terlihat di sheet isu sinkron.
+  autoSyncActions: async (): Promise<{synced: number; failed: number}> => {
+    let syncedCount = 0;
+    let failedCount = 0;
+
+    const queued = actionQueue.getQueue();
+    const expiredItems = queued.filter(item => (item.retry_attempts || 0) >= MAX_RETRIES);
+    if (expiredItems.length > 0) {
+      actionQueue.moveToFailedPermanent(
+        expiredItems.map(item => ({
+          ...item,
+          error_message: `Melebihi batas retry (${MAX_RETRIES}x)`,
+        })),
+      );
+      failedCount += expiredItems.length;
+      devLog(`[Sync] ${expiredItems.length} aksi expired → failedPermanent.`);
+    }
+
+    const replayOne = async (action: QueuedAction) => {
+      try {
+        const response =
+          action.kind === 'SKIP'
+            ? await collectionService.skipAssignment(
+                action.assignment_id,
+                action.reason_code,
+                action.notes,
+              )
+            : await collectionService.recordCanVisit(action.can_id, action.outcome, action.notes);
+
+        if (response.success) {
+          actionQueue.dequeue([action.offline_id]);
+          syncedCount++;
+          return;
+        }
+
+        const errorCode = response.error?.code || '';
+        if (DROP_ACTION_ERROR_CODES.has(errorCode)) {
+          // Sudah diproses di server (replay ganda / diubah jalur lain) — selesai.
+          actionQueue.dequeue([action.offline_id]);
+          syncedCount++;
+          devLog(`[Sync] Aksi ${action.kind} dibuang (${errorCode}) — sudah diproses server.`);
+          return;
+        }
+        if (PERMANENT_ACTION_ERROR_CODES.has(errorCode)) {
+          actionQueue.moveToFailedPermanent([
+            {
+              ...action,
+              error_message: response.error?.message || 'Aksi ditolak server.',
+            },
+          ]);
+          failedCount++;
+          return;
+        }
+        actionQueue.incrementRetryAttempts([action.offline_id]);
+      } catch {
+        actionQueue.incrementRetryAttempts([action.offline_id]);
+      }
+    };
+
+    for (const action of actionQueue.getRetryableActions()) {
+      await replayOne(action);
+    }
+
+    if (syncedCount > 0 || failedCount > 0) {
+      devLog(`[Sync] Aksi: ${syncedCount} selesai, ${failedCount} gagal permanen.`);
+    }
+    return {synced: syncedCount, failed: failedCount};
+  },
+
   // Batch penjemputan saja — tanpa flush koreksi. Internal: dipanggil autoSync()
   // yang sudah memegang lock syncInProgress dan memvalidasi konektivitas.
   autoSyncCollections: async (): Promise<SyncOutcome> => {
@@ -346,10 +437,13 @@ export const syncService = {
     try {
       const collectionsResult = await syncService.autoSyncCollections();
       const correctionsResult = await flushCorrectionsInternal();
+      const actionsResult = await syncService.autoSyncActions();
       return {
         ...collectionsResult,
         corrections_synced: correctionsResult.synced,
         corrections_failed: correctionsResult.failed,
+        actions_synced: actionsResult.synced,
+        actions_failed: actionsResult.failed,
       };
     } finally {
       syncInProgress = false;

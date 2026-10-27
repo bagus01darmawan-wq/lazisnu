@@ -5,6 +5,7 @@ import {Task, AssignmentStatus} from '@lazisnu/shared-types';
 import NetInfo from '@react-native-community/netinfo';
 import {tasksStatsCache} from '../services/offline/cache';
 import {offlineQueue} from '../services/offline/queue';
+import {actionQueue} from '../services/offline/actionQueue';
 import {taskCache} from '../services/offline/tasks';
 import {taskOrderCache} from '../services/offline/taskOrderCache';
 import {getErrorMessage} from '../utils/error';
@@ -179,6 +180,8 @@ interface TasksState {
     /** Diisi bila server membentuk usulan kondisi berdasarkan aturan legacy. */
     proposalId?: string;
     reasonCode?: string;
+    /** True bila aksi diantrekan offline — belum sampai server. */
+    queued?: boolean;
   }>;
   completePeriod: () => Promise<{skipped: number; expiredClosed: number; error?: string}>;
   resolveTaskByQRCode: (qrCode: string) => Promise<{
@@ -440,7 +443,43 @@ export const useTasksStore = create<TasksState>((set, get) => ({
   },
 
   skipAssignment: async (taskId: string, reasonCode?: string, notes?: string) => {
+    // Offline-first: antrekan skip di perangkat dan terapkan secara optimistik
+    // (sama seperti sukses server); syncService mereplay saat internet kembali.
+    // Bila replay nanti ditolak (mis. periode sudah FINAL), catatannya muncul
+    // di sheet isu sinkron — bukan hilang diam-diam.
     try {
+      const netInfo = await NetInfo.fetch();
+      const isOnline = !!(netInfo.isConnected && netInfo.isInternetReachable);
+      if (!isOnline) {
+        const task =
+          get().tasks.find(t => t.id === taskId) ??
+          taskCache.getTasks('ACTIVE').find(t => t.id === taskId);
+        actionQueue.enqueue({
+          kind: 'SKIP',
+          assignment_id: taskId,
+          can_id: task?.can_id,
+          qr_code: task?.qr_code,
+          reason_code: reasonCode,
+          notes,
+          created_at: new Date().toISOString(),
+        });
+        const {tasks, activeCount, completedCount, totalCount} = get();
+        set({
+          tasks: applyCustomOrder(tasks.filter(t => t.id !== taskId)),
+        });
+        taskCache.markCompleted(taskId);
+        tasksStatsCache.set({
+          active: Math.max(0, activeCount - 1),
+          completed: completedCount + 1,
+          total: totalCount,
+          completedNominal: get().completedNominal,
+        });
+        set({
+          activeCount: Math.max(0, activeCount - 1),
+          completedCount: completedCount + 1,
+        });
+        return {success: true, queued: true, reasonCode};
+      }
       const result = await collectionService.skipAssignment(taskId, reasonCode, notes);
       if (result.success) {
         const {tasks, activeCount, completedCount, totalCount} = get();
