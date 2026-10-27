@@ -7,6 +7,7 @@ import { getRoleScope } from '../utils/role-scope';
 import { JWTPayload } from '../middleware/auth';
 import { isTransitionAllowed, isTrackedForCondition, ASSIGNABLE_CONDITIONS } from './conditionRules';
 import type { CanConditionValue } from './conditionRules';
+import { buildDraftLockError, type DraftLockInfo } from './canDraftLock';
 
 export interface CreateCanInput {
   branch_id?: string | null;
@@ -361,6 +362,30 @@ export async function updateCan(canId: string, body: UpdateCanInput, ctx: Access
   return { can: updated[0], oldData: existing };
 }
 
+/**
+ * Baris draft penugasan yang masih menunjuk kaleng-kaleng ini. Dipakai guard
+ * hapus permanen — alasan dan kalimatnya ada di `canDraftLock.ts`.
+ *
+ * Catatan performa: `period_draft_items` hanya punya index gabungan
+ * (`draft_id`, `can_id`), jadi pencarian per `can_id` memindai tabel. Tabelnya
+ * kecil (± jumlah kaleng × jumlah periode) dan fungsi ini hanya dipanggil saat
+ * hapus permanen — bukan di jalur baca.
+ */
+async function findDraftLocks(canIds: string[]): Promise<DraftLockInfo[]> {
+  if (canIds.length === 0) return [];
+  const rows = await db
+    .select({
+      canId: schema.periodDraftItems.canId,
+      periodYear: schema.periodDrafts.periodYear,
+      periodMonth: schema.periodDrafts.periodMonth,
+      status: schema.periodDrafts.status,
+    })
+    .from(schema.periodDraftItems)
+    .innerJoin(schema.periodDrafts, eq(schema.periodDraftItems.draftId, schema.periodDrafts.id))
+    .where(inArray(schema.periodDraftItems.canId, canIds));
+  return rows;
+}
+
 export async function deleteCan(canId: string, permanent: boolean, ctx: AccessContext) {
   const existing = await db.query.cans.findFirst({ where: eq(schema.cans.id, canId) });
   if (!existing) throw Errors.COLLECTION_NOT_FOUND('Kaleng tidak ditemukan');
@@ -368,9 +393,23 @@ export async function deleteCan(canId: string, permanent: boolean, ctx: AccessCo
   await checkAccess(ctx, existing, 'Kaleng bukan milik ranting/kecamatan Anda');
 
   if (permanent) {
-    if ((existing as any).collectionCount > 0) {
-      throw new AppError('HAS_COLLECTION_HISTORY', 'Kaleng dengan riwayat penjemputan tidak dapat dihapus permanen. Gunakan fitur nonaktifkan (soft delete).', 409);
+    // Sumber kebenaran = baris `collections`, BUKAN kolom cache
+    // `cans.collection_count`. Cache itu hanya bertambah di jalur submit
+    // tertentu, jadi bisa meleset; salah hitung di sini berarti menghapus
+    // riwayat uang yang sebenarnya ada.
+    const hasCollectionHistory = await db
+      .select({ id: schema.collections.id })
+      .from(schema.collections)
+      .where(eq(schema.collections.canId, canId))
+      .limit(1);
+    if (hasCollectionHistory.length > 0) {
+      throw new AppError('HAS_COLLECTION_HISTORY', 'Kaleng dengan riwayat penjemputan tidak dapat dihapus permanen. Gunakan penandaan dikembalikan.', 409);
     }
+    // Guard draft: tanpa ini Postgres tetap menolak (FK `period_draft_items`),
+    // tetapi pesannya tidak bisa menyebut periode maupun membedakan draft yang
+    // masih boleh diedit dari yang sudah disetujui.
+    const draftError = buildDraftLockError(await findDraftLocks([canId]));
+    if (draftError) throw draftError;
     await db.delete(schema.cans).where(eq(schema.cans.id, canId));
     return { deleted: true, oldData: existing };
   }
@@ -433,13 +472,23 @@ export async function createBulkCans(branch_id: string, items: any[], ctx: Acces
 
 export async function deleteBulkCans(ids: string[], permanent: boolean, ctx: AccessContext) {
   if (permanent) {
-    const cansWithHistory = await db.query.cans.findMany({
-      where: and(inArray(schema.cans.id, ids), sql`${schema.cans.collectionCount} > 0`),
-    });
+    // Sama seperti hapus tunggal: hitung baris `collections` yang benar-benar
+    // ada, jangan percaya kolom cache `collection_count`.
+    const cansWithHistory = await db
+      .select({ canId: schema.collections.canId })
+      .from(schema.collections)
+      .where(inArray(schema.collections.canId, ids))
+      .groupBy(schema.collections.canId);
 
     if (cansWithHistory.length > 0) {
-      throw new AppError('HAS_COLLECTION_HISTORY', 'Beberapa kaleng memiliki riwayat penjemputan dan tidak dapat dihapus permanen. Gunakan fitur nonaktifkan (soft delete).', 409);
+      throw new AppError('HAS_COLLECTION_HISTORY', `Hapus permanen dibatalkan: ${cansWithHistory.length} dari ${ids.length} kaleng punya riwayat penjemputan, jadi tidak bisa dihapus permanen. Gunakan penandaan dikembalikan.`, 409);
     }
+
+    // Satu kaleng yang masih di draft menggagalkan SELURUH perintah DELETE
+    // (satu statement `IN (...)`), dan tanpa guard ini pengguna tidak tahu
+    // berapa maupun periode mana yang menahan.
+    const draftError = buildDraftLockError(await findDraftLocks(ids), ids.length);
+    if (draftError) throw draftError;
   }
 
   if (ctx.role === 'ADMIN_RANTING' && ctx.branchId) {

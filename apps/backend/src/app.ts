@@ -20,6 +20,7 @@ import { auditLogger } from './middleware/audit-logger';
 import { initRollbar, captureError } from './config/rollbar';
 import { isAppError } from './utils/AppError';
 import { isJwtErrorLike } from './utils/error-guards';
+import { translateDatabaseError } from './utils/dbErrorMessages';
 import { z } from 'zod';
 
 export async function buildApp() {
@@ -236,7 +237,30 @@ export async function buildApp() {
       });
     }
 
-    // 7. Unknown error — sanitize: log detail di server, response generik
+    // 7. Pelanggaran aturan database yang bisa dijelaskan (foreign key, nilai
+    //    unik, isian wajib). Ini bukan kegagalan server: permintaannya yang
+    //    ditolak database, jadi jawab 4xx dengan pesan yang menyebut sebabnya.
+    //    Error infrastruktur (koneksi, timeout) TIDAK ikut dipetakan dan tetap
+    //    jatuh ke 500 di bawah.
+    const dbError = translateDatabaseError(error);
+    if (dbError) {
+      captureError(error instanceof Error ? error : new Error(String(error)), {
+        requestId: request.id,
+        method: request.method,
+        url: request.url,
+        statusCode: dbError.statusCode,
+        dbErrorCode: dbError.code,
+      });
+      return reply.status(dbError.statusCode).send({
+        success: false,
+        error: {
+          code: dbError.code,
+          message: dbError.message,
+        },
+      });
+    }
+
+    // 8. Unknown error — sanitize: log detail di server, response generik
     captureError(error instanceof Error ? error : new Error(String(error)), {
       requestId: request.id,
       method: request.method,

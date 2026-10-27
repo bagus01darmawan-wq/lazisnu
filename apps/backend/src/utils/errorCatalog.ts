@@ -49,6 +49,17 @@ export const ErrorCode = {
   OFFLINE_ID_DUPLICATE: 'OFFLINE_ID_DUPLICATE',
   DUKUH_IN_USE: 'DUKUH_IN_USE',
   COLLECTION_IN_USE: 'COLLECTION_IN_USE',
+
+  // Pelanggaran aturan database yang bisa dijelaskan ke pengguna (lihat
+  // utils/dbErrorMessages.ts). Tanpa kode ini, semuanya tampil sebagai
+  // "Terjadi kesalahan server" yang tidak memberi tahu apa pun.
+  DATA_IN_USE: 'DATA_IN_USE',
+  DUPLICATE_DATA: 'DUPLICATE_DATA',
+
+  // Kaleng tidak bisa dihapus permanen karena masih tercatat di draft penugasan
+  // (lihat services/canDraftLock.ts). Dipisah dari DATA_IN_USE agar pesannya bisa
+  // menyebut periode dan status draftnya.
+  CAN_IN_PERIOD_DRAFT: 'CAN_IN_PERIOD_DRAFT',
 } as const;
 
 export type ErrorCodeType = (typeof ErrorCode)[keyof typeof ErrorCode];

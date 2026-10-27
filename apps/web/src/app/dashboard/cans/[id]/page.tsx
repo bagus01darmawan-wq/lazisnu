@@ -110,6 +110,39 @@ interface ApiError {
   };
 }
 
+/**
+ * Kolom STATUS di halaman ini menjawab satu pertanyaan saja: "aset ini dalam
+ * kondisi apa?". Sumbunya KONDISI (`cans.condition`), bukan status tugas.
+ * Status tugas (ASSIGNED/SELESAI/RE-ASSIGN/TERLEWAT) milik halaman Penugasan —
+ * dulu dua sumbu itu dicampur di satu kolom sehingga kaleng RUSAK/HILANG/
+ * NON_AKTIF tampil "AKTIF" hanya karena `is_active` masih true.
+ * Label mengikuti CONDITION_LABELS di backend (`services/conditionRules.ts`).
+ *
+ * `hint` = keterangan kecil di bawah label. Fungsinya mencegah salah paham yang
+ * paling mahal: RUSAK dan HILANG **tetap masuk daftar penjemputan** (lihat
+ * ASSIGNABLE_CONDITIONS), jadi tanpa keterangan orang mengira kalengnya mati.
+ * Kalimatnya diambil dari aturan backend, bukan dikarang: "tetap dijemput" =
+ * ASSIGNABLE_CONDITIONS, "ganti unit"/"beri kaleng baru" = ACTION_LABELS.
+ * Baris AKTIF sengaja TANPA hint — itu keadaan normal, tidak perlu dijelaskan.
+ */
+const CONDITION_STYLE: Record<string, { label: string; className: string; hint?: string }> = {
+  AKTIF: { label: 'AKTIF', className: 'text-[#1F8243]' },
+  NON_AKTIF: { label: 'NON-AKTIF', className: 'text-[#EAD19B]', hint: 'dijeda · kunjungi untuk verifikasi' },
+  RUSAK: { label: 'RUSAK', className: 'text-[#DE6F4A]', hint: 'tetap dijemput · ganti unit' },
+  HILANG: { label: 'HILANG', className: 'text-[#D97A76]', hint: 'tetap dijemput · beri kaleng baru' },
+  DIKEMBALIKAN: { label: 'DIKEMBALIKAN', className: 'text-[#F4F1EA]/40', hint: 'keluar dari pelacakan' },
+};
+
+/**
+ * Kaleng yang sudah keluar dari pelacakan (`is_active = false`, kondisi
+ * DIKEMBALIKAN) — satu-satunya yang boleh dihapus permanen. Dipakai bersama oleh
+ * aksi baris, aksi massal, dan tombol di bilah aksi agar ketiganya tidak pernah
+ * berbeda pendapat.
+ */
+function isReturnedCan(can: { condition?: string; isActive: boolean }): boolean {
+  return can.condition === 'DIKEMBALIKAN' || !can.isActive;
+}
+
 const canSchema = z.object({
   owner_name: z.string().min(1, 'Nama pemilik wajib diisi'),
   branch_id: z.string().uuid('Pilih ranting'),
@@ -150,7 +183,10 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
    */
   const FILTER_AWAL = {
     search: '',
-    statusFilter: 'ALL',
+    // Halaman dibuka pada kaleng AKTIF (kondisi AKTIF = aktif dan baik).
+    // Konsekuensinya disengaja: kaleng RUSAK/HILANG/NON-AKTIF/DIKEMBALIKAN tidak
+    // ikut tampil sampai filter diganti — itu tugas filter, bukan daftar utama.
+    statusFilter: 'AKTIF',
     currentPage: 1,
     pageSize: 10,
   };
@@ -313,17 +349,32 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
     setIsModalOpen(true);
   };
 
+  /**
+   * Pilihan massal hanya boleh dihapus permanen bila SELURUH baris terpilih
+   * sudah DIKEMBALIKAN. Dipakai bersama oleh handler dan oleh tombol di bilah
+   * aksi, supaya label tombol tidak pernah berbeda dari aksi yang dijalankan.
+   */
+  const isBulkPermanentSelection = () => {
+    const selectedRows = data.filter((row) => selectedIds.includes(row.id));
+    return selectedRows.length > 0 && selectedRows.every(isReturnedCan);
+  };
+
   const handleDelete = async (id: string, isPermanentRow?: boolean) => {
-    const isPermanent = isPermanentRow || statusFilter === 'NON_ACTIVE';
+    // Hapus permanen HANYA untuk kaleng yang sudah DIKEMBALIKAN (is_active=false).
+    // Dulu filter yang sedang aktif ikut menentukan jenis aksi: memilih filter
+    // NON-AKTIF membuat SEMUA baris di layar menjadi hapus permanen, padahal
+    // NON_AKTIF adalah kondisi sementara ("kunjungi untuk verifikasi") — kaleng
+    // yang paling mungkin kembali aktif justru yang paling mudah dihapus.
+    const isPermanent = isPermanentRow === true;
 
     toast.custom((t: string | number) => (
       <ConfirmToast
         id={t}
-        title={isPermanent ? "Hapus Permanen?" : "Nonaktifkan Kaleng?"}
+        title={isPermanent ? "Hapus Permanen?" : "Tandai Dikembalikan?"}
         description={isPermanent
           ? "Data akan hilang selamanya and tidak dapat dikembalikan."
-          : "Kaleng tidak akan muncul di daftar penjemputan aktif."}
-        confirmLabel={isPermanent ? "Hapus Permanen" : "Ya, Nonaktifkan"}
+          : "Kaleng keluar dari daftar penjemputan dan dicatat sebagai dikembalikan. Bisa diaktifkan kembali kapan saja."}
+        confirmLabel={isPermanent ? "Hapus Permanen" : "Ya, Dikembalikan"}
         onConfirm={() => {
           toast.promise(
             api.delete(`/admin/cans/${id}${isPermanent ? '?permanent=true' : ''}`).then((res) => {
@@ -332,7 +383,7 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
             }),
             {
               loading: 'Memproses...',
-              success: isPermanent ? 'Data kaleng berhasil dihapus permanen' : 'Data kaleng berhasil dinonaktifkan',
+              success: isPermanent ? 'Data kaleng berhasil dihapus permanen' : 'Kaleng ditandai dikembalikan',
               error: (err: ApiError) => err.error?.message || err.message || 'Gagal memproses penghapusan',
             }
           )
@@ -344,21 +395,23 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
 
   const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return;
-    const isNonActiveView = statusFilter === 'NON_ACTIVE';
+    // Massal: permanen hanya bila SELURUH pilihan sudah DIKEMBALIKAN. Pilihan
+    // campuran diperlakukan sebagai penandaan dikembalikan — aman, bisa dibatalkan.
+    const isPermanentBulk = isBulkPermanentSelection();
 
     toast.custom((t: string | number) => (
       <ConfirmToast
         id={t}
-        title={isNonActiveView ? "Hapus Massal?" : "Nonaktifkan Massal?"}
-        description={isNonActiveView
+        title={isPermanentBulk ? "Hapus Massal?" : "Tandai Dikembalikan Massal?"}
+        description={isPermanentBulk
           ? `Hapus permanen ${selectedIds.length} kaleng terpilih?`
-          : `Nonaktifkan ${selectedIds.length} kaleng terpilih?`}
-        confirmLabel={isNonActiveView ? "Hapus Permanen" : "Ya, Nonaktifkan"}
+          : `Tandai ${selectedIds.length} kaleng terpilih sebagai dikembalikan?`}
+        confirmLabel={isPermanentBulk ? "Hapus Permanen" : "Ya, Dikembalikan"}
         onConfirm={() => {
           toast.promise(
             api.post('/admin/cans/bulk-delete', {
               ids: selectedIds,
-              permanent: isNonActiveView
+              permanent: isPermanentBulk
             }).then((res) => {
               void fetchData();
               setSelectedIds([]);
@@ -366,14 +419,14 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
             }),
             {
               loading: 'Memproses...',
-              success: isNonActiveView
+              success: isPermanentBulk
                 ? `Berhasil menghapus permanen ${selectedIds.length} kaleng`
-                : `Berhasil menonaktifkan ${selectedIds.length} kaleng`,
+                : `Berhasil menandai ${selectedIds.length} kaleng sebagai dikembalikan`,
               error: (err: ApiError) => err.message || 'Gagal menghapus data masal',
             }
           )
         }}
-        variant={isNonActiveView ? 'danger' : 'warning'}
+        variant={isPermanentBulk ? 'danger' : 'warning'}
       />
     ), { duration: 5000 });
   };
@@ -617,7 +670,10 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
       ),
     },
     {
-      accessorKey: 'isActive',
+      // Kolom ini membaca `condition` (kondisi aset), bukan `isActive` dan bukan
+      // status tugas. `isActive` hanya jadi jaring pengaman bila backend lama
+      // belum mengirim kolom condition.
+      accessorKey: 'condition',
       header: () => (
         <div className="flex items-center gap-1.5">
           <CheckCircle2 size={12} className="text-[#EAD19B]" />
@@ -626,35 +682,20 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
       ),
       cell: ({ row }) => {
         const can = row.original;
-        const isAssigned = can.assignments && can.assignments.length > 0;
-        const assignmentStatus = can.assignments?.[0]?.status;
-
-        if (!can.isActive) {
-          return <span className="text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/40">NON-AKTIF</span>;
-        }
-
-        if (isAssigned) {
-          if (assignmentStatus === 'COMPLETED') {
-            return (
-              <span
-                className="text-[10px] font-bold uppercase tracking-widest text-[#1F8243] cursor-pointer hover:opacity-80 transition-opacity"
-                onClick={() => router.push('/dashboard/assignments')}
-              >
-                SELESAI
-              </span>
-            );
-          }
-          return (
-            <span
-              className="text-[10px] font-bold uppercase tracking-widest text-[#DE6F4A] cursor-pointer hover:opacity-80 transition-opacity"
-              onClick={() => router.push('/dashboard/assignments')}
-            >
-              ASSIGNED
+        const condition = can.condition ?? (can.isActive ? 'AKTIF' : 'DIKEMBALIKAN');
+        const style = CONDITION_STYLE[condition] ?? CONDITION_STYLE.AKTIF;
+        return (
+          <div className="flex flex-col">
+            <span className={`text-[10px] font-bold uppercase tracking-widest ${style.className}`}>
+              {style.label}
             </span>
-          );
-        }
-
-        return <span className="text-[10px] font-bold uppercase tracking-widest text-[#1F8243]">AKTIF</span>;
+            {style.hint && (
+              <span className="text-[11px] italic text-[#F4F1EA]/50 leading-tight mt-0.5">
+                {style.hint}
+              </span>
+            )}
+          </div>
+        );
       },
     },
     {
@@ -705,7 +746,7 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
                 size="sm"
                 className={`h-8 w-8 p-0 rounded-xl transition-all duration-300 border-white/10 bg-white/5 group ${isNonActiveRow ? 'hover:bg-red-500/20 hover:text-[#D97A76] hover:border-red-500/30' : 'hover:bg-red-500/10 hover:text-[#D97A76] hover:border-red-500/20'}`}
                 onClick={() => handleDelete(row.original.id, isNonActiveRow)}
-                title={isNonActiveRow ? 'Hapus Permanen' : 'Non-aktifkan'}
+                title={isNonActiveRow ? 'Hapus Permanen' : 'Tandai Dikembalikan'}
               >
                 {isNonActiveRow ? (
                   <AlertTriangle size={14} className="text-[#D97A76]" />
@@ -748,7 +789,7 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
         <div className="flex items-center gap-4">
           {/* Bulk Action Pill Wrapper */}
           {selectedIds.length > 0 && (
-            statusFilter === 'NON_ACTIVE' ? (
+            isBulkPermanentSelection() ? (
               <button
                 onClick={handleBulkDelete}
                 className="h-[35px] px-4 rounded-xl text-[11px] font-bold transition-all active:scale-95 flex items-center gap-2 bg-[#D97A76] text-white shadow-lg shadow-[#D97A76]/20"
@@ -835,10 +876,14 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
             showSearch={false}
             options={[
               { label: 'SEMUA STATUS', value: 'ALL' },
-              { label: 'AKTIF', value: 'ACTIVE' },
-              { label: 'ASSIGNED', value: 'ASSIGNED' },
-              { label: 'SELESAI', value: 'COMPLETED' },
-              { label: 'NON-AKTIF', value: 'NON_ACTIVE' }
+              // Lima kondisi aset — nilai `value` harus sama dengan yang dibaca
+              // `canService.getCans` (AKTIF/RUSAK/HILANG/DIKEMBALIKAN, dan
+              // NON_ACTIVE dipetakan ke kondisi NON_AKTIF).
+              { label: 'AKTIF', value: 'AKTIF' },
+              { label: 'NON-AKTIF', value: 'NON_ACTIVE' },
+              { label: 'RUSAK', value: 'RUSAK' },
+              { label: 'HILANG', value: 'HILANG' },
+              { label: 'DIKEMBALIKAN', value: 'DIKEMBALIKAN' }
             ]}
             value={statusFilter}
             onChange={(val) => {
