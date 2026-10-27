@@ -51,7 +51,7 @@ overrides:
   'nanoid': 3.3.18
   'postcss@>=8.0.0 <8.5.26': 8.5.26 # <=8.5.22 (GHSA-xxxx) — 8.5.26 & 4.2.4 di tree tetap
   'protobufjs': 7.6.6 # <=7.6.4 (GHSA-8gq9-2x98-8v72) — 7.6.6 di luar rentang; allowBuilds ada
-  'qs@6': 6.16.0 # >=6.11.1 <=6.15.1 (GHSA-xxxx) — via superagent (test)
+  'qs@6': 6.16.1 # <6.16.1 (GHSA-6pq8-jhm2-2vcw, moderate) — via superagent (test); 6.16.0 sempat jadi dasar 2026-10-25 lalu advisory baru muncul
   'send@0.18': 0.19.2 # <0.19.0 (GHSA-xxxx) — via @expo/cli; bump minor tooling
   'sharp': 0.35.5 # <0.35.5 (GHSA-wq5f-xc86-pv6w) — next>sharp (runtime prod) + mobile
   'shell-quote': 1.11.0 # <1.11.0 (GHSA-pqg4-j6r4-53mv) — via RN CLI; pin 1.9.0 sudah tertinggal
