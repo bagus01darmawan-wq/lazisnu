@@ -221,14 +221,21 @@ export async function officersRoutes(fastify: FastifyInstance) {
         return sendError(reply, 403, 'FORBIDDEN', 'Akses ditolak');
       }
       const [updated] = await db.transaction(async (tx) => {
-        const updatedOfficers = await tx.update(schema.officers).set({ 
-          fullName: body.full_name ?? existing.fullName, 
-          phone: body.phone ?? existing.phone, 
+        const updatedOfficers = await tx.update(schema.officers).set({
+          fullName: body.full_name ?? existing.fullName,
+          phone: body.phone ?? existing.phone,
           isActive: body.is_active !== undefined ? body.is_active : existing.isActive
         }).where(eq(schema.officers.id, id)).returning();
 
         if (body.is_active !== undefined) {
           await tx.update(schema.users).set({ isActive: body.is_active }).where(eq(schema.users.id, existing.userId));
+        }
+
+        // Nomor HP juga kunci login (identifier users.phone) dan target OTP.
+        // Tanpa sinkron ini kedua tabel menyimpang: OTP pakai officers.phone,
+        // login password pakai users.phone (kasus nyata 2026-10-27).
+        if (body.phone && body.phone !== existing.phone) {
+          await tx.update(schema.users).set({ phone: body.phone }).where(eq(schema.users.id, existing.userId));
         }
 
         return updatedOfficers;

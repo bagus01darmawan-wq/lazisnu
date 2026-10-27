@@ -188,4 +188,30 @@ describe('Pembuatan petugas baru — kode otomatis', () => {
     expect(response.json().error.code).toBe('DUPLICATE_ERROR');
     expect(response.json().error.message).toContain('Nomor HP sudah terdaftar');
   });
+
+  it('mengubah nomor HP petugas ikut menyinkronkan users.phone', async () => {
+    // Nomor HP adalah kunci login password (users.phone) sekaligus target OTP
+    // (officers.phone). Sebelumnya PUT /officers hanya memperbarui tabel
+    // officers, membuat login password memakai nomor lama selamanya.
+    const app = await getApp();
+    const phoneBaru = `6287309${TAG}`;
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/v1/admin/officers/${IDS.officer1}`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { phone: phoneBaru },
+    });
+
+    expect(res.statusCode).toBe(200);
+
+    const officer = await db.query.officers.findFirst({
+      where: eq(schema.officers.id, IDS.officer1),
+    });
+    const user = await db.query.users.findFirst({
+      where: eq(schema.users.id, IDS.officerUser1),
+    });
+    expect(officer?.phone).toBe(phoneBaru);
+    expect(user?.phone).toBe(phoneBaru);
+  });
 });
