@@ -42,9 +42,10 @@ export interface QueuedSkipAction {
   kind: 'SKIP';
   offline_id: string;
   assignment_id: string;
-  /** Informasi tampilan saja — replay hanya butuh assignment_id. */
+  /** Informasi tampilan saja (kartu Riwayat offline) — replay hanya butuh assignment_id. */
   can_id?: string;
   qr_code?: string;
+  owner_name?: string;
   reason_code?: string;
   notes?: string;
   created_at: string;

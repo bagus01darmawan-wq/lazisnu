@@ -459,6 +459,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
           assignment_id: taskId,
           can_id: task?.can_id,
           qr_code: task?.qr_code,
+          owner_name: task?.owner_name,
           reason_code: reasonCode,
           notes,
           created_at: new Date().toISOString(),
