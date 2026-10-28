@@ -1,4 +1,4 @@
-import React, {useCallback, useMemo, useState} from 'react';
+import React, {useCallback, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -16,6 +17,8 @@ import type {Collection} from '@lazisnu/shared-types';
 import type {CanVisitHistoryItem, Task} from '@lazisnu/shared-types';
 import {collectionService, tasksService} from '../services/api';
 import {correctionQueue, QueuedCorrection} from '../services/offline/corrections';
+import {actionQueue} from '../services/offline/actionQueue';
+import {composeUncollectedOffline} from '../services/offline/uncollected';
 import {useCollectionsStore, useSyncStore, useTasksStore} from '../stores';
 import {useFocusEffect} from '@react-navigation/native';
 import {Colors, ComponentSizes, Layout, Radius, Spacing, Typography} from '../theme';
@@ -50,6 +53,9 @@ const HistoryScreen: React.FC = () => {
   // tugas UNCOLLECTED periode berjalan yang masih bisa dibuka kembali.
   const [historyTab, setHistoryTab] = useState<'terjemput' | 'tidak'>('terjemput');
   const [uncollected, setUncollected] = useState<Task[]>([]);
+  // Sumber baca saat offline menyusun daftar — sinkron tiap render.
+  const uncollectedRef = useRef<Task[]>([]);
+  uncollectedRef.current = uncollected;
   const [uncollectedLoading, setUncollectedLoading] = useState(false);
   const [reopeningId, setReopeningId] = useState<string | null>(null);
   const [completedPeriodCount, setCompletedPeriodCount] = useState(0);
@@ -72,6 +78,16 @@ const HistoryScreen: React.FC = () => {
   const fetchUncollected = useCallback(async () => {
     setUncollectedLoading(true);
     try {
+      // Offline: server tak bisa ditanya — gabungkan daftar terakhir yang
+      // masih tampil dengan aksi skip yang menunggu replay di perangkat,
+      // agar tindakan yang barusan dilakukan tetap terhitung di sini.
+      const netInfo = await NetInfo.fetch();
+      if (!(netInfo.isConnected && netInfo.isInternetReachable)) {
+        const composed = composeUncollectedOffline(uncollectedRef.current, actionQueue.getQueue());
+        setUncollected(composed);
+        setUncollectedCount(composed.length);
+        return;
+      }
       const res = await tasksService.getTasks({
         status: 'UNCOLLECTED',
         page: 1,
@@ -91,6 +107,20 @@ const HistoryScreen: React.FC = () => {
 
   const fetchRiwayatCounts = useCallback(async () => {
     try {
+      // Offline: angka server tak bisa diperbarui — Terjemput dihitung dari
+      // daftar lokal (cache + antrean) supaya angka == jumlah kartu tampil;
+      // angka Tidak Dijemput disusun oleh fetchUncollected.
+      const netInfo = await NetInfo.fetch();
+      if (!(netInfo.isConnected && netInfo.isInternetReachable)) {
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+        const localCompleted = useCollectionsStore.getState().collections.filter(c => {
+          const t = Date.parse(String(c.collected_at).replace(' ', 'T'));
+          return !isNaN(t) && t >= start;
+        }).length;
+        setCompletedPeriodCount(localCompleted);
+        return;
+      }
       const [done, skipped] = await Promise.all([
         tasksService.getTasks({status: 'COMPLETED', page: 1, limit: 1, current_period: true}),
         tasksService.getTasks({status: 'UNCOLLECTED', page: 1, limit: 1, current_period: true}),
@@ -99,7 +129,17 @@ const HistoryScreen: React.FC = () => {
       if (!skipped.success) return;
       setUncollectedCount(skipped.data?.pagination?.total || 0);
     } catch {
-      // Senyap — angka terakhir dipertahankan.
+      // Senyap — angka terakhir dipertahankan; fallback Terjemput dari daftar
+      // lokal bila angka masih nol (baru saja kehilangan koneksi).
+      setCompletedPeriodCount(prev => {
+        if (prev > 0) return prev;
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+        return useCollectionsStore.getState().collections.filter(c => {
+          const t = Date.parse(String(c.collected_at).replace(' ', 'T'));
+          return !isNaN(t) && t >= start;
+        }).length;
+      });
     }
   }, []);
 

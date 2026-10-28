@@ -128,7 +128,11 @@ jest.mock('../../src/stores', () => ({
     page: 1,
     totalPages: 1,
   }),
-  useCollectionsStore: makeCollectionsStore,
+  // HistoryScreen kini membaca useCollectionsStore.getState() di cabang
+  // offline (hitungan Terjemput dari daftar lokal) — sediakan getState.
+  useCollectionsStore: Object.assign(makeCollectionsStore, {
+    getState: () => makeCollectionsStore(),
+  }),
   useCollectionStore: () => makeCollectionStore(),
 }));
 
@@ -368,8 +372,10 @@ describe('HistoryScreen — modal Koreksi', () => {
 
   it('merender HistoryScreen dalam state loading tanpa crash', async () => {
     const storesMock = jest.requireMock('../../src/stores');
-    storesMock.useCollectionsStore = () =>
-      makeCollectionsStore({isLoading: true, collections: [], page: 1});
+    storesMock.useCollectionsStore = Object.assign(
+      () => makeCollectionsStore({isLoading: true, collections: [], page: 1}),
+      {getState: () => makeCollectionsStore({isLoading: true, collections: [], page: 1})},
+    );
     const tree = await renderAsync(<HistoryScreen />);
     expect(tree.toJSON()).not.toBeNull();
     // restore
@@ -378,8 +384,10 @@ describe('HistoryScreen — modal Koreksi', () => {
 
   it('merender HistoryScreen dengan koleksi dan tombol Koreksi tersedia di kode sumber', async () => {
     const storesMock = jest.requireMock('../../src/stores');
-    storesMock.useCollectionsStore = () =>
-      makeCollectionsStore({collections: [collectionWithAddress], total: 1});
+    storesMock.useCollectionsStore = Object.assign(
+      () => makeCollectionsStore({collections: [collectionWithAddress], total: 1}),
+      {getState: () => makeCollectionsStore({collections: [collectionWithAddress], total: 1})},
+    );
     const tree = await renderAsync(<HistoryScreen />);
     expect(tree.toJSON()).not.toBeNull();
     expect(findTextInTree(tree, 'Koreksi')).toBe(true);
@@ -397,8 +405,10 @@ describe('HistoryScreen — modal Koreksi', () => {
       },
     };
     const storesMock = jest.requireMock('../../src/stores');
-    storesMock.useCollectionsStore = () =>
-      makeCollectionsStore({collections: [collectionWithoutAddress], total: 1});
+    storesMock.useCollectionsStore = Object.assign(
+      () => makeCollectionsStore({collections: [collectionWithoutAddress], total: 1}),
+      {getState: () => makeCollectionsStore({collections: [collectionWithoutAddress], total: 1})},
+    );
     const tree = await renderAsync(<HistoryScreen />);
     expect(tree.toJSON()).not.toBeNull();
     expect(findTextInTree(tree, 'Alamat tidak tersedia')).toBe(true);
@@ -408,8 +418,10 @@ describe('HistoryScreen — modal Koreksi', () => {
 
   it('merender HistoryScreen dalam state error dan banner error tampil', async () => {
     const storesMock = jest.requireMock('../../src/stores');
-    storesMock.useCollectionsStore = () =>
-      makeCollectionsStore({error: 'Gagal memuat riwayat', isLoading: false});
+    storesMock.useCollectionsStore = Object.assign(
+      () => makeCollectionsStore({error: 'Gagal memuat riwayat', isLoading: false}),
+      {getState: () => makeCollectionsStore({error: 'Gagal memuat riwayat', isLoading: false})},
+    );
     const tree = await renderAsync(<HistoryScreen />);
     expect(tree.toJSON()).not.toBeNull();
     expect(findTextInTree(tree, 'Gagal memuat riwayat')).toBe(true);
