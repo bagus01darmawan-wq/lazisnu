@@ -41,6 +41,10 @@ module.exports = {
   // mock blank membuat error render menjadi "uncaught" dan root ter-unmount).
   moduleNameMapper: {
     '^react-native-get-random-values$': '<rootDir>/__mocks__/react-native-get-random-values.ts',
+    // reanimated dipetakan lewat nama modul (bukan jest.mock) supaya
+    // react-native-gesture-handler — yang memuatnya dari dalam paketnya
+    // sendiri — ikut mendapat mock yang sama. Lihat __mocks__/react-native-reanimated.js.
+    '^react-native-reanimated$': '<rootDir>/__mocks__/react-native-reanimated.js',
   },
   // Clear mocks otomatis sebelum tiap test
   clearMocks: true,

@@ -18,6 +18,20 @@ const mockGetBranchBaPdf = jest.fn();
 /** Diubah per-tes untuk menguji gerbang peran. */
 let mockCurrentRole = 'ADMIN_RANTING';
 
+jest.mock('@react-navigation/native', () => ({
+  // Layar Profil memakai useFocusEffect untuk menyegarkan chip periode tiap
+  // kali tab dibuka. Di tes tidak ada NavigationContainer, jadi hook-nya
+  // ditiru dengan semantik mount (useEffect sekali) — pola yang sama dipakai
+  // AuthenticatedScreens.test.tsx. useNavigation/useIsFocused disediakan
+  // supaya komponen lain di pohon render tidak menerima undefined.
+  useNavigation: () => ({navigate: jest.fn(), goBack: jest.fn()}),
+  useIsFocused: () => true,
+  useFocusEffect: (mockCallback: () => void) => {
+    const mockUseEffect = require('react').useEffect;
+    mockUseEffect(mockCallback, []);
+  },
+}));
+
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({top: 0, bottom: 0, left: 0, right: 0}),
 }));
