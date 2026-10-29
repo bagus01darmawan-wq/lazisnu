@@ -937,7 +937,12 @@ jobs:
   # 2026) lolos hijau padahal 8 dari 10 job ter-skip dan tidak ada deploy.
   ci-status:
     name: CI status
-    needs: [changes, verify, test-backend, test-mobile, test-web, build-image]
+    # Dua job APK WAJIB ikut dinilai. Sebelum 29 Okt 2026 daftar ini hanya
+    # memuat gerbang tes + build-image, sehingga job ini bisa mencetak
+    # "Semua job relevan lolos" padahal build Android gagal. Run tetap merah
+    # (job yang gagal mewarnai run), tapi gerbang agregatnya menyesatkan —
+    # persis jenis hijau palsu yang job ini dibuat untuk mencegah.
+    needs: [changes, verify, test-backend, test-mobile, test-web, build-image, build-android-debug, build-staging-apk]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -951,6 +956,8 @@ jobs:
           R_TEST_MOBILE: ${{ needs.test-mobile.result }}
           R_TEST_WEB: ${{ needs.test-web.result }}
           R_BUILD_IMAGE: ${{ needs.build-image.result }}
+          R_BUILD_ANDROID_DEBUG: ${{ needs.build-android-debug.result }}
+          R_BUILD_STAGING_APK: ${{ needs.build-staging-apk.result }}
         run: |
           set -euo pipefail
           echo "changes       : $R_CHANGES (ada kode berubah: ${CODE_CHANGED:-tidak diketahui})"
@@ -959,10 +966,16 @@ jobs:
           echo "test-mobile   : $R_TEST_MOBILE"
           echo "test-web      : $R_TEST_WEB"
           echo "build-image   : $R_BUILD_IMAGE"
+          echo "build-android : $R_BUILD_ANDROID_DEBUG"
+          echo "build-staging : $R_BUILD_STAGING_APK"
 
           gagal=0
 
-          for r in "$R_VERIFY" "$R_TEST_BACKEND" "$R_TEST_MOBILE" "$R_TEST_WEB" "$R_BUILD_IMAGE"; do
+          # `skipped` sengaja lolos: job dibatasi filter path (APK hanya jalan
+          # bila mobile berubah), jadi skipped adalah keadaan normal. Yang
+          # dihitung gagal hanya failure/cancelled.
+          for r in "$R_VERIFY" "$R_TEST_BACKEND" "$R_TEST_MOBILE" "$R_TEST_WEB" "$R_BUILD_IMAGE" \
+                   "$R_BUILD_ANDROID_DEBUG" "$R_BUILD_STAGING_APK"; do
             if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
               gagal=1
             fi
