@@ -13,7 +13,7 @@
 
 import React from 'react';
 import renderer, {act} from 'react-test-renderer';
-import {Alert} from 'react-native';
+import {Alert, StyleSheet} from 'react-native';
 
 // ─── Navigation mocks ────────────────────────────────────────────────────────
 const mockNavigate = jest.fn();
@@ -40,21 +40,10 @@ jest.mock('react-native-linear-gradient', () => {
   return View;
 });
 
-jest.mock('react-native-reanimated', () => {
-  const {View} = require('react-native');
-  return {
-    __esModule: true,
-    // createAnimatedComponent WAJIB ada. react-native-gesture-handler 3.4
-    // memanggil `Reanimated.default.createAnimatedComponent(Wrap)` tanpa
-    // penjagaan saat modulnya dimuat, dan layar Riwayat kini mengimpor
-    // GestureDetector. Tanpa ini seluruh suite gagal sebelum satu tes pun
-    // berjalan — bukan karena gesturnya salah, hanya karena mock lokal ini
-    // lebih sempit daripada mock global di jest.setup.js.
-    default: {View, createAnimatedComponent: (Component: unknown) => Component},
-    FadeInUp: {delay: () => ({duration: () => undefined})},
-    Layout: {springify: () => undefined},
-  };
-});
+// react-native-reanimated sengaja TIDAK di-mock di berkas ini. Mock global di
+// jest.setup.js sudah mencakup semuanya, termasuk createAnimatedComponent yang
+// diwajibkan react-native-gesture-handler. Mock lokal yang lebih sempit pernah
+// menimpanya dan membuat seluruh suite gagal sebelum satu tes pun berjalan.
 
 // ─── Task fixtures ────────────────────────────────────────────────────────────
 const taskWithAddress = {
@@ -152,6 +141,7 @@ jest.mock('../../src/services/api', () => ({
   },
 }));
 
+import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import CollectionScreen from '../../src/screens/CollectionScreen';
 import HistoryScreen from '../../src/screens/HistoryScreen';
 
@@ -159,10 +149,25 @@ const makeNav = () => ({navigate: mockNavigate, goBack: mockGoBack}) as any;
 
 const mountedTrees = new Set<renderer.ReactTestRenderer>();
 
+/**
+ * Layar Riwayat memakai GestureDetector untuk geser antar filter, dan RNGH
+ * melempar error bila GestureDetector tidak berada di dalam
+ * GestureHandlerRootView. Di aplikasi, App.tsx yang menyediakannya — di sini
+ * pembungkus itu harus ditiru, kalau tidak semua tes render Riwayat gagal
+ * sebelum menguji apa pun.
+ */
+const styles = StyleSheet.create({
+  rootView: {flex: 1},
+});
+
+const withRootView = (element: React.ReactElement) => (
+  <GestureHandlerRootView style={styles.rootView}>{element}</GestureHandlerRootView>
+);
+
 const render = (element: React.ReactElement) => {
   let tree!: renderer.ReactTestRenderer;
   act(() => {
-    tree = renderer.create(element);
+    tree = renderer.create(withRootView(element));
   });
   mountedTrees.add(tree);
   return tree;
@@ -171,7 +176,7 @@ const render = (element: React.ReactElement) => {
 const renderAsync = async (element: React.ReactElement) => {
   let tree!: renderer.ReactTestRenderer;
   await act(async () => {
-    tree = renderer.create(element);
+    tree = renderer.create(withRootView(element));
     await Promise.resolve();
   });
   mountedTrees.add(tree);
