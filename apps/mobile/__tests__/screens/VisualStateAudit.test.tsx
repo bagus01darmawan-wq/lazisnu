@@ -50,7 +50,7 @@ jest.mock('react-native-reanimated', () => {
     // GestureDetector. Tanpa ini seluruh suite gagal sebelum satu tes pun
     // berjalan — bukan karena gesturnya salah, hanya karena mock lokal ini
     // lebih sempit daripada mock global di jest.setup.js.
-    default: {View, createAnimatedComponent: Component => Component},
+    default: {View, createAnimatedComponent: (Component: unknown) => Component},
     FadeInUp: {delay: () => ({duration: () => undefined})},
     Layout: {springify: () => undefined},
   };
