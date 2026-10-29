@@ -10,15 +10,22 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import {useFocusEffect} from '@react-navigation/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useAuthStore, useTasksStore, useUpdateStore} from '../stores';
 import {getBiometryType, isBiometricAvailable} from '../services/biometric';
-import {authService, c1Service, type BranchSubmissionRowDto} from '../services/api';
+import {
+  authService,
+  c1Service,
+  type BranchSubmissionRowDto,
+  type PeriodInfoDto,
+} from '../services/api';
 import {isManager, normalizeRole} from '../roles/roleMap';
 import {APP_VERSION} from '../config/appConfig';
 import {AppButton, AppCard, StatusBadge} from '../components/ui';
+import {PeriodChip} from '../components/PeriodChip';
 import {PasswordSheet} from '../components/PasswordSheet';
 import {Colors, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
 import {formatCurrency} from '../utils/format';
@@ -46,6 +53,21 @@ const ProfileScreen: React.FC = () => {
   const [biometryType, setBiometryType] = useState<string | null>(null);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [advancedVisible, setAdvancedVisible] = useState(false);
+
+  // Chip periode (toleransi / sisa hari penjemputan) — pindahan dari Beranda.
+  // Disegarkan tiap layar dibuka: layar tab tidak pernah di-unmount, jadi
+  // hitungan hari akan basi kalau hanya dimuat sekali saat mount.
+  const [periodInfo, setPeriodInfo] = useState<PeriodInfoDto | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      c1Service
+        .getPeriodInfo()
+        .then(res => {
+          if (res.success && res.data) setPeriodInfo(res.data);
+        })
+        .catch(() => {});
+    }, []),
+  );
 
   // Berita Acara (halaman Profil). Hanya manager: daftarnya bersumber dari
   // `GET /admin/branch-submissions`, yang bergerbang ADMIN_RANTING /
@@ -265,10 +287,9 @@ const ProfileScreen: React.FC = () => {
         </View>
         <Text style={styles.userName}>{user?.full_name || 'Petugas'}</Text>
         <Text style={styles.userRole}>{role}</Text>
-        <StatusBadge
-          status={user?.is_active === false ? 'error' : 'success'}
-          label={user?.is_active === false ? 'Tidak Aktif' : 'Aktif'}
-        />
+        <View style={styles.periodWrap}>
+          <PeriodChip info={periodInfo} onDark />
+        </View>
       </LinearGradient>
 
       <Text style={[styles.sectionTitle, styles.sectionTitleFirst]}>Informasi akun</Text>
@@ -520,6 +541,13 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: Radius.hero,
     borderBottomRightRadius: Radius.hero,
     ...Shadows.soft,
+  },
+  // Pojok kiri bawah hero: hero memakai alignItems 'center', jadi chip perlu
+  // pembungkus yang melebar penuh lalu rata kiri.
+  periodWrap: {
+    alignSelf: 'stretch',
+    alignItems: 'flex-start',
+    marginTop: Spacing.md,
   },
   avatarText: {
     color: Colors.brand.deepGreen,

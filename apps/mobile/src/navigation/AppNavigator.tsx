@@ -34,6 +34,8 @@ import {normalizeRole, tabsForRole, TAB_TITLES, type TabName} from '../roles/rol
 import {Colors, Spacing} from '../theme';
 import UpdateModal from '../components/UpdateModal';
 import FloatingTabBar from '../components/FloatingTabBar';
+import {navigationRef, navigateToSetoran} from './navigationRef';
+import {attachPushNavigation, registerPushToken} from '../services/push/pushNotifications';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -158,18 +160,28 @@ const AppNavigator = () => {
     return () => sub.remove();
   }, [isAuthenticated, isInitializing]);
 
+  // T11: daftarkan token push setelah login supaya notifikasi "BA siap
+  // diunduh" benar-benar sampai (tanpa token, server hanya bisa kirim WA),
+  // dan buka halaman Setoran saat notifikasi itu diketuk.
+  useEffect(() => {
+    if (!isAuthenticated || isInitializing) return;
+    registerPushToken().catch(() => undefined);
+    const detach = attachPushNavigation(navigateToSetoran);
+    return detach;
+  }, [isAuthenticated, isInitializing]);
+
   // Selama initializeAuth() berjalan, tampilkan splash agar UI tidak
   // flash ke LoginScreen saat ternyata token masih valid.
   if (isInitializing) {
     return (
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef}>
         <SplashScreen />
       </NavigationContainer>
     );
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       {isAuthenticated ? <MainStack /> : <AuthStack />}
       {/* Modal pembaruan (Tingkat 1) — melayang di atas semua layar */}
       <UpdateModal />

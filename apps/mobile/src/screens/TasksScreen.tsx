@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import {GestureDetector} from 'react-native-gesture-handler';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -24,6 +25,7 @@ import type {MainNavigationProp} from '../navigation/types';
 import {TaskItem, TaskSearchBar} from './tasks';
 import {SegmentedControl} from '../components/ui';
 import {SyncIssuesSheet} from '../components/SyncIssuesSheet';
+import {useTabSwipeSwitch} from '../hooks/useTabSwipeSwitch';
 
 type TaskTab = 'aktif' | 'nonaktif';
 
@@ -66,6 +68,12 @@ const TasksScreen: React.FC = () => {
       // Bukan halangan utama — daftar penjemputan tetap tampil.
     }
   }, []);
+
+  // Geser samping untuk berpindah tab Aktif ↔ Non-Aktif (urutan pill).
+  const tabSwipeGesture = useTabSwipeSwitch({
+    onNext: () => setTaskTab('nonaktif'),
+    onPrevious: () => setTaskTab('aktif'),
+  });
 
   // Refetch setiap kali tab kembali fokus: layar tab tidak pernah di-unmount,
   // dan aksi di layar lain (jemput, reopen dari Riwayat) mengubah data tugas —
@@ -303,58 +311,62 @@ const TasksScreen: React.FC = () => {
         </TouchableOpacity>
       )}
 
-      <FlatList
-        data={taskTab === 'aktif' ? filteredTasks : visitTasks}
-        renderItem={taskTab === 'aktif' ? renderTaskItem : renderVisitItem}
-        keyExtractor={item => item.id}
-        contentContainerStyle={styles.listContainer}
-        ListHeaderComponent={
-          // B2: kaleng NON_AKTIF — bukan penjemputan, tapi kunjungan penyelesaian.
-          taskTab === 'nonaktif' && visitTasks.length > 0 ? (
-            <Text style={styles.listSectionTitle}>Perlu Dikunjungi ({visitTasks.length})</Text>
-          ) : undefined
-        }
-        ListEmptyComponent={
-          isLoading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size={'large'} color={Colors.brand.emerald} />
-              <Text style={styles.loadingText}>Memuat tugas...</Text>
-            </View>
-          ) : taskTab === 'aktif' ? (
-            renderEmpty
-          ) : (
-            renderEmptyVisit
-          )
-        }
-        refreshControl={
-          <RefreshControl
-            refreshing={isLoading && page === 1}
-            onRefresh={() => {
-              fetchTasks();
-              fetchStats();
-              fetchVisitRequired();
-              checkStatus();
+      <GestureDetector gesture={tabSwipeGesture}>
+        <View style={styles.listWrap}>
+          <FlatList
+            data={taskTab === 'aktif' ? filteredTasks : visitTasks}
+            renderItem={taskTab === 'aktif' ? renderTaskItem : renderVisitItem}
+            keyExtractor={item => item.id}
+            contentContainerStyle={styles.listContainer}
+            ListHeaderComponent={
+              // B2: kaleng NON_AKTIF — bukan penjemputan, tapi kunjungan penyelesaian.
+              taskTab === 'nonaktif' && visitTasks.length > 0 ? (
+                <Text style={styles.listSectionTitle}>Perlu Dikunjungi ({visitTasks.length})</Text>
+              ) : undefined
+            }
+            ListEmptyComponent={
+              isLoading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size={'large'} color={Colors.brand.emerald} />
+                  <Text style={styles.loadingText}>Memuat tugas...</Text>
+                </View>
+              ) : taskTab === 'aktif' ? (
+                renderEmpty
+              ) : (
+                renderEmptyVisit
+              )
+            }
+            refreshControl={
+              <RefreshControl
+                refreshing={isLoading && page === 1}
+                onRefresh={() => {
+                  fetchTasks();
+                  fetchStats();
+                  fetchVisitRequired();
+                  checkStatus();
+                }}
+                colors={[Colors.brand.emerald]}
+                tintColor={Colors.brand.emerald}
+              />
+            }
+            onEndReached={() => {
+              // Paginasi hanya untuk daftar tugas; visit-required datang sekaligus.
+              if (taskTab === 'aktif' && !isLoading && page < totalPages) {
+                loadMore();
+              }
             }}
-            colors={[Colors.brand.emerald]}
-            tintColor={Colors.brand.emerald}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={
+              isLoading && page > 1 ? (
+                <ActivityIndicator style={styles.loadingFooter} color={Colors.brand.emerald} />
+              ) : undefined
+            }
+            showsVerticalScrollIndicator={false}
+            maxToRenderPerBatch={10}
+            windowSize={5}
           />
-        }
-        onEndReached={() => {
-          // Paginasi hanya untuk daftar tugas; visit-required datang sekaligus.
-          if (taskTab === 'aktif' && !isLoading && page < totalPages) {
-            loadMore();
-          }
-        }}
-        onEndReachedThreshold={0.5}
-        ListFooterComponent={
-          isLoading && page > 1 ? (
-            <ActivityIndicator style={styles.loadingFooter} color={Colors.brand.emerald} />
-          ) : undefined
-        }
-        showsVerticalScrollIndicator={false}
-        maxToRenderPerBatch={10}
-        windowSize={5}
-      />
+        </View>
+      </GestureDetector>
       <SyncIssuesSheet visible={issuesVisible} onClose={() => setIssuesVisible(false)} />
     </View>
   );
@@ -421,6 +433,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.screenPadding,
     marginTop: Spacing.md,
     marginBottom: Spacing.xs,
+  },
+  listWrap: {
+    flex: 1,
   },
   listContainer: {
     paddingHorizontal: Layout.screenPadding,

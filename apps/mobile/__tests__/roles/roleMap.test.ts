@@ -70,7 +70,7 @@ describe('C1-T9 roleMap', () => {
       days_to_lock: 4,
       in_tolerance: true,
     };
-    expect(countdownText(tol)).toBe('Toleransi: sisa 4 hari');
+    expect(countdownText(tol)).toBe('Perpanjangan penjemputan: sisa 4 hari');
     const locked = {
       period: '2026-09',
       period_status: 'LOCKED',

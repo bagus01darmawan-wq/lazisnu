@@ -19,8 +19,6 @@ import {Colors, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
 import {formatCurrency, getInitials} from '../utils';
 import {AppPressable, SegmentedControl} from '../components/ui';
 import {SyncIssuesSheet} from '../components/SyncIssuesSheet';
-import {PeriodChip} from '../components/PeriodChip';
-import {c1Service, type PeriodInfoDto} from '../services/api';
 import type {MainNavigationProp} from '../navigation/types';
 
 const logo = require('../assets/branding/logo-lazisnu-putih.png');
@@ -96,9 +94,6 @@ const DashboardScreen: React.FC = () => {
   const totalSyncIssues = totalWaiting + totalReview;
   const [issuesVisible, setIssuesVisible] = useState(false);
   const [period, setPeriod] = useState<PeriodFilter>('today');
-  // C1-T9: info periode untuk chip toleransi + countdown (gagal muat = null,
-  // PeriodChip tidak render — bukan 0 hari).
-  const [periodInfo, setPeriodInfo] = useState<PeriodInfoDto | null>(null);
 
   // Refetch setiap kali tab kembali fokus: layar tab tidak pernah di-unmount,
   // jadi statistik Beranda basi setelah aksi di layar lain sampai di-swipe.
@@ -107,12 +102,6 @@ const DashboardScreen: React.FC = () => {
       fetchDashboard();
       fetchStats();
       checkStatus();
-      c1Service
-        .getPeriodInfo()
-        .then(res => {
-          if (res.success && res.data) setPeriodInfo(res.data);
-        })
-        .catch(() => {});
     }, [checkStatus, fetchDashboard, fetchStats]),
   );
 
@@ -120,12 +109,6 @@ const DashboardScreen: React.FC = () => {
     fetchDashboard();
     fetchStats();
     checkStatus();
-    c1Service
-      .getPeriodInfo()
-      .then(res => {
-        if (res.success && res.data) setPeriodInfo(res.data);
-      })
-      .catch(() => {});
   };
 
   const periodStats = period === 'today' ? todayStats : weekStats;
@@ -323,7 +306,6 @@ const DashboardScreen: React.FC = () => {
             </View>
             <Icon name={'chevron-right'} size={24} color={Colors.text.secondary} />
           </AppPressable>
-          <PeriodChip info={periodInfo} />
           <AppPressable
             accessibilityRole={'button'}
             accessibilityLabel={'Buka statistik rekap rentang tanggal'}

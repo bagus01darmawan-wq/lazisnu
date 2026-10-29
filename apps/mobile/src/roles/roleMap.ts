@@ -86,7 +86,7 @@ export interface PeriodInfoLike {
 export function countdownText(info: PeriodInfoLike): string {
   if (info.period_status === 'LOCKED') return `Periode ${info.period} dikunci`;
   if (info.in_tolerance || info.days_to_due <= 0) {
-    return `Toleransi: sisa ${info.days_to_lock} hari`;
+    return `Perpanjangan penjemputan: sisa ${info.days_to_lock} hari`;
   }
   return `Sisa ${info.days_to_due} hari penjemputan`;
 }

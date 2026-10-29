@@ -189,6 +189,9 @@ importers:
       '@react-native-firebase/crashlytics':
         specifier: ^27.1.0
         version: 27.1.0(@react-native-firebase/app@27.1.0(react-native@0.88.0(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(typescript@6.0.3))(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))
+      '@react-native-firebase/messaging':
+        specifier: ^27.1.0
+        version: 27.1.0(@react-native-firebase/app@27.1.0(react-native@0.88.0(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(typescript@6.0.3))(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))
       '@react-navigation/bottom-tabs':
         specifier: ^7.21.0
         version: 7.21.0(@react-navigation/native@7.5.1(react-native@0.88.0(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(typescript@6.0.3))(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native-safe-area-context@5.10.1(react-native@0.88.0(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(typescript@6.0.3))(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native-screens@4.30.0(react-native@0.88.0(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(typescript@6.0.3))(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native@0.88.0(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(typescript@6.0.3))(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
@@ -2919,6 +2922,15 @@ packages:
 
   '@react-native-firebase/crashlytics@27.1.0':
     resolution: {integrity: sha512-JLmUUYaMki5mPrvhMG7fvqy+2KVIW5lxkLLICfXclgZJ+bp7EjN8ZwOc4EVD0pRbj05jIwM4B21gijEDqba+5A==}
+    peerDependencies:
+      '@react-native-firebase/app': 27.1.0
+      expo: '*'
+    peerDependenciesMeta:
+      expo:
+        optional: true
+
+  '@react-native-firebase/messaging@27.1.0':
+    resolution: {integrity: sha512-DoU6N/CwUn2ThZy1uZ5J56otscZeLUo4aGAjN8u6GvXJfPWEmH/cb0II0SOSSMjXYzNDHm7NEMuetoGAZWqXKA==}
     peerDependencies:
       '@react-native-firebase/app': 27.1.0
       expo: '*'
@@ -11565,6 +11577,10 @@ snapshots:
     dependencies:
       '@react-native-firebase/app': 27.1.0(react-native@0.88.0(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(typescript@6.0.3))(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
       stacktrace-js: 2.0.2
+
+  '@react-native-firebase/messaging@27.1.0(@react-native-firebase/app@27.1.0(react-native@0.88.0(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(typescript@6.0.3))(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))':
+    dependencies:
+      '@react-native-firebase/app': 27.1.0(react-native@0.88.0(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(typescript@6.0.3))(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
 
   '@react-native/asset-utils@0.88.0': {}
 

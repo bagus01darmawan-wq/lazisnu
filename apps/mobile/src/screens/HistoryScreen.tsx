@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import {GestureDetector} from 'react-native-gesture-handler';
 import NetInfo from '@react-native-community/netinfo';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
@@ -24,6 +25,7 @@ import {useFocusEffect} from '@react-navigation/native';
 import {Colors, ComponentSizes, Layout, Radius, Spacing, Typography} from '../theme';
 import {AppButton, SegmentedControl} from '../components/ui';
 import {SKIP_REASON_OPTIONS} from '../components/ui/SkipReasonSheet';
+import {useTabSwipeSwitch} from '../hooks/useTabSwipeSwitch';
 import {
   HistoryCorrectionData,
   HistoryCorrectionFailureModal,
@@ -52,6 +54,11 @@ const HistoryScreen: React.FC = () => {
   // Tab Riwayat: "terjemput" = riwayat penjemputan (list lama); "tidak" =
   // tugas UNCOLLECTED periode berjalan yang masih bisa dibuka kembali.
   const [historyTab, setHistoryTab] = useState<'terjemput' | 'tidak'>('terjemput');
+  // Geser samping untuk berpindah tab Terjemput ↔ Tidak Dijemput (urutan pill).
+  const tabSwipeGesture = useTabSwipeSwitch({
+    onNext: () => setHistoryTab('tidak'),
+    onPrevious: () => setHistoryTab('terjemput'),
+  });
   const [uncollected, setUncollected] = useState<Task[]>([]);
   // Sumber baca saat offline menyusun daftar — sinkron tiap render.
   const uncollectedRef = useRef<Task[]>([]);
@@ -367,138 +374,152 @@ const HistoryScreen: React.FC = () => {
         </View>
       )}
 
-      {historyTab === 'terjemput' ? (
-        <FlatList
-          data={collectionsThisMonth}
-          renderItem={renderItem}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.listContent}
-          ListHeaderComponent={
-            <>
-              {visits.length ? (
-                <View style={styles.visitCard}>
-                  <Text style={styles.visitTitle}>Kunjungan non-penjemputan</Text>
-                  {visits.map(v => (
-                    <View key={v.id} style={styles.visitRow}>
+      <GestureDetector gesture={tabSwipeGesture}>
+        <View style={styles.listWrap}>
+          {historyTab === 'terjemput' ? (
+            <FlatList
+              data={collectionsThisMonth}
+              renderItem={renderItem}
+              keyExtractor={item => item.id}
+              contentContainerStyle={styles.listContent}
+              ListHeaderComponent={
+                <>
+                  {visits.length ? (
+                    <View style={styles.visitCard}>
+                      <Text style={styles.visitTitle}>Kunjungan non-penjemputan</Text>
+                      {visits.map(v => (
+                        <View key={v.id} style={styles.visitRow}>
+                          <Icon
+                            name={
+                              v.purpose === 'PENGGANTIAN' ? 'swap-horizontal' : 'eye-check-outline'
+                            }
+                            size={18}
+                            color={Colors.brand.deepGreen}
+                          />
+                          <View style={styles.visitTextWrap}>
+                            <Text style={styles.visitText}>
+                              {v.purpose === 'PENGGANTIAN' ? 'Penggantian unit' : 'Verifikasi'} ·{' '}
+                              {v.owner_name || v.qr_code}
+                            </Text>
+                            <Text style={styles.visitSub}>
+                              {new Date(v.visited_at).toLocaleDateString('id-ID', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric',
+                              })}{' '}
+                              · tanpa nominal
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+                </>
+              }
+              ListEmptyComponent={
+                !isLoading ? (
+                  <View style={styles.emptyContainer}>
+                    <View style={styles.emptyIcon}>
+                      <Icon name={'history'} size={44} color={Colors.brand.deepGreen} />
+                    </View>
+                    <Text style={styles.emptyTitle}>Belum ada riwayat</Text>
+                    <Text style={styles.emptyText}>
+                      Penjemputan yang selesai akan muncul di halaman ini.
+                    </Text>
+                  </View>
+                ) : undefined
+              }
+              refreshControl={
+                <RefreshControl
+                  refreshing={isLoading && page === 1}
+                  onRefresh={() => {
+                    fetchCollections();
+                    checkStatus();
+                  }}
+                  colors={[Colors.brand.emerald]}
+                  tintColor={Colors.brand.emerald}
+                />
+              }
+              onEndReached={() => {
+                if (!isLoading && page < totalPages) {
+                  loadMore();
+                }
+              }}
+              onEndReachedThreshold={0.5}
+              ListFooterComponent={
+                isLoading && page > 1 ? (
+                  <ActivityIndicator style={styles.loadingFooter} color={Colors.brand.emerald} />
+                ) : undefined
+              }
+              showsVerticalScrollIndicator={false}
+            />
+          ) : (
+            <FlatList
+              data={uncollected}
+              keyExtractor={item => item.id}
+              contentContainerStyle={styles.listContent}
+              renderItem={({item}) => {
+                const reasonLabel = item.skip_reason_code
+                  ? (SKIP_REASON_OPTIONS.find(o => o.value === item.skip_reason_code)?.label ??
+                    item.skip_reason_code)
+                  : 'Ditutup otomatis saat penutupan periode';
+                return (
+                  <View style={styles.uncollectedCard}>
+                    <View style={styles.uncollectedHead}>
                       <Icon
-                        name={v.purpose === 'PENGGANTIAN' ? 'swap-horizontal' : 'eye-check-outline'}
-                        size={18}
-                        color={Colors.brand.deepGreen}
+                        name={'package-variant-closed'}
+                        size={22}
+                        color={Colors.status.warning}
                       />
-                      <View style={styles.visitTextWrap}>
-                        <Text style={styles.visitText}>
-                          {v.purpose === 'PENGGANTIAN' ? 'Penggantian unit' : 'Verifikasi'} ·{' '}
-                          {v.owner_name || v.qr_code}
-                        </Text>
-                        <Text style={styles.visitSub}>
-                          {new Date(v.visited_at).toLocaleDateString('id-ID', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                          })}{' '}
-                          · tanpa nominal
-                        </Text>
+                      <View style={styles.uncollectedHeadText}>
+                        <Text style={styles.uncollectedOwner}>{item.owner_name}</Text>
+                        <Text style={styles.uncollectedQr}>{item.qr_code}</Text>
                       </View>
                     </View>
-                  ))}
-                </View>
-              ) : null}
-            </>
-          }
-          ListEmptyComponent={
-            !isLoading ? (
-              <View style={styles.emptyContainer}>
-                <View style={styles.emptyIcon}>
-                  <Icon name={'history'} size={44} color={Colors.brand.deepGreen} />
-                </View>
-                <Text style={styles.emptyTitle}>Belum ada riwayat</Text>
-                <Text style={styles.emptyText}>
-                  Penjemputan yang selesai akan muncul di halaman ini.
-                </Text>
-              </View>
-            ) : undefined
-          }
-          refreshControl={
-            <RefreshControl
-              refreshing={isLoading && page === 1}
-              onRefresh={() => {
-                fetchCollections();
-                checkStatus();
-              }}
-              colors={[Colors.brand.emerald]}
-              tintColor={Colors.brand.emerald}
-            />
-          }
-          onEndReached={() => {
-            if (!isLoading && page < totalPages) {
-              loadMore();
-            }
-          }}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={
-            isLoading && page > 1 ? (
-              <ActivityIndicator style={styles.loadingFooter} color={Colors.brand.emerald} />
-            ) : undefined
-          }
-          showsVerticalScrollIndicator={false}
-        />
-      ) : (
-        <FlatList
-          data={uncollected}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.listContent}
-          renderItem={({item}) => {
-            const reasonLabel = item.skip_reason_code
-              ? (SKIP_REASON_OPTIONS.find(o => o.value === item.skip_reason_code)?.label ??
-                item.skip_reason_code)
-              : 'Ditutup otomatis saat penutupan periode';
-            return (
-              <View style={styles.uncollectedCard}>
-                <View style={styles.uncollectedHead}>
-                  <Icon name={'package-variant-closed'} size={22} color={Colors.status.warning} />
-                  <View style={styles.uncollectedHeadText}>
-                    <Text style={styles.uncollectedOwner}>{item.owner_name}</Text>
-                    <Text style={styles.uncollectedQr}>{item.qr_code}</Text>
+                    <Text style={styles.uncollectedReason}>{`Alasan: ${reasonLabel}`}</Text>
+                    <AppButton
+                      label="Jemput Sekarang"
+                      icon="restore"
+                      onPress={() => handleReopen(item)}
+                      loading={reopeningId === item.id}
+                      fullWidth
+                    />
                   </View>
-                </View>
-                <Text style={styles.uncollectedReason}>{`Alasan: ${reasonLabel}`}</Text>
-                <AppButton
-                  label="Jemput Sekarang"
-                  icon="restore"
-                  onPress={() => handleReopen(item)}
-                  loading={reopeningId === item.id}
-                  fullWidth
-                />
-              </View>
-            );
-          }}
-          ListEmptyComponent={
-            !uncollectedLoading ? (
-              <View style={styles.emptyContainer}>
-                <View style={styles.emptyIcon}>
-                  <Icon name={'clipboard-check-outline'} size={44} color={Colors.brand.deepGreen} />
-                </View>
-                <Text style={styles.emptyTitle}>Tidak ada tugas tertunda</Text>
-                <Text style={styles.emptyText}>
-                  Tugas yang Anda tandai tidak dijemput bulan ini akan muncul di sini.
-                </Text>
-              </View>
-            ) : undefined
-          }
-          refreshControl={
-            <RefreshControl
-              refreshing={uncollectedLoading}
-              onRefresh={() => {
-                fetchUncollected();
-                fetchRiwayatCounts();
+                );
               }}
-              colors={[Colors.brand.emerald]}
-              tintColor={Colors.brand.emerald}
+              ListEmptyComponent={
+                !uncollectedLoading ? (
+                  <View style={styles.emptyContainer}>
+                    <View style={styles.emptyIcon}>
+                      <Icon
+                        name={'clipboard-check-outline'}
+                        size={44}
+                        color={Colors.brand.deepGreen}
+                      />
+                    </View>
+                    <Text style={styles.emptyTitle}>Tidak ada tugas tertunda</Text>
+                    <Text style={styles.emptyText}>
+                      Tugas yang Anda tandai tidak dijemput bulan ini akan muncul di sini.
+                    </Text>
+                  </View>
+                ) : undefined
+              }
+              refreshControl={
+                <RefreshControl
+                  refreshing={uncollectedLoading}
+                  onRefresh={() => {
+                    fetchUncollected();
+                    fetchRiwayatCounts();
+                  }}
+                  colors={[Colors.brand.emerald]}
+                  tintColor={Colors.brand.emerald}
+                />
+              }
+              showsVerticalScrollIndicator={false}
             />
-          }
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+          )}
+        </View>
+      </GestureDetector>
 
       {failedCorrectionsCount > 0 && !showFailedCorrections && (
         <TouchableOpacity
@@ -547,6 +568,7 @@ const HistoryScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: Colors.surface.page},
+  listWrap: {flex: 1},
   header: {
     paddingHorizontal: Layout.screenPadding,
     paddingBottom: Spacing.md,

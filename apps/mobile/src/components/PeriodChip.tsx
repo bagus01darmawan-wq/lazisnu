@@ -7,6 +7,8 @@ import {StatusBadge} from './ui/StatusBadge';
 type PeriodChipProps = {
   info: PeriodInfoLike | null;
   compact?: boolean;
+  /** Ditempel di atas latar gelap (hero hijau): teks countdown dibuat terang. */
+  onDark?: boolean;
 };
 
 /**
@@ -14,7 +16,7 @@ type PeriodChipProps = {
  * Toleransi → chip kuning; dikunci → chip abu; selain itu hanya countdown.
  * `info` null (offline/belum muat) → tidak render apa-apa (bukan 0 hari).
  */
-export const PeriodChip: React.FC<PeriodChipProps> = ({info, compact = false}) => {
+export const PeriodChip: React.FC<PeriodChipProps> = ({info, compact = false, onDark = false}) => {
   const chip = info ? toleranceChip(info) : null;
   if (!info) return null;
   return (
@@ -22,7 +24,11 @@ export const PeriodChip: React.FC<PeriodChipProps> = ({info, compact = false}) =
       {chip ? (
         <StatusBadge status={chip.tone === 'warn' ? 'warning' : 'offline'} label={chip.label} />
       ) : null}
-      {!compact ? <Text style={styles.countdown}>{countdownText(info)}</Text> : null}
+      {!compact ? (
+        <Text style={[styles.countdown, onDark && styles.countdownOnDark]}>
+          {countdownText(info)}
+        </Text>
+      ) : null}
     </View>
   );
 };
@@ -38,5 +44,9 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     color: Colors.text.muted,
     fontWeight: '600',
+  },
+  countdownOnDark: {
+    color: Colors.text.white,
+    opacity: 0.92,
   },
 });

@@ -3,6 +3,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Notifikasi "BA siap diunduh" (Android 13+ minta izin runtime). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Fitur update-in-app: memasang APK yang diunduh dari dalam aplikasi.
          Android menampilkan layar konfirmasi sistem saat pemasangan. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />

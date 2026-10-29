@@ -488,9 +488,7 @@ jobs:
         # Setelah productFlavors ditambahkan, `assembleDebug` membangun SEMUA
         # variant (termasuk staging). Job ini hanya verifikasi compile biasa,
         # jadi pakai flavor production eksplisit. Build staging punya job
-        # tersendiri (build-staging-apk di bawah) yang mematikan plugin
-        # google-services via -PdisableFirebase=true (google-services.json
-        # belum punya client .staging).
+        # tersendiri (build-staging-apk di bawah).
         run: ./gradlew assembleProductionDebug --no-daemon
 
   # ─── Build Staging APK (reproduksi di perangkat nyata) ────────────────────
@@ -549,11 +547,17 @@ jobs:
       # (transform-inline-environment-variables, lihat apps/mobile/babel.config.js).
       # Jika TIDAK di-set, fallback di api.ts menunjuk ke API PRODUKSI —
       # jadi wajib eksplisit di sini.
+      #
+      # Firebase AKTIF untuk staging sejak 29 Okt 2026: client
+      # com.lazisnucollectorapp.staging sudah didaftarkan di project yang sama,
+      # sehingga plugin google-services tidak lagi perlu dimatikan. Ini yang
+      # membuat APK staging bisa diuji push notification (FCM token diambil
+      # dari client staging, bukan produksi).
       - name: Build Staging APK (arm64-v8a)
         working-directory: apps/mobile/android
         env:
           API_URL: https://staging-api.lazisnu.site
-        run: ./gradlew assembleStagingDebug --no-daemon "-PabiFilter=arm64-v8a" "-PdisableFirebase=true"
+        run: ./gradlew assembleStagingDebug --no-daemon "-PabiFilter=arm64-v8a"
 
       # Artifact private (hanya yang punya akses repo), kedaluwarsa otomatis
       # setelah 14 hari. if-no-files-found: error → job merah bila APK tidak

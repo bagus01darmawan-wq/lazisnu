@@ -70,6 +70,8 @@ jest.mock('../../src/services/api', () => ({
     getBranchSubmissions: (...args: unknown[]) => mockGetBranchSubmissions(...args),
     generateBranchBaPdf: (...args: unknown[]) => mockGenerateBranchBaPdf(...args),
     getBranchBaPdf: (...args: unknown[]) => mockGetBranchBaPdf(...args),
+    // Chip periode di hero Profil memanggil ini saat layar difokuskan.
+    getPeriodInfo: jest.fn().mockResolvedValue({success: true, data: null}),
   },
 }));
 
