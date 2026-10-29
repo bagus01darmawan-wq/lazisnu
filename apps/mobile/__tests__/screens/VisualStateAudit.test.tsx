@@ -44,7 +44,13 @@ jest.mock('react-native-reanimated', () => {
   const {View} = require('react-native');
   return {
     __esModule: true,
-    default: {View},
+    // createAnimatedComponent WAJIB ada. react-native-gesture-handler 3.4
+    // memanggil `Reanimated.default.createAnimatedComponent(Wrap)` tanpa
+    // penjagaan saat modulnya dimuat, dan layar Riwayat kini mengimpor
+    // GestureDetector. Tanpa ini seluruh suite gagal sebelum satu tes pun
+    // berjalan — bukan karena gesturnya salah, hanya karena mock lokal ini
+    // lebih sempit daripada mock global di jest.setup.js.
+    default: {View, createAnimatedComponent: Component => Component},
     FadeInUp: {delay: () => ({duration: () => undefined})},
     Layout: {springify: () => undefined},
   };
