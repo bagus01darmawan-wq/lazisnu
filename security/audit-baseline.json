@@ -1,12 +1,21 @@
 {
   "_caraPakai": "Daftar kerentanan yang sudah dikenal dan diterima. Gerbang CI gagal hanya bila muncul id yang BELUM ada di sini. Perbarui dengan: node scripts/audit-baseline.mjs --update",
-  "updatedAt": "2026-10-25T04:02:28.486Z",
+  "_catatan": {
+    "GHSA-gcqx-w48m-w2h4": "Diterima 2026-10-29 (keputusan Pion): belum ada versi tambalan sama sekali (patched <0.0.0). Satu-satunya jalur masuk adalah @react-native-community/cli — devDependency, alat build — sehingga paket ini tidak ikut ke dalam APK yang dipakai petugas; paparan ke pengguna nol. Cabut entri ini begitu deepmerge merilis versi tambalan."
+  },
+  "updatedAt": "2026-10-29T02:31:23.000Z",
   "advisories": {
     "GHSA-67mh-4wv8-2f99": {
       "module": "esbuild",
       "severity": "moderate",
       "url": "https://github.com/advisories/GHSA-67mh-4wv8-2f99",
       "patched": ">=0.25.0"
+    },
+    "GHSA-gcqx-w48m-w2h4": {
+      "module": "deepmerge",
+      "severity": "low",
+      "url": "https://github.com/advisories/GHSA-gcqx-w48m-w2h4",
+      "patched": "<0.0.0"
     },
     "GHSA-rxp7-6hxx-x8q5": {
       "module": "ip-address",
