@@ -21,7 +21,7 @@
     "build:all": "pnpm build:shared && pnpm build:backend && pnpm build:web"
   },
   "devDependencies": {
-    "@types/node": "^25.9.9",
+    "@types/node": "^26.6.5",
     "ts-morph": "^28.0.0"
   }
 }
