@@ -383,3 +383,69 @@ describe('auditLogger — graceful DB error handling', () => {
     );
   });
 });
+
+// ============================================================================
+// Test 9: sumber alamat IP — header X-Forwarded-For TIDAK dibaca langsung
+// ============================================================================
+//
+// Sebelum perbaikan, middleware ini membaca `request.headers['x-forwarded-for']`
+// mentah-mentah. Akibatnya:
+//   1. klien bisa mengarang alamat IP (header dikirim sendiri oleh pemanggil);
+//   2. nginx menambahkan alamat asli di belakangnya, jadi yang tersimpan berupa
+//      daftar "1.2.3.4, 114.10.4.212" — bukan satu alamat;
+//   3. daftar itu bisa melewati varchar(45) dan membuat baris audit ditolak DB.
+// Sumber kebenaran sekarang hanya `request.ip`, yang diisi Fastify dari
+// X-Forwarded-For HANYA bila koneksi datang dari proxy tepercaya (trustProxy).
+
+describe('auditLogger — sumber alamat IP', () => {
+  it('MENGABAIKAN header x-forwarded-for dan memakai request.ip', async () => {
+    const req = mockRequest({
+      method: 'POST',
+      url: '/v1/admin/cans',
+      headers: { 'x-forwarded-for': '1.2.3.4' },
+      ip: '9.9.9.9',
+    });
+    const rep = mockReply(201);
+
+    await auditLogger(req as any, rep as any);
+
+    expect(valuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ ipAddress: '9.9.9.9' })
+    );
+  });
+
+  it('header berisi daftar panjang tidak masuk ke kolom audit', async () => {
+    // 54 karakter — melebihi varchar(45) dan dulu memicu SQLSTATE 22001.
+    const forged = '1.2.3.4, 5.6.7.8, 9.10.11.12, 13.14.15.16, 17.18.19.20';
+    const req = mockRequest({
+      method: 'POST',
+      url: '/v1/admin/cans',
+      headers: { 'x-forwarded-for': forged },
+      ip: '9.9.9.9',
+    });
+    const rep = mockReply(201);
+
+    await auditLogger(req as any, rep as any);
+
+    const stored = valuesMock.mock.calls[0][0].ipAddress;
+    expect(stored).toBe('9.9.9.9');
+    expect(stored).not.toContain('1.2.3.4');
+    expect(stored.length).toBeLessThanOrEqual(45);
+  });
+
+  it('AUTH_FAILED (401/403) juga memakai request.ip', async () => {
+    const req = mockRequest({
+      method: 'POST',
+      url: '/v1/admin/cans',
+      headers: { 'x-forwarded-for': '1.2.3.4' },
+      ip: '9.9.9.9',
+    });
+    const rep = mockReply(403);
+
+    await auditLogger(req as any, rep as any);
+
+    expect(valuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ actionType: 'AUTH_FAILED', ipAddress: '9.9.9.9' })
+    );
+  });
+});
