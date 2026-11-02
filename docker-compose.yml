@@ -69,8 +69,13 @@ services:
     ports:
       - "127.0.0.1:9090:9090"
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml:ro
+      # Mount level DIREKTORI, bukan per-berkas. Bind-mount file tunggal
+      # mengikat inode saat container start: mengganti berkas di host lewat
+      # install/cp/sed -i (semuanya membuat inode baru) tidak pernah terlihat
+      # container — reload SIGHUP membaca berkas lama. Terbukti 3 Nov 2026:
+      # update alert.rules.yml hanya berlaku setelah restart container.
+      # Dengan mount direktori, edit berkas + reload HUP cukup.
+      - ./prometheus:/etc/prometheus:ro
       - ./prometheus-data:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -91,7 +96,9 @@ services:
     env_file:
       - .env.alertmanager   # DISCORD_WEBHOOK_PROMETHEUS (di VM, chmod 600, TIDAK di-commit)
     volumes:
-      - ./alertmanager/alertmanager.yml.tmpl:/etc/alertmanager/alertmanager.yml.tmpl:ro
+      # Mount direktori, bukan per-berkas — alasan: lihat komentar volumes
+      # service prometheus (jebakan inode bind-mount file tunggal).
+      - ./alertmanager:/etc/alertmanager:ro
       - ./alertmanager-data:/alertmanager
     # Alertmanager TIDAK me-substitusi env ${VAR} di config (v0.33) → template
     # + sed di entrypoint: ganti placeholder __DISCORD_WEBHOOK__ dengan nilai
