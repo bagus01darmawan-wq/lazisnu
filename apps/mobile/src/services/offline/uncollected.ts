@@ -28,7 +28,9 @@ export function composeUncollectedOffline(prev: Task[], queue: QueuedAction[]): 
       owner_address: 'Alamat belum tersedia',
       status: 'UNCOLLECTED' as Task['status'],
       assigned_at: action.created_at,
-      period: action.created_at.slice(0, 7).replace('-', '-'),
+      // Format kanonis Task.period = "YYYY-MM" (routes/mobile/tasks.ts:516);
+      // slice(0, 7) atas ISO "2026-11-02T..." sudah menghasilkan itu.
+      period: action.created_at.slice(0, 7),
       skip_reason_code: action.reason_code ?? null,
     }));
   if (additions.length === 0) {
