@@ -150,7 +150,7 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
             officer_id: query.officer_id || null,
             search: query.search || null,
           },
-          ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+          ipAddress: request.ip,
           userAgent: request.headers['user-agent'] || null,
         });
       } catch (err) {

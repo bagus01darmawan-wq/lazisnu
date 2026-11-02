@@ -28,6 +28,20 @@ export async function buildApp() {
   initRollbar();
 
   const server = Fastify({
+    // Hanya percaya header X-Forwarded-For bila koneksi datang dari jaringan
+    // Docker internal (172.18.0.0/16 = lazisnu_default, tempat nginx berada).
+    //
+    // Kenapa bukan `trustProxy: 1`: produksi dijalankan docker-compose.blue-green.yml
+    // yang mempublikasikan backend ke 127.0.0.1, sehingga `1` juga akan mempercayai
+    // header karangan dari koneksi lokal VM.
+    // Kenapa bukan IP nginx tunggal (/32): alamat container diberikan Docker secara
+    // dinamis — kalau nginx dibuat ulang dan alamatnya berubah, /32 diam-diam berhenti
+    // bekerja. CIDR tahan terhadap perubahan itu.
+    //
+    // Sifat gagal-aman: bila CIDR salah, req.ip kembali menjadi alamat nginx — yaitu
+    // perilaku sebelum perbaikan, bukan lebih buruk.
+    // Rincian & bukti: docs/rencana-perbaikan-trustproxy-2026-11-01.md (D1, tahap 2).
+    trustProxy: '172.18.0.0/16',
     logger: {
       level: config.NODE_ENV === 'production' ? 'info' : 'debug',
       redact: {

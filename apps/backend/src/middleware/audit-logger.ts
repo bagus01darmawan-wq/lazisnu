@@ -23,7 +23,7 @@ export async function auditLogger(request: FastifyRequest, reply: FastifyReply) 
       actionType: 'AUTH_FAILED',
       entityType: 'auth',
       entityId: null,
-      ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+      ipAddress: request.ip,
       userAgent: request.headers['user-agent'] || null,
     });
     return;
@@ -40,7 +40,7 @@ export async function auditLogger(request: FastifyRequest, reply: FastifyReply) 
       actionType,
       entityType: inferEntity(request.url),
       entityId: (request.params as any)?.id || null,
-      ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+      ipAddress: request.ip,
       userAgent: request.headers['user-agent'] || null,
     });
     return;
@@ -75,7 +75,7 @@ export async function auditLogger(request: FastifyRequest, reply: FastifyReply) 
       entityId,
       oldData: request.auditContext?.oldData || null,
       newData: request.auditContext?.newData || null,
-      ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+      ipAddress: request.ip,
       userAgent: request.headers['user-agent'] || null,
     });
   } catch (error) {

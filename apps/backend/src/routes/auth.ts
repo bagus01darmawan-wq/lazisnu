@@ -127,7 +127,7 @@ export async function authRoutes(fastify: FastifyInstance) {
             entityType: 'auth',
             entityId: null,
             newData: { identifier: body.identifier, reason: 'USER_NOT_FOUND' },
-            ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+            ipAddress: request.ip,
             userAgent: request.headers['user-agent'] || null,
           });
         } catch (err) {
@@ -161,7 +161,7 @@ export async function authRoutes(fastify: FastifyInstance) {
             entityType: 'auth',
             entityId: null,
             newData: { identifier: body.identifier, reason: 'INVALID_PASSWORD', attempts: attemptCount },
-            ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+            ipAddress: request.ip,
             userAgent: request.headers['user-agent'] || null,
           });
         } catch (err) {
@@ -184,7 +184,7 @@ export async function authRoutes(fastify: FastifyInstance) {
             entityType: 'auth',
             entityId: null,
             newData: { identifier: body.identifier, reason: 'ACCOUNT_DISABLED' },
-            ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+            ipAddress: request.ip,
             userAgent: request.headers['user-agent'] || null,
           });
         } catch (err) {
@@ -235,7 +235,7 @@ export async function authRoutes(fastify: FastifyInstance) {
           entityType: 'auth',
           entityId: null,
           newData: { method: 'password', identifier: body.identifier },
-          ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+          ipAddress: request.ip,
           userAgent: request.headers['user-agent'] || null,
         });
       } catch (err) {
@@ -384,7 +384,7 @@ export async function authRoutes(fastify: FastifyInstance) {
             entityType: 'auth',
             entityId: null,
             newData: { phone: body.phone, reason: 'INVALID_OTP' },
-            ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+            ipAddress: request.ip,
             userAgent: request.headers['user-agent'] || null,
           });
         } catch (err) {
@@ -461,7 +461,7 @@ export async function authRoutes(fastify: FastifyInstance) {
           entityType: 'auth',
           entityId: null,
           newData: { method: 'otp', phone: body.phone },
-          ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+          ipAddress: request.ip,
           userAgent: request.headers['user-agent'] || null,
         });
       } catch (err) {
@@ -672,7 +672,7 @@ export async function authRoutes(fastify: FastifyInstance) {
             officerId,
             entityType: 'auth',
             newData: { reason: 'USER_LOGOUT' },
-            ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+            ipAddress: request.ip,
             userAgent: request.headers['user-agent'] || null,
             entityId: null,
           });
@@ -842,7 +842,7 @@ export async function authRoutes(fastify: FastifyInstance) {
             entityType: 'auth',
             entityId: user.id,
             newData: { reason: 'PASSWORD_CHANGE_INVALID_OTP' },
-            ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+            ipAddress: request.ip,
             userAgent: (request.headers['user-agent'] as string) || null,
           });
         } catch (err) {
@@ -905,7 +905,7 @@ export async function authRoutes(fastify: FastifyInstance) {
           entityType: 'auth',
           entityId: user.id,
           newData: { method: 'otp', revoked_devices: revokedCount },
-          ipAddress: (request.headers['x-forwarded-for'] as string) || request.ip,
+          ipAddress: request.ip,
           userAgent: (request.headers['user-agent'] as string) || null,
         });
       } catch (err) {
