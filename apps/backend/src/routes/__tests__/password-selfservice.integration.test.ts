@@ -8,7 +8,7 @@
  * pendek pun harus berhasil, dan sesi perangkat lain tercabut.
  */
 import { randomUUID } from 'crypto';
-import { and, eq, or } from 'drizzle-orm';
+import { eq, or } from 'drizzle-orm';
 import { getApp, closeApp } from './helpers/app-helper';
 import { db } from '../../config/database';
 import { otpService } from '../../services/otp';
