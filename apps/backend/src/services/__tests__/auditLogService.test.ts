@@ -130,4 +130,54 @@ describe('auditLogService — insertActivityLog', () => {
       })
     );
   });
+
+  it('harus memotong ipAddress ke 45 karakter agar baris audit tidak gagal disimpan', async () => {
+    // Regresi E7 (30 Okt 2026): header X-Forwarded-For sepanjang 56 karakter
+    // membuat insert ditolak PostgreSQL (varchar(45), SQLSTATE 22001) dan
+    // SELURUH baris audit hilang tanpa error ke pengguna.
+    const terlaluPanjang = '10.0.0.1, 10.0.0.2, 10.0.0.3, 10.0.0.4, 10.0.0.5, 10.0.0.6';
+    expect(terlaluPanjang.length).toBeGreaterThan(45);
+
+    await insertActivityLog({
+      userId: null,
+      officerId: null,
+      actionType: 'FAILED_LOGIN',
+      entityType: 'auth',
+      entityId: null,
+      ipAddress: terlaluPanjang,
+      userAgent: 'curl/8.13.0',
+    });
+
+    const disimpan = valuesMock.mock.calls[0][0];
+    expect(disimpan.ipAddress).toHaveLength(45);
+    expect(disimpan.ipAddress).toBe(terlaluPanjang.slice(0, 45));
+  });
+
+  it('tidak mengubah ipAddress yang sudah muat, dan mempertahankan null', async () => {
+    await insertActivityLog({
+      userId: null,
+      officerId: null,
+      actionType: 'LOGIN_SUCCESS',
+      entityType: 'auth',
+      entityId: null,
+      ipAddress: '114.10.4.212',
+      userAgent: null,
+    });
+
+    expect(valuesMock.mock.calls[0][0].ipAddress).toBe('114.10.4.212');
+
+    valuesMock.mockClear();
+
+    await insertActivityLog({
+      userId: null,
+      officerId: null,
+      actionType: 'LOGIN_SUCCESS',
+      entityType: 'auth',
+      entityId: null,
+      ipAddress: null as unknown as string,
+      userAgent: null,
+    });
+
+    expect(valuesMock.mock.calls[0][0].ipAddress).toBeNull();
+  });
 });

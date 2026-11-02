@@ -61,6 +61,27 @@ export function sanitizeAuditData(data: unknown): unknown {
   return data;
 }
 
+/**
+ * Lebar kolom `activity_logs.ip_address` = varchar(45).
+ *
+ * Nilai yang lebih panjang DITOLAK PostgreSQL (SQLSTATE 22001) dan **seluruh
+ * baris audit hilang** — terbukti di staging 30 Okt 2026: satu header
+ * `X-Forwarded-For` sepanjang 56 karakter membuat `FAILED_LOGIN` dan
+ * `AUTH_FAILED` sama-sama gagal disimpan, tanpa error ke pengguna.
+ * Rincian: docs/rencana-penyelidikan-trustproxy-2026-10-30.md (temuan E7).
+ *
+ * Sengaja HANYA memotong, tidak memilih entri mana pun dari daftar ber-koma:
+ * memilih entri pertama berarti mengabadikan nilai yang bisa dikarang klien.
+ * Setelah `trustProxy` aktif, nilai yang masuk selalu satu alamat, sehingga
+ * pemotongan ini murni jaring pengaman.
+ */
+const IP_ADDRESS_MAX_LENGTH = 45;
+
+function clampIpAddress(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  return String(value).slice(0, IP_ADDRESS_MAX_LENGTH);
+}
+
 export async function insertActivityLog(input: AuditLogInput, client: any = db): Promise<void> {
   await client.insert(schema.activityLogs).values({
     userId: input.userId,
@@ -71,7 +92,7 @@ export async function insertActivityLog(input: AuditLogInput, client: any = db):
     requestId: input.requestId || null,
     oldData: sanitizeAuditData(input.oldData) || null,
     newData: sanitizeAuditData(input.newData) || null,
-    ipAddress: input.ipAddress,
+    ipAddress: clampIpAddress(input.ipAddress),
     userAgent: input.userAgent,
   });
 }
