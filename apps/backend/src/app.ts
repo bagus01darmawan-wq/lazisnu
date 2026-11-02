@@ -17,6 +17,7 @@ import { metricsRoutes } from './routes/metrics';
 import { httpRequestDurationMs, httpRequestsTotal } from './routes/metrics';
 import { correlationIdHook } from './middleware/correlationId';
 import { auditLogger } from './middleware/audit-logger';
+import { createSystemBreaker } from './utils/systemBreaker';
 import { initRollbar, captureError } from './config/rollbar';
 import { isAppError } from './utils/AppError';
 import { isJwtErrorLike } from './utils/error-guards';
@@ -102,8 +103,14 @@ export async function buildApp() {
     verify: { algorithms: ['HS256'] },
   });
 
+  // Batas per-IP — D3 rencana trustProxy (keputusan 2 Nov 2026): 100 → 200
+  // permintaan/menit. Dasar angka: puncak sah per IP yang pernah terukur
+  // 58/menit × 3 ≈ 175, dan jangan sampai satu IP menyerap >30% beban puncak
+  // sistem (~660/menit). Kuncinya request.ip = alamat klien nyata (trustProxy
+  // CIDR, tahap 2). Limiter login dan rute auth lain punya penghitung
+  // per-rute sendiri (5/menit, 3/menit, dst.) dan TIDAK berubah di sini.
   await server.register(rateLimit, {
-    max: 100,
+    max: 200,
     timeWindow: '1 minute',
     errorResponseBuilder: (request, context) => {
       return {
@@ -115,6 +122,13 @@ export async function buildApp() {
       };
     }
   });
+
+  // Pemutus arus sistem — D3: 3.000/menit untuk seluruh proses, jaring
+  // pengaman di atas batas per-IP (50 petugas menyinkron bersamaan ≈
+  // 2.900/menit — tidak boleh terpotong). Didaftarkan SETELAH plugin
+  // rate-limit: keduanya onRequest, jadi permintaan yang sudah ditolak
+  // per-IP berhenti di hook rate-limit dan tidak menggerus jatah global.
+  server.addHook('onRequest', createSystemBreaker({ max: 3000, windowMs: 60_000 }));
 
   if (config.NODE_ENV !== 'production' && config.NODE_ENV !== 'test') {
     await server.register(swagger, {
