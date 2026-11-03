@@ -14,7 +14,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import Svg, {Circle} from 'react-native-svg';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import {useAuthStore, useDashboardStore, useSyncStore, useTasksStore} from '../stores';
+import {useAuthStore, useDashboardStore, usePeriodStore, useSyncStore, useTasksStore} from '../stores';
 import {Colors, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
 import {formatCurrency, getInitials} from '../utils';
 import {AppPressable, SegmentedControl} from '../components/ui';
@@ -29,6 +29,21 @@ const PERIOD_OPTIONS: {label: string; value: PeriodFilter}[] = [
   {label: 'Hari Ini', value: 'today'},
   {label: 'Minggu Ini', value: 'week'},
 ];
+
+const PERIOD_WAITING_LABEL: Record<string, string> = {
+  PPK: 'tanda tangan PPK',
+  BENDAHARA_RANTING: 'tanda tangan Bendahara Ranting',
+  BENDAHARA_MWC: 'tanda tangan Bendahara MWC',
+  ADMIN: 'tindakan admin',
+};
+
+const formatPeriodLabel = (period: string): string => {
+  const [year, month] = period.split('-').map(Number);
+  if (!year || !month) return period;
+  return new Intl.DateTimeFormat('id-ID', {month: 'long', year: 'numeric'}).format(
+    new Date(year, month - 1, 1),
+  );
+};
 
 const RING_SIZE = 74;
 const RING_STROKE = 7;
@@ -94,6 +109,10 @@ const DashboardScreen: React.FC = () => {
   const totalSyncIssues = totalWaiting + totalReview;
   const [issuesVisible, setIssuesVisible] = useState(false);
   const [period, setPeriod] = useState<PeriodFilter>('today');
+  // Periode tertua yang belum tuntas untuk cakupan pengguna (mis. BA Oktober
+  // menunggu bendahara). Banner ini informasi + jalan pintas, bukan blokir.
+  const periodBanner = usePeriodStore(state => state.context?.unsettled[0] ?? null);
+  const refreshPeriod = usePeriodStore(state => state.refresh);
 
   // Refetch setiap kali tab kembali fokus: layar tab tidak pernah di-unmount,
   // jadi statistik Beranda basi setelah aksi di layar lain sampai di-swipe.
@@ -102,13 +121,15 @@ const DashboardScreen: React.FC = () => {
       fetchDashboard();
       fetchStats();
       checkStatus();
-    }, [checkStatus, fetchDashboard, fetchStats]),
+      refreshPeriod();
+    }, [checkStatus, fetchDashboard, fetchStats, refreshPeriod]),
   );
 
   const refresh = () => {
     fetchDashboard();
     fetchStats();
     checkStatus();
+    refreshPeriod();
   };
 
   const periodStats = period === 'today' ? todayStats : weekStats;
@@ -207,6 +228,25 @@ const DashboardScreen: React.FC = () => {
         </LinearGradient>
 
         <View style={styles.body}>
+          {periodBanner && (
+            <TouchableOpacity
+              accessibilityRole={'button'}
+              accessibilityLabel={`Periode ${formatPeriodLabel(periodBanner.period)} belum tuntas`}
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('Setoran')}
+              style={styles.periodBanner}>
+              <Icon name={'alert-circle-outline'} size={22} color={Colors.status.warning} />
+              <View style={styles.periodBannerText}>
+                <Text style={styles.periodBannerTitle}>
+                  Periode {formatPeriodLabel(periodBanner.period)} belum tuntas
+                </Text>
+                <Text style={styles.periodBannerBody}>
+                  Menunggu {PERIOD_WAITING_LABEL[periodBanner.waiting_for] ?? 'tindakan'}.
+                </Text>
+              </View>
+              <Icon name={'chevron-right'} size={20} color={Colors.text.muted} />
+            </TouchableOpacity>
+          )}
           <View style={styles.mainCard}>
             <SegmentedControl
               options={PERIOD_OPTIONS}
@@ -402,6 +442,29 @@ const styles = StyleSheet.create({
     opacity: 0.12,
   },
   body: {paddingHorizontal: Layout.screenPadding},
+  periodBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border.accent,
+    backgroundColor: Colors.surface.warningSoft,
+  },
+  periodBannerText: {flex: 1},
+  periodBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  periodBannerBody: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: Colors.text.secondary,
+    marginTop: 2,
+  },
   mainCard: {
     marginTop: Spacing.md,
     backgroundColor: Colors.surface.card,

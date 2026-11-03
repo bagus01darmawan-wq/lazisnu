@@ -26,10 +26,27 @@ const PROD_ROWS: StatusCountRow[] = [
 ];
 
 describe('computeTaskMetrics — kontrak dasar-perbaikan-metrik §7', () => {
-  it('task_total = ACTIVE + COMPLETED + UNCOLLECTED + REASSIGNED', () => {
+  it('task_total = ACTIVE + COMPLETED + UNCOLLECTED (REASSIGNED tidak masuk beban)', () => {
     const m = computeTaskMetrics(PROD_ROWS);
-    expect(m.task_total).toBe(15 + 84 + 60 + 53);
-    expect(m.task_total).toBe(212);
+    expect(m.task_total).toBe(15 + 84 + 60);
+    expect(m.task_total).toBe(159);
+  });
+
+  it('task_reassigned dilaporkan terpisah, bukan bagian dari total', () => {
+    const m = computeTaskMetrics(PROD_ROWS);
+    expect(m.task_reassigned).toBe(53);
+    expect(m.task_total + m.task_reassigned).toBe(212);
+  });
+
+  it('kurir 10 paket: transfer 3 lalu selesaikan 7 → progres 100%', () => {
+    const m = computeTaskMetrics([
+      { status: 'REASSIGNED', count: 3 },
+      { status: 'COMPLETED', count: 7 },
+    ]);
+    expect(m.task_total).toBe(7);
+    expect(m.task_closed).toBe(7);
+    expect(m.task_reassigned).toBe(3);
+    expect(m.task_closed / m.task_total).toBe(1);
   });
 
   it('task_closed = COMPLETED + UNCOLLECTED (REASSIGNED tidak pernah selesai)', () => {
@@ -52,7 +69,7 @@ describe('computeTaskMetrics — kontrak dasar-perbaikan-metrik §7', () => {
     ];
     const m = computeTaskMetrics(rows);
     // Total tidak bertambah...
-    expect(m.task_total).toBe(212);
+    expect(m.task_total).toBe(159);
     // ...dan 7 baris itu dilaporkan sebagai tidak terhitung, bukan diam-diam
     // dibuang. Inilah perbaikan inti: pola lama `reduce(rows)` memasukkan
     // POSTPONED ke total secara tak terdeteksi.
@@ -65,7 +82,7 @@ describe('computeTaskMetrics — kontrak dasar-perbaikan-metrik §7', () => {
       { status: 'CANCELED', count: 3 },
     ];
     const m = computeTaskMetrics(rows);
-    expect(m.task_total).toBe(212);
+    expect(m.task_total).toBe(159);
     expect(m.task_unaccounted).toBe(3);
   });
 
@@ -76,7 +93,7 @@ describe('computeTaskMetrics — kontrak dasar-perbaikan-metrik §7', () => {
       { status: 'UNCOLLECTED', count: '600' },
       { status: 'REASSIGNED', count: '5300' },
     ]);
-    expect(m.task_total).toBe(89915);
+    expect(m.task_total).toBe(84615);
     expect(m.task_closed).toBe(84600);
   });
 

@@ -4,7 +4,14 @@
  * Kontrak: docs/audit/dasar-perbaikan-metrik-tugas-mobile-2026-09-13.md §7
  * - tugas_belum   = ACTIVE
  * - tugas_selesai = COMPLETED + UNCOLLECTED
- * - task_total    = ACTIVE + COMPLETED + UNCOLLECTED + REASSIGNED
+ * - task_total    = ACTIVE + COMPLETED + UNCOLLECTED
+ * - task_reassigned = REASSIGNED — DILAPORKAN tapi tidak masuk penyebut.
+ *
+ * REASSIGNED berarti tugas lepas dari petugas asal (transfer ke petugas lain,
+ * baris ACTIVE baru dibuat untuk pengganti). Karena itu ia bukan beban kerja
+ * maupun progres petugas asal: petugas yang mentransfer 3 dari 10 paket dan
+ * menyelesaikan 7 sisanya harus tampil 100%, bukan 70%. Akuntansi baris tetap
+ * utuh lewat invariant task_total + task_reassigned == jumlah baris.
  *
  * Mengapa file ini ada: rumus ini dulu dihitung ulang di 4 tempat
  * (overviewService.getTaskSummary, routes/mobile/tasks.ts month_stats dan
@@ -33,8 +40,9 @@ export type AssignmentStatus =
   | 'REASSIGNED';
 
 /**
- * Status assignment yang dihitung di task_total. Setiap status enum yang
- * masih ada di skema WAJIB ada di sini — otherwise total < jumlah baris.
+ * Seluruh status assignment yang dikenal skema. Dipakai untuk mendeteksi baris
+ * tak terhitung; REASSIGNED ada di sini tetapi TIDAK masuk `task_total` —
+ * lihat kontrak di atas.
  */
 export const TOTAL_STATUSES: readonly AssignmentStatus[] = [
   'ACTIVE',
@@ -82,7 +90,8 @@ export function computeTaskMetrics(rows: StatusCountRow[]): {
     }
   }
 
-  const task_total = task_active + task_completed + task_uncollected + task_reassigned;
+  // REASSIGNED = tugas lepas, bukan beban petugas asal.
+  const task_total = task_active + task_completed + task_uncollected;
   const task_closed = task_completed + task_uncollected;
 
   return {
@@ -96,13 +105,14 @@ export function computeTaskMetrics(rows: StatusCountRow[]): {
   };
 }
 
-/** Cek apakah angka metrik konsisten — total harus sama dengan jumlah baris. */
+/** Cek apakah angka metrik konsisten — total + dialihkan harus sama dengan jumlah baris. */
 export function assertMetricsAccountForAllRows(rows: StatusCountRow[]): void {
   const m = computeTaskMetrics(rows);
   const rowCount = rows.reduce((sum, r) => sum + Number(r.count ?? 0), 0);
-  if (m.task_total !== rowCount) {
+  if (m.task_total + m.task_reassigned !== rowCount) {
     throw new Error(
-      `Kontrak metrik dilanggar: task_total=${m.task_total} padahal jumlah baris=${rowCount} ` +
+      `Kontrak metrik dilanggar: task_total=${m.task_total} + dialihkan=${m.task_reassigned} ` +
+        `padahal jumlah baris=${rowCount} ` +
         `(tidak terhitung: ${m.task_unaccounted}). Status enum baru belum didaftarkan di TOTAL_STATUSES?`,
     );
   }

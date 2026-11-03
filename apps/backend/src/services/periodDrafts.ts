@@ -41,6 +41,7 @@ import {
 } from './periodCalendar';
 import { getRoleScope } from '../utils/role-scope';
 import type { JWTPayload } from '../middleware/auth';
+import { assertPreviousPeriodSettled } from './periodState';
 
 /** C1-T3 (§14.12): diam 24 jam → approve diteruskan ke Bendahara/Sekretaris. */
 export const ESCALATION_HOURS = 24;
@@ -50,6 +51,12 @@ export interface DraftActor {
   role: string;
   branchId?: string | null;
   districtId?: string | null;
+}
+
+/** Opsi gate giliran saat menyetujui draft (force + alasan tercatat di audit). */
+export interface ApproveGateOptions {
+  force?: boolean;
+  reason?: string | null;
 }
 
 export interface DraftScope {
@@ -177,18 +184,9 @@ export async function preparePeriodDraft(
   opts: { now?: Date } = {},
 ): Promise<PrepareResult> {
   const now = opts.now ?? new Date();
-  const b = buildPeriodBoundaries(year, month); // sekaligus validasi periode
-  void b;
-  // Guard jadwal (§14.12 "tepat jadwal, tidak dimajukan"): robot hanya menyiapkan
-  // draft bulan BERJALAN (cron tgl 10 → bulan itu = M+1 pasca-kunci; cron tgl 20
-  // → susulan bulan itu). Draft masa depan tidak akan pernah bisa disetujui.
-  const nowY = now.getFullYear();
-  const nowM = now.getMonth() + 1;
-  if (year > nowY || (year === nowY && month > nowM)) {
-    throw Errors.VALIDATION_ERROR(
-      `Draft periode ${periodKey(year, month)} belum berjalan — robot tidak menyiapkan masa depan.`,
-    );
-  }
+  buildPeriodBoundaries(year, month); // sekaligus validasi periode
+  // Direvisi 2026-11-03: guard "bulan harus sudah berjalan" dihapus. Periode
+  // maju karena rantai aksi (gate giliran di approve/assignment), bukan jam.
   const calendarRowWritten = await ensurePeriodCalendarRow(year, month);
 
   const branches = await db.select({
@@ -612,6 +610,7 @@ export async function approveDraft(
   actor: DraftActor,
   draftId: string,
   now: Date = new Date(),
+  gateOptions: ApproveGateOptions = {},
 ): Promise<ApproveResult> {
   const summary = await db.transaction(async (tx) => {
     const draft = await tx.query.periodDrafts.findFirst({
@@ -622,38 +621,29 @@ export async function approveDraft(
     const branchKind = draft.branch.kind as 'RANTING' | 'PROGRAM_MWC';
     assertDraftAccess(actor, { branchId: draft.branchId, districtId: draft.districtId, branchKind });
 
+    // Gate giliran: periode ini baru boleh dibuka setelah periode sebelumnya
+    // untuk ranting ini tuntas. Default `PERIOD_GATE=warn` (peringatan saja);
+    // `enforce` menolak 409 dan admin dapat memakai force + alasan.
+    await assertPreviousPeriodSettled(
+      { kind: 'branch', branchId: draft.branchId },
+      { year: draft.periodYear, month: draft.periodMonth },
+      {
+        force: gateOptions.force === true,
+        reason: gateOptions.reason ?? null,
+        actor: { userId: actor.userId, ipAddress: null, userAgent: null },
+        now,
+      },
+    );
+
     if (draft.status !== 'DRAFT') {
       throw Errors.VALIDATION_ERROR(
         `Draft periode ${periodKey(draft.periodYear, draft.periodMonth)} sudah disetujui — tidak bisa disetujui dua kali.`,
       );
     }
 
-    const escalated = actor.role === 'STAF_KEUANGAN';
-    if (escalated && !isEscalated(draft.preparedAt, now)) {
-      throw Errors.FORBIDDEN('Eskalasi berlaku 24 jam setelah draft disiapkan — menunggu Staf Pengumpulan dulu');
-    }
-
-    // Guard masa depan (syarat review-T2 butir a): approve hanya untuk periode
-    // yang bulannya sudah berjalan. Menyetujui draft Okt pada 10–31 Okt sah
-    // (jemput awal §6); menyetujui Nov pada Okt ditolak.
-    const nowY = now.getFullYear();
-    const nowM = now.getMonth() + 1;
-    if (draft.periodYear > nowY || (draft.periodYear === nowY && draft.periodMonth > nowM)) {
-      throw Errors.VALIDATION_ERROR(
-        `Draft periode ${periodKey(draft.periodYear, draft.periodMonth)} belum berjalan — tidak bisa disetujui duluan.`,
-      );
-    }
-
-    // Guard kunci: menyetujui draft periode terkunci hanya melahirkan tugas mati.
-    const b = buildPeriodBoundaries(draft.periodYear, draft.periodMonth);
-    if (isPeriodLocked(now, b.toleranceEnd)) {
-      const period = periodKey(draft.periodYear, draft.periodMonth);
-      throw Errors.QR_PERIOD_CLOSED(
-        `Periode ${period} sudah dikunci — draft tidak bisa disetujui. Siapkan untuk periode berjalan.`,
-        { period },
-      );
-    }
-
+    // Direvisi 2026-11-03: eskalasi 24 jam, guard masa depan, dan kunci periode
+    // BUKAN lagi gerbang. Yang mengatur giliran adalah assertPreviousPeriodSettled
+    // (periode sebelumnya harus tuntas), bukan tanggal.
     const items = await tx.query.periodDraftItems.findMany({
       where: eq(schema.periodDraftItems.draftId, draft.id),
     });

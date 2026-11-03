@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { FileSignature, Download, RefreshCcw, FileCog, Eye, TriangleAlert } from 'lucide-react';
 import { PeriodPicker } from '@/components/ui/PeriodPicker';
 import { c1Api, type BranchSubmissionDetail, type BaVersion, type BranchBaText } from '@/lib/c1';
+import { useOperationalPeriod } from '@/hooks/useOperationalPeriod';
 
 /**
  * Label Indonesia untuk `ppk_submission_status` (schema.ts:17 —
@@ -39,6 +40,15 @@ export default function SetoranPage() {
   const now = new Date();
   const [month, setMonth] = useState(String(now.getMonth() + 1));
   const [year, setYear] = useState(String(now.getFullYear()));
+  // Periode tampilan berbasis aksi: bulan lalu yang belum tuntas tetap tampil.
+  const periodContext = useOperationalPeriod();
+  useEffect(() => {
+    const y = periodContext.displayYear;
+    const m = periodContext.displayMonth;
+    if (!y || !m) return;
+    setYear(String(y));
+    setMonth(String(m));
+  }, [periodContext.displayYear, periodContext.displayMonth]);
   const [rows, setRows] = useState<BranchSubmissionDetail[]>([]);
   const [selected, setSelected] = useState<BranchSubmissionDetail | null>(null);
   const [versions, setVersions] = useState<BaVersion[]>([]);

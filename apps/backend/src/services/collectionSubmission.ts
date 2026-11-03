@@ -5,11 +5,8 @@ import { alias, PgTransaction } from 'drizzle-orm/pg-core';
 import { Errors } from '../utils/errorCatalog';
 import {
   buildPeriodBoundaries,
-  isPeriodLocked,
   periodKey,
-  shiftPeriod,
 } from './periodCalendar';
-import { scanClosedMessage } from './scanClassification';
 import { isOrdinaryBatchCondition, isTrackedForCondition, isTransitionAllowed, type CanConditionValue } from './conditionRules';
 import { insertActivityLog } from './auditLogService';
 
@@ -71,17 +68,13 @@ export async function sumCollectionsByPeriod(
 // ---------------------------------------------------------------------------
 
 /**
- * C1-T7: tolak tulis bila jendela koreksi reopen sudah berakhir.
- * DRAFT normal (`reopenedUntil` NULL) selalu lolos — hanya baris reopened
- * yang dibatasi waktu. Batas inklusif: `now == until` masih boleh.
+ * C1-T7 (direvisi 2026-11-03): jendela koreksi 48 jam **bukan lagi gerbang**.
+ * Tanggal hanya pengingat; koreksi boleh dilakukan kapan pun selama baris
+ * submission belum FINAL. Fungsi dipertahankan agar seluruh call site tetap
+ * kompatibel dan semantiknya hanya satu tempat.
  */
-export function assertReopenWindowOpen(sub: { reopenedUntil: Date | null }, now: Date = new Date()): void {
-  if (sub.reopenedUntil !== null && now.getTime() > sub.reopenedUntil.getTime()) {
-    throw Errors.VALIDATION_ERROR('Jendela koreksi reopen berakhir — minta reopen ulang ke Admin.', {
-      reason: 'REOPEN_WINDOW_CLOSED',
-      reopened_until: sub.reopenedUntil.toISOString(),
-    });
-  }
+export function assertReopenWindowOpen(_sub: { reopenedUntil: Date | null }, _now: Date = new Date()): void {
+  // Sengaja no-op: tidak ada penolakan berbasis waktu.
 }
 
 export async function assertSubmissionOpen(
@@ -150,17 +143,18 @@ export function getLatestCollectionCondition() {
 }
 
 /**
- * Validasi apakah assignment aktif, valid, dimiliki officer, dan periodenya
- * belum dikunci sistem (§14.1–14.2: patokan = assignment.period, bukan waktu
- * kirim; submit Sept yang tiba setelah 10 Okt 00:00 DITOLAK untuk Sept dan
- * diarahkan ke assignment Okt).
+ * Validasi apakah assignment aktif, valid, dan dimiliki officer.
+ *
+ * Direvisi 2026-11-03: kunci periode berbasis tanggal DIHAPUS. Setoran untuk
+ * periode lama tetap diterima (hanya ditandai terlambat); atribusi uang tetap
+ * memakai periode assignment, bukan bulan `collected_at`.
  */
 export async function validateAssignmentForSubmit(
   tx: Transaction,
   assignmentId: string,
   canId: string,
   officerId: string,
-  now: Date = new Date()
+  _now: Date = new Date()
 ) {
   const assignment = await tx.query.assignments.findFirst({
     where: and(
@@ -177,53 +171,56 @@ export async function validateAssignmentForSubmit(
     throw Errors.CAN_ID_MISMATCH();
   }
 
-  const b = buildPeriodBoundaries(assignment.periodYear, assignment.periodMonth);
-  if (isPeriodLocked(now, b.toleranceEnd)) {
-    const period = periodKey(assignment.periodYear, assignment.periodMonth);
-    const next = shiftPeriod(assignment.periodYear, assignment.periodMonth, 1);
-    const nextPeriod = periodKey(next.year, next.month);
-    throw Errors.QR_PERIOD_CLOSED(scanClosedMessage(period, nextPeriod), {
-      period,
-      next_period: nextPeriod,
-    });
-  }
-
   return assignment;
 }
 
 /**
- * C1-T2 (§14.3): `collected_at` (klaim HP) wajib berada dalam jendela periode
- * milik assignment — `[assign_date 00:00, tolerance_end 23:59]` + skew ±10 mnt.
- * Di luar → VALIDATION_ERROR (non-retry: antrean HP memindah ke gagal permanen
- * yang terlihat + audit di pemanggil, bukan hilang diam-diam).
+ * C1-T2 (direvisi 2026-11-03): jendela `collected_at` kini **penanda**, bukan
+ * gerbang. Setoran di luar jendela [assign 20, toleransi tgl 9] tetap diterima
+ * dan dihitung ke periode assignment-nya; keluarannya dipakai UI untuk badge
+ * "terlambat". Hanya `collected_at` yang tidak valid yang ditolak.
  */
-export function assertCollectedAtInWindow(
+export interface CollectWindowStatus {
+  late: boolean;
+  period: string;
+  collected_at: string;
+  window_start: string;
+  window_end: string;
+}
+
+export function collectWindowStatus(
   collectedAt: Date,
   periodYear: number,
   periodMonth: number
-): void {
+): CollectWindowStatus {
   const b = buildPeriodBoundaries(periodYear, periodMonth);
   const skewMs = CLOCK_SKEW_MINUTES * 60 * 1000;
   const t = collectedAt.getTime();
   const period = periodKey(periodYear, periodMonth);
   if (Number.isNaN(t)) {
     throw Errors.VALIDATION_ERROR(`collected_at tidak valid untuk periode ${period}.`, {
-      reason: 'COLLECTED_AT_OUT_OF_WINDOW',
+      reason: 'COLLECTED_AT_INVALID',
       period,
     });
   }
-  if (t < b.assignDate.getTime() - skewMs || t > b.toleranceEnd.getTime() + skewMs) {
-    throw Errors.VALIDATION_ERROR(
-      `collected_at di luar jendela periode ${period} (20 00:00 s/d 9 bln berikut 23:59).`,
-      {
-        reason: 'COLLECTED_AT_OUT_OF_WINDOW',
-        period,
-        collected_at: collectedAt.toISOString(),
-        window_start: new Date(b.assignDate.getTime() - skewMs).toISOString(),
-        window_end: new Date(b.toleranceEnd.getTime() + skewMs).toISOString(),
-      }
-    );
-  }
+  const windowStart = new Date(b.assignDate.getTime() - skewMs);
+  const windowEnd = new Date(b.toleranceEnd.getTime() + skewMs);
+  return {
+    late: t < windowStart.getTime() || t > windowEnd.getTime(),
+    period,
+    collected_at: collectedAt.toISOString(),
+    window_start: windowStart.toISOString(),
+    window_end: windowEnd.toISOString(),
+  };
+}
+
+/** Alias lama — tidak lagi melempar untuk tanggal di luar jendela. */
+export function assertCollectedAtInWindow(
+  collectedAt: Date,
+  periodYear: number,
+  periodMonth: number
+): CollectWindowStatus {
+  return collectWindowStatus(collectedAt, periodYear, periodMonth);
 }
 
 async function assertNoExistingFirstSubmit(

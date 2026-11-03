@@ -786,8 +786,6 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
       }
 
-      const op = currentOperationalPeriod();
-
       const updated = await db.transaction(async (tx) => {
         // Kunci baris assignment agar dua reopen bersamaan terserialisasi;
         // pemeriksaan status dilakukan ulang pada snapshot yang terkunci.
@@ -804,13 +802,6 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           throw new AppError(
             'ASSIGNMENT_NOT_REOPENABLE',
             'Hanya tugas yang ditandai tidak dijemput yang bisa dibuka kembali',
-            409,
-          );
-        }
-        if (existing.periodYear !== op.year || existing.periodMonth !== op.month) {
-          throw new AppError(
-            'PERIOD_CLOSED',
-            'Tugas ini sudah lewat periodenya dan tidak bisa dibuka kembali',
             409,
           );
         }

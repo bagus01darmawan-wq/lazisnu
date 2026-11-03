@@ -4,6 +4,7 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import { Box } from 'lucide-react';
 import { RegionCards } from '@/components/region/RegionCards';
+import { useOperationalPeriod } from '@/hooks/useOperationalPeriod';
 
 /**
  * LAYER 1 — daftar kartu wilayah (pola list users/page.tsx).
@@ -13,6 +14,10 @@ import { RegionCards } from '@/components/region/RegionCards';
 export default function CansPage() {
   const router = useRouter();
   const now = new Date();
+  // Periode tampilan berbasis aksi: mengikuti periode yang belum tuntas.
+  const { displayYear, displayMonth } = useOperationalPeriod();
+  const year = displayYear ?? now.getFullYear();
+  const month = displayMonth ?? now.getMonth() + 1;
 
   return (
     <div className="space-y-6">
@@ -30,14 +35,16 @@ export default function CansPage() {
       {/* Kartu wilayah — klik beralih halaman ke detail */}
       <RegionCards
         page="cans"
-        year={now.getFullYear()}
-        month={now.getMonth() + 1}
+        year={year}
+        month={month}
         selectedId={null}
         onSelect={(r) => {
           const params = new URLSearchParams({
             kind: r.kind,
             name: r.name,
             branch: r.branchName ?? '',
+            year: String(year),
+            month: String(month),
           });
           router.push(`/dashboard/cans/${r.id}?${params.toString()}`);
         }}

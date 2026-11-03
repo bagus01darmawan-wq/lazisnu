@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { ClipboardCheck, CheckCircle2, Clock, RefreshCcw } from 'lucide-react';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
 import { c1Api, type PeriodDraftItem, type StafSummary } from '@/lib/c1';
+import { useOperationalPeriod } from '@/hooks/useOperationalPeriod';
 
 const MONTHS = [
   { label: 'Januari', value: '1' }, { label: 'Februari', value: '2' },
@@ -29,6 +30,16 @@ export default function PersetujuanPage() {
   const now = new Date();
   const [month, setMonth] = useState(String(now.getMonth() + 1));
   const [year, setYear] = useState(String(now.getFullYear()));
+  // Periode tampilan berbasis aksi: giliran penugasan mengikuti periode yang
+  // belum tuntas, bukan bulan kalender.
+  const periodContext = useOperationalPeriod();
+  useEffect(() => {
+    const y = periodContext.displayYear;
+    const m = periodContext.displayMonth;
+    if (!y || !m) return;
+    setYear(String(y));
+    setMonth(String(m));
+  }, [periodContext.displayYear, periodContext.displayMonth]);
   const [summary, setSummary] = useState<StafSummary | null>(null);
   const [drafts, setDrafts] = useState<PeriodDraftItem[]>([]);
   const [loading, setLoading] = useState(true);

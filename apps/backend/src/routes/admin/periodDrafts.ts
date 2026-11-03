@@ -73,7 +73,19 @@ export async function periodDraftsRoutes(fastify: FastifyInstance) {
   fastify.post('/period-drafts/:id/approve', stafOnly, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
-      return sendSuccess(reply, await approveDraft(actorOf(request), id));
+      const gate = z
+        .object({
+          force: z.boolean().optional(),
+          force_reason: z.string().max(255).optional(),
+        })
+        .parse(request.body ?? {});
+      return sendSuccess(
+        reply,
+        await approveDraft(actorOf(request), id, new Date(), {
+          force: gate.force === true,
+          reason: gate.force_reason ?? null,
+        }),
+      );
     } catch (error) {
       return sendAppError(reply, error);
     }

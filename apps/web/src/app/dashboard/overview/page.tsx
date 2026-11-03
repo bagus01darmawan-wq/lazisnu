@@ -12,6 +12,7 @@ import ProductivitySection from '@/components/overview/ProductivitySection';
 import CollectionTrendChart from '@/components/overview/CollectionTrendChart';
 import ConditionBreakdown from '@/components/overview/ConditionBreakdown';
 import BranchComparisonList from '@/components/overview/BranchComparisonList';
+import { useOperationalPeriod } from '@/hooks/useOperationalPeriod';
 
 interface ApiError {
   message?: string;
@@ -41,6 +42,9 @@ export default function OverviewPage() {
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  // Periode tampilan berbasis aksi: periode belum tuntas tertua untuk cakupan
+  // ini (mis. Oktober yang BA-nya menunggu bendahara), fallback bulan berjalan.
+  const periodContext = useOperationalPeriod();
 
   const fetchOverview = React.useCallback(async (
     nextBranchId: string,
@@ -91,6 +95,17 @@ export default function OverviewPage() {
     void Promise.resolve().then(() => fetchOverview('', filter.year, filter.months, 'first'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, isDistrictAdmin]);
+
+  // Terapkan periode tampilan setelah konteks aksi termuat (sekali per periode).
+  React.useEffect(() => {
+    const y = periodContext.displayYear;
+    const m = periodContext.displayMonth;
+    if (!user || !y || !m) return;
+    if (filter.year === y && filter.months.length === 1 && filter.months[0] === m) return;
+    setFilter({ year: y, months: [m] });
+    void fetchOverview(branchId, y, [m], 'refresh');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, periodContext.displayYear, periodContext.displayMonth]);
 
   // Ganti periode: data lama dipertahankan dengan indikator kecil.
   const handlePeriodChange = React.useCallback((months: number[], year: number) => {

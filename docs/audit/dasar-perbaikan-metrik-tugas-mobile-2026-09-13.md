@@ -308,10 +308,17 @@ task_completed = COMPLETED
 Perubahan yang diperlukan:
 
 ```text
-task_active   = ACTIVE
-task_closed   = COMPLETED + UNCOLLECTED
-task_total    = seluruh assignment pada petugas + periode
+task_active     = ACTIVE
+task_closed     = COMPLETED + UNCOLLECTED
+task_total      = ACTIVE + COMPLETED + UNCOLLECTED      (REASSIGNED tidak termasuk)
+task_reassigned = REASSIGNED                            (dilaporkan terpisah, bukan beban)
 ```
+
+Catatan pembaruan 2026-11-03: `REASSIGNED` berarti tugas **lepas** dari petugas asal
+(transfer final oleh admin; baris `ACTIVE` baru dibuat untuk pengganti). Karena itu
+ia bukan beban kerja maupun penyebut progres petugas asal â€” petugas yang mentransfer
+3 dari 10 paket lalu menyelesaikan 7 sisanya tampil 100%. Invariant akuntansi:
+`task_total + task_reassigned == jumlah seluruh baris`.
 
 `task_completed` tetap boleh dikembalikan untuk kebutuhan teknis atau laporan khusus, tetapi bukan lagi numerator utama kartu progres tugas.
 
@@ -847,6 +854,6 @@ REASSIGNED
 
 Dokumen ini adalah dasar perbaikan. Belum ada perubahan kode yang dilakukan saat dokumen ini dibuat.
 
-## Adendum C1-T12 (22 Sep 2026) — basis assignment dikunci
+## Adendum C1-T12 (22 Sep 2026) ï¿½ basis assignment dikunci
 
-Uang (dashboard monthStats, stats-range, scheduler calculate-summaries) kini diagregat per PERIODE ASSIGNMENT via helper bersama sumCollectionsByPeriod (collectionSubmission.ts) — collected_at 20 Sep–9 Okt milik assignment Sept = pemasukan Sept. Hari/Minggu Ini tetap wall-clock (aktivitas harian, bukan atribusi). Task counts memang sudah period-based (§7 terpenuhi). Bukti: c1Acceptance12 §2.2 (jemputan 5 Okt masuk Sept, bukan Okt).
+Uang (dashboard monthStats, stats-range, scheduler calculate-summaries) kini diagregat per PERIODE ASSIGNMENT via helper bersama sumCollectionsByPeriod (collectionSubmission.ts) ï¿½ collected_at 20 Sepï¿½9 Okt milik assignment Sept = pemasukan Sept. Hari/Minggu Ini tetap wall-clock (aktivitas harian, bukan atribusi). Task counts memang sudah period-based (ï¿½7 terpenuhi). Bukti: c1Acceptance12 ï¿½2.2 (jemputan 5 Okt masuk Sept, bukan Okt).

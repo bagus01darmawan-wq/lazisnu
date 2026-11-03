@@ -155,10 +155,10 @@ describe('C1-T12 akseptansi tutup (§2.2 + celah §12)', () => {
     )).rejects.toMatchObject({ code: ErrorCode.FORBIDDEN });
   });
 
-  test('#13: sync 11 Okt untuk Sept → PERIOD_CLOSED; Okt dipercepat lolos', async () => {
+  test('#13: validate 11 Okt untuk Sept & Okt → keduanya lolos (tanpa gerbang tanggal)', async () => {
     await db.transaction(async (tx) => {
-      await expect(validateAssignmentForSubmit(tx as never, septAsg2, can2, off1, new Date(2026, 9, 11, 10, 0, 0)))
-        .rejects.toMatchObject({ code: ErrorCode.QR_PERIOD_CLOSED });
+      const sept = await validateAssignmentForSubmit(tx as never, septAsg2, can2, off1, new Date(2026, 9, 11, 10, 0, 0));
+      expect(sept.id).toBe(septAsg2);
       const okt = await validateAssignmentForSubmit(tx as never, oktAsg, can1, off1, new Date(2026, 9, 12, 10, 0, 0));
       expect(okt.id).toBe(oktAsg);
     });

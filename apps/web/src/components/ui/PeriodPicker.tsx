@@ -9,6 +9,8 @@ interface PeriodPickerProps {
   year: number;
   onChange: (months: number[], year: number) => void;
   className?: string;
+  /** Tahun tambahan (mis. periode belum tuntas dari konteks aksi). */
+  extraYears?: number[];
 }
 
 const monthNames = [
@@ -16,14 +18,18 @@ const monthNames = [
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
 ];
 
-export function PeriodPicker({ months, year, onChange, className }: PeriodPickerProps) {
+export function PeriodPicker({ months, year, onChange, className, extraYears }: PeriodPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
   const currentYear = new Date().getFullYear();
-  const years = [currentYear - 1, currentYear, currentYear + 1];
+  // Sertakan tahun terpilih + tahun periode belum tuntas agar periode lama
+  // (mis. tunggakan tahun lalu) tetap bisa dipilih.
+  const years = Array.from(
+    new Set([currentYear - 1, currentYear, currentYear + 1, year, ...(extraYears ?? [])]),
+  ).sort((a, b) => a - b);
 
   const allMonthsSelected = months.length === 12;
 

@@ -1,9 +1,8 @@
 /**
- * C1-T2 — uji klasifikasi scan lintas periode (fungsi murni, tanpa DB).
+ * C1-T2 (direvisi 2026-11-03) — klasifikasi scan lintas periode.
  *
- * Skenario inti dari dokumen induk §12: scan Sept pada 5 Okt lolos toleransi,
- * scan Sept pada 10 Okt → QR_PERIOD_CLOSED; + kasus B1 (periode lain,
- * sudah dijemput, bukan tugas).
+ * Kunci periode berbasis tanggal dihapus: tugas periode lama tetap HIT
+ * (hanya ditandai toleransi/terlambat), COMPLETED lama tetap ALREADY_COLLECTED.
  */
 import { classifyScan, scanClosedMessage } from '../scanClassification';
 import type { ScanAssignmentRow } from '../scanClassification';
@@ -44,20 +43,20 @@ describe('C1-T2 classifyScan — HIT', () => {
 });
 
 describe('C1-T2 classifyScan — penolakan', () => {
-  test('uji §12.2: scan Sept pada 10 Okt → PERIOD_CLOSED + arahan Okt', () => {
+  test('scan Sept pada 10 Okt → tetap HIT (terlambat), bukan ditolak', () => {
     const r = classifyScan([row(2026, 9, 'ACTIVE')], new Date(2026, 9, 10, 0, 0, 0));
-    expect(r).toEqual({ kind: 'PERIOD_CLOSED', period: '2026-09', nextPeriod: '2026-10' });
+    expect(r).toMatchObject({ kind: 'HIT', period: '2026-09', tolerance: true });
     expect(scanClosedMessage('2026-09', '2026-10')).toContain('2026-10');
   });
 
-  test('lintas tahun: Des dikunci 10 Jan → PERIOD_CLOSED + arahan Jan', () => {
+  test('lintas tahun: Des dipindai 10 Jan → tetap HIT Des', () => {
     const r = classifyScan([row(2026, 12, 'ACTIVE')], new Date(2027, 0, 10, 0, 0, 1));
-    expect(r).toEqual({ kind: 'PERIOD_CLOSED', period: '2026-12', nextPeriod: '2027-01' });
+    expect(r).toMatchObject({ kind: 'HIT', period: '2026-12', tolerance: true });
   });
 
-  test('kasus B1: ACTIVE Juli dipindai Sept → WRONG_PERIOD (bukan CLOSED)', () => {
+  test('kasus B1: ACTIVE Juli dipindai Sept → HIT Juli (terlambat)', () => {
     const r = classifyScan([row(2026, 7, 'ACTIVE')], new Date(2026, 8, 15, 12, 0, 0));
-    expect(r).toEqual({ kind: 'WRONG_PERIOD', period: '2026-07' });
+    expect(r).toMatchObject({ kind: 'HIT', period: '2026-07', tolerance: true });
   });
 
   test('sudah dijemput periode berjalan → ALREADY_COLLECTED', () => {
@@ -79,10 +78,10 @@ describe('C1-T2 classifyScan — penolakan', () => {
     expect(r).toEqual({ kind: 'NOT_ASSIGNED' });
   });
 
-  test('COMPLETED lama (Juli) dipindai Sept → NOT_ASSIGNED (bukan CLOSED/WARN salah)', () => {
-    // Juli COMPLETED = sudah beres; tak ada arahan relevan → jangan tuduh terkunci.
+  test('COMPLETED lama (Juli) dipindai Sept → ALREADY_COLLECTED', () => {
+    // COMPLETED tetap terdeteksi walau periodenya jauh di belakang.
     const r = classifyScan([row(2026, 7, 'COMPLETED')], new Date(2026, 8, 15, 12, 0, 0));
-    expect(r).toEqual({ kind: 'NOT_ASSIGNED' });
+    expect(r).toEqual({ kind: 'ALREADY_COLLECTED', period: '2026-07' });
   });
 });
 

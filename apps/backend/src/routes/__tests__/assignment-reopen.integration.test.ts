@@ -278,7 +278,7 @@ describe('POST /mobile/assignments/:id/reopen', () => {
     expect(res.json().error.code).toBe('ASSIGNMENT_NOT_REOPENABLE');
   });
 
-  it('tolak tugas periode yang sudah lewat (409 PERIOD_CLOSED)', async () => {
+  it('boleh membuka kembali tugas periode lampau (tanggal bukan gerbang)', async () => {
     const app = await getApp();
     const row = await db.query.assignments.findFirst({
       where: eq(schema.assignments.canId, IDS.canPast),
@@ -289,8 +289,7 @@ describe('POST /mobile/assignments/:id/reopen', () => {
       url: `/v1/mobile/assignments/${row?.id}/reopen`,
       headers: { authorization: `Bearer ${token}` },
     });
-    expect(res.statusCode).toBe(409);
-    expect(res.json().error.code).toBe('PERIOD_CLOSED');
+    expect(res.statusCode).toBe(200);
   });
 
   it('reopen kedua pada tugas yang sama ditolak (409)', async () => {

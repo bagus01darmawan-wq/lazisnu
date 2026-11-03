@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { PieChart, RefreshCcw, Download } from 'lucide-react';
 import { PeriodPicker } from '@/components/ui/PeriodPicker';
 import { c1Api, type MwcRecap, type MwcRecapRow } from '@/lib/c1';
+import { useOperationalPeriod } from '@/hooks/useOperationalPeriod';
 
 /**
  * C1-T10 — Rekap MWC (tarik FINAL + unduh BA).
@@ -19,6 +20,15 @@ export default function RekapMwcPage() {
   const now = new Date();
   const [month, setMonth] = useState(String(now.getMonth() + 1));
   const [year, setYear] = useState(String(now.getFullYear()));
+  // Periode tampilan berbasis aksi: bulan lalu yang belum tuntas tetap tampil.
+  const periodContext = useOperationalPeriod();
+  useEffect(() => {
+    const y = periodContext.displayYear;
+    const m = periodContext.displayMonth;
+    if (!y || !m) return;
+    setYear(String(y));
+    setMonth(String(m));
+  }, [periodContext.displayYear, periodContext.displayMonth]);
   const [recap, setRecap] = useState<MwcRecap | null>(null);
   const [loading, setLoading] = useState(true);
 

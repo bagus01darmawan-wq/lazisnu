@@ -16,8 +16,32 @@ import { ASSIGNABLE_CONDITIONS } from '../../services/conditionRules';
 import { getAssignmentWorkQueue } from '../../services/assignmentWorkQueueService';
 import { AppError, isAppError } from '../../utils/AppError';
 import { currentOperationalPeriod } from '../../utils/operationalTimeZone';
+import { assertPreviousPeriodSettled, type PeriodGateResult } from '../../services/periodState';
 
 const rantingOrKec = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
+
+/** Opsi gate giliran dari body admin: force + alasan (tercatat di audit). */
+function periodGateOptions(request: FastifyRequest) {
+  const raw = (request.body ?? {}) as Record<string, unknown>;
+  const user = request.currentUser!;
+  return {
+    force: raw.force === true,
+    reason: typeof raw.force_reason === 'string' ? raw.force_reason : null,
+    actor: {
+      userId: user.userId ?? null,
+      ipAddress: request.ip ?? null,
+      userAgent: (request.headers['user-agent'] as string | undefined) ?? null,
+    },
+  };
+}
+
+function logGate(fastify: FastifyInstance, gate: PeriodGateResult, scope: string) {
+  if (!gate.warning) return;
+  fastify.log.warn(
+    { unsettled: gate.warning, overridden: gate.overridden, scope },
+    'Gate periode: periode sebelumnya belum tuntas',
+  );
+}
 
 export async function assignmentsRoutes(fastify: FastifyInstance) {
   // Ringkasan per wilayah untuk layer kartu. Static segment didahulukan atas
@@ -186,9 +210,14 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       const user = request.currentUser!;
       const body = createAssignmentSchema.parse(request.body);
 
+      const can = await db.query.cans.findFirst({
+        where: eq(schema.cans.id, body.can_id),
+        columns: { id: true, branchId: true },
+      });
+      if (!can) return sendError(reply, 404, 'CAN_NOT_FOUND', 'Kaleng tidak ditemukan');
+
       if (user.role === 'ADMIN_RANTING') {
-        const can = await db.query.cans.findFirst({ where: eq(schema.cans.id, body.can_id) });
-        if (!can || can.branchId !== user.branchId) {
+        if (can.branchId !== user.branchId) {
           return sendError(reply, 403, 'FORBIDDEN', 'Kaleng bukan milik ranting Anda');
         }
         const officer = await db.query.officers.findFirst({ where: eq(schema.officers.id, body.officer_id) });
@@ -196,6 +225,13 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
           return sendError(reply, 403, 'FORBIDDEN', 'Petugas bukan anggota ranting Anda');
         }
       }
+
+      const gate = await assertPreviousPeriodSettled(
+        { kind: 'branch', branchId: can.branchId },
+        { year: body.period_year, month: body.period_month },
+        periodGateOptions(request),
+      );
+      logGate(fastify, gate, `assignment ${body.can_id}`);
 
       // Kunci baris kaleng lalu periksa ulang assignment di dalam transaksi
       // yang sama: dua request bersamaan untuk kaleng yang sama menjadi
@@ -254,6 +290,13 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       const operational = currentOperationalPeriod();
       const currentYear = body.period_year ?? operational.year;
       const currentMonth = body.period_month ?? operational.month;
+
+      const gate = await assertPreviousPeriodSettled(
+        { kind: 'branch', branchId: body.branch_id },
+        { year: currentYear, month: currentMonth },
+        periodGateOptions(request),
+      );
+      logGate(fastify, gate, `bulk-branch ${body.branch_id}`);
 
       const candidateConditions: any[] = [
         eq(schema.cans.branchId, body.branch_id),
@@ -386,6 +429,13 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       const operational = currentOperationalPeriod();
       const currentYear = body.period_year ?? operational.year;
       const currentMonth = body.period_month ?? operational.month;
+
+      const gate = await assertPreviousPeriodSettled(
+        { kind: 'branch', branchId: officer.branchId },
+        { year: currentYear, month: currentMonth },
+        periodGateOptions(request),
+      );
+      logGate(fastify, gate, `bulk-cans ${body.officer_id}`);
 
       // Kunci kaleng yang diminta, lalu hitung ulang kelayakan dan sisipkan
       // di transaksi yang sama — pola yang sama dengan bulk-branch agar dua

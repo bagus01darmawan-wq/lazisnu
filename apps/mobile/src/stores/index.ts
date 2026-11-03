@@ -5,6 +5,7 @@ import {useCollectionStore, useCollectionsStore} from './useCollectionStore';
 import {useSyncStore, refreshSyncCounts} from './useSyncStore';
 import {useOfficerStore} from './useOfficerStore';
 import {useUpdateStore} from './useUpdateStore';
+import {usePeriodStore} from './usePeriodStore';
 
 export {
   useAuthStore,
@@ -16,6 +17,7 @@ export {
   refreshSyncCounts,
   useOfficerStore,
   useUpdateStore,
+  usePeriodStore,
 };
 
 export default {
@@ -28,4 +30,5 @@ export default {
   refreshSyncCounts,
   useOfficerStore,
   useUpdateStore,
+  usePeriodStore,
 };

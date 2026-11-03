@@ -122,35 +122,25 @@ describe('C1-T2 kunci periode submit (tolak Sept→Okt)', () => {
     });
   });
 
-  test('uji §12.2: Sept tiba 10 Okt 00:00 → QR_PERIOD_CLOSED 409 non-retry + arahan Okt', async () => {
-    await expect(
-      db.transaction(async (tx) => {
-        await validateAssignmentForSubmit(
-          tx as any, septAssignmentId, septCanId, officerId, new Date(2026, 9, 10, 0, 0, 0),
-        );
-      }),
-    ).rejects.toMatchObject({
-      code: ErrorCode.QR_PERIOD_CLOSED,
-      statusCode: 409,
-      isRetryable: false,
+  test('Sept tiba 10 Okt → tetap lolos (tanggal bukan gerbang)', async () => {
+    await db.transaction(async (tx) => {
+      const a = await validateAssignmentForSubmit(
+        tx as any, septAssignmentId, septCanId, officerId, new Date(2026, 9, 10, 0, 0, 0),
+      );
+      expect(a.id).toBe(septAssignmentId);
+      expect(a.periodYear).toBe(2026);
+      expect(a.periodMonth).toBe(9);
     });
   });
 
-  test('detail error menyebut periode terkunci + periode pengganti', async () => {
-    const err = await db
-      .transaction(async (tx) => {
-        await validateAssignmentForSubmit(
-          tx as any, septAssignmentId, septCanId, officerId, new Date(2026, 9, 10, 0, 0, 1),
-        );
-      })
-      .then(
-        () => null,
-        (e) => e,
-      );
-    expect(err).not.toBeNull();
-    expect(err.details).toMatchObject({ period: '2026-09', next_period: '2026-10' });
-    expect(err.message).toContain('2026-09');
-    expect(err.message).toContain('2026-10');
+  test('setoran terlambat tetap diatribusikan ke periode assignment', async () => {
+    const a = await db.transaction(async (tx) =>
+      validateAssignmentForSubmit(
+        tx as any, septAssignmentId, septCanId, officerId, new Date(2026, 9, 10, 0, 0, 1),
+      ),
+    );
+    expect(a.periodYear).toBe(2026);
+    expect(a.periodMonth).toBe(9);
   });
 
   test('kasus §6: Okt lolos 12 Okt (jemput awal, sebelum assign tgl 20)', async () => {

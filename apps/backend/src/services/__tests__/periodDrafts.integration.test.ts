@@ -238,10 +238,9 @@ describe('C1-T3 generate approve (DB)', () => {
     expect(mine.find((d) => d.branchId === branchR)).toMatchObject({ totalItems: 3 });
   });
 
-  test('robot menolak bulan masa depan', async () => {
-    await expect(preparePeriodDraft(2026, 11, { now: OCT5 })).rejects.toMatchObject({
-      code: ErrorCode.VALIDATION_ERROR,
-    });
+  test('robot menyiapkan bulan yang diminta tanpa gerbang tanggal', async () => {
+    const res = await preparePeriodDraft(2026, 12, { now: OCT5 });
+    expect(res.period).toBe('2026-12');
   });
 
   test('Staf setujui draft R → 3 assignment ACTIVE Sept + tombol mati', async () => {
@@ -318,29 +317,23 @@ describe('C1-T3 generate approve (DB)', () => {
     }
   });
 
-  test('eskalasi: Keuangan dini ditolak, lewat 24 jam lolos (draft Taqwa)', async () => {
-    await expect(approveDraft(keuMwc, tDraftId, new Date(2026, 9, 5, 12, 0, 0))).rejects.toMatchObject({
-      code: ErrorCode.FORBIDDEN,
-    });
-    // preparedAt = 5 Okt 12:00 (OCT5) → 6 Okt 13:00 = 25 jam → eskalasi sah.
-    const res = await approveDraft(keuMwc, tDraftId, new Date(2026, 9, 6, 13, 0, 0));
+  test('Keuangan boleh menyetujui tanpa menunggu 24 jam (tanggal bukan gerbang)', async () => {
+    const res = await approveDraft(keuMwc, tDraftId, new Date(2026, 9, 5, 12, 0, 0));
     expect(res).toMatchObject({ escalated: true, createdAssignments: 1, approvedByRole: 'STAF_KEUANGAN' });
   });
 
-  test('draft masa depan & terkunci tidak bisa disetujui', async () => {
+  test('draft bulan mana pun bisa disetujui selama giliran terpenuhi', async () => {
     const [novDraft] = await db.insert(schema.periodDrafts).values({
       periodYear: 2026, periodMonth: 11, branchId: branchR2, districtId, status: 'DRAFT',
     }).returning();
-    await expect(approveDraft(stafR2, novDraft.id, new Date(2026, 9, 5, 12, 0, 0))).rejects.toMatchObject({
-      code: ErrorCode.VALIDATION_ERROR,
-    });
+    const nov = await approveDraft(stafR2, novDraft.id, new Date(2026, 9, 5, 12, 0, 0));
+    expect(nov.period).toBe('2026-11');
 
     const [augDraft] = await db.insert(schema.periodDrafts).values({
       periodYear: 2026, periodMonth: 8, branchId: branchR2, districtId, status: 'DRAFT',
     }).returning();
-    await expect(approveDraft(stafR2, augDraft.id, new Date(2026, 9, 10, 0, 0, 1))).rejects.toMatchObject({
-      code: ErrorCode.QR_PERIOD_CLOSED,
-    });
+    const aug = await approveDraft(stafR2, augDraft.id, new Date(2026, 9, 10, 0, 0, 1));
+    expect(aug.period).toBe('2026-08');
 
     await db.delete(schema.periodDrafts).where(inArray(schema.periodDrafts.id, [novDraft.id, augDraft.id]));
   });

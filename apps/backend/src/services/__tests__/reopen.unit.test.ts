@@ -19,14 +19,9 @@ describe('C1-T7 jendela reopen 48 jam', () => {
     expect(() => assertReopenWindowOpen({ reopenedUntil: UNTIL }, UNTIL)).not.toThrow();
   });
 
-  test('lewat 1 detik → REOPEN_WINDOW_CLOSED', () => {
+  test('lewat jendela tetap boleh (tanggal bukan gerbang)', () => {
     const late = new Date(UNTIL.getTime() + 1000);
-    try {
-      assertReopenWindowOpen({ reopenedUntil: UNTIL }, late);
-      throw new Error('seharusnya melempar');
-    } catch (e: unknown) {
-      expect(e).toMatchObject({ code: 'VALIDATION_ERROR', details: { reason: 'REOPEN_WINDOW_CLOSED' } });
-    }
+    expect(() => assertReopenWindowOpen({ reopenedUntil: UNTIL }, late)).not.toThrow();
   });
 });
 

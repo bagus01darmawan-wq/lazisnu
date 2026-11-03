@@ -1,15 +1,14 @@
 /**
- * C1-T2 — uji jendela collected_at + kunci periode (murni, tanpa DB).
- *
- * §14.3: collected_at ∈ [assign_date 00:00, tolerance_end 23:59] + skew ±10 mnt.
- * Kunci keras tgl 10 00:00 diuji lewat isPeriodLocked (sudah hijau di T1) dan
- * jalur validateAssignmentForSubmit pada periodLock.integration.test.ts.
+ * C1-T2 (direvisi 2026-11-03) — jendela `collected_at` kini PENANDA, bukan
+ * gerbang. Tanggal di luar [assign 20, toleransi tgl 9] tetap diterima dan
+ * hanya menghasilkan `late: true` untuk badge UI. Atribusi uang tetap memakai
+ * periode assignment, bukan bulan `collected_at`.
  */
 import { assertCollectedAtInWindow, CLOCK_SKEW_MINUTES } from '../collectionSubmission';
 import { buildPeriodBoundaries } from '../periodCalendar';
 import { ErrorCode } from '../../utils/errorCatalog';
 
-describe('C1-T2 assertCollectedAtInWindow — Sept 2026', () => {
+describe('C1-T2 collectWindowStatus — Sept 2026', () => {
   const Y = 2026;
   const M = 9;
   const b = buildPeriodBoundaries(Y, M);
@@ -18,50 +17,50 @@ describe('C1-T2 assertCollectedAtInWindow — Sept 2026', () => {
     expect(CLOCK_SKEW_MINUTES).toBe(10);
   });
 
-  test('jemput 25 Sep siang → lolos', () => {
-    expect(() => assertCollectedAtInWindow(new Date(2026, 8, 25, 12, 0, 0), Y, M)).not.toThrow();
+  test('jemput 25 Sep siang → tidak terlambat', () => {
+    expect(assertCollectedAtInWindow(new Date(2026, 8, 25, 12, 0, 0), Y, M).late).toBe(false);
   });
 
-  test('jemput 5 Okt (toleransi) → lolos, tercatat Sept', () => {
-    expect(() => assertCollectedAtInWindow(new Date(2026, 9, 5, 12, 0, 0), Y, M)).not.toThrow();
+  test('jemput 5 Okt (toleransi) → tidak terlambat, tercatat Sept', () => {
+    const s = assertCollectedAtInWindow(new Date(2026, 9, 5, 12, 0, 0), Y, M);
+    expect(s.late).toBe(false);
+    expect(s.period).toBe('2026-09');
   });
 
-  test('jemput 9 Okt 23:59:59 → lolos (batas akhir)', () => {
-    expect(() => assertCollectedAtInWindow(new Date(2026, 9, 9, 23, 59, 59), Y, M)).not.toThrow();
+  test('jemput 9 Okt 23:59:59 → tidak terlambat (batas akhir)', () => {
+    expect(assertCollectedAtInWindow(new Date(2026, 9, 9, 23, 59, 59), Y, M).late).toBe(false);
   });
 
-  test('backdating 20 Agu untuk Sept → VALIDATION_ERROR', () => {
+  test('backdating 20 Agu untuk Sept → late, TIDAK ditolak', () => {
+    const s = assertCollectedAtInWindow(new Date(2026, 7, 20, 12, 0, 0), Y, M);
+    expect(s.late).toBe(true);
+    expect(s.period).toBe('2026-09');
+  });
+
+  test('forward-dating 11 Okt untuk Sept → late, TIDAK ditolak', () => {
+    expect(assertCollectedAtInWindow(new Date(2026, 9, 11, 0, 0, 0), Y, M).late).toBe(true);
+  });
+
+  test('dalam skew: 19 Sep 23:55 (5 mnt sebelum assign) → tidak terlambat', () => {
+    expect(assertCollectedAtInWindow(new Date(2026, 8, 19, 23, 55, 0), Y, M).late).toBe(false);
+  });
+
+  test('luar skew: 19 Sep 23:30 (30 mnt sebelum assign) → late, TIDAK ditolak', () => {
+    expect(assertCollectedAtInWindow(new Date(2026, 8, 19, 23, 30, 0), Y, M).late).toBe(true);
+  });
+
+  test('dalam skew: 10 Okt 00:05 (5 mnt sesudah tolerance_end) → tidak terlambat', () => {
+    expect(assertCollectedAtInWindow(new Date(2026, 9, 10, 0, 5, 0), Y, M).late).toBe(false);
+  });
+
+  test('collected_at tidak valid tetap ditolak (input rusak, bukan gerbang)', () => {
     try {
-      assertCollectedAtInWindow(new Date(2026, 7, 20, 12, 0, 0), Y, M);
+      assertCollectedAtInWindow(new Date('bukan-tanggal'), Y, M);
       throw new Error('seharusnya ditolak');
     } catch (err: any) {
       expect(err.code).toBe(ErrorCode.VALIDATION_ERROR);
-      expect(err.isRetryable).toBe(false);
-      expect(err.details?.reason).toBe('COLLECTED_AT_OUT_OF_WINDOW');
-      expect(err.details?.period).toBe('2026-09');
+      expect(err.details?.reason).toBe('COLLECTED_AT_INVALID');
     }
-  });
-
-  test('forward-dating 11 Okt untuk Sept → VALIDATION_ERROR', () => {
-    try {
-      assertCollectedAtInWindow(new Date(2026, 9, 11, 0, 0, 0), Y, M);
-      throw new Error('seharusnya ditolak');
-    } catch (err: any) {
-      expect(err.code).toBe(ErrorCode.VALIDATION_ERROR);
-      expect(err.details?.reason).toBe('COLLECTED_AT_OUT_OF_WINDOW');
-    }
-  });
-
-  test('dalam skew: 19 Sep 23:55 (5 mnt sebelum assign) → lolos', () => {
-    expect(() => assertCollectedAtInWindow(new Date(2026, 8, 19, 23, 55, 0), Y, M)).not.toThrow();
-  });
-
-  test('luar skew: 19 Sep 23:30 (30 mnt sebelum assign) → ditolak', () => {
-    expect(() => assertCollectedAtInWindow(new Date(2026, 8, 19, 23, 30, 0), Y, M)).toThrow();
-  });
-
-  test('dalam skew: 10 Okt 00:05 (5 mnt sesudah tolerance_end) → lolos', () => {
-    expect(() => assertCollectedAtInWindow(new Date(2026, 9, 10, 0, 5, 0), Y, M)).not.toThrow();
   });
 
   test('batas dihitung dari helper tunggal (konsisten dengan DB)', () => {

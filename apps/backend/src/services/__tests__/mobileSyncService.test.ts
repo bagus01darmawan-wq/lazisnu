@@ -241,11 +241,13 @@ describe('mobileSyncService syncCollectionsBatch', () => {
     });
   });
 
-  it('C1-T2: collected_at di luar jendela → FAILED VALIDATION can_retry=false (tidak spam)', async () => {
-    // Pakai implementasi asli penegak jendela; assignment Mei, klaim 20 Agu.
+  it('C1-T2 (revisi): collected_at di luar jendela TIDAK menggagalkan sync', async () => {
+    // Jendela periode kini penanda, bukan gerbang: data terlambat tetap masuk
+    // dan diatribusikan ke periode assignment.
     const real = jest.requireActual('../collectionSubmission') as typeof import('../collectionSubmission');
     assertCollectedAtInWindow.mockImplementationOnce(real.assertCollectedAtInWindow);
     (validateAssignmentForSubmit as jest.Mock).mockResolvedValue({ periodYear: 2026, periodMonth: 5 });
+    (submitCollection as jest.Mock).mockResolvedValue({ id: 'srv-late' });
     (db.query.collections.findFirst as jest.Mock).mockResolvedValue(null);
     (db.transaction as jest.Mock).mockImplementation(async (cb) => cb());
 
@@ -256,17 +258,9 @@ describe('mobileSyncService syncCollectionsBatch', () => {
     );
 
     expect(result.total).toBe(1);
-    expect(result.succeeded).toBe(0);
-    expect(result.failed).toBe(1);
-    expect(result.results[0]).toMatchObject({
-      offline_id: 'loc-1',
-      status: 'FAILED',
-      error_code: 'VALIDATION_ERROR',
-      error_type: 'VALIDATION',
-      can_retry: false,
-    });
-    // Audit COLLECTED_AT_REJECTED tidak boleh meledak meski db audit tak di-mock
-    // (dibungkus try/catch di service) — hasil di atas sudah membuktikannya.
+    expect(result.succeeded).toBe(1);
+    expect(result.failed).toBe(0);
+    expect(submitCollection).toHaveBeenCalled();
   });
 
   it('mengklasifikasikan error tidak dikenal (non-AppError) sebagai SERVER error + can_retry = true', async () => {

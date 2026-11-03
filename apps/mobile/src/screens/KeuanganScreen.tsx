@@ -11,6 +11,7 @@ import {SignSheet} from '../components/SignSheet';
 import {Colors, Radius, Spacing, Typography} from '../theme';
 import {formatCurrency} from '../utils/format';
 import {getErrorMessage} from '../utils/error';
+import {usePeriodStore} from '../stores';
 
 /** Selisih share di luar nilai ini wajib alasan — cerminan `SHARE_TOLERANCE`. */
 const SHARE_TOLERANCE = 10_000;
@@ -42,6 +43,11 @@ const digitsOnly = (s: string): number => Number(s.replace(/[^\d]/g, '')) || 0;
  */
 export const KeuanganScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
+  // Periode tampilan berbasis aksi: antrean TTD bulan lalu yang belum tuntas
+  // tetap muncul walau bulan kalender sudah berganti.
+  const displayYear = usePeriodStore(state => state.context?.display_period.year);
+  const displayMonth = usePeriodStore(state => state.context?.display_period.month);
+  const refreshPeriod = usePeriodStore(state => state.refresh);
   const [items, setItems] = useState<KeuanganInboxItemDto[]>([]);
   const [period, setPeriod] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -67,12 +73,10 @@ export const KeuanganScreen: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      /* Periode SENGAJA tidak dikirim — lihat ProfileScreen.loadBa: server
-         memakai periode berjalan, sumber kebenaran yang sama dengan
-         penjaga-fresh (`periodComplete`). Periode yang dipakai server tetap
-         ditampilkan ke pengguna lewat `setPeriod` di bawah, jadi antrean tidak
-         pernah tampak kosong tanpa keterangan periode mana yang dimaksud. */
-      const res = await c1Service.getKeuanganInbox();
+      /* Periode dikirim eksplisit dari konteks aksi (`display_period`), bukan
+         jam kalender: antrean BA bulan lalu tetap terlihat sampai tuntas.
+         Bila konteks belum termuat, server memakai periode berjalan. */
+      const res = await c1Service.getKeuanganInbox(displayYear, displayMonth);
       if (!res.success || !res.data) throw new Error(res.error?.message || 'Gagal memuat antrean');
       setItems(res.data.items);
       setPeriod(res.data.period);
@@ -81,7 +85,11 @@ export const KeuanganScreen: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [displayYear, displayMonth]);
+
+  useEffect(() => {
+    refreshPeriod();
+  }, [refreshPeriod]);
 
   useEffect(() => {
     load();

@@ -25,7 +25,7 @@ import {BaPreviewSheet} from '../components/BaPreviewSheet';
 import {PeriodChip} from '../components/PeriodChip';
 import {SignSheet} from '../components/SignSheet';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import {useAuthStore} from '../stores';
+import {useAuthStore, usePeriodStore} from '../stores';
 import {normalizeRole} from '../roles/roleMap';
 import {Colors, Spacing, Typography} from '../theme';
 import {formatCurrency} from '../utils/format';
@@ -56,6 +56,11 @@ const versionStatusLabel = (status: string, period: string): string =>
 export const SetoranScreen: React.FC = () => {
   const navigation = useNavigation();
   const role = normalizeRole(useAuthStore(state => state.user?.role));
+  // Periode tampilan berbasis aksi: BA bulan lalu yang belum tuntas tetap
+  // ditampilkan, bukan kosong karena bulan kalender berganti.
+  const displayYear = usePeriodStore(state => state.context?.display_period.year);
+  const displayMonth = usePeriodStore(state => state.context?.display_period.month);
+  const refreshPeriod = usePeriodStore(state => state.refresh);
   const [submission, setSubmission] = useState<PpkSubmissionDto | null>(null);
   const [periodInfo, setPeriodInfo] = useState<PeriodInfoDto | null>(null);
   const [versions, setVersions] = useState<BaVersionDto[]>([]);
@@ -79,8 +84,8 @@ export const SetoranScreen: React.FC = () => {
     setError(null);
     try {
       const [subRes, periodRes] = await Promise.all([
-        c1Service.getMySubmission(),
-        c1Service.getPeriodInfo(),
+        c1Service.getMySubmission(displayYear, displayMonth),
+        c1Service.getPeriodInfo(displayYear, displayMonth),
       ]);
       if (!subRes.success || !subRes.data) {
         throw new Error(subRes.error?.message || 'Gagal memuat setoran');
@@ -111,7 +116,11 @@ export const SetoranScreen: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [displayYear, displayMonth]);
+
+  useEffect(() => {
+    refreshPeriod();
+  }, [refreshPeriod]);
 
   useEffect(() => {
     load();

@@ -90,6 +90,10 @@ jest.mock('../../src/stores', () => ({
   useUpdateStore: () => ({
     checkManually: mockCheckUpdates,
   }),
+  usePeriodStore: (selector?: (state: any) => unknown) => {
+    const state = {context: null, isLoading: false, refresh: jest.fn(), reset: jest.fn()};
+    return selector ? selector(state) : state;
+  },
   useCollectionsStore: () => ({
     collections: [
       {

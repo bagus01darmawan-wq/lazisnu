@@ -236,6 +236,41 @@ export interface PeriodDraftItem {
   officer_name: string;
 }
 
+// ─── Periode berbasis AKSI (GET /mobile|admin/period-context) ────────────────
+// Periode tampilan = periode berhak tertua yang belum tuntas untuk cakupan
+// pengguna; kalau tidak ada → periode operasional berjalan. Tanggal hanya
+// pengingat, bukan gerbang.
+export interface PeriodRefView {
+  year: number;
+  month: number;
+}
+
+export type PeriodPendingReason =
+  | "PPK_DRAFT"
+  | "PPK_WAITING_BENDAHARA"
+  | "BRANCH_DRAFT"
+  | "BRANCH_WAITING_MWC"
+  | "DISTRICT_UNSETTLED";
+
+export type PeriodWaitingFor =
+  | "PPK"
+  | "BENDAHARA_RANTING"
+  | "BENDAHARA_MWC"
+  | "ADMIN";
+
+export interface PeriodProgressView extends PeriodRefView {
+  period: string;
+  reason: PeriodPendingReason;
+  waiting_for: PeriodWaitingFor;
+}
+
+export interface PeriodStateView {
+  current_period: PeriodRefView;
+  display_period: PeriodRefView;
+  display_reason: PeriodPendingReason | null;
+  unsettled: PeriodProgressView[];
+}
+
 // ─── User ─────────────────────────────────────────────────────────────────────
 export interface User {
   id: string;

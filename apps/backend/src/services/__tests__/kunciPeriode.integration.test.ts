@@ -285,10 +285,10 @@ describe('C1-T6 kunci berlapis MWC (DB, R2 mock)', () => {
     await closeDbConnection();
   });
 
-  test('belum saatnya (<27) → VALIDATION_ERROR; non-MWC → FORBIDDEN', async () => {
-    await expect(kunciPeriode(adminKec, { year: 2026, month: 9 }, NOW_BELUM)).rejects.toMatchObject({
-      code: ErrorCode.VALIDATION_ERROR,
-    });
+  test('sebelum tgl 27 tidak lagi ditolak; diperlakukan REKAP tanpa men-nolkan', async () => {
+    const res = await kunciPeriode(adminKec, { year: 2026, month: 9 }, NOW_BELUM);
+    expect(res.phase).toBe('REKAP');
+    expect(res.created_final_nol).toEqual([]);
     await expect(
       kunciPeriode({ userId: keuMwc.userId, role: 'STAF_KEUANGAN', branchId: null, districtId: dt6 }, { year: 2026, month: 9 }, NOW_REKAP),
     ).rejects.toMatchObject({ code: ErrorCode.FORBIDDEN });

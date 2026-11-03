@@ -20,6 +20,7 @@ import { incidentRoutes } from './incidents';
 import { laporanMwcRoutes } from './laporanMwc';
 import { productivityRoutes } from './productivity';
 import { userAccountsRoutes } from './userAccounts';
+import { periodContextRoutes } from './periodContext';
 
 export default async function adminRoutes(fastify: FastifyInstance) {
   // Apply auth middleware to all routes in this plugin
@@ -44,4 +45,5 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   await fastify.register(laporanMwcRoutes);
   await fastify.register(productivityRoutes);
   await fastify.register(userAccountsRoutes);
+  await fastify.register(periodContextRoutes);
 }

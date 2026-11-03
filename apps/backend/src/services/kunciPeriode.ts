@@ -150,12 +150,10 @@ export async function kunciPeriode(
     );
   }
 
+  // Direvisi 2026-11-03: fase waktu BUKAN gerbang. Kunci periode adalah aksi
+  // manual MWC; tanggal 27/10 hanya pengingat di UI. `phase` tetap dihitung
+  // untuk memilih perilaku REKAP (tarik FINAL saja) vs KUNCI_KERAS (nulkan).
   const phase = resolveKunciPeriodePhase(now, b);
-  if (phase === 'BELUM_SAATNYA') {
-    throw Errors.VALIDATION_ERROR(
-      `Kunci Periode aktif sejak 27 ${periodKey(input.year, input.month)} 00:00 — belum saatnya.`,
-    );
-  }
   const periodStatus = resolvePeriodStatus(now, b);
 
   await ensurePeriodCalendarRow(input.year, input.month, now);
@@ -245,7 +243,9 @@ export async function kunciPeriode(
     }
   }
 
-  if (phase === 'REKAP') {
+  // Sebelum tgl 27 atau sesudah tgl 9: REKAP non-destruktif. Hanya fase
+  // KUNCI_KERAS yang men-nolkan (FINAL_NOL) dan mengunci kalender.
+  if (phase !== 'KUNCI_KERAS') {
     await auditKunci(actor, 'KUNCI_PERIODE_REKAP', periodKey(input.year, input.month), {
       period_status: periodStatus,
       total_ranting: rantings.length,

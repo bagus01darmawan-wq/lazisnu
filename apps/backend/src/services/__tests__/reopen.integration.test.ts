@@ -296,24 +296,12 @@ describe('C1-T7 reopen menular + arsip + jendela (DB, R2 mock)', () => {
     expect(cal?.status).toBe('DIBUKA_SEBAGIAN');
   });
 
-  test('jendela: tulis lewat 49 jam ditolak; perpanjang → boleh lagi', async () => {
+  test('jendela koreksi tidak lagi memblokir tulis setelah 49 jam', async () => {
     // Penegakan deterministik via now injeksi (choke memakai jam server).
     const row = await db.query.ppkSubmissions.findFirst({ where: eq(schema.ppkSubmissions.id, ppkSubId) });
     expect(row?.status).toBe('DRAFT');
     expect(() => assertReopenWindowOpen(row!, T0)).not.toThrow();
-    expect(() => assertReopenWindowOpen(row!, LATE)).toThrow(
-      expect.objectContaining({ code: 'VALIDATION_ERROR' }),
-    );
-    await expect(
-      signPpkSubmission(ppk1, { submissionId: ppkSubId, signaturePng: TINY_PNG_B64, consent: true }, CTX, LATE),
-    ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_ERROR });
-
-    // Perpanjang jendela via reopen ulang.
-    const ext = await reopenPpkSubmission(adminKec, { submissionId: ppkSubId, reason: 'perpanjangan jendela koreksi susulan' }, LATE);
-    expect(ext.extended).toBe(true);
-    expect(ext.version).toBe(2);
-    const after = await db.query.ppkSubmissions.findFirst({ where: eq(schema.ppkSubmissions.id, ppkSubId) });
-    expect(after!.reopenedUntil!.getTime()).toBe(LATE.getTime() + REOPEN_WINDOW_HOURS * 3_600_000);
+    expect(() => assertReopenWindowOpen(row!, LATE)).not.toThrow();
   });
 
   test('siklus penuh: resubmit → co-sign ulang → FINAL v2 + kalender LOCKED + QR v1&v2 sah', async () => {

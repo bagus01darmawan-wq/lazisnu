@@ -841,6 +841,31 @@ export interface PeriodInfoDto {
   in_tolerance: boolean;
 }
 
+// Periode berbasis aksi — GET /mobile/period-context.
+export type PeriodPendingReasonDto =
+  | 'PPK_DRAFT'
+  | 'PPK_WAITING_BENDAHARA'
+  | 'BRANCH_DRAFT'
+  | 'BRANCH_WAITING_MWC'
+  | 'DISTRICT_UNSETTLED';
+
+export type PeriodWaitingForDto = 'PPK' | 'BENDAHARA_RANTING' | 'BENDAHARA_MWC' | 'ADMIN';
+
+export interface PeriodProgressDto {
+  year: number;
+  month: number;
+  period: string;
+  reason: PeriodPendingReasonDto;
+  waiting_for: PeriodWaitingForDto;
+}
+
+export interface PeriodContextDto {
+  current_period: {year: number; month: number};
+  display_period: {year: number; month: number};
+  display_reason: PeriodPendingReasonDto | null;
+  unsettled: PeriodProgressDto[];
+}
+
 export interface PpkSubmissionDto {
   id: string;
   officer_id: string;
@@ -1013,6 +1038,14 @@ const periodQuery = (year?: number, month?: number): string => {
 export const c1Service = {
   getPeriodInfo: async (year?: number, month?: number): Promise<ApiResponse<PeriodInfoDto>> => {
     return apiRequest<PeriodInfoDto>(`/mobile/period-info${periodQuery(year, month)}`);
+  },
+
+  /**
+   * Periode tampilan berbasis aksi. `display_period` = periode berhak tertua
+   * yang belum tuntas untuk cakupan pengguna; `unsettled` untuk banner.
+   */
+  getPeriodContext: async (): Promise<ApiResponse<PeriodContextDto>> => {
+    return apiRequest<PeriodContextDto>('/mobile/period-context');
   },
 
   saveDeviceToken: async (fcmToken: string): Promise<ApiResponse<{saved: boolean}>> => {

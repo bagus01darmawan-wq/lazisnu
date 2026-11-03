@@ -4,6 +4,7 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import { ClipboardList } from 'lucide-react';
 import { RegionCards } from '@/components/region/RegionCards';
+import { useOperationalPeriod } from '@/hooks/useOperationalPeriod';
 
 /**
  * LAYER 1 — daftar kartu wilayah (pola list users/page.tsx).
@@ -13,6 +14,11 @@ import { RegionCards } from '@/components/region/RegionCards';
 export default function AssignmentsPage() {
   const router = useRouter();
   const now = new Date();
+  // Periode tampilan berbasis aksi: penugasan mengikuti periode yang belum
+  // tuntas, bukan bulan kalender.
+  const { displayYear, displayMonth } = useOperationalPeriod();
+  const year = displayYear ?? now.getFullYear();
+  const month = displayMonth ?? now.getMonth() + 1;
 
   return (
     <div className="space-y-6">
@@ -30,14 +36,16 @@ export default function AssignmentsPage() {
       {/* Kartu wilayah — klik beralih halaman ke detail */}
       <RegionCards
         page="assignments"
-        year={now.getFullYear()}
-        month={now.getMonth() + 1}
+        year={year}
+        month={month}
         selectedId={null}
         onSelect={(r) => {
           const params = new URLSearchParams({
             kind: r.kind,
             name: r.name,
             branch: r.branchName ?? '',
+            year: String(year),
+            month: String(month),
           });
           router.push(`/dashboard/assignments/${r.id}?${params.toString()}`);
         }}

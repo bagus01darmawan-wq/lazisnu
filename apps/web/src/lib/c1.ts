@@ -36,6 +36,31 @@ export interface StafSummary {
   tugasActive: number;
 }
 
+// ── Periode berbasis AKSI (GET /admin/period-context) ────────────────────────
+export type PeriodPendingReason =
+  | 'PPK_DRAFT'
+  | 'PPK_WAITING_BENDAHARA'
+  | 'BRANCH_DRAFT'
+  | 'BRANCH_WAITING_MWC'
+  | 'DISTRICT_UNSETTLED';
+
+export type PeriodWaitingFor = 'PPK' | 'BENDAHARA_RANTING' | 'BENDAHARA_MWC' | 'ADMIN';
+
+export interface PeriodProgressView {
+  year: number;
+  month: number;
+  period: string;
+  reason: PeriodPendingReason;
+  waiting_for: PeriodWaitingFor;
+}
+
+export interface PeriodStateView {
+  current_period: { year: number; month: number };
+  display_period: { year: number; month: number };
+  display_reason: PeriodPendingReason | null;
+  unsettled: PeriodProgressView[];
+}
+
 export interface PpkPenyusun {
   officerName: string;
   total: number;
@@ -139,6 +164,14 @@ function periodQuery(year?: number, month?: number): string {
 }
 
 export const c1Api = {
+  /**
+   * Periode tampilan berbasis aksi. `display_period` = periode berhak tertua
+   * yang belum tuntas untuk cakupan pengguna; dipakai sebagai nilai awal
+   * pemilih periode — bukan mengganti kalender operasional.
+   */
+  getPeriodContext: () =>
+    api.get<C1Envelope<PeriodStateView>>('/admin/period-context'),
+
   // Staf Pengumpulan — monitor + setujui.
   getDrafts: (year?: number, month?: number) =>
     api.get<C1Envelope<PeriodDraftItem[]>>(`/admin/period-drafts${periodQuery(year, month)}`),
