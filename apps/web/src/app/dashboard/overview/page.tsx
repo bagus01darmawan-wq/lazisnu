@@ -32,19 +32,23 @@ export default function OverviewPage() {
   const isDistrictAdmin = user?.role === 'ADMIN_KECAMATAN';
 
   const [data, setData] = React.useState<OverviewResponseView | null>(null);
-  // Filter periode multi-bulan ala assignments; default bulan berjalan.
-  const [filter, setFilter] = React.useState<{ year: number; months: number[] }>(() => {
+  // Filter periode multi-bulan ala assignments. Nilai awal = periode belum
+  // tuntas tertua dari konteks aksi; pilihan manual mengalahkan konteks.
+  const periodContext = useOperationalPeriod();
+  const [filterOverride, setFilterOverride] = React.useState<{ year: number; months: number[] } | null>(null);
+  const fallbackFilter = React.useMemo(() => {
     const now = new Date();
-    return { year: now.getFullYear(), months: [now.getMonth() + 1] };
-  });
+    return {
+      year: periodContext.displayYear ?? now.getFullYear(),
+      months: [periodContext.displayMonth ?? now.getMonth() + 1],
+    };
+  }, [periodContext.displayYear, periodContext.displayMonth]);
+  const filter = filterOverride ?? fallbackFilter;
   // Scope ranting hanya via drill-down daftar perbandingan (dropdown dihapus).
   const [branchId, setBranchId] = React.useState('');
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  // Periode tampilan berbasis aksi: periode belum tuntas tertua untuk cakupan
-  // ini (mis. Oktober yang BA-nya menunggu bendahara), fallback bulan berjalan.
-  const periodContext = useOperationalPeriod();
 
   const fetchOverview = React.useCallback(async (
     nextBranchId: string,
@@ -96,14 +100,13 @@ export default function OverviewPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, isDistrictAdmin]);
 
-  // Terapkan periode tampilan setelah konteks aksi termuat (sekali per periode).
+  // Terapkan periode tampilan setelah konteks aksi termuat. Tidak memanggil
+  // setState di efek (aturan react-hooks v6); cukup muat ulang data.
   React.useEffect(() => {
-    const y = periodContext.displayYear;
-    const m = periodContext.displayMonth;
-    if (!user || !y || !m) return;
-    if (filter.year === y && filter.months.length === 1 && filter.months[0] === m) return;
-    setFilter({ year: y, months: [m] });
-    void fetchOverview(branchId, y, [m], 'refresh');
+    if (!user || periodContext.displayYear == null) return;
+    void Promise.resolve().then(() =>
+      fetchOverview('', fallbackFilter.year, fallbackFilter.months, 'first'),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, periodContext.displayYear, periodContext.displayMonth]);
 
@@ -112,7 +115,7 @@ export default function OverviewPage() {
     // PeriodPicker bisa melepas semua bulan — jangan kirim months kosong
     // (backend menolak); pertahankan pilihan terakhir hingga ada yang dicentang.
     if (months.length === 0) return;
-    setFilter({ year, months: [...months].sort((a, b) => a - b) });
+    setFilterOverride({ year, months: [...months].sort((a, b) => a - b) });
     void fetchOverview(branchId, year, [...months].sort((a, b) => a - b), 'refresh');
   }, [branchId, fetchOverview]);
 

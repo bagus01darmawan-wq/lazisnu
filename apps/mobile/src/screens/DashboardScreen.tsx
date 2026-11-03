@@ -14,7 +14,13 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import Svg, {Circle} from 'react-native-svg';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import {useAuthStore, useDashboardStore, usePeriodStore, useSyncStore, useTasksStore} from '../stores';
+import {
+  useAuthStore,
+  useDashboardStore,
+  usePeriodStore,
+  useSyncStore,
+  useTasksStore,
+} from '../stores';
 import {Colors, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
 import {formatCurrency, getInitials} from '../utils';
 import {AppPressable, SegmentedControl} from '../components/ui';

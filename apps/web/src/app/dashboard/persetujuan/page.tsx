@@ -28,18 +28,12 @@ const YEARS = ['2024', '2025', '2026', '2027'].map((y) => ({ label: y, value: y 
  */
 export default function PersetujuanPage() {
   const now = new Date();
-  const [month, setMonth] = useState(String(now.getMonth() + 1));
-  const [year, setYear] = useState(String(now.getFullYear()));
-  // Periode tampilan berbasis aksi: giliran penugasan mengikuti periode yang
-  // belum tuntas, bukan bulan kalender.
+  // Nilai awal dari konteks aksi (giliran penugasan), bukan bulan kalender.
   const periodContext = useOperationalPeriod();
-  useEffect(() => {
-    const y = periodContext.displayYear;
-    const m = periodContext.displayMonth;
-    if (!y || !m) return;
-    setYear(String(y));
-    setMonth(String(m));
-  }, [periodContext.displayYear, periodContext.displayMonth]);
+  const [monthOverride, setMonth] = useState<string | null>(null);
+  const [yearOverride, setYear] = useState<string | null>(null);
+  const month = monthOverride ?? String(periodContext.displayMonth ?? now.getMonth() + 1);
+  const year = yearOverride ?? String(periodContext.displayYear ?? now.getFullYear());
   const [summary, setSummary] = useState<StafSummary | null>(null);
   const [drafts, setDrafts] = useState<PeriodDraftItem[]>([]);
   const [loading, setLoading] = useState(true);

@@ -18,17 +18,12 @@ import { useOperationalPeriod } from '@/hooks/useOperationalPeriod';
  */
 export default function RekapMwcPage() {
   const now = new Date();
-  const [month, setMonth] = useState(String(now.getMonth() + 1));
-  const [year, setYear] = useState(String(now.getFullYear()));
-  // Periode tampilan berbasis aksi: bulan lalu yang belum tuntas tetap tampil.
+  // Nilai awal dari konteks aksi; pilihan manual picker mengalahkan konteks.
   const periodContext = useOperationalPeriod();
-  useEffect(() => {
-    const y = periodContext.displayYear;
-    const m = periodContext.displayMonth;
-    if (!y || !m) return;
-    setYear(String(y));
-    setMonth(String(m));
-  }, [periodContext.displayYear, periodContext.displayMonth]);
+  const [monthOverride, setMonth] = useState<string | null>(null);
+  const [yearOverride, setYear] = useState<string | null>(null);
+  const month = monthOverride ?? String(periodContext.displayMonth ?? now.getMonth() + 1);
+  const year = yearOverride ?? String(periodContext.displayYear ?? now.getFullYear());
   const [recap, setRecap] = useState<MwcRecap | null>(null);
   const [loading, setLoading] = useState(true);
 

@@ -38,17 +38,13 @@ const PPK_STATUS_LABEL: Record<string, string> = {
  */
 export default function SetoranPage() {
   const now = new Date();
-  const [month, setMonth] = useState(String(now.getMonth() + 1));
-  const [year, setYear] = useState(String(now.getFullYear()));
-  // Periode tampilan berbasis aksi: bulan lalu yang belum tuntas tetap tampil.
+  // Periode tampilan berbasis aksi: nilai awal mengikuti `display_period`
+  // (periode belum tuntas tertua); pilihan manual lewat picker mengalahkannya.
   const periodContext = useOperationalPeriod();
-  useEffect(() => {
-    const y = periodContext.displayYear;
-    const m = periodContext.displayMonth;
-    if (!y || !m) return;
-    setYear(String(y));
-    setMonth(String(m));
-  }, [periodContext.displayYear, periodContext.displayMonth]);
+  const [monthOverride, setMonth] = useState<string | null>(null);
+  const [yearOverride, setYear] = useState<string | null>(null);
+  const month = monthOverride ?? String(periodContext.displayMonth ?? now.getMonth() + 1);
+  const year = yearOverride ?? String(periodContext.displayYear ?? now.getFullYear());
   const [rows, setRows] = useState<BranchSubmissionDetail[]>([]);
   const [selected, setSelected] = useState<BranchSubmissionDetail | null>(null);
   const [versions, setVersions] = useState<BaVersion[]>([]);

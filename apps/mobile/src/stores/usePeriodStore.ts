@@ -15,7 +15,7 @@ interface PeriodStoreState {
   reset: () => void;
 }
 
-export const usePeriodStore = create<PeriodStoreState>((set) => ({
+export const usePeriodStore = create<PeriodStoreState>(set => ({
   context: null,
   isLoading: false,
   refresh: async () => {
