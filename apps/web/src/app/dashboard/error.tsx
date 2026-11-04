@@ -35,7 +35,7 @@ export default function DashboardError({
           <RefreshCcw size={18} className="mr-2" />
           Coba Lagi
         </Button>
-        <Link href="/dashboard">
+        <Link href="/dashboard/overview">
           <Button variant="outline" className="rounded-xl w-full sm:w-auto border-[#F4F1EA]/20 text-[#F4F1EA] hover:bg-white/5">
             <Home size={18} className="mr-2" />
             Kembali ke Beranda

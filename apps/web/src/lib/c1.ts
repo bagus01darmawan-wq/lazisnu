@@ -51,13 +51,13 @@ export interface PeriodProgressView {
   month: number;
   period: string;
   reason: PeriodPendingReason;
-  waiting_for: PeriodWaitingFor;
+  waitingFor: PeriodWaitingFor;
 }
 
 export interface PeriodStateView {
-  current_period: { year: number; month: number };
-  display_period: { year: number; month: number };
-  display_reason: PeriodPendingReason | null;
+  currentPeriod: { year: number; month: number };
+  displayPeriod: { year: number; month: number };
+  displayReason: PeriodPendingReason | null;
   unsettled: PeriodProgressView[];
 }
 
@@ -165,7 +165,7 @@ function periodQuery(year?: number, month?: number): string {
 
 export const c1Api = {
   /**
-   * Periode tampilan berbasis aksi. `display_period` = periode berhak tertua
+   * Periode tampilan berbasis aksi. `displayPeriod` = periode berhak tertua
    * yang belum tuntas untuk cakupan pengguna; dipakai sebagai nilai awal
    * pemilih periode — bukan mengganti kalender operasional.
    */

@@ -6,7 +6,7 @@ import { c1Api, type PeriodStateView } from '@/lib/c1';
 /**
  * Konteks periode berbasis aksi untuk halaman admin.
  *
- * `display_period` = periode berhak tertua yang belum tuntas untuk cakupan
+ * `displayPeriod` = periode berhak tertua yang belum tuntas untuk cakupan
  * pengguna. Halaman memakainya sebagai **nilai awal** pemilih periode; tanggal
  * kalender hanya pengingat, tidak memblokir. `unsettled` dipakai banner.
  */
@@ -42,7 +42,7 @@ export function useOperationalPeriod(): OperationalPeriod {
   return {
     context,
     loading,
-    displayYear: context?.display_period.year ?? null,
-    displayMonth: context?.display_period.month ?? null,
+    displayYear: context?.displayPeriod?.year ?? null,
+    displayMonth: context?.displayPeriod?.month ?? null,
   };
 }
