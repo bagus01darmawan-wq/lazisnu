@@ -21,6 +21,7 @@ import { assertCanAccess } from '../../services/canService';
 import { submitCollection } from '../../services/collectionSubmission';
 import { insertActivityLog } from '../../services/auditLogService';
 import { completeOfficerPeriod } from '../../services/periodComplete';
+import { getPeriodState } from '../../services/periodState';
 import { currentOperationalPeriod } from '../../utils/operationalTimeZone';
 import { ErrorCode } from '../../utils/errorCatalog';
 import {
@@ -428,17 +429,18 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         eq(schema.assignments.officerId, officerId!),
         eq(schema.assignments.status, status as any),
       ];
-      // Penjaga daftar fresh: ACTIVE default hanya periode berjalan agar
-      // assignment kedaluwarsa tak menumpuk di HP. Riwayat (COMPLETED/
-      // UNCOLLECTED) tetap lintas periode; `all=true` membuka semua.
+      // Penjaga daftar: ACTIVE mengikuti periode tampilan berbasis aksi
+      // (`display_period`), bukan bulan kalender. Tugas periode lama yang belum
+      // tuntas (mis. Oktober) tidak boleh hilang dari daftar hanya karena bulan
+      // berganti — banner Beranda justru menagih periode itu. Periode setelah
+      // display_period tetap ikut agar tugas periode berjalan tidak tersembunyi;
+      // hanya periode yang lebih tua dari display_period yang disaring.
+      // Riwayat (COMPLETED/UNCOLLECTED) tetap lintas periode; `all=true`
+      // membuka semua; `year`+`month` eksplisit menang (periode persis).
       const qYear = parseInt(query.year || '');
       const qMonth = parseInt(query.month || '');
-      if (status === 'ACTIVE' && query.all !== 'true') {
-        const y = Number.isInteger(qYear) && qYear >= 2020 && qYear <= 2100 ? qYear : currentYear;
-        const m = Number.isInteger(qMonth) && qMonth >= 1 && qMonth <= 12 ? qMonth : currentMonth;
-        conditions.push(eq(schema.assignments.periodYear, y));
-        conditions.push(eq(schema.assignments.periodMonth, m));
-      }
+      const explicitYear = Number.isInteger(qYear) && qYear >= 2020 && qYear <= 2100 ? qYear : null;
+      const explicitMonth = Number.isInteger(qMonth) && qMonth >= 1 && qMonth <= 12 ? qMonth : null;
       // Filter periode operasional berjalan eksplisit untuk status apa pun —
       // dipakai tab "Tidak Dijemput"/hitungan filter Riwayat yang menurut
       // kebijakan produk hanya menyentuh periode berjalan (2026-10-25).
@@ -446,6 +448,18 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         const op = currentOperationalPeriod();
         conditions.push(eq(schema.assignments.periodYear, op.year));
         conditions.push(eq(schema.assignments.periodMonth, op.month));
+      } else if (status === 'ACTIVE' && query.all !== 'true') {
+        if (explicitYear !== null && explicitMonth !== null) {
+          conditions.push(eq(schema.assignments.periodYear, explicitYear));
+          conditions.push(eq(schema.assignments.periodMonth, explicitMonth));
+        } else {
+          const state = await getPeriodState({ kind: 'officer', officerId: officerId! });
+          const start = state.display_period;
+          const startOrdinal = start.year * 12 + (start.month - 1);
+          conditions.push(
+            sql`(${schema.assignments.periodYear} * 12 + ${schema.assignments.periodMonth} - 1) >= ${startOrdinal}`,
+          );
+        }
       }
       const whereClause = and(...conditions);
 
