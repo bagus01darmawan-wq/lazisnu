@@ -87,12 +87,13 @@ export async function getCollectionOutcome(
       empty: sql<number>`count(*) filter (where ${schema.collections.nominal} = 0)::int`,
     })
     .from(schema.collections)
+    .innerJoin(schema.assignments, eq(schema.collections.assignmentId, schema.assignments.id))
     .innerJoin(schema.cans, eq(schema.collections.canId, schema.cans.id))
     .where(and(
       scopeCondition(scope),
       eq(schema.collections.syncStatus, 'COMPLETED'),
       getLatestCollectionCondition(),
-      inSelectedMonths(schema.collections.collectedAt, year, months),
+      inAssignmentPeriod(year, months),
     ));
   return {
     collected: Number(row?.collected ?? 0),
@@ -165,12 +166,13 @@ export async function getOfficerProductivity(
       filled: sql<number>`count(*) filter (where ${schema.collections.nominal} > 0)::int`,
     })
       .from(schema.collections)
+      .innerJoin(schema.assignments, eq(schema.collections.assignmentId, schema.assignments.id))
       .innerJoin(schema.cans, eq(schema.collections.canId, schema.cans.id))
       .where(and(
         scopeCondition(scope),
         eq(schema.collections.syncStatus, 'COMPLETED'),
         getLatestCollectionCondition(),
-        inSelectedMonths(schema.collections.collectedAt, year, months),
+        inAssignmentPeriod(year, months),
       ))
       .groupBy(schema.collections.officerId),
   ]);

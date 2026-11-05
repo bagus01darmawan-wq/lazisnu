@@ -205,18 +205,21 @@ export async function getOfficerCount(scope: OverviewScopeInput) {
 export async function getCollectionSummary(scope: OverviewScopeInput, period: OverviewPeriodInput) {
   const months = effectiveMonths(period);
 
+  // Atribusi uang = PERIODE ASSIGNMENT, bukan bulan `collected_at` (C1-T12 §2.2).
+  // Jemputan 5 Nov untuk assignment Oktober adalah pemasukan Oktober.
   const [row] = await db
     .select({
       nominal: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
       count: sql<number>`count(*)::int`,
     })
     .from(schema.collections)
+    .innerJoin(schema.assignments, eq(schema.collections.assignmentId, schema.assignments.id))
     .innerJoin(schema.cans, eq(schema.collections.canId, schema.cans.id))
     .where(and(
       scopeCondition(scope),
       eq(schema.collections.syncStatus, 'COMPLETED'),
       getLatestCollectionCondition(),
-      inSelectedMonths(schema.collections.collectedAt, period.year, months),
+      inAssignmentPeriod(period.year, months),
     ));
 
   return {
@@ -340,26 +343,29 @@ export async function getMonthlyOperationalTrend(
   }
 
   const first = buckets[0];
-  const firstStart = new Date(first.year, first.month - 1, 1);
   const lastKey = buckets[buckets.length - 1].key;
   const firstKey = first.key;
 
   const [collectionRows, assignmentRows] = await Promise.all([
+    // Tren uang juga memakai periode assignment agar sejajar dengan tren tugas
+    // dan tidak memindahkan jemputan toleransi ke bulan kalender berikutnya.
     db.select({
-      month: sql<string>`to_char(${schema.collections.collectedAt}, 'YYYY-MM')`,
+      year: schema.assignments.periodYear,
+      month: schema.assignments.periodMonth,
       collected: sql<number>`count(*)::int`,
       empty: sql<number>`count(*) filter (where ${schema.collections.nominal} = 0)::int`,
       nominal: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
     })
       .from(schema.collections)
+      .innerJoin(schema.assignments, eq(schema.collections.assignmentId, schema.assignments.id))
       .innerJoin(schema.cans, eq(schema.collections.canId, schema.cans.id))
       .where(and(
         scopeCondition(scope),
         eq(schema.collections.syncStatus, 'COMPLETED'),
         getLatestCollectionCondition(),
-        gte(schema.collections.collectedAt, firstStart),
+        eq(schema.assignments.periodYear, period.year),
       ))
-      .groupBy(sql`to_char(${schema.collections.collectedAt}, 'YYYY-MM')`),
+      .groupBy(schema.assignments.periodYear, schema.assignments.periodMonth),
 
     db.select({
       year: schema.assignments.periodYear,
@@ -378,7 +384,7 @@ export async function getMonthlyOperationalTrend(
   ]);
 
   return buckets.map((b) => {
-    const col = collectionRows.find((r) => r.month === b.key);
+    const col = collectionRows.find((r) => r.year === b.year && r.month === b.month);
     const task = assignmentRows.find((r) => r.year === b.year && r.month === b.month);
     return {
       month: b.key,
@@ -440,13 +446,14 @@ export async function getBranchComparison(
       filled: sql<number>`count(*) filter (where ${schema.collections.nominal} > 0)::int`,
     })
       .from(schema.collections)
+      .innerJoin(schema.assignments, eq(schema.collections.assignmentId, schema.assignments.id))
       .innerJoin(schema.cans, eq(schema.collections.canId, schema.cans.id))
       .innerJoin(schema.branches, eq(schema.cans.branchId, schema.branches.id))
       .where(and(
         eq(schema.branches.districtId, districtId),
         eq(schema.collections.syncStatus, 'COMPLETED'),
         getLatestCollectionCondition(),
-        inSelectedMonths(schema.collections.collectedAt, period.year, months),
+        inAssignmentPeriod(period.year, months),
       ))
       .groupBy(schema.cans.branchId),
   ]);
