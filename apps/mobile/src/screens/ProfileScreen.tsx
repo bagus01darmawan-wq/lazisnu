@@ -14,7 +14,7 @@ import {useFocusEffect} from '@react-navigation/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import {useAuthStore, useTasksStore, useUpdateStore} from '../stores';
+import {useAuthStore, usePeriodStore, useTasksStore, useUpdateStore} from '../stores';
 import {getBiometryType, isBiometricAvailable} from '../services/biometric';
 import {
   authService,
@@ -28,7 +28,7 @@ import {AppButton, AppCard, StatusBadge} from '../components/ui';
 import {PeriodChip} from '../components/PeriodChip';
 import {PasswordSheet} from '../components/PasswordSheet';
 import {Colors, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
-import {formatCurrency} from '../utils/format';
+import {formatCurrency, formatPeriod, periodKeyOf} from '../utils/format';
 import {getErrorMessage} from '../utils/error';
 import {getInitials} from '../utils';
 
@@ -53,20 +53,37 @@ const ProfileScreen: React.FC = () => {
   const [biometryType, setBiometryType] = useState<string | null>(null);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [advancedVisible, setAdvancedVisible] = useState(false);
+  const {activeCount, completePeriod, fetchStats} = useTasksStore();
 
   // Chip periode (toleransi / sisa hari penjemputan) — pindahan dari Beranda.
   // Disegarkan tiap layar dibuka: layar tab tidak pernah di-unmount, jadi
   // hitungan hari akan basi kalau hanya dimuat sekali saat mount.
   const [periodInfo, setPeriodInfo] = useState<PeriodInfoDto | null>(null);
+  const displayYear = usePeriodStore(state => state.context?.display_period.year);
+  const displayMonth = usePeriodStore(state => state.context?.display_period.month);
+  const refreshPeriod = usePeriodStore(state => state.refresh);
+  const displayKey =
+    displayYear && displayMonth ? periodKeyOf({year: displayYear, month: displayMonth}) : null;
+  const periodLabel = displayKey ? formatPeriod(displayKey) : 'periode berjalan';
   useFocusEffect(
     useCallback(() => {
-      c1Service
-        .getPeriodInfo()
-        .then(res => {
-          if (res.success && res.data) setPeriodInfo(res.data);
-        })
-        .catch(() => {});
-    }, []),
+      let cancelled = false;
+      (async () => {
+        await refreshPeriod();
+        if (cancelled) return;
+        const display = usePeriodStore.getState().context?.display_period;
+        c1Service
+          .getPeriodInfo(display?.year, display?.month)
+          .then(res => {
+            if (!cancelled && res.success && res.data) setPeriodInfo(res.data);
+          })
+          .catch(() => {});
+        fetchStats(display);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [fetchStats, refreshPeriod]),
   );
 
   // Berita Acara (halaman Profil). Hanya manager: daftarnya bersumber dari
@@ -168,36 +185,45 @@ const ProfileScreen: React.FC = () => {
     }
   }, [checkManually]);
 
-  const {activeCount, completePeriod} = useTasksStore();
-
   const handleCompletePeriod = useCallback(() => {
     if (!activeCount) {
       return;
     }
     Alert.alert(
       'Selesai Periode',
-      `Anda memiliki ${activeCount} tugas yang belum dijemput. Tandai semua sebagai selesai dan lanjut ke periode berikutnya?`,
+      `Anda memiliki ${activeCount} tugas yang belum dijemput pada ${periodLabel}. Tandai semua sebagai selesai dan lanjut ke periode berikutnya?`,
       [
         {text: 'Batal', style: 'cancel'},
         {
           text: 'Ya, Selesaikan',
           onPress: async () => {
-            const result = await completePeriod();
+            const result = await completePeriod(displayYear, displayMonth);
             if (result.error) {
               Alert.alert('Gagal', result.error);
             } else if (result.skipped + result.expiredClosed > 0) {
               Alert.alert(
                 'Berhasil',
                 result.expiredClosed > 0
-                  ? `${result.skipped} tugas bulan ini + ${result.expiredClosed} tugas sisa bulan-bulan sebelumnya ditandai tidak dijemput.\n\nTugas bulan ini masih bisa dibuka kembali lewat Riwayat → Tidak Dijemput.`
+                  ? `${result.skipped} tugas ${periodLabel} + ${result.expiredClosed} tugas sisa periode sebelumnya ditandai tidak dijemput.\n\nTugas ${periodLabel} masih bisa dibuka kembali lewat Riwayat → Tidak Dijemput.`
                   : `${result.skipped} tugas ditandai tidak dijemput. Masih bisa dibuka kembali lewat Riwayat → Tidak Dijemput.`,
               );
             }
+            await refreshPeriod();
+            const display = usePeriodStore.getState().context?.display_period;
+            fetchStats(display);
           },
         },
       ],
     );
-  }, [activeCount, completePeriod]);
+  }, [
+    activeCount,
+    completePeriod,
+    displayMonth,
+    displayYear,
+    fetchStats,
+    periodLabel,
+    refreshPeriod,
+  ]);
 
   /** BA sah = sudah kedua tanda tangan; di luar itu server menolak terbitkan. */
   const baIsFinal = (status: string): boolean => status === 'FINAL' || status === 'FINAL_NOL';
@@ -209,15 +235,9 @@ const ProfileScreen: React.FC = () => {
     setBaLoading(true);
     setBaError(null);
     try {
-      /* Periode SENGAJA tidak dikirim: server memakai periode berjalan, dan
-         itulah sumber kebenaran yang sama dipakai penjaga-fresh
-         (`periodComplete`). Mengirim year/month dari jam HP akan memisahkan
-         keduanya di batas bulan — HP di WIB, server kemungkinan UTC — sehingga
-         daftar bisa menunjuk periode yang berbeda dari yang dijaga server.
-         Konsekuensi yang diterima: saat rollover bulan daftar ini menampilkan
-         periode baru (bisa kosong). Itu bukan data hilang — arsip tetap ada di
-         periode masing-masing, dan server yang menentukan periode mana. */
-      const res = await c1Service.getBranchSubmissions();
+      /* Periode eksplisit dari display_period: daftar BA mengikuti periode
+         aksi yang sama dengan banner & daftar tugas, bukan jam dinding. */
+      const res = await c1Service.getBranchSubmissions(displayYear, displayMonth);
       if (!res.success || !res.data) {
         throw new Error(res.error?.message || 'Gagal memuat daftar berita acara');
       }
@@ -227,7 +247,7 @@ const ProfileScreen: React.FC = () => {
     } finally {
       setBaLoading(false);
     }
-  }, [canManageBa]);
+  }, [canManageBa, displayMonth, displayYear]);
 
   useEffect(() => {
     loadBa();
@@ -244,7 +264,7 @@ const ProfileScreen: React.FC = () => {
         // Muat ulang daftar: `pdf_url` baru terisi setelah server menyimpan
         // berkas, dan itulah penanda yang memunculkan tombol Unduh.
         await loadBa();
-        Alert.alert('PDF Siap', `Berita acara ${row.period} sudah diterbitkan.`);
+        Alert.alert('PDF Siap', `Berita acara ${formatPeriod(row.period)} sudah diterbitkan.`);
       } catch (error) {
         Alert.alert('Gagal Menerbitkan', getErrorMessage(error, 'Tidak dapat menerbitkan PDF'));
       } finally {
@@ -327,11 +347,11 @@ const ProfileScreen: React.FC = () => {
                 key={row.id}
                 style={[styles.baRow, index === baRows.length - 1 && styles.infoRowLast]}>
                 <Text style={styles.baBranch} numberOfLines={1}>
-                  {row.branch_name || row.period}
+                  {row.branch_name || formatPeriod(row.period)}
                 </Text>
                 <View style={styles.baHead}>
                   <Text style={styles.baMeta}>
-                    {row.period} • {formatCurrency(row.total_amount)}
+                    {formatPeriod(row.period)} • {formatCurrency(row.total_amount)}
                   </Text>
                   <StatusBadge
                     status={baIsFinal(row.status) ? 'success' : 'pending'}

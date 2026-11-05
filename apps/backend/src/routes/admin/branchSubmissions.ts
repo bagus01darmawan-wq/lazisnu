@@ -22,6 +22,8 @@ import {
 } from '../../services/cosign';
 import { reopenBranchSubmission } from '../../services/reopen';
 import { listBranchBaVersions } from '../../services/baPdfService';
+import { resolveDisplayPeriod } from '../../services/periodState';
+import { currentOperationalPeriod } from '../../utils/operationalTimeZone';
 
 // C1-T5: Kunci Ranting = upacara sign (Admin Ranting) + countersign (MWC).
 // Orkestrasi berlapis MWC + FINAL_NOL massal = T6.
@@ -58,9 +60,20 @@ export async function branchSubmissionsRoutes(fastify: FastifyInstance) {
     try {
       const user = request.currentUser!;
       const query = request.query as { year?: string; month?: string };
-      const now = new Date();
-      const year = query.year ? z.coerce.number().int().min(2020).max(2100).parse(query.year) : now.getFullYear();
-      const month = query.month ? z.coerce.number().int().min(1).max(12).parse(query.month) : now.getMonth() + 1;
+      const defaultPeriod = query.year || query.month
+        ? null
+        : (await resolveDisplayPeriod({
+            role: user.role,
+            officerId: user.officerId,
+            branchId: user.branchId,
+            districtId: user.districtId,
+          })) ?? currentOperationalPeriod();
+      const year = query.year
+        ? z.coerce.number().int().min(2020).max(2100).parse(query.year)
+        : defaultPeriod!.year;
+      const month = query.month
+        ? z.coerce.number().int().min(1).max(12).parse(query.month)
+        : defaultPeriod!.month;
 
       // Daftar branch dalam scope: ranting → miliknya; kecamatan → sedistrik.
       let branchIds: string[];

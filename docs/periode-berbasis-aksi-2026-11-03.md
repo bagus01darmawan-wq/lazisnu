@@ -76,9 +76,16 @@ Contoh: kurir 10 paket, transfer 3, selesaikan 7 → progres 100%.
 
 ## 7. Klien
 
-- **Mobile**: `usePeriodStore` mengambil `/mobile/period-context`; Setoran &
-  Keuangan memakai `display_period`; Beranda menampilkan banner periode belum
-  tuntas + CTA ke Setoran.
+- **Mobile**: `usePeriodStore` mengambil `/mobile/period-context` dan menyimpannya
+  untuk mode offline. Semua layar yang menyebut periode memakai `display_period`
+  dengan label eksplisit (mis. "Bulan Oktober 2026"): Beranda (kartu bulanan,
+  sisa tugas), Tugas, Riwayat (badge + daftar Terjemput + Tidak Dijemput),
+  Setoran, Keuangan, Profil (BA & Selesai Periode), Persetujuan, dan Rekap.
+  Pengecualian yang tetap tanggal: toggle Beranda "Hari Ini/Minggu Ini"
+  (aktivitas `collected_at`) dan "Penjemputan Terakhir".
+  Statistik Rentang: uang = `collected_at` di dalam rentang; tugas selesai =
+  `completed_at` di dalam rentang; sisa = ACTIVE pada periode assignment yang
+  tercakup; daftar bulan ditampilkan dengan nama bulan.
 - **Web**: `useOperationalPeriod()` → `display_period` menjadi nilai awal
   pemilih periode di Overview, Berita Acara, Rekap MWC, Persetujuan, Penugasan,
   dan Kelola Kaleng. Pemilih periode tetap ada.

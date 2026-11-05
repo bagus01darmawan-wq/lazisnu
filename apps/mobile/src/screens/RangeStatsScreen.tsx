@@ -7,7 +7,7 @@ import {RangeStatsResponse} from '@lazisnu/shared-types';
 import {tasksService} from '../services/api';
 import {AppHeader, RangeCalendar} from '../components/ui';
 import {Colors, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
-import {formatCurrency} from '../utils';
+import {formatCurrency, formatPeriod} from '../utils';
 import {getErrorMessage} from '../utils/error';
 
 const toISODate = (d: Date): string =>
@@ -118,13 +118,18 @@ const RangeStatsScreen: React.FC = () => {
   }, []);
 
   const rangeComplete = !!startDate && !!endDate;
-  // Kontrak metrik final: selesai = COMPLETED + UNCOLLECTED.
-  // Fallback ke task_completed untuk respons server lama.
-  const taskClosed = stats?.task_closed ?? stats?.task_completed ?? 0;
-  const taskProgress = useMemo(
-    () => (stats && stats.task_total ? taskClosed / stats.task_total : 0),
-    [stats, taskClosed],
-  );
+  // Uang = collected_at di dalam rentang; tugas selesai = completed_at di
+  // dalam rentang; sisa = ACTIVE pada periode assignment yang tercakup.
+  const collectedInRange = stats?.collected_in_range ?? stats?.collected ?? 0;
+  const nominalInRange = stats?.nominal_in_range ?? stats?.total_nominal ?? 0;
+  const completedInRange = stats?.task_completed_in_range ?? stats?.task_completed ?? 0;
+  const uncollectedInRange = stats?.task_uncollected_in_range ?? stats?.task_uncollected ?? 0;
+  const closedInRange = stats?.task_closed_in_range ?? completedInRange + uncollectedInRange;
+  const activeInPeriods = stats?.task_active_in_periods ?? stats?.task_active ?? 0;
+  const taskProgress = useMemo(() => {
+    const denominator = closedInRange + activeInPeriods;
+    return denominator ? closedInRange / denominator : 0;
+  }, [closedInRange, activeInPeriods]);
 
   return (
     <View style={styles.screen}>
@@ -194,23 +199,23 @@ const RangeStatsScreen: React.FC = () => {
                 <View style={styles.statGrid}>
                   <StatBlock
                     icon={'package-variant-closed'}
-                    value={`${stats.collected}`}
-                    label={'Penjemputan'}
+                    value={`${collectedInRange}`}
+                    label={'Penjemputan (rentang)'}
                   />
                   <StatBlock
                     icon={'cash-multiple'}
-                    value={formatCurrency(stats.total_nominal)}
-                    label={'Total Infak'}
-                  />
-                  <StatBlock
-                    icon={'progress-check'}
-                    value={`${stats.task_active}`}
-                    label={'Tugas Belum'}
+                    value={formatCurrency(nominalInRange)}
+                    label={'Total Infak (rentang)'}
                   />
                   <StatBlock
                     icon={'check-circle-outline'}
-                    value={`${taskClosed}/${stats.task_total}`}
-                    label={'Tugas Selesai'}
+                    value={`${completedInRange}`}
+                    label={'Tugas Selesai (rentang)'}
+                  />
+                  <StatBlock
+                    icon={'progress-check'}
+                    value={`${activeInPeriods}`}
+                    label={'Sisa di Periode'}
                   />
                 </View>
                 <View style={styles.progressTrack}>
@@ -218,9 +223,13 @@ const RangeStatsScreen: React.FC = () => {
                     style={[styles.progressFill, {width: `${Math.round(taskProgress * 100)}%`}]}
                   />
                 </View>
+                <Text style={styles.monthsText}>
+                  {completedInRange} selesai dalam rentang • {activeInPeriods} sisa pada periode
+                  yang tercakup
+                </Text>
                 {!!stats.months_covered.length && (
                   <Text style={styles.monthsText}>
-                    Mencakup periode tugas: {stats.months_covered.join(', ')}
+                    Mencakup periode tugas: {stats.months_covered.map(formatPeriod).join(', ')}
                   </Text>
                 )}
               </>

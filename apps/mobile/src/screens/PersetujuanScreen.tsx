@@ -17,6 +17,8 @@ import {StatusBadge} from '../components/ui/StatusBadge';
 import {Colors, Spacing, Typography} from '../theme';
 import {getErrorMessage} from '../utils/error';
 import {reminderFor} from '../roles/roleMap';
+import {formatPeriod, periodKeyOf} from '../utils/format';
+import {usePeriodStore} from '../stores';
 
 /**
  * C1-T9 — Layar Staf Pengumpulan (setuju/monitor).
@@ -30,14 +32,19 @@ export const PersetujuanScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const displayYear = usePeriodStore(state => state.context?.display_period.year);
+  const displayMonth = usePeriodStore(state => state.context?.display_period.month);
+  const refreshPeriod = usePeriodStore(state => state.refresh);
+  const displayKey =
+    displayYear && displayMonth ? periodKeyOf({year: displayYear, month: displayMonth}) : null;
 
   const load = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
       const [sumRes, draftRes] = await Promise.all([
-        c1Service.getStafSummary(),
-        c1Service.getDrafts(),
+        c1Service.getStafSummary(displayYear, displayMonth),
+        c1Service.getDrafts(displayYear, displayMonth),
       ]);
       if (!sumRes.success || !sumRes.data)
         throw new Error(sumRes.error?.message || 'Gagal memuat ringkasan');
@@ -48,11 +55,12 @@ export const PersetujuanScreen: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [displayMonth, displayYear]);
 
   useEffect(() => {
+    refreshPeriod();
     load();
-  }, [load]);
+  }, [load, refreshPeriod]);
 
   const approve = useCallback(
     async (id: string) => {
@@ -97,7 +105,9 @@ export const PersetujuanScreen: React.FC = () => {
         ) : null}
         {summary ? (
           <AppCard>
-            <Text style={styles.period}>{summary.period}</Text>
+            <Text style={styles.period}>
+              {displayKey ? formatPeriod(displayKey) : summary.period}
+            </Text>
             <Text style={styles.meta}>
               Draft: {summary.drafts.pending} menunggu • {summary.drafts.escalated} eskalasi •{' '}
               {summary.drafts.approved} disetujui
@@ -127,7 +137,7 @@ export const PersetujuanScreen: React.FC = () => {
               />
             </View>
             <Text style={styles.meta}>
-              {d.item_count} kaleng • {d.period}
+              {d.item_count} kaleng • {formatPeriod(d.period)}
             </Text>
             {d.status !== 'APPROVED' ? (
               <AppButton

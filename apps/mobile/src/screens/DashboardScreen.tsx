@@ -22,7 +22,7 @@ import {
   useTasksStore,
 } from '../stores';
 import {Colors, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
-import {formatCurrency, getInitials} from '../utils';
+import {formatCurrency, formatPeriod, getInitials, periodKeyOf} from '../utils';
 import {AppPressable, SegmentedControl} from '../components/ui';
 import {SyncIssuesSheet} from '../components/SyncIssuesSheet';
 import type {MainNavigationProp} from '../navigation/types';
@@ -43,13 +43,7 @@ const PERIOD_WAITING_LABEL: Record<string, string> = {
   ADMIN: 'tindakan admin',
 };
 
-const formatPeriodLabel = (period: string): string => {
-  const [year, month] = period.split('-').map(Number);
-  if (!year || !month) return period;
-  return new Intl.DateTimeFormat('id-ID', {month: 'long', year: 'numeric'}).format(
-    new Date(year, month - 1, 1),
-  );
-};
+const formatPeriodLabel = (period: string): string => formatPeriod(period);
 
 const RING_SIZE = 74;
 const RING_STROKE = 7;
@@ -119,23 +113,39 @@ const DashboardScreen: React.FC = () => {
   // menunggu bendahara). Banner ini informasi + jalan pintas, bukan blokir.
   const periodBanner = usePeriodStore(state => state.context?.unsettled[0] ?? null);
   const refreshPeriod = usePeriodStore(state => state.refresh);
+  const displayYear = usePeriodStore(state => state.context?.display_period.year);
+  const displayMonth = usePeriodStore(state => state.context?.display_period.month);
+  const displayKey =
+    displayYear && displayMonth ? periodKeyOf({year: displayYear, month: displayMonth}) : null;
+  const monthLabel = displayKey
+    ? `BULAN ${formatPeriod(displayKey).toUpperCase()}`
+    : 'PERIODE BERJALAN';
 
   // Refetch setiap kali tab kembali fokus: layar tab tidak pernah di-unmount,
   // jadi statistik Beranda basi setelah aksi di layar lain sampai di-swipe.
   useFocusEffect(
     useCallback(() => {
-      fetchDashboard();
-      fetchStats();
-      checkStatus();
-      refreshPeriod();
+      let cancelled = false;
+      (async () => {
+        await refreshPeriod();
+        if (cancelled) return;
+        const display = usePeriodStore.getState().context?.display_period;
+        fetchDashboard(display);
+        fetchStats(display);
+        checkStatus();
+      })();
+      return () => {
+        cancelled = true;
+      };
     }, [checkStatus, fetchDashboard, fetchStats, refreshPeriod]),
   );
 
-  const refresh = () => {
-    fetchDashboard();
-    fetchStats();
+  const refresh = async () => {
+    await refreshPeriod();
+    const display = usePeriodStore.getState().context?.display_period;
+    fetchDashboard(display);
+    fetchStats(display);
     checkStatus();
-    refreshPeriod();
   };
 
   const periodStats = period === 'today' ? todayStats : weekStats;
@@ -260,7 +270,9 @@ const DashboardScreen: React.FC = () => {
               onChange={setPeriod}
               style={styles.periodControl}
             />
-            <Text style={styles.totalLabel}>TOTAL INFAK TERKUMPUL</Text>
+            <Text style={styles.totalLabel}>
+              TOTAL INFAK TERKUMPUL · {period === 'today' ? 'HARI INI' : 'MINGGU INI'}
+            </Text>
             <View style={styles.totalRow}>
               <Text
                 style={styles.totalValue}
@@ -280,7 +292,7 @@ const DashboardScreen: React.FC = () => {
                 </View>
                 <View style={styles.metaTextWrap}>
                   <Text style={styles.metaNum}>{monthStats?.collected || 0}</Text>
-                  <Text style={styles.metaTxt}>penjemputan</Text>
+                  <Text style={styles.metaTxt}>penjemputan periode</Text>
                 </View>
               </View>
               <View style={styles.metaDivider} />
@@ -309,7 +321,7 @@ const DashboardScreen: React.FC = () => {
             end={{x: 1, y: 1}}
             style={styles.monthCard}>
             <View style={styles.monthTextWrap}>
-              <Text style={styles.monthLabel}>BULAN INI</Text>
+              <Text style={styles.monthLabel}>{monthLabel}</Text>
               <Text
                 style={styles.monthValue}
                 numberOfLines={1}

@@ -556,8 +556,15 @@ export const authService = {
 // ── Dashboard Services ────────────────────────────────────────────────────────
 
 export const dashboardService = {
-  getDashboard: async (): Promise<ApiResponse<DashboardResponse>> => {
-    return apiRequest<DashboardResponse>('/mobile/dashboard');
+  getDashboard: async (params?: {
+    year?: number;
+    month?: number;
+  }): Promise<ApiResponse<DashboardResponse>> => {
+    const queryParams = new URLSearchParams();
+    if (params?.year !== undefined) queryParams.append('year', String(params.year));
+    if (params?.month !== undefined) queryParams.append('month', String(params.month));
+    const query = queryParams.toString();
+    return apiRequest<DashboardResponse>(`/mobile/dashboard${query ? `?${query}` : ''}`);
   },
 
   getProfile: async (): Promise<ApiResponse<ProfileResponse>> => {
@@ -574,6 +581,9 @@ export const tasksService = {
     limit?: number;
     /** Scope paksa ke periode operasional berjalan (tab/hitungan Riwayat). */
     current_period?: boolean;
+    /** Periode assignment persis (menang atas default server). */
+    year?: number;
+    month?: number;
   }): Promise<ApiResponse<TaskListResponse>> => {
     const queryParams = new URLSearchParams();
     if (params?.status) {
@@ -587,6 +597,12 @@ export const tasksService = {
     }
     if (params?.current_period) {
       queryParams.append('current_period', 'true');
+    }
+    if (params?.year !== undefined) {
+      queryParams.append('year', params.year.toString());
+    }
+    if (params?.month !== undefined) {
+      queryParams.append('month', params.month.toString());
     }
 
     const query = queryParams.toString();
@@ -780,15 +796,19 @@ export const collectionService = {
     });
   },
 
-  completePeriod: async (): Promise<
+  completePeriod: async (
+    year?: number,
+    month?: number,
+  ): Promise<
     ApiResponse<{
       period: string;
       skipped_count: number;
       expired_closed_count: number;
       message: string;
+      display_period?: {year: number; month: number};
     }>
   > => {
-    return apiRequest('/mobile/periods/complete', {
+    return apiRequest(`/mobile/periods/complete${periodQuery(year, month)}`, {
       method: 'POST',
       body: JSON.stringify({}),
     });

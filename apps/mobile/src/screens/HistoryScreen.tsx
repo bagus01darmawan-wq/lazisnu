@@ -20,9 +20,10 @@ import {collectionService, tasksService} from '../services/api';
 import {correctionQueue, QueuedCorrection} from '../services/offline/corrections';
 import {actionQueue} from '../services/offline/actionQueue';
 import {composeUncollectedOffline} from '../services/offline/uncollected';
-import {useCollectionsStore, useSyncStore, useTasksStore} from '../stores';
+import {useCollectionsStore, usePeriodStore, useSyncStore, useTasksStore} from '../stores';
 import {useFocusEffect} from '@react-navigation/native';
 import {Colors, ComponentSizes, Layout, Radius, Spacing, Typography} from '../theme';
+import {formatPeriod, periodKeyOf} from '../utils/format';
 import {AppButton, SegmentedControl} from '../components/ui';
 import {SKIP_REASON_OPTIONS} from '../components/ui/SkipReasonSheet';
 import {useTabSwipeSwitch} from '../hooks/useTabSwipeSwitch';
@@ -41,14 +42,16 @@ const HistoryScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const {collections, fetchCollections, loadMore, isLoading, error, page, totalPages} =
     useCollectionsStore();
+  const displayYear = usePeriodStore(state => state.context?.display_period.year);
+  const displayMonth = usePeriodStore(state => state.context?.display_period.month);
+  const refreshPeriod = usePeriodStore(state => state.refresh);
+  const displayKey =
+    displayYear && displayMonth ? periodKeyOf({year: displayYear, month: displayMonth}) : null;
+  const periodLabel = displayKey ? formatPeriod(displayKey) : 'periode berjalan';
   const collectionsThisMonth = useMemo(() => {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-    return collections.filter(c => {
-      const t = Date.parse(String(c.collected_at).replace(' ', 'T'));
-      return !isNaN(t) && t >= start;
-    });
-  }, [collections]);
+    if (!displayKey) return collections;
+    return collections.filter(c => c.period === displayKey);
+  }, [collections, displayKey]);
   const {checkStatus, failedCorrectionsCount} = useSyncStore();
   const [visits, setVisits] = useState<CanVisitHistoryItem[]>([]);
   // Tab Riwayat: "terjemput" = riwayat penjemputan (list lama); "tidak" =
@@ -90,7 +93,9 @@ const HistoryScreen: React.FC = () => {
       // agar tindakan yang barusan dilakukan tetap terhitung di sini.
       const netInfo = await NetInfo.fetch();
       if (!(netInfo.isConnected && netInfo.isInternetReachable)) {
-        const composed = composeUncollectedOffline(uncollectedRef.current, actionQueue.getQueue());
+        const composed = composeUncollectedOffline(uncollectedRef.current, actionQueue.getQueue(), {
+          displayPeriod: displayKey ?? undefined,
+        });
         setUncollected(composed);
         setUncollectedCount(composed.length);
         return;
@@ -99,7 +104,7 @@ const HistoryScreen: React.FC = () => {
         status: 'UNCOLLECTED',
         page: 1,
         limit: 50,
-        current_period: true,
+        ...(displayYear && displayMonth ? {year: displayYear, month: displayMonth} : {}),
       });
       if (res.success && res.data) {
         setUncollected(res.data.tasks || []);
@@ -110,7 +115,7 @@ const HistoryScreen: React.FC = () => {
     } finally {
       setUncollectedLoading(false);
     }
-  }, []);
+  }, [displayKey, displayMonth, displayYear]);
 
   const fetchRiwayatCounts = useCallback(async () => {
     try {
@@ -119,18 +124,15 @@ const HistoryScreen: React.FC = () => {
       // angka Tidak Dijemput disusun oleh fetchUncollected.
       const netInfo = await NetInfo.fetch();
       if (!(netInfo.isConnected && netInfo.isInternetReachable)) {
-        const now = new Date();
-        const start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-        const localCompleted = useCollectionsStore.getState().collections.filter(c => {
-          const t = Date.parse(String(c.collected_at).replace(' ', 'T'));
-          return !isNaN(t) && t >= start;
-        }).length;
-        setCompletedPeriodCount(localCompleted);
+        setCompletedPeriodCount(
+          useCollectionsStore.getState().collections.filter(c => c.period === displayKey).length,
+        );
         return;
       }
+      const params = displayYear && displayMonth ? {year: displayYear, month: displayMonth} : {};
       const [done, skipped] = await Promise.all([
-        tasksService.getTasks({status: 'COMPLETED', page: 1, limit: 1, current_period: true}),
-        tasksService.getTasks({status: 'UNCOLLECTED', page: 1, limit: 1, current_period: true}),
+        tasksService.getTasks({status: 'COMPLETED', page: 1, limit: 1, ...params}),
+        tasksService.getTasks({status: 'UNCOLLECTED', page: 1, limit: 1, ...params}),
       ]);
       setCompletedPeriodCount(done.data?.pagination?.total || 0);
       if (!skipped.success) return;
@@ -140,21 +142,18 @@ const HistoryScreen: React.FC = () => {
       // lokal bila angka masih nol (baru saja kehilangan koneksi).
       setCompletedPeriodCount(prev => {
         if (prev > 0) return prev;
-        const now = new Date();
-        const start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-        return useCollectionsStore.getState().collections.filter(c => {
-          const t = Date.parse(String(c.collected_at).replace(' ', 'T'));
-          return !isNaN(t) && t >= start;
-        }).length;
+        return useCollectionsStore.getState().collections.filter(c => c.period === displayKey)
+          .length;
       });
     }
-  }, []);
+  }, [displayKey, displayMonth, displayYear]);
 
   // Refetch setiap kali tab kembali fokus: layar tab tidak pernah di-unmount,
   // dan aksi di Scan (tandai tidak dijemput) atau penjemputan baru mengubah
   // angka filter dan daftar di sini — tanpa ini tampil basi sampai di-swipe.
   useFocusEffect(
     useCallback(() => {
+      refreshPeriod();
       fetchUncollected();
       fetchRiwayatCounts();
       fetchCollections();
@@ -168,14 +167,14 @@ const HistoryScreen: React.FC = () => {
           }
         })
         .catch(() => {});
-    }, [checkStatus, fetchCollections, fetchRiwayatCounts, fetchUncollected]),
+    }, [checkStatus, fetchCollections, fetchRiwayatCounts, fetchUncollected, refreshPeriod]),
   );
 
   const handleReopen = useCallback(
     (task: Task) => {
       Alert.alert(
         'Jemput Sekarang',
-        `Aktifkan kembali tugas kaleng ${task.qr_code} untuk bulan ini?`,
+        `Aktifkan kembali tugas kaleng ${task.qr_code} untuk ${periodLabel}?`,
         [
           {text: 'Batal', style: 'cancel'},
           {
@@ -206,7 +205,7 @@ const HistoryScreen: React.FC = () => {
         ],
       );
     },
-    [fetchUncollected, fetchRiwayatCounts],
+    [fetchUncollected, fetchRiwayatCounts, periodLabel],
   );
 
   const dismissFailedCorrection = useCallback((correctionId: string) => {
@@ -347,7 +346,7 @@ const HistoryScreen: React.FC = () => {
           />
           <View style={styles.summaryRow}>
             <Text style={styles.summaryValue}>{completedPeriodCount + uncollectedCount}</Text>
-            <Text style={styles.summaryLabel}>Tugas selesai bulan ini</Text>
+            <Text style={styles.summaryLabel}>Tugas selesai {periodLabel}</Text>
           </View>
         </View>
       </LinearGradient>
@@ -499,7 +498,7 @@ const HistoryScreen: React.FC = () => {
                     </View>
                     <Text style={styles.emptyTitle}>Tidak ada tugas tertunda</Text>
                     <Text style={styles.emptyText}>
-                      Tugas yang Anda tandai tidak dijemput bulan ini akan muncul di sini.
+                      Tugas yang Anda tandai tidak dijemput pada {periodLabel} akan muncul di sini.
                     </Text>
                   </View>
                 ) : undefined

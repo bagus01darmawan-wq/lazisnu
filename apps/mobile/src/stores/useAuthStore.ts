@@ -24,6 +24,7 @@ import {useDashboardStore} from './useDashboardStore';
 import {useTasksStore} from './useTasksStore';
 import {useCollectionsStore} from './useCollectionStore';
 import {useSyncStore} from './useSyncStore';
+import {usePeriodStore} from './usePeriodStore';
 import {User} from '@lazisnu/shared-types';
 import {getErrorMessage} from '../utils/error';
 import {
@@ -136,6 +137,7 @@ function resetAllClientState() {
   //    WAJIB dipanggil saat logout/ganti akun agar data petugas lama tidak bocor.
   clearAllCache();
   // 4. Reset Zustand stores (kecuali auth sendiri — di-handle pemanggil)
+  usePeriodStore.getState().reset();
   useDashboardStore.setState({
     todayStats: null,
     weekStats: null,

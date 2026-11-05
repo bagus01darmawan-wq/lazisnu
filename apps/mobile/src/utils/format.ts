@@ -85,3 +85,10 @@ export const formatPeriod = (period: string): string => {
     year: 'numeric',
   }).format(date);
 };
+
+/** Label kapital untuk kartu periode, mis. "BULAN OKTOBER 2026". */
+export const formatPeriodUpper = (period: string): string => formatPeriod(period).toUpperCase();
+
+/** Kunci periode "YYYY-MM" dari komponen tahun/bulan. */
+export const periodKeyOf = (period: {year: number; month: number}): string =>
+  `${period.year}-${String(period.month).padStart(2, '0')}`;

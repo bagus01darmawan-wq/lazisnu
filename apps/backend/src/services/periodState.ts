@@ -94,6 +94,25 @@ export function scopeForUser(user: {
   return null;
 }
 
+/**
+ * Periode tampilan berbasis aksi untuk pengguna JWT. `null` bila pengguna
+ * tidak punya cakupan data — pemanggil yang memutuskan fallback/400.
+ */
+export async function resolveDisplayPeriod(
+  user: {
+    role: string;
+    officerId?: string;
+    branchId?: string;
+    districtId?: string;
+  },
+  now: Date = new Date(),
+): Promise<PeriodRef | null> {
+  const scope = scopeForUser(user);
+  if (!scope) return null;
+  const state = await getPeriodState(scope, now);
+  return state.display_period;
+}
+
 export function periodKey(p: PeriodRef): string {
   return `${p.year}-${String(p.month).padStart(2, '0')}`;
 }

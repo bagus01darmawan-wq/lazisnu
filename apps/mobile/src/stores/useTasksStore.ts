@@ -9,6 +9,8 @@ import {actionQueue} from '../services/offline/actionQueue';
 import {taskCache} from '../services/offline/tasks';
 import {taskOrderCache} from '../services/offline/taskOrderCache';
 import {getErrorMessage} from '../utils/error';
+import {usePeriodStore} from './usePeriodStore';
+import {periodKeyOf} from '../utils/format';
 
 let latestTasksRequestId = 0;
 let latestStatsRequestId = 0;
@@ -154,14 +156,17 @@ interface TasksState {
   completedCount: number;
   totalCount: number;
   completedNominal: number;
-  setStats: (stats: {
-    active: number;
-    completed: number;
-    total: number;
-    completedNominal: number;
-  }) => void;
-  hydrateFromCache: () => void;
-  fetchStats: () => Promise<void>;
+  setStats: (
+    stats: {
+      active: number;
+      completed: number;
+      total: number;
+      completedNominal: number;
+    },
+    period?: string,
+  ) => void;
+  hydrateFromCache: (period?: string) => void;
+  fetchStats: (period?: {year: number; month: number}) => Promise<void>;
 
   fetchTasks: (status?: 'ACTIVE' | 'COMPLETED') => Promise<void>;
   loadMore: (status?: 'ACTIVE' | 'COMPLETED') => Promise<void>;
@@ -183,7 +188,10 @@ interface TasksState {
     /** True bila aksi diantrekan offline — belum sampai server. */
     queued?: boolean;
   }>;
-  completePeriod: () => Promise<{skipped: number; expiredClosed: number; error?: string}>;
+  completePeriod: (
+    year?: number,
+    month?: number,
+  ) => Promise<{skipped: number; expiredClosed: number; error?: string}>;
   resolveTaskByQRCode: (qrCode: string) => Promise<{
     success: boolean;
     task?: Task;
@@ -207,9 +215,9 @@ export const useTasksStore = create<TasksState>((set, get) => ({
   totalCount: 0,
   completedNominal: 0,
 
-  setStats: stats => {
+  setStats: (stats, period) => {
     // Simpan ke MMKV + update RAM
-    tasksStatsCache.set(stats);
+    tasksStatsCache.set(stats, period);
     set({
       activeCount: stats.active,
       completedCount: stats.completed,
@@ -218,8 +226,8 @@ export const useTasksStore = create<TasksState>((set, get) => ({
     });
   },
 
-  hydrateFromCache: () => {
-    const cachedStats = tasksStatsCache.get();
+  hydrateFromCache: period => {
+    const cachedStats = tasksStatsCache.get(period);
     set({
       activeCount: cachedStats.active,
       completedCount: cachedStats.completed,
@@ -228,7 +236,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
     });
   },
 
-  fetchStats: async () => {
+  fetchStats: async (period?: {year: number; month: number}) => {
     const requestId = ++latestStatsRequestId;
     const isLatestRequest = () => requestId === latestStatsRequestId;
     const netInfo = await NetInfo.fetch();
@@ -236,17 +244,21 @@ export const useTasksStore = create<TasksState>((set, get) => ({
       return;
     }
 
+    const target = period ?? usePeriodStore.getState().context?.display_period;
+    const periodKey = target ? periodKeyOf(target) : undefined;
+
     const isOnline = !!(netInfo.isConnected && netInfo.isInternetReachable);
     if (!isOnline) {
-      get().hydrateFromCache();
+      get().hydrateFromCache(periodKey);
       return;
     }
 
     try {
+      const params = target ? {year: target.year, month: target.month} : {};
       const [activeRes, completedRes, uncollectedRes] = await Promise.all([
-        tasksService.getTasks({status: 'ACTIVE', page: 1, limit: 1}),
-        tasksService.getTasks({status: 'COMPLETED', page: 1, limit: 1}),
-        tasksService.getTasks({status: 'UNCOLLECTED', page: 1, limit: 1}),
+        tasksService.getTasks({status: 'ACTIVE', page: 1, limit: 1, ...params}),
+        tasksService.getTasks({status: 'COMPLETED', page: 1, limit: 1, ...params}),
+        tasksService.getTasks({status: 'UNCOLLECTED', page: 1, limit: 1, ...params}),
       ]);
       if (!isLatestRequest()) {
         return;
@@ -265,8 +277,18 @@ export const useTasksStore = create<TasksState>((set, get) => ({
         const completedNom = completedRes.data?.total_nominal || 0;
 
         // Active queue dan quarantine sama-sama merepresentasikan tugas yang
-        // sudah dijemput lokal tetapi belum mendapat ACK server.
-        const queue = [...offlineQueue.getQueue(), ...offlineQueue.getFailedPermanent()];
+        // sudah dijemput lokal tetapi belum mendapat ACK server. Hanya item
+        // untuk periode yang sedang dihitung yang boleh memengaruhi angka.
+        const queue = [...offlineQueue.getQueue(), ...offlineQueue.getFailedPermanent()].filter(
+          item => {
+            if (!periodKey) return true;
+            const taskPeriod =
+              item.period ??
+              taskCache.getTasks('ACTIVE').find(t => t.id === item.assignment_id)?.period ??
+              taskCache.getTasks('COMPLETED').find(t => t.id === item.assignment_id)?.period;
+            return taskPeriod === undefined || taskPeriod === periodKey;
+          },
+        );
 
         const uniqueMap = new Map<string, (typeof queue)[number]>();
         for (const item of queue) {
@@ -281,12 +303,15 @@ export const useTasksStore = create<TasksState>((set, get) => ({
         const reconciledCompleted = closedTotal + pendingCount;
         const reconciledCompletedNominal = completedNom + pendingNominal;
 
-        get().setStats({
-          active: reconciledActive,
-          completed: reconciledCompleted,
-          total: allTotal,
-          completedNominal: reconciledCompletedNominal,
-        });
+        get().setStats(
+          {
+            active: reconciledActive,
+            completed: reconciledCompleted,
+            total: allTotal,
+            completedNominal: reconciledCompletedNominal,
+          },
+          periodKey,
+        );
       }
     } catch (e) {
       if (isLatestRequest()) {
@@ -305,7 +330,12 @@ export const useTasksStore = create<TasksState>((set, get) => ({
     const isOnline = !!(netInfo.isConnected && netInfo.isInternetReachable);
 
     if (!isOnline) {
-      const cached = taskCache.getTasks(status);
+      const display = usePeriodStore.getState().context?.display_period;
+      const displayKey = display ? periodKeyOf(display) : undefined;
+      const cached = taskCache.getTasks(status).filter(task => {
+        if (status !== 'ACTIVE' || !displayKey || !task.period) return true;
+        return task.period >= displayKey;
+      });
       const reconciled = reconcileTasks(cached, status);
       set({
         tasks: applyCustomOrder(reconciled),
@@ -462,6 +492,12 @@ export const useTasksStore = create<TasksState>((set, get) => ({
           owner_name: task?.owner_name,
           reason_code: reasonCode,
           notes,
+          period:
+            task?.period ??
+            (() => {
+              const display = usePeriodStore.getState().context?.display_period;
+              return display ? periodKeyOf(display) : undefined;
+            })(),
           created_at: new Date().toISOString(),
         });
         const {tasks, activeCount, completedCount, totalCount} = get();
@@ -522,21 +558,24 @@ export const useTasksStore = create<TasksState>((set, get) => ({
     }
   },
 
-  completePeriod: async () => {
+  completePeriod: async (year?: number, month?: number) => {
     try {
-      const result = await collectionService.completePeriod();
+      const result = await collectionService.completePeriod(year, month);
       if (result.success && result.data) {
         const skipped = result.data.skipped_count;
         const expiredClosed = result.data.expired_closed_count ?? 0;
         const closed = skipped + expiredClosed;
         if (closed > 0) {
           const {completedCount, totalCount, completedNominal} = get();
-          tasksStatsCache.set({
-            active: 0,
-            completed: completedCount + closed,
-            total: totalCount,
-            completedNominal,
-          });
+          tasksStatsCache.set(
+            {
+              active: 0,
+              completed: completedCount + closed,
+              total: totalCount,
+              completedNominal,
+            },
+            year && month ? periodKeyOf({year, month}) : undefined,
+          );
           set({
             activeCount: 0,
             completedCount: completedCount + closed,

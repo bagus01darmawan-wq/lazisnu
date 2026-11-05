@@ -9,8 +9,10 @@ import {Collection, CanCondition, HistoryItem, SyncStatus} from '@lazisnu/shared
 import {useTasksStore} from './useTasksStore';
 import {refreshSyncCounts} from './useSyncStore';
 import {useDashboardStore} from './useDashboardStore';
+import {usePeriodStore} from './usePeriodStore';
 import {collectionsCache} from '../services/offline/cache';
 import {taskCache} from '../services/offline/tasks';
+import {periodKeyOf} from '../utils/format';
 
 let latestCollectionsRequestId = 0;
 
@@ -99,14 +101,18 @@ export const useCollectionStore = create<CollectionState>(set => ({
         return {success: true, synced: false};
       }
 
-      // 1. Simpan ke Queue lokal (MMKV)
+      // 1. Simpan ke Queue lokal (MMKV). Periode assignment ikut disimpan
+      //    agar rekonsiliasi offline tidak memakai bulan kalender perangkat.
+      const task =
+        useTasksStore.getState().tasks.find(t => t.id === preparedData.assignment_id) ??
+        taskCache.getTasks('ACTIVE').find(t => t.id === preparedData.assignment_id) ??
+        taskCache.getTasks('COMPLETED').find(t => t.id === preparedData.assignment_id);
+      const displayPeriod = usePeriodStore.getState().context?.display_period;
       offlineQueue.enqueue({
         ...preparedData,
+        period: task?.period ?? (displayPeriod ? periodKeyOf(displayPeriod) : undefined),
         device_info: getDeviceInfo(),
       });
-
-      // Ambil metadata sebelum task dipindahkan dari daftar ACTIVE.
-      const task = useTasksStore.getState().tasks.find(t => t.id === preparedData.assignment_id);
 
       // Optimistic updates for offline-first responsiveness
       useTasksStore.getState().markTaskComplete(preparedData.assignment_id, preparedData.nominal);
@@ -119,6 +125,7 @@ export const useCollectionStore = create<CollectionState>(set => ({
         officer_id: '',
         nominal: preparedData.nominal,
         collected_at: preparedData.collected_at,
+        period: task?.period,
         sync_status: SyncStatus.PENDING,
         condition: preparedData.condition,
         can: {
@@ -207,6 +214,7 @@ function mapHistoryToCollection(item: HistoryItem): Collection {
     officer_id: '',
     nominal: item.nominal,
     collected_at: item.collected_at,
+    period: item.period,
     sync_status: item.sync_status,
     condition: item.condition,
     offline_id: item.offline_id || undefined,
@@ -236,6 +244,7 @@ export function mergeCollectionsWithQueues(
       officer_id: '',
       nominal: item.nominal,
       collected_at: item.collected_at,
+      period: item.period ?? task?.period,
       sync_status: isFailed ? SyncStatus.FAILED : SyncStatus.PENDING,
       condition: item.condition,
       offline_id: item.offline_id || undefined,

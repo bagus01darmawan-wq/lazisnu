@@ -8,6 +8,8 @@ import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { and, eq, lt, or } from 'drizzle-orm';
 import { insertActivityLog } from './auditLogService';
+import { currentOperationalPeriod } from '../utils/operationalTimeZone';
+import type { PeriodRef } from './periodState';
 
 export interface PeriodCompleteResult {
   period: string;
@@ -19,9 +21,11 @@ export interface PeriodCompleteResult {
 export async function completeOfficerPeriod(
   input: { officerId: string; userId: string | null; ipAddress: string | null; userAgent: string | null },
   now: Date = new Date(),
+  target?: PeriodRef,
 ): Promise<PeriodCompleteResult> {
-  const periodYear = now.getFullYear();
-  const periodMonth = now.getMonth() + 1;
+  const targetPeriod = target ?? currentOperationalPeriod(now);
+  const periodYear = targetPeriod.year;
+  const periodMonth = targetPeriod.month;
   const period = `${periodYear}-${String(periodMonth).padStart(2, '0')}`;
 
   const currentWhere = and(

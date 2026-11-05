@@ -9,6 +9,19 @@ const mockFetchTasks = jest.fn();
 const mockFetchStats = jest.fn();
 const mockFetchCollections = jest.fn();
 const mockCheckUpdates = jest.fn();
+const mockRefreshPeriod = jest.fn().mockResolvedValue(undefined);
+
+const mockPeriodState = {
+  context: {
+    current_period: {year: 2026, month: 11},
+    display_period: {year: 2026, month: 10},
+    display_reason: 'PPK_DRAFT',
+    unsettled: [],
+  },
+  isLoading: false,
+  refresh: mockRefreshPeriod,
+  reset: jest.fn(),
+};
 
 const mockTask = {
   id: 'assignment-1',
@@ -90,32 +103,49 @@ jest.mock('../../src/stores', () => ({
   useUpdateStore: () => ({
     checkManually: mockCheckUpdates,
   }),
-  usePeriodStore: (selector?: (state: any) => unknown) => {
-    const state = {context: null, isLoading: false, refresh: jest.fn(), reset: jest.fn()};
-    return selector ? selector(state) : state;
-  },
-  useCollectionsStore: () => ({
-    collections: [
-      {
-        id: 'collection-1',
-        nominal: 125000,
-        collected_at: '2026-07-05T10:00:00.000Z',
-        sync_status: 'COMPLETED',
-        can: {
-          qr_code: mockTask.qr_code,
-          owner_name: mockTask.owner_name,
-          owner_address: mockTask.owner_address,
+  usePeriodStore: Object.assign(
+    (selector?: (state: any) => unknown) =>
+      selector ? selector(mockPeriodState) : mockPeriodState,
+    {getState: () => mockPeriodState},
+  ),
+  useCollectionsStore: Object.assign(
+    () => ({
+      collections: [
+        {
+          id: 'collection-1',
+          nominal: 125000,
+          collected_at: '2026-07-05T10:00:00.000Z',
+          period: '2026-10',
+          sync_status: 'COMPLETED',
+          can: {
+            qr_code: mockTask.qr_code,
+            owner_name: mockTask.owner_name,
+            owner_address: mockTask.owner_address,
+          },
         },
-      },
-    ],
-    fetchCollections: mockFetchCollections,
-    loadMore: jest.fn(),
-    isLoading: false,
-    error: null,
-    page: 1,
-    totalPages: 1,
-    total: 1,
-  }),
+      ],
+      fetchCollections: mockFetchCollections,
+      loadMore: jest.fn(),
+      isLoading: false,
+      error: null,
+      page: 1,
+      totalPages: 1,
+      total: 1,
+    }),
+    {
+      getState: () => ({
+        collections: [
+          {
+            id: 'collection-1',
+            nominal: 125000,
+            collected_at: '2026-07-05T10:00:00.000Z',
+            period: '2026-10',
+            sync_status: 'COMPLETED',
+          },
+        ],
+      }),
+    },
+  ),
   useCollectionStore: () => ({
     submitCollection: jest.fn(),
     isSubmitting: false,

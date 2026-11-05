@@ -10,6 +10,8 @@ import {
   getStafSummary,
   saveDeviceToken,
 } from '../../services/mobileRoles';
+import { resolveDisplayPeriod } from '../../services/periodState';
+import { currentOperationalPeriod } from '../../utils/operationalTimeZone';
 
 function actorOf(request: FastifyRequest) {
   const user = request.currentUser!;
@@ -24,11 +26,28 @@ function actorOf(request: FastifyRequest) {
 
 function periodOf(request: FastifyRequest): { year: number; month: number } {
   const query = request.query as { year?: string; month?: string };
-  const now = new Date();
+  const now = currentOperationalPeriod();
   return {
-    year: query.year ? z.coerce.number().int().min(2020).max(2100).parse(query.year) : now.getFullYear(),
-    month: query.month ? z.coerce.number().int().min(1).max(12).parse(query.month) : now.getMonth() + 1,
+    year: query.year ? z.coerce.number().int().min(2020).max(2100).parse(query.year) : now.year,
+    month: query.month ? z.coerce.number().int().min(1).max(12).parse(query.month) : now.month,
   };
+}
+
+/**
+ * Default periode untuk layar berbasis aksi (mis. Persetujuan staf): pakai
+ * `display_period` cakupan pengguna; query eksplisit tetap menang.
+ */
+async function displayPeriodOf(request: FastifyRequest): Promise<{ year: number; month: number }> {
+  const query = request.query as { year?: string; month?: string };
+  if (query.year || query.month) return periodOf(request);
+  const actor = actorOf(request);
+  const display = await resolveDisplayPeriod({
+    role: actor.role,
+    officerId: actor.officerId ?? undefined,
+    branchId: actor.branchId ?? undefined,
+    districtId: actor.districtId ?? undefined,
+  });
+  return display ?? currentOperationalPeriod();
 }
 
 function sendAppError(reply: FastifyReply, error: unknown, logger?: { error: (e: unknown) => void }) {
@@ -74,7 +93,7 @@ export async function rolesRoutes(fastify: FastifyInstance) {
     { preHandler: [authorize('STAF_PENGUMPULAN')] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { year, month } = periodOf(request);
+        const { year, month } = await displayPeriodOf(request);
         return sendSuccess(reply, await getStafSummary(actorOf(request), year, month, new Date()));
       } catch (error: unknown) {
         return sendAppError(reply, error, fastify.log);

@@ -19,7 +19,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import type {Task} from '@lazisnu/shared-types';
 import {AssignmentStatus, CanCondition, VisitTask} from '@lazisnu/shared-types';
 import {collectionService} from '../services/api';
-import {useTasksStore, useSyncStore} from '../stores';
+import {useTasksStore, useSyncStore, usePeriodStore} from '../stores';
 import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
 import type {MainNavigationProp} from '../navigation/types';
 import {TaskItem, TaskSearchBar} from './tasks';
@@ -53,6 +53,7 @@ const TasksScreen: React.FC = () => {
     fetchStats,
     reorderTasks,
   } = useTasksStore();
+  const refreshPeriod = usePeriodStore(state => state.refresh);
   const [searchQuery, setSearchQuery] = useState('');
   const [issuesVisible, setIssuesVisible] = useState(false);
   const [visitRequired, setVisitRequired] = useState<VisitTask[]>([]);
@@ -80,11 +81,20 @@ const TasksScreen: React.FC = () => {
   // tanpa ini daftar basi sampai pengguna swipe-refresh sendiri.
   useFocusEffect(
     useCallback(() => {
-      fetchTasks();
-      fetchStats();
-      fetchVisitRequired();
-      checkStatus();
-    }, [checkStatus, fetchTasks, fetchStats, fetchVisitRequired]),
+      let cancelled = false;
+      (async () => {
+        await refreshPeriod();
+        if (cancelled) return;
+        const display = usePeriodStore.getState().context?.display_period;
+        fetchTasks();
+        fetchStats(display);
+        fetchVisitRequired();
+        checkStatus();
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [checkStatus, fetchTasks, fetchStats, fetchVisitRequired, refreshPeriod]),
   );
 
   const copyToClipboard = useCallback((text: string) => {

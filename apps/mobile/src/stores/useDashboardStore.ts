@@ -12,6 +12,8 @@ import NetInfo from '@react-native-community/netinfo';
 import {dashboardCache} from '../services/offline/cache';
 import {offlineQueue} from '../services/offline/queue';
 import {taskCache} from '../services/offline/tasks';
+import {usePeriodStore} from './usePeriodStore';
+import {periodKeyOf} from '../utils/format';
 
 let latestDashboardRequestId = 0;
 
@@ -54,10 +56,11 @@ const isThisWeek = (dateStr: string): boolean => {
   return time >= startOfWeek.getTime() && time <= endOfWeek.getTime();
 };
 
-const isCurrentMonth = (dateStr: string): boolean => {
-  const d = new Date(dateStr);
+const resolveDisplayPeriodKey = (): string => {
+  const display = usePeriodStore.getState().context?.display_period;
+  if (display) return periodKeyOf(display);
   const now = new Date();
-  return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 };
 
 function mergeDashboardData(
@@ -65,7 +68,8 @@ function mergeDashboardData(
   week_stats: WeekStats,
   pending_tasks: DashboardTaskItem[],
   recent_collections: RecentCollectionSummary[],
-  month_stats?: MonthStats | null,
+  month_stats: MonthStats | null | undefined,
+  displayPeriod: string,
 ) {
   const activeQueue = offlineQueue.getQueue();
   const failedQueue = offlineQueue.getFailedPermanent();
@@ -91,9 +95,8 @@ function mergeDashboardData(
   const taskActiveMonth = month_stats?.task_active;
   const taskTotalMonth = month_stats?.task_total ?? 0;
 
-  const tasks = taskCache.getTasks();
-  const now = new Date();
-  const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const tasks = [...taskCache.getTasks('ACTIVE'), ...taskCache.getTasks('COMPLETED')];
+  const taskById = new Map(tasks.map((t: Task) => [t.id, t]));
   const periodAdjustedIds = new Set<string>();
 
   for (const item of allLocal) {
@@ -106,22 +109,19 @@ function mergeDashboardData(
       collectedWeek += 1;
       nominalWeek += item.nominal;
     }
-    if (month_stats && isCurrentMonth(item.collected_at)) {
+    // Atribusi periode = assignment (period), bukan bulan collected_at.
+    // Item antrean baru membawa `period`; item lama jatuh ke cache tugas.
+    const itemPeriod =
+      item.period ?? taskById.get(item.assignment_id)?.period ?? item.collected_at.slice(0, 7);
+    if (month_stats && itemPeriod === displayPeriod) {
       collectedMonth += 1;
       nominalMonth += item.nominal;
 
       // Satu assignment hanya digeser sekali walau muncul di queue + failed.
       if (!periodAdjustedIds.has(item.assignment_id)) {
         periodAdjustedIds.add(item.assignment_id);
-        const task = tasks.find((t: Task) => t.id === item.assignment_id);
-        // Periode tugas tidak diketahui → pakai periode penjemputan sebagai
-        // aproksimasi; penjemputan bulan ini hampir selalu tugas periode ini.
-        const inCurrentPeriod =
-          task?.period === currentPeriod || (!task?.period && isCurrentMonth(item.collected_at));
-        if (inCurrentPeriod) {
-          taskCompletedMonth += 1;
-          taskClosedMonth += 1;
-        }
+        taskCompletedMonth += 1;
+        taskClosedMonth += 1;
       }
     }
   }
@@ -195,7 +195,7 @@ interface DashboardState {
   isLoading: boolean;
   error: string | null;
 
-  fetchDashboard: () => Promise<void>;
+  fetchDashboard: (period?: {year: number; month: number}) => Promise<void>;
   refreshStats: () => Promise<void>;
   hydrateFromCache: () => void;
   optimisticUpdateStats: (nominal: number) => void;
@@ -212,7 +212,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   isLoading: false,
   error: null,
 
-  fetchDashboard: async () => {
+  fetchDashboard: async (period?: {year: number; month: number}) => {
     const requestId = ++latestDashboardRequestId;
     const isLatestRequest = () => requestId === latestDashboardRequestId;
     const netInfo = await NetInfo.fetch();
@@ -220,6 +220,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       return;
     }
 
+    const contextPeriod = usePeriodStore.getState().context?.display_period;
+    const effectivePeriod = period ?? contextPeriod;
+    let displayPeriod = period ? periodKeyOf(period) : resolveDisplayPeriodKey();
     const isOnline = !!(netInfo.isConnected && netInfo.isInternetReachable);
 
     if (!isOnline) {
@@ -229,7 +232,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         remaining: 0,
       };
       const cachedWeek = dashboardCache.getWeekStats() || {collected: 0, total_nominal: 0};
-      const cachedMonth = dashboardCache.getMonthStats();
+      const cachedMonth = dashboardCache.getMonthStats(displayPeriod);
       const cachedTasks = dashboardCache.getPendingTasks();
       const cachedRecent = dashboardCache.getRecentCollections();
 
@@ -239,6 +242,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         cachedTasks,
         cachedRecent,
         cachedMonth,
+        displayPeriod,
       );
       if (!isLatestRequest()) {
         return;
@@ -253,7 +257,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
     set({isLoading: true, error: null});
     try {
-      const result = await dashboardService.getDashboard();
+      const result = await dashboardService.getDashboard(effectivePeriod);
       if (!isLatestRequest()) {
         return;
       }
@@ -261,11 +265,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       if (result.success && result.data) {
         const {today_stats, week_stats, pending_tasks, recent_collections, month_stats} =
           result.data;
+        if (result.data.display_period) {
+          displayPeriod = periodKeyOf(result.data.display_period);
+        }
 
         dashboardCache.setTodayStats(today_stats);
         dashboardCache.setWeekStats(week_stats);
         if (month_stats) {
-          dashboardCache.setMonthStats(month_stats);
+          dashboardCache.setMonthStats(month_stats, displayPeriod);
         }
         dashboardCache.setPendingTasks(pending_tasks || []);
         dashboardCache.setRecentCollections(recent_collections || []);
@@ -275,7 +282,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           week_stats,
           pending_tasks || [],
           recent_collections || [],
-          month_stats ?? dashboardCache.getMonthStats(),
+          month_stats ?? dashboardCache.getMonthStats(displayPeriod),
+          displayPeriod,
         );
 
         // Statistik kemarin untuk chip tren "vs kemarin". Gagal/kosong = null
@@ -289,8 +297,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           ).padStart(2, '0')}`;
           const yRes = await tasksService.getRangeStats(yStr, yStr);
           if (yRes.success && yRes.data) {
-            let collected = yRes.data.collected;
-            let nominal = yRes.data.total_nominal;
+            let collected = yRes.data.collected_in_range ?? yRes.data.collected;
+            let nominal = yRes.data.nominal_in_range ?? yRes.data.total_nominal;
             for (const item of [...offlineQueue.getQueue(), ...offlineQueue.getFailedPermanent()]) {
               if (isYesterday(item.collected_at)) {
                 collected += 1;
@@ -331,13 +339,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   hydrateFromCache: () => {
+    const displayPeriod = resolveDisplayPeriodKey();
     const cachedToday = dashboardCache.getTodayStats() || {
       collected: 0,
       total_nominal: 0,
       remaining: 0,
     };
     const cachedWeek = dashboardCache.getWeekStats() || {collected: 0, total_nominal: 0};
-    const cachedMonth = dashboardCache.getMonthStats();
+    const cachedMonth = dashboardCache.getMonthStats(displayPeriod);
     const cachedTasks = dashboardCache.getPendingTasks();
     const cachedRecent = dashboardCache.getRecentCollections();
 
@@ -347,6 +356,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       cachedTasks,
       cachedRecent,
       cachedMonth,
+      displayPeriod,
     );
     set(merged);
   },

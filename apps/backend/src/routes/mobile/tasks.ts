@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { eq, and, desc, asc, gte, or, sql } from 'drizzle-orm';
+import { eq, and, desc, asc, gte, lte, inArray, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { isValidQRCode } from '../../utils/qr';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
@@ -21,7 +21,7 @@ import { assertCanAccess } from '../../services/canService';
 import { submitCollection } from '../../services/collectionSubmission';
 import { insertActivityLog } from '../../services/auditLogService';
 import { completeOfficerPeriod } from '../../services/periodComplete';
-import { getPeriodState } from '../../services/periodState';
+import { getPeriodState, resolveDisplayPeriod } from '../../services/periodState';
 import { currentOperationalPeriod } from '../../utils/operationalTimeZone';
 import { ErrorCode } from '../../utils/errorCatalog';
 import {
@@ -73,8 +73,11 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const weekStart = new Date(today);
       weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-      const periodYear = now.getFullYear();
-      const periodMonth = now.getMonth() + 1;
+      // Kartu bulanan mengikuti periode aksi (display_period), bukan bulan
+      // kalender. Hari/Minggu Ini tetap aktivitas wall-clock di bawah.
+      const display = (await resolveDisplayPeriod(user)) ?? currentOperationalPeriod(now);
+      const periodYear = display.year;
+      const periodMonth = display.month;
 
       const [todayStats, weekStats, monthStats, pendingAssignments, latestRecent, remainingCount] = await Promise.all([
         db.select({
@@ -172,6 +175,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       ]);
 
       return sendSuccess(reply, {
+        display_period: { year: periodYear, month: periodMonth },
         today_stats: {
           collected: todayStats.collected,
           total_nominal: Number(todayStats.total_nominal),
@@ -191,6 +195,8 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           task_active: monthStats.task_active,
           task_closed: monthStats.task_closed,
           task_uncollected: monthStats.task_uncollected,
+          period_year: periodYear,
+          period_month: periodMonth,
         },
         pending_tasks: pendingAssignments.map((a) => ({
           id: a.id,
@@ -249,9 +255,10 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         return sendSuccess(reply, { items: [], total: 0 });
       }
 
-      const currentPeriod = new Date();
-      const year = currentPeriod.getFullYear();
-      const month = currentPeriod.getMonth() + 1;
+      // Periode kerja = display_period (aksi), bukan bulan kalender.
+      const display = (await resolveDisplayPeriod(user)) ?? currentOperationalPeriod();
+      const year = display.year;
+      const month = display.month;
 
       const cans = await db.query.cans.findMany({
         where: and(
@@ -268,22 +275,28 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         orderBy: [asc(schema.cans.qrCode)],
       });
 
-      const items = (await Promise.all(cans.map(async (c) => {
+      const assignmentRows = cans.length === 0
+        ? []
+        : await db.select({
+            canId: schema.assignments.canId,
+            id: schema.assignments.id,
+            status: schema.assignments.status,
+          }).from(schema.assignments).where(and(
+            inArray(schema.assignments.canId, cans.map((c) => c.id)),
+            eq(schema.assignments.periodYear, year),
+            eq(schema.assignments.periodMonth, month),
+          ));
+      const assignmentByCan = new Map(assignmentRows.map((row) => [row.canId, row]));
+
+      const items = cans.map((c) => {
         // B2: kaleng NON_AKTIF tidak diberi assignment oleh aturan
         // (ASSIGNABLE_CONDITIONS). Tapi kaleng NON_AKTIF yang TERNYATA berisi
         // harus bisa dikembalikan ke AKTIF — penjemputan berisi butuh assignment
         // (collections.assignment_id NOT NULL). Karena itu cari assignment
-        // periode berjalan untuk kaleng ini; bila tidak ada, app membuatnya
+        // periode kerja untuk kaleng ini; bila tidak ada, app membuatnya
         // on-demand lewat POST /mobile/cans/:canId/ensure-assignment.
         // null = belum ada assignment.
-        const assignment = await db.query.assignments.findFirst({
-          where: and(
-            eq(schema.assignments.canId, c.id),
-            eq(schema.assignments.periodYear, year),
-            eq(schema.assignments.periodMonth, month),
-          ),
-          columns: { id: true, status: true },
-        });
+        const assignment = assignmentByCan.get(c.id);
 
         return {
           can_id: c.id,
@@ -300,7 +313,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           last_visit_purpose: c.visits[0]?.purpose ?? null,
           last_visit_outcome: c.visits[0]?.outcome ?? null,
         };
-      }))).filter((item) => item.assignment_status !== 'COMPLETED');
+      }).filter((item) => item.assignment_status !== 'COMPLETED');
 
       return sendSuccess(reply, { items, total: items.length });
     } catch (error: unknown) {
@@ -342,8 +355,9 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       await assertCanAccess(user, can, 'Kaleng ini bukan wilayah Anda');
 
       const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth() + 1;
+      const display = (await resolveDisplayPeriod(user)) ?? currentOperationalPeriod(now);
+      const year = display.year;
+      const month = display.month;
 
       const existing = await db.query.assignments.findFirst({
         where: and(
@@ -421,45 +435,33 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       const limit = parseInt(query.limit || '20');
       const status = query.status || 'ACTIVE';
       const skip = (page - 1) * limit;
-      const currentPeriod = new Date();
-      const currentYear = currentPeriod.getFullYear();
-      const currentMonth = currentPeriod.getMonth() + 1;
 
       const conditions: any[] = [
         eq(schema.assignments.officerId, officerId!),
         eq(schema.assignments.status, status as any),
       ];
-      // Penjaga daftar: ACTIVE mengikuti periode tampilan berbasis aksi
-      // (`display_period`), bukan bulan kalender. Tugas periode lama yang belum
-      // tuntas (mis. Oktober) tidak boleh hilang dari daftar hanya karena bulan
-      // berganti — banner Beranda justru menagih periode itu. Periode setelah
-      // display_period tetap ikut agar tugas periode berjalan tidak tersembunyi;
-      // hanya periode yang lebih tua dari display_period yang disaring.
-      // Riwayat (COMPLETED/UNCOLLECTED) tetap lintas periode; `all=true`
-      // membuka semua; `year`+`month` eksplisit menang (periode persis).
+      // Periode eksplisit (`year`+`month`) berlaku untuk SEMUA status —
+      // dibutuhkan layar berbasis periode aksi (Riwayat, hitungan kartu).
+      // Tanpa parameter: ACTIVE mengikuti display_period (periode lebih tua
+      // disembunyikan), status riwayat tetap lintas periode.
       const qYear = parseInt(query.year || '');
       const qMonth = parseInt(query.month || '');
       const explicitYear = Number.isInteger(qYear) && qYear >= 2020 && qYear <= 2100 ? qYear : null;
       const explicitMonth = Number.isInteger(qMonth) && qMonth >= 1 && qMonth <= 12 ? qMonth : null;
-      // Filter periode operasional berjalan eksplisit untuk status apa pun —
-      // dipakai tab "Tidak Dijemput"/hitungan filter Riwayat yang menurut
-      // kebijakan produk hanya menyentuh periode berjalan (2026-10-25).
-      if (query.current_period === 'true') {
+      if (explicitYear !== null && explicitMonth !== null) {
+        conditions.push(eq(schema.assignments.periodYear, explicitYear));
+        conditions.push(eq(schema.assignments.periodMonth, explicitMonth));
+      } else if (query.current_period === 'true') {
         const op = currentOperationalPeriod();
         conditions.push(eq(schema.assignments.periodYear, op.year));
         conditions.push(eq(schema.assignments.periodMonth, op.month));
       } else if (status === 'ACTIVE' && query.all !== 'true') {
-        if (explicitYear !== null && explicitMonth !== null) {
-          conditions.push(eq(schema.assignments.periodYear, explicitYear));
-          conditions.push(eq(schema.assignments.periodMonth, explicitMonth));
-        } else {
-          const state = await getPeriodState({ kind: 'officer', officerId: officerId! });
-          const start = state.display_period;
-          const startOrdinal = start.year * 12 + (start.month - 1);
-          conditions.push(
-            sql`(${schema.assignments.periodYear} * 12 + ${schema.assignments.periodMonth} - 1) >= ${startOrdinal}`,
-          );
-        }
+        const state = await getPeriodState({ kind: 'officer', officerId: officerId! });
+        const start = state.display_period;
+        const startOrdinal = start.year * 12 + (start.month - 1);
+        conditions.push(
+          sql`(${schema.assignments.periodYear} * 12 + ${schema.assignments.periodMonth} - 1) >= ${startOrdinal}`,
+        );
       }
       const whereClause = and(...conditions);
 
@@ -491,6 +493,11 @@ export async function tasksRoutes(fastify: FastifyInstance) {
 
       let totalNominal = 0;
       if (status === 'COMPLETED') {
+        const nominalPeriod = explicitYear !== null && explicitMonth !== null
+          ? { year: explicitYear, month: explicitMonth }
+          : query.current_period === 'true'
+            ? currentOperationalPeriod()
+            : (await resolveDisplayPeriod(user)) ?? currentOperationalPeriod();
         const nominalResult = await db.select({
           total_nominal: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`
         })
@@ -499,8 +506,8 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         .where(and(
           eq(schema.collections.officerId, officerId),
           eq(schema.collections.syncStatus, 'COMPLETED'),
-          eq(schema.assignments.periodYear, currentYear),
-          eq(schema.assignments.periodMonth, currentMonth),
+          eq(schema.assignments.periodYear, nominalPeriod.year),
+          eq(schema.assignments.periodMonth, nominalPeriod.month),
           getLatestCollectionCondition()
         ));
 
@@ -574,10 +581,9 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         return and(eq(schema.assignments.periodYear, y), eq(schema.assignments.periodMonth, m));
       });
 
-      const [colRes, taskRows] = await Promise.all([
-        // C1-T12 (§2.2): nominal per PERIODE assignment yang tersentuh rentang
-        // (konsisten dengan separuh tugas di bawah + months_covered) — bukan
-        // bulan collected_at.
+      const [colRes, rangeColRes, taskRows, closedRangeRows] = await Promise.all([
+        // Kontrak lama: nominal per PERIODE assignment yang tersentuh rentang.
+        // Dipertahankan agar APK lama tidak berubah.
         sumCollectionsByPeriod(db, {
           officerId,
           periods: monthsCovered.map((period) => {
@@ -585,6 +591,19 @@ export async function tasksRoutes(fastify: FastifyInstance) {
             return { year: y as number, month: m as number };
           }),
         }),
+        // Kontrak baru: uang yang benar-benar tercatat di dalam rentang tanggal.
+        db.select({
+          collected: sql<number>`count(*)::int`,
+          total_nominal: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
+        }).from(schema.collections)
+          .where(and(
+            eq(schema.collections.officerId, officerId),
+            eq(schema.collections.syncStatus, 'COMPLETED'),
+            getLatestCollectionCondition(),
+            gte(schema.collections.collectedAt, startDate),
+            lte(schema.collections.collectedAt, endDate),
+          ))
+          .then((rows) => rows[0]),
         db.select({
           status: schema.assignments.status,
           count: sql<number>`count(*)::int`,
@@ -594,9 +613,25 @@ export async function tasksRoutes(fastify: FastifyInstance) {
             or(...periodConditions)
           ))
           .groupBy(schema.assignments.status),
+        // Tugas yang ditutup (COMPLETED/UNCOLLECTED) di dalam rentang tanggal.
+        db.select({
+          status: schema.assignments.status,
+          count: sql<number>`count(*)::int`,
+        }).from(schema.assignments)
+          .where(and(
+            eq(schema.assignments.officerId, officerId),
+            inArray(schema.assignments.status, ['COMPLETED', 'UNCOLLECTED']),
+            gte(schema.assignments.completedAt, startDate),
+            lte(schema.assignments.completedAt, endDate),
+          ))
+          .groupBy(schema.assignments.status),
       ]);
 
       const metrics = computeTaskMetrics(taskRows);
+      const countStatus = (rows: Array<{ status: string; count: number }>, value: string) =>
+        Number(rows.find((row) => row.status === value)?.count ?? 0);
+      const completedInRange = countStatus(closedRangeRows, 'COMPLETED');
+      const uncollectedInRange = countStatus(closedRangeRows, 'UNCOLLECTED');
       return sendSuccess(reply, {
         collected: colRes.collected,
         total_nominal: Number(colRes.total_nominal),
@@ -606,6 +641,12 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         task_uncollected: metrics.task_uncollected,
         task_total: metrics.task_total,
         months_covered: monthsCovered,
+        collected_in_range: Number(rangeColRes?.collected ?? 0),
+        nominal_in_range: Number(rangeColRes?.total_nominal ?? 0),
+        task_completed_in_range: completedInRange,
+        task_uncollected_in_range: uncollectedInRange,
+        task_closed_in_range: completedInRange + uncollectedInRange,
+        task_active_in_periods: metrics.task_active,
       });
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
@@ -924,6 +965,17 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
       }
 
+      const query = request.query as { year?: string; month?: string };
+      const qYear = parseInt(query.year || '');
+      const qMonth = parseInt(query.month || '');
+      const explicit = Number.isInteger(qYear) && qYear >= 2020 && qYear <= 2100
+        && Number.isInteger(qMonth) && qMonth >= 1 && qMonth <= 12
+        ? { year: qYear, month: qMonth }
+        : null;
+      const target = explicit
+        ?? (await resolveDisplayPeriod(user))
+        ?? currentOperationalPeriod();
+
       const result = await completeOfficerPeriod(
         {
           officerId,
@@ -932,8 +984,10 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           userAgent: request.headers['user-agent'] || null,
         },
         new Date(),
+        target,
       );
-      return sendSuccess(reply, result);
+      const display = (await resolveDisplayPeriod(user)) ?? currentOperationalPeriod();
+      return sendSuccess(reply, { ...result, display_period: display });
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);
     }

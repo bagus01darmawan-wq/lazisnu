@@ -6,9 +6,9 @@ import {AppCard} from '../components/ui/AppCard';
 import {AppHeader} from '../components/ui/AppHeader';
 import {StatusBadge} from '../components/ui/StatusBadge';
 import {Colors, Spacing, Typography} from '../theme';
-import {formatCurrency} from '../utils/format';
+import {formatCurrency, formatPeriod, periodKeyOf} from '../utils/format';
 import {getErrorMessage} from '../utils/error';
-import {useAuthStore} from '../stores';
+import {useAuthStore, usePeriodStore} from '../stores';
 
 /**
  * C1-T9 — Layar Manager (baca).
@@ -21,6 +21,11 @@ export const RekapScreen: React.FC = () => {
   const [recap, setRecap] = useState<MwcRecapDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const displayYear = usePeriodStore(state => state.context?.display_period.year);
+  const displayMonth = usePeriodStore(state => state.context?.display_period.month);
+  const refreshPeriod = usePeriodStore(state => state.refresh);
+  const displayKey =
+    displayYear && displayMonth ? periodKeyOf({year: displayYear, month: displayMonth}) : null;
 
   const load = useCallback(async () => {
     if (role !== 'ADMIN_KECAMATAN') {
@@ -30,7 +35,7 @@ export const RekapScreen: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await c1Service.getLaporanMwc();
+      const res = await c1Service.getLaporanMwc(displayYear, displayMonth);
       if (!res.success || !res.data) throw new Error(res.error?.message || 'Gagal memuat rekap');
       setRecap(res.data);
     } catch (e: unknown) {
@@ -38,11 +43,12 @@ export const RekapScreen: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [role]);
+  }, [displayMonth, displayYear, role]);
 
   useEffect(() => {
+    refreshPeriod();
     load();
-  }, [load]);
+  }, [load, refreshPeriod]);
 
   return (
     <View style={[styles.container, {paddingTop: insets.top}]}>
@@ -58,7 +64,10 @@ export const RekapScreen: React.FC = () => {
         {role === 'ADMIN_KECAMATAN' && recap ? (
           <>
             <AppCard>
-              <Text style={styles.cardTitle}>Perolehan Ranting • {recap.period}</Text>
+              <Text style={styles.cardTitle}>
+                Perolehan Ranting •{' '}
+                {displayKey ? formatPeriod(displayKey) : formatPeriod(recap.period)}
+              </Text>
               <Text style={styles.total}>{formatCurrency(recap.kartu_ranting.total)}</Text>
               <Text style={styles.meta}>
                 Share MWC {formatCurrency(recap.kartu_ranting.share_mwc)} • Lapor{' '}

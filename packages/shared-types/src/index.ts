@@ -391,6 +391,8 @@ export interface Collection {
   officer_id: string;
   nominal: number;
   collected_at: string;
+  /** Periode assignment ("YYYY-MM") — dasar filter periode aksi. */
+  period?: string;
   submitted_at?: string;
   synced_at?: string;
   sync_status: SyncStatus;
@@ -545,6 +547,9 @@ export interface MonthStats {
   /** COMPLETED + UNCOLLECTED — tugas yang sudah ditutup operasional. */
   task_closed?: number;
   task_uncollected?: number;
+  /** Periode assignment yang direpresentasikan angka-angka ini (periode aksi). */
+  period_year?: number;
+  period_month?: number;
 }
 
 // ─── API Response Types ──────────────────────────────────────────────────────
@@ -661,6 +666,8 @@ export interface DashboardResponse {
   week_stats: WeekStats;
   /** Opsional untuk kompatibilitas aplikasi lama yang masih berjalan. */
   month_stats?: MonthStats;
+  /** Periode aksi yang dipakai `month_stats`/`pending_tasks`. */
+  display_period?: { year: number; month: number };
   pending_tasks: DashboardTaskItem[];
   /** B2: kaleng NON_AKTIF yang perlu dikunjungi (bukan assignment). Opsional demi APK lama. */
   visit_tasks?: { total: number; completed: number };
@@ -670,6 +677,7 @@ export interface DashboardResponse {
 // Response GET /mobile/tasks/stats-range — akumulasi dalam rentang tanggal.
 // Progres tugas dihitung dari seluruh periode (bulan) yang tersentuh rentang.
 export interface RangeStatsResponse {
+  /** Kontrak lama: atribusi per periode assignment yang tersentuh rentang. */
   collected: number;
   total_nominal: number;
   task_active: number;
@@ -680,6 +688,16 @@ export interface RangeStatsResponse {
   task_uncollected?: number;
   /** Periode yang tersentuh rentang, format "YYYY-MM". */
   months_covered: string[];
+  /** Uang yang benar-benar tercatat (collected_at) di dalam rentang tanggal. */
+  collected_in_range?: number;
+  nominal_in_range?: number;
+  /** Tugas yang completed_at-nya jatuh di dalam rentang tanggal. */
+  task_completed_in_range?: number;
+  /** Tugas yang ditutup (UNCOLLECTED) di dalam rentang tanggal. */
+  task_uncollected_in_range?: number;
+  task_closed_in_range?: number;
+  /** Sisa tugas ACTIVE pada periode assignment yang tercakup rentang. */
+  task_active_in_periods?: number;
 }
 
 // Response GET /mobile/assignments/:id/proposal-status — proyeksi status
@@ -785,6 +803,8 @@ export interface HistoryItem {
   owner_address: string;
   nominal: number;
   collected_at: string;
+  /** Periode assignment ("YYYY-MM"), bukan bulan collected_at. */
+  period?: string;
   condition: CanCondition;
   sync_status: SyncStatus;
   submit_sequence?: number;

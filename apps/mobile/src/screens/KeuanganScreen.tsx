@@ -9,7 +9,7 @@ import {AppTextInput} from '../components/ui/AppTextInput';
 import {StatusBadge} from '../components/ui/StatusBadge';
 import {SignSheet} from '../components/SignSheet';
 import {Colors, Radius, Spacing, Typography} from '../theme';
-import {formatCurrency} from '../utils/format';
+import {formatCurrency, formatPeriod} from '../utils/format';
 import {getErrorMessage} from '../utils/error';
 import {usePeriodStore} from '../stores';
 
@@ -198,7 +198,9 @@ export const KeuanganScreen: React.FC = () => {
         ) : null}
         {!isLoading && items.length === 0 && !error ? (
           <AppCard>
-            <Text style={styles.meta}>Tidak ada antrean tanda tangan periode {period}.</Text>
+            <Text style={styles.meta}>
+              Tidak ada antrean tanda tangan periode {formatPeriod(period)}.
+            </Text>
           </AppCard>
         ) : null}
         {items.map(item => (

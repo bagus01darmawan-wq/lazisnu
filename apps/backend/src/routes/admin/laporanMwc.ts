@@ -4,6 +4,8 @@ import { authorize } from '../../middleware/auth';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { isAppError } from '../../utils/AppError';
 import { getMwcRecap } from '../../services/mwcRecap';
+import { resolveDisplayPeriod } from '../../services/periodState';
+import { currentOperationalPeriod } from '../../utils/operationalTimeZone';
 
 /**
  * C1-T8 — Rekap MWC (§8 + §7.2 + §8b): 2 kartu (Ranting vs Program),
@@ -16,10 +18,20 @@ export async function laporanMwcRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const query = request.query as { year?: string; month?: string };
-        const now = new Date();
-        const year = query.year ? z.coerce.number().int().min(2020).max(2100).parse(query.year) : now.getFullYear();
-        const month = query.month ? z.coerce.number().int().min(1).max(12).parse(query.month) : now.getMonth() + 1;
         const user = request.currentUser!;
+        const defaultPeriod = query.year || query.month
+          ? null
+          : (await resolveDisplayPeriod({
+              role: user.role,
+              branchId: user.branchId,
+              districtId: user.districtId,
+            })) ?? currentOperationalPeriod();
+        const year = query.year
+          ? z.coerce.number().int().min(2020).max(2100).parse(query.year)
+          : defaultPeriod!.year;
+        const month = query.month
+          ? z.coerce.number().int().min(1).max(12).parse(query.month)
+          : defaultPeriod!.month;
         const result = await getMwcRecap(
           {
             userId: user.userId,

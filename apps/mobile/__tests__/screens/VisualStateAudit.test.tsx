@@ -68,6 +68,18 @@ const mockSubmitCollection = jest.fn();
 const mockReset = jest.fn();
 const mockFetchCollections = jest.fn();
 
+const mockPeriodState = {
+  context: {
+    current_period: {year: 2026, month: 11},
+    display_period: {year: 2026, month: 10},
+    display_reason: null,
+    unsettled: [],
+  },
+  isLoading: false,
+  refresh: jest.fn().mockResolvedValue(undefined),
+  reset: jest.fn(),
+};
+
 const makeCollectionStore = (overrides = {}) => ({
   submitCollection: mockSubmitCollection,
   isSubmitting: false,
@@ -123,8 +135,12 @@ jest.mock('../../src/stores', () => ({
     page: 1,
     totalPages: 1,
   }),
-  // HistoryScreen kini membaca useCollectionsStore.getState() di cabang
-  // offline (hitungan Terjemput dari daftar lokal) — sediakan getState.
+  // HistoryScreen membaca usePeriodStore (periode aksi) dan
+  // useCollectionsStore.getState() di cabang offline.
+  usePeriodStore: Object.assign(
+    (selector?: (s: any) => unknown) => (selector ? selector(mockPeriodState) : mockPeriodState),
+    {getState: () => mockPeriodState},
+  ),
   useCollectionsStore: Object.assign(makeCollectionsStore, {
     getState: () => makeCollectionsStore(),
   }),
@@ -366,6 +382,7 @@ describe('HistoryScreen — modal Koreksi', () => {
     id: 'col-1',
     nominal: 125000,
     collected_at: new Date().toISOString(),
+    period: '2026-10',
     sync_status: 'COMPLETED',
     can: {
       qr_code: 'LAZ-PNG-25-00009-533',

@@ -48,6 +48,8 @@ export interface QueuedSkipAction {
   owner_name?: string;
   reason_code?: string;
   notes?: string;
+  /** Periode assignment ("YYYY-MM") untuk tampilan offline berbasis periode. */
+  period?: string;
   created_at: string;
   retry_attempts?: number;
   next_retry_at?: string;

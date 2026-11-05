@@ -48,6 +48,8 @@ export interface QueuedCollection {
   can_id: string;
   nominal: number;
   collected_at: string;
+  /** Periode assignment ("YYYY-MM") — durabel walau cache tugas hilang. */
+  period?: string;
   latitude?: number;
   longitude?: number;
   /** Kondisi kaleng menurut PPK (halaman submit) — ikut tersinkron. */

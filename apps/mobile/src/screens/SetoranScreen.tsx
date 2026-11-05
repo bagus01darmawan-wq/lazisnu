@@ -28,7 +28,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useAuthStore, usePeriodStore} from '../stores';
 import {normalizeRole} from '../roles/roleMap';
 import {Colors, Spacing, Typography} from '../theme';
-import {formatCurrency} from '../utils/format';
+import {formatCurrency, formatPeriod} from '../utils/format';
 import {getErrorMessage} from '../utils/error';
 
 /**
@@ -197,7 +197,7 @@ export const SetoranScreen: React.FC = () => {
               onPress={() => setPreviewVisible(true)}>
               <AppCard>
                 <View style={styles.rowBetween}>
-                  <Text style={styles.period}>{submission.period}</Text>
+                  <Text style={styles.period}>{formatPeriod(submission.period)}</Text>
                   <StatusBadge status={statusTone(submission.status)} label={submission.status} />
                 </View>
                 <Text style={styles.total}>{formatCurrency(submission.total_amount)}</Text>

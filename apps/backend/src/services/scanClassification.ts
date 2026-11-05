@@ -14,6 +14,7 @@
  * 4. NOT_ASSIGNED ................ bukan tugasnya / sudah tidak bisa ditindak.
  */
 import { periodKey } from './periodCalendar';
+import { currentOperationalPeriod } from '../utils/operationalTimeZone';
 
 export interface ScanAssignmentRow {
   id: string;
@@ -54,7 +55,7 @@ export function scanAlreadyCollectedMessage(period: string): string {
 export function classifyScan(rows: ScanAssignmentRow[], now: Date = new Date()): ScanClassification {
   if (rows.length === 0) return { kind: 'NOT_ASSIGNED' };
 
-  const cur = { year: now.getFullYear(), month: now.getMonth() + 1 };
+  const cur = currentOperationalPeriod(now);
   const sorted = [...rows].sort(byPeriodDesc);
 
   // 1. HIT — ACTIVE pada periode berjalan atau lampau. Tidak ada lagi gerbang

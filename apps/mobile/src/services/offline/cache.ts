@@ -21,15 +21,18 @@ import {
 const KEY_DASHBOARD_TODAY_STATS = 'cache:dashboard:todayStats';
 const KEY_DASHBOARD_WEEK_STATS = 'cache:dashboard:weekStats';
 const KEY_DASHBOARD_MONTH_STATS = 'cache:dashboard:monthStats';
+const KEY_DASHBOARD_MONTH_PERIOD = 'cache:dashboard:monthStatsPeriod';
 const KEY_DASHBOARD_PENDING_TASKS = 'cache:dashboard:pendingTasks';
 const KEY_DASHBOARD_RECENT = 'cache:dashboard:recentCollections';
 const KEY_DASHBOARD_SCHEMA_VERSION = 'cache:dashboard:schemaVersion';
-const DASHBOARD_SCHEMA_VERSION = 3;
+const DASHBOARD_SCHEMA_VERSION = 4;
 const KEY_TASKS_ACTIVE_COUNT = 'cache:tasks:activeCount';
 const KEY_TASKS_COMPLETED_COUNT = 'cache:tasks:completedCount';
 const KEY_TASKS_COMPLETED_NOMINAL = 'cache:tasks:completedNominal';
 const KEY_TASKS_TOTAL_COUNT = 'cache:tasks:totalCount';
+const KEY_TASKS_STATS_PERIOD = 'cache:tasks:statsPeriod';
 const KEY_COLLECTIONS = 'cache:collections:list';
+const KEY_PERIOD_CONTEXT = 'cache:period:context';
 
 // --- Helpers -----------------------------------------------------------------
 function safeGet<T>(key: string): T | null {
@@ -72,6 +75,7 @@ function ensureDashboardSchema(): void {
     storage.remove(KEY_DASHBOARD_TODAY_STATS);
     storage.remove(KEY_DASHBOARD_WEEK_STATS);
     storage.remove(KEY_DASHBOARD_MONTH_STATS);
+    storage.remove(KEY_DASHBOARD_MONTH_PERIOD);
     storage.remove(KEY_DASHBOARD_PENDING_TASKS);
     storage.remove(KEY_DASHBOARD_RECENT);
     storage.set(KEY_DASHBOARD_SCHEMA_VERSION, DASHBOARD_SCHEMA_VERSION);
@@ -102,14 +106,18 @@ export const dashboardCache = {
     safeSet(KEY_DASHBOARD_WEEK_STATS, stats);
   },
 
-  getMonthStats: (): MonthStats | null => {
+  getMonthStats: (period?: string): MonthStats | null => {
     ensureDashboardSchema();
+    if (period && safeGet<string>(KEY_DASHBOARD_MONTH_PERIOD) !== period) {
+      return null;
+    }
     return safeGet<MonthStats>(KEY_DASHBOARD_MONTH_STATS);
   },
 
-  setMonthStats: (stats: MonthStats): void => {
+  setMonthStats: (stats: MonthStats, period?: string): void => {
     ensureDashboardSchema();
     safeSet(KEY_DASHBOARD_MONTH_STATS, stats);
+    if (period) safeSet(KEY_DASHBOARD_MONTH_PERIOD, period);
   },
 
   getPendingTasks: (): DashboardTaskItem[] => {
@@ -136,6 +144,7 @@ export const dashboardCache = {
     safeDelete(KEY_DASHBOARD_TODAY_STATS);
     safeDelete(KEY_DASHBOARD_WEEK_STATS);
     safeDelete(KEY_DASHBOARD_MONTH_STATS);
+    safeDelete(KEY_DASHBOARD_MONTH_PERIOD);
     safeDelete(KEY_DASHBOARD_PENDING_TASKS);
     safeDelete(KEY_DASHBOARD_RECENT);
     safeDelete(KEY_DASHBOARD_SCHEMA_VERSION);
@@ -144,23 +153,34 @@ export const dashboardCache = {
 
 // --- Tasks Stats Cache --------------------------------------------------------
 export const tasksStatsCache = {
-  get: (): {active: number; completed: number; total: number; completedNominal: number} => ({
-    active: safeGet<number>(KEY_TASKS_ACTIVE_COUNT) ?? 0,
-    completed: safeGet<number>(KEY_TASKS_COMPLETED_COUNT) ?? 0,
-    total: safeGet<number>(KEY_TASKS_TOTAL_COUNT) ?? 0,
-    completedNominal: safeGet<number>(KEY_TASKS_COMPLETED_NOMINAL) ?? 0,
-  }),
+  get: (
+    period?: string,
+  ): {active: number; completed: number; total: number; completedNominal: number} => {
+    if (period && safeGet<string>(KEY_TASKS_STATS_PERIOD) !== period) {
+      return {active: 0, completed: 0, total: 0, completedNominal: 0};
+    }
+    return {
+      active: safeGet<number>(KEY_TASKS_ACTIVE_COUNT) ?? 0,
+      completed: safeGet<number>(KEY_TASKS_COMPLETED_COUNT) ?? 0,
+      total: safeGet<number>(KEY_TASKS_TOTAL_COUNT) ?? 0,
+      completedNominal: safeGet<number>(KEY_TASKS_COMPLETED_NOMINAL) ?? 0,
+    };
+  },
 
-  set: (stats: {
-    active: number;
-    completed: number;
-    total: number;
-    completedNominal: number;
-  }): void => {
+  set: (
+    stats: {
+      active: number;
+      completed: number;
+      total: number;
+      completedNominal: number;
+    },
+    period?: string,
+  ): void => {
     safeSet(KEY_TASKS_ACTIVE_COUNT, stats.active);
     safeSet(KEY_TASKS_COMPLETED_COUNT, stats.completed);
     safeSet(KEY_TASKS_TOTAL_COUNT, stats.total);
     safeSet(KEY_TASKS_COMPLETED_NOMINAL, stats.completedNominal);
+    if (period) safeSet(KEY_TASKS_STATS_PERIOD, period);
   },
 
   clear: (): void => {
@@ -168,6 +188,7 @@ export const tasksStatsCache = {
     safeDelete(KEY_TASKS_COMPLETED_COUNT);
     safeDelete(KEY_TASKS_TOTAL_COUNT);
     safeDelete(KEY_TASKS_COMPLETED_NOMINAL);
+    safeDelete(KEY_TASKS_STATS_PERIOD);
   },
 };
 
@@ -180,9 +201,17 @@ export const collectionsCache = {
   clear: (): void => safeDelete(KEY_COLLECTIONS),
 };
 
+// --- Period Context Cache -----------------------------------------------------
+export const periodContextCache = {
+  get: <T>(): T | null => safeGet<T>(KEY_PERIOD_CONTEXT),
+  set: (context: unknown): void => safeSet(KEY_PERIOD_CONTEXT, context),
+  clear: (): void => safeDelete(KEY_PERIOD_CONTEXT),
+};
+
 // --- Clear All (dipanggil saat logout / ganti akun) ---------------------------
 export function clearAllCache(): void {
   dashboardCache.clear();
   tasksStatsCache.clear();
   collectionsCache.clear();
+  periodContextCache.clear();
 }

@@ -30,6 +30,7 @@ type MobileHistoryCollection = {
     ownerAddress: string | null;
     condition?: string;
   };
+  assignment?: { periodYear: number; periodMonth: number } | null;
 };
 
 export function toMobileHistoryItem(collection: MobileHistoryCollection) {
@@ -43,6 +44,9 @@ export function toMobileHistoryItem(collection: MobileHistoryCollection) {
     owner_address: collection.can.ownerAddress || '',
     nominal: Number(collection.nominal),
     collected_at: collection.collectedAt,
+    period: collection.assignment
+      ? `${collection.assignment.periodYear}-${String(collection.assignment.periodMonth).padStart(2, '0')}`
+      : undefined,
     condition: collection.can.condition ?? 'AKTIF',
     sync_status: collection.syncStatus,
     submit_sequence: collection.submitSequence,
@@ -197,7 +201,10 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
             eq(schema.collections.syncStatus, 'COMPLETED'),
             latestCollectionCondition
           ),
-          with: { can: { columns: { qrCode: true, ownerName: true, ownerAddress: true, condition: true } } },
+          with: {
+            can: { columns: { qrCode: true, ownerName: true, ownerAddress: true, condition: true } },
+            assignment: { columns: { periodYear: true, periodMonth: true } },
+          },
           orderBy: [desc(schema.collections.collectedAt)],
           offset: skip,
           limit,

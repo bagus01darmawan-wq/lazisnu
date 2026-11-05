@@ -71,7 +71,40 @@ jest.mock('../../src/stores', () => ({
     };
     return selector ? selector(state) : state;
   },
-  useTasksStore: () => ({activeCount: 0, completePeriod: jest.fn()}),
+  useTasksStore: () => ({
+    activeCount: 0,
+    completePeriod: jest.fn(),
+    fetchStats: jest.fn(),
+  }),
+  usePeriodStore: Object.assign(
+    (selector?: (state: unknown) => unknown) => {
+      const state = {
+        context: {
+          current_period: {year: 2026, month: 11},
+          display_period: {year: 2026, month: 10},
+          display_reason: null,
+          unsettled: [],
+        },
+        isLoading: false,
+        refresh: jest.fn().mockResolvedValue(undefined),
+        reset: jest.fn(),
+      };
+      return selector ? selector(state) : state;
+    },
+    {
+      getState: () => ({
+        context: {
+          current_period: {year: 2026, month: 11},
+          display_period: {year: 2026, month: 10},
+          display_reason: null,
+          unsettled: [],
+        },
+        isLoading: false,
+        refresh: jest.fn().mockResolvedValue(undefined),
+        reset: jest.fn(),
+      }),
+    },
+  ),
   useUpdateStore: (selector?: (state: unknown) => unknown) => {
     const state = {checkManually: jest.fn()};
     return selector ? selector(state) : state;
