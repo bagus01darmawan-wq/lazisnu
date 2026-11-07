@@ -92,3 +92,40 @@ export const formatPeriodUpper = (period: string): string => formatPeriod(period
 /** Kunci periode "YYYY-MM" dari komponen tahun/bulan. */
 export const periodKeyOf = (period: {year: number; month: number}): string =>
   `${period.year}-${String(period.month).padStart(2, '0')}`;
+
+/** Format RT/RW kaleng; komponen yang kosong tidak ditampilkan. */
+export const formatRtRw = (rt?: string | null, rw?: string | null): string => {
+  const r = (rt || '').trim();
+  const w = (rw || '').trim();
+  if (r && w) {
+    return `RT ${r} / RW ${w}`;
+  }
+  if (r) {
+    return `RT ${r}`;
+  }
+  if (w) {
+    return `RW ${w}`;
+  }
+  return '';
+};
+
+export interface CanAddressParts {
+  dukuh_name?: string | null;
+  dukuh?: string | null;
+  rt?: string | null;
+  rw?: string | null;
+  owner_address?: string | null;
+}
+
+/**
+ * Alamat kartu kaleng: Dukuh + RT/RW adalah sumber utama. `owner_address`
+ * hanya jaring pengaman untuk data lama yang wilayahnya belum terisi.
+ */
+export const formatCanAddress = (
+  parts: CanAddressParts,
+  fallback = 'Alamat belum tersedia',
+): string => {
+  const dukuh = (parts.dukuh_name || parts.dukuh || '').trim();
+  const region = [dukuh, formatRtRw(parts.rt, parts.rw)].filter(Boolean).join(' · ');
+  return region || (parts.owner_address || '').trim() || fallback;
+};

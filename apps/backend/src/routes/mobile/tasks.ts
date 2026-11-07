@@ -146,7 +146,10 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           ),
           with: {
             can: {
-              columns: { id: true, qrCode: true, ownerName: true, ownerAddress: true, latitude: true, longitude: true, condition: true, isActive: true },
+              columns: { id: true, qrCode: true, ownerName: true, ownerAddress: true, dukuh: true, rt: true, rw: true, latitude: true, longitude: true, condition: true, isActive: true },
+              with: {
+                dukuhDetails: { columns: { name: true } },
+              },
             },
           },
           limit: 10,
@@ -204,6 +207,9 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           qr_code: a.can.qrCode,
           owner_name: a.can.ownerName,
           address: a.can.ownerAddress,
+          dukuh_name: a.can.dukuhDetails?.name || a.can.dukuh || '',
+          rt: a.can.rt,
+          rw: a.can.rw,
           latitude: a.can.latitude,
           longitude: a.can.longitude,
           condition: a.can.condition,
@@ -271,6 +277,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
             orderBy: [desc(schema.canVisits.visitedAt)],
             columns: { id: true, purpose: true, outcome: true, visitedAt: true },
           },
+          dukuhDetails: { columns: { name: true } },
         },
         orderBy: [asc(schema.cans.qrCode)],
       });
@@ -303,6 +310,9 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           qr_code: c.qrCode,
           owner_name: c.ownerName,
           owner_address: c.ownerAddress,
+          dukuh_name: c.dukuhDetails?.name || c.dukuh || '',
+          rt: c.rt,
+          rw: c.rw,
           latitude: c.latitude,
           longitude: c.longitude,
           condition: c.condition,
@@ -470,13 +480,14 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           where: whereClause,
           with: {
             can: {
-              columns: { id: true, qrCode: true, ownerName: true, ownerPhone: true, ownerAddress: true, latitude: true, longitude: true, condition: true, isActive: true },
+              columns: { id: true, qrCode: true, ownerName: true, ownerPhone: true, ownerAddress: true, dukuh: true, rt: true, rw: true, latitude: true, longitude: true, condition: true, isActive: true },
               with: {
                 visits: {
                   columns: { id: true, purpose: true, outcome: true, condition: true, receivedAt: true, visitedAt: true },
                   orderBy: [desc(schema.canVisits.visitedAt)],
                   limit: 1,
                 },
+                dukuhDetails: { columns: { name: true } },
               },
             },
           },
@@ -521,6 +532,9 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         owner_name: a.can.ownerName,
         owner_phone: a.can.ownerPhone,
         owner_address: a.can.ownerAddress,
+        dukuh_name: a.can.dukuhDetails?.name || a.can.dukuh || '',
+        rt: a.can.rt,
+        rw: a.can.rw,
         latitude: a.can.latitude,
         longitude: a.can.longitude,
         condition: a.can.condition,
@@ -717,6 +731,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         where: eq(schema.cans.qrCode, qrCode),
         with: {
           collections: { orderBy: [desc(schema.collections.collectedAt)], limit: 1 },
+          dukuhDetails: { columns: { name: true } },
         },
       });
 
@@ -779,6 +794,9 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         owner_name: can.ownerName,
         owner_phone: can.ownerPhone,
         owner_address: can.ownerAddress,
+        dukuh_name: can.dukuhDetails?.name || can.dukuh || '',
+        rt: can.rt,
+        rw: can.rw,
         latitude: can.latitude ? Number(can.latitude) : undefined,
         longitude: can.longitude ? Number(can.longitude) : undefined,
         last_collection: lastCollection

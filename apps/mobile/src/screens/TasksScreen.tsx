@@ -26,6 +26,7 @@ import {TaskItem, TaskSearchBar} from './tasks';
 import {SegmentedControl} from '../components/ui';
 import {SyncIssuesSheet} from '../components/SyncIssuesSheet';
 import {useTabSwipeSwitch} from '../hooks/useTabSwipeSwitch';
+import {matchesTaskQuery} from '../utils';
 
 type TaskTab = 'aktif' | 'nonaktif';
 
@@ -110,15 +111,7 @@ const TasksScreen: React.FC = () => {
     if (task.condition === CanCondition.NON_AKTIF) {
       return false;
     }
-    const query = searchQuery.toLowerCase().trim();
-    if (!query) {
-      return true;
-    }
-    return (
-      task.owner_name?.toLowerCase().includes(query) ||
-      task.owner_address?.toLowerCase().includes(query) ||
-      task.qr_code?.toLowerCase().includes(query)
-    );
+    return matchesTaskQuery(task, searchQuery);
   });
 
   // Kaleng NON_AKTIF tidak punya assignment asli — bentuk tugas ringkas dari
@@ -127,18 +120,8 @@ const TasksScreen: React.FC = () => {
   // belum, id sintetis dipakai hanya sebagai key React — TaskDetailScreen tahu
   // membedakannya via is_visit_task. Pencarian berlaku sama seperti tab aktif.
   const visitTasks = useMemo<Task[]>(() => {
-    const query = searchQuery.toLowerCase().trim();
     return visitRequired
-      .filter(v => {
-        if (!query) {
-          return true;
-        }
-        return (
-          v.owner_name?.toLowerCase().includes(query) ||
-          v.owner_address?.toLowerCase().includes(query) ||
-          v.qr_code?.toLowerCase().includes(query)
-        );
-      })
+      .filter(v => matchesTaskQuery(v, searchQuery))
       .map(v => ({
         id: v.assignment_id ?? `visit-${v.can_id}`,
         can_id: v.can_id,
@@ -146,6 +129,9 @@ const TasksScreen: React.FC = () => {
         owner_name: v.owner_name,
         owner_phone: '',
         owner_address: v.owner_address ?? '',
+        dukuh_name: v.dukuh_name,
+        rt: v.rt,
+        rw: v.rw,
         latitude: v.latitude,
         longitude: v.longitude,
         condition: CanCondition.NON_AKTIF,

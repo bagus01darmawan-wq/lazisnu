@@ -1,4 +1,4 @@
-import { createCanSchema, createAssignmentSchema } from '../schemas';
+import { createCanSchema, createAssignmentSchema, createOfficerSchema } from '../schemas';
 
 describe('createCanSchema', () => {
   const validBody = {
@@ -91,6 +91,56 @@ describe('createCanSchema', () => {
     const result = createCanSchema.safeParse({
       ...validBody,
       branch_id: 'not-uuid',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('createOfficerSchema', () => {
+  const validBody = {
+    full_name: 'Petugas Baru',
+    phone: '081234567890',
+  };
+
+  it('menerima body minimal tanpa dukuh_id', () => {
+    const result = createOfficerSchema.safeParse(validBody);
+    expect(result.success).toBe(true);
+  });
+
+  it('menerima dukuh_id UUID', () => {
+    const result = createOfficerSchema.safeParse({
+      ...validBody,
+      dukuh_id: '00000000-0000-4000-8000-000000000002',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('menerima dukuh_id kosong (di-preprocess jadi undefined)', () => {
+    const result = createOfficerSchema.safeParse({
+      ...validBody,
+      dukuh_id: '',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.dukuh_id).toBeUndefined();
+    }
+  });
+
+  it('menerima dukuh_id null untuk melepas pemetaan', () => {
+    const result = createOfficerSchema.safeParse({
+      ...validBody,
+      dukuh_id: null,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.dukuh_id).toBeNull();
+    }
+  });
+
+  it('menolak dukuh_id bukan UUID', () => {
+    const result = createOfficerSchema.safeParse({
+      ...validBody,
+      dukuh_id: 'not-uuid',
     });
     expect(result.success).toBe(false);
   });

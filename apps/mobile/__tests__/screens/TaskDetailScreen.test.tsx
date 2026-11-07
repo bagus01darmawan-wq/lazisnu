@@ -10,6 +10,9 @@ const mockTask = {
   owner_name: 'H. Ahmad Fauzi',
   owner_phone: '081234567890',
   owner_address: 'Dukuh Krajan, Paninggaran',
+  dukuh_name: 'KRAJAN',
+  rt: '003',
+  rw: '004',
   period: 'Juli 2026',
   status: 'ACTIVE',
   last_collection: {nominal: 150000},
@@ -113,7 +116,7 @@ describe('TaskDetailScreen — detail penjemputan dari kartu tugas', () => {
     expect(text).toContain('Nomor HP');
     expect(text).toContain('081234567890');
     expect(text).toContain('Alamat');
-    expect(text).toContain('Dukuh Krajan, Paninggaran');
+    expect(text).toContain('KRAJAN · RT 003 / RW 004');
     expect(text).toContain('Periode');
     expect(text).toContain('Penjemputan Terakhir');
     expect(text).toContain('Tidak Dijemput');

@@ -53,6 +53,9 @@ const taskWithAddress = {
   owner_name: 'Ayam Kremes',
   owner_phone: '081234567890',
   owner_address: 'Jl. Merdeka No. 10, Pekalongan',
+  dukuh_name: 'BOJONGIRENG',
+  rt: '001',
+  rw: '001',
   period: 'Juli 2026',
   status: 'ACTIVE',
 };
@@ -61,6 +64,9 @@ const taskWithoutAddress = {
   ...taskWithAddress,
   id: 'assignment-2',
   owner_address: '',
+  dukuh_name: '',
+  rt: null,
+  rw: null,
 };
 
 // ─── Store mocks ─────────────────────────────────────────────────────────────
@@ -236,14 +242,14 @@ const findTextInTree = (tree: renderer.ReactTestRenderer, text: string): boolean
 // 1. Fallback alamat — CollectionScreen kartu donor
 // ─────────────────────────────────────────────────────────────────────────────
 describe('CollectionScreen — fallback alamat kartu donor', () => {
-  it('menampilkan alamat asli jika tersedia', () => {
+  it('menampilkan Dukuh + RT/RW sebagai alamat utama', () => {
     const tree = render(
       <CollectionScreen navigation={makeNav()} route={{params: {task: taskWithAddress}} as any} />,
     );
-    expect(findTextInTree(tree, 'Jl. Merdeka No. 10, Pekalongan')).toBe(true);
+    expect(findTextInTree(tree, 'BOJONGIRENG · RT 001 / RW 001')).toBe(true);
   });
 
-  it('menampilkan "Alamat belum tersedia" jika owner_address kosong', () => {
+  it('menampilkan "Alamat belum tersedia" jika wilayah dan owner_address kosong', () => {
     const tree = render(
       <CollectionScreen
         navigation={makeNav()}
@@ -388,6 +394,9 @@ describe('HistoryScreen — modal Koreksi', () => {
       qr_code: 'LAZ-PNG-25-00009-533',
       owner_name: 'Ayam Kremes',
       owner_address: 'Jl. Merdeka No. 10',
+      dukuh_name: 'BOJONGIRENG',
+      rt: '001',
+      rw: '002',
     },
   };
 

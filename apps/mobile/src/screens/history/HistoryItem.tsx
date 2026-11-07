@@ -5,7 +5,7 @@ import Animated, {FadeInUp, Layout as AnimatedLayout} from 'react-native-reanima
 import type {CanCondition, Collection} from '@lazisnu/shared-types';
 import {AppCard} from '../../components/ui';
 import {Colors, Radius, Spacing, Typography} from '../../theme';
-import {formatCurrency, formatDate} from '../../utils';
+import {formatCanAddress, formatCurrency, formatDate} from '../../utils';
 
 export interface HistoryItemProps {
   item: Collection;
@@ -92,7 +92,7 @@ export const HistoryItem = memo(
                 {item.can?.owner_name || 'Donatur'}
               </Text>
               <Text style={styles.ownerAddress} numberOfLines={2}>
-                {item.can?.owner_address || 'Alamat tidak tersedia'}
+                {formatCanAddress(item.can ?? {}, 'Alamat tidak tersedia')}
               </Text>
             </View>
             <Icon

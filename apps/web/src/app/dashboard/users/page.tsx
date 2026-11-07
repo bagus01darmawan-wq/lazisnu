@@ -51,14 +51,21 @@ interface OfficerExtended {
   photoUrl?: string;
   districtId: string;
   branchId: string;
+  dukuhId?: string | null;
   assignedZone?: string;
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
   branch?: { id: string; name: string; code?: string; districtId?: string } | null;
+  dukuh?: { id: string; name: string } | null;
 }
 
 interface Branch {
+  id: string;
+  name: string;
+}
+
+interface Dukuh {
   id: string;
   name: string;
 }
@@ -81,6 +88,7 @@ const officerSchema = z.object({
   full_name: z.string().min(1, 'Nama lengkap wajib diisi'),
   phone: z.string().min(10, 'Nomor HP minimal 10 digit'),
   branch_id: z.string().min(1, 'Pilih ranting').optional(),
+  dukuh_id: z.string().optional(),
 });
 
 type OfficerFormValues = z.infer<typeof officerSchema>;
@@ -113,23 +121,41 @@ export default function UsersPage() {
   const [editingOfficer, setEditingOfficer] = useState<OfficerExtended | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [dukuhs, setDukuhs] = useState<Dukuh[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const { user } = useAuthStore();
   const router = useRouter();
 
-  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<OfficerFormValues>({
+  const { register, handleSubmit, reset, setValue, getValues, setError, clearErrors, watch, formState: { errors } } = useForm<OfficerFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(officerSchema as any),
   });
 
   // eslint-disable-next-line react-hooks/incompatible-library
   const watchBranchId = watch('branch_id');
+  const watchDukuhId = watch('dukuh_id');
+  const effectiveBranchId = editingOfficer?.branchId || watchBranchId || user?.branchId || '';
 
   const fetchBranches = async () => {
     try {
       const response = await api.get('/admin/branches') as unknown as ApiResponse<Branch[]>;
       if (response.success && response.data) setBranches(response.data);
     } catch {}
+  };
+
+  const fetchDukuhs = async (branchId: string) => {
+    if (!branchId) {
+      setDukuhs([]);
+      return;
+    }
+    try {
+      const response = await api.get('/admin/dukuhs', {
+        params: { branch_id: branchId },
+      }) as unknown as ApiResponse<Dukuh[]>;
+      setDukuhs(response.success && response.data ? response.data : []);
+    } catch {
+      setDukuhs([]);
+    }
   };
 
   const fetchOfficers = async () => {
@@ -165,7 +191,23 @@ export default function UsersPage() {
     if (user?.role === 'ADMIN_KECAMATAN') void fetchBranches();
   }, [user]);
 
+  useEffect(() => {
+    if (!isModalOpen) return;
+    void fetchDukuhs(effectiveBranchId);
+  }, [isModalOpen, effectiveBranchId]);
+
+  useEffect(() => {
+    if (!isModalOpen || dukuhs.length !== 1) return;
+    if (!getValues('dukuh_id')) {
+      setValue('dukuh_id', dukuhs[0].id);
+    }
+  }, [isModalOpen, dukuhs, getValues, setValue]);
+
   const onSubmit = async (values: OfficerFormValues) => {
+    if (dukuhs.length > 0 && !values.dukuh_id) {
+      setError('dukuh_id', { message: 'Dukuh wajib dipilih' });
+      return;
+    }
     setSubmitting(true);
     try {
       if (editingOfficer) {
@@ -201,6 +243,7 @@ export default function UsersPage() {
     setValue('full_name', officer.fullName);
     setValue('phone', officer.phone);
     setValue('branch_id', officer.branchId);
+    setValue('dukuh_id', officer.dukuhId ?? '');
     setIsModalOpen(true);
   };
 
@@ -375,10 +418,14 @@ export default function UsersPage() {
       ),
       cell: ({ row }) => {
         const branchName = row.original.branch?.name || 'Belum diatur';
+        const dukuhName = row.original.dukuh?.name;
         return (
           <div className="flex flex-col">
             <span className="text-[10px] font-bold uppercase tracking-widest text-[#EAD19B]/60">
               {branchName.replace(/ranting/gi, '').trim()}
+            </span>
+            <span className={`text-[10px] font-medium tracking-tight ${dukuhName ? 'text-[#F4F1EA]/40' : 'text-amber-400/70'}`}>
+              {dukuhName || 'Belum dipetakan'}
             </span>
           </div>
         );
@@ -694,17 +741,51 @@ export default function UsersPage() {
               <label className="text-sm font-semibold text-[#F4F1EA]/60">Pilih Ranting</label>
               <GlassSelect
                 value={watchBranchId || ''}
-                onChange={(val) => setValue('branch_id', val)}
+                onChange={(val) => {
+                  setValue('branch_id', val);
+                  setValue('dukuh_id', '');
+                  setDukuhs([]);
+                  clearErrors('dukuh_id');
+                }}
                 placeholder="-- Pilih Ranting --"
                 options={branches.map((b: Branch) => ({
                   label: b.name,
                   value: b.id
                 }))}
                 error={errors.branch_id?.message}
+                disabled={!!editingOfficer}
                 searchable
               />
             </div>
           )}
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-[#F4F1EA]/60">Dukuh</label>
+            <GlassSelect
+              value={watchDukuhId || ''}
+              onChange={(val) => {
+                setValue('dukuh_id', val);
+                clearErrors('dukuh_id');
+              }}
+              placeholder={
+                !effectiveBranchId
+                  ? 'Pilih ranting terlebih dahulu'
+                  : dukuhs.length > 0
+                    ? '-- Pilih Dukuh --'
+                    : 'Ranting belum memiliki Dukuh'
+              }
+              options={dukuhs.map((d: Dukuh) => ({
+                label: d.name,
+                value: d.id
+              }))}
+              error={errors.dukuh_id?.message}
+              disabled={dukuhs.length === 0}
+            />
+            {dukuhs.length === 0 && effectiveBranchId && (
+              <p className="text-xs text-[#F4F1EA]/40">
+                Ranting ini belum memiliki Dukuh, jadi petugas disimpan tanpa pemetaan.
+              </p>
+            )}
+          </div>
           <div className="text-xs text-[#F4F1EA]/60 bg-white/3 p-4 rounded-xl border border-white/10">
              <div className="flex gap-2 items-center mb-1 font-bold text-[#F4F1EA]">
                <Shield size={14} className="text-[#EAD19B]" />

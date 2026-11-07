@@ -27,6 +27,9 @@ export async function getOfficerDetailWithStats(
       district: {
         columns: { id: true, name: true, code: true },
       },
+      dukuh: {
+        columns: { id: true, name: true },
+      },
     },
   });
 

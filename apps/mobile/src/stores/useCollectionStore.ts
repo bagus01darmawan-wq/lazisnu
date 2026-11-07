@@ -131,7 +131,10 @@ export const useCollectionStore = create<CollectionState>(set => ({
         can: {
           qr_code: task?.qr_code || 'Offline',
           owner_name: task?.owner_name || 'Kaleng Masukan QR',
-          owner_address: task?.owner_address || '-',
+          owner_address: task?.owner_address || '',
+          dukuh_name: task?.dukuh_name,
+          rt: task?.rt,
+          rw: task?.rw,
         },
       };
       useCollectionsStore.getState().addOptimisticCollection(newCollection);
@@ -223,6 +226,9 @@ function mapHistoryToCollection(item: HistoryItem): Collection {
       qr_code: item.qr_code,
       owner_name: item.owner_name,
       owner_address: item.owner_address,
+      dukuh_name: item.dukuh_name,
+      rt: item.rt,
+      rw: item.rw,
     },
   };
 }
@@ -253,7 +259,10 @@ export function mergeCollectionsWithQueues(
       can: {
         qr_code: task?.qr_code || 'Offline',
         owner_name: task?.owner_name || 'Kaleng Masukan QR',
-        owner_address: task?.owner_address || '-',
+        owner_address: task?.owner_address || '',
+        dukuh_name: task?.dukuh_name,
+        rt: task?.rt,
+        rw: task?.rw,
       },
     };
   };

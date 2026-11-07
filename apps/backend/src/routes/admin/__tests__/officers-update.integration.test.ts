@@ -33,6 +33,9 @@ const NOMOR = {
 const IDS = {
   district: randomUUID(),
   branch: randomUUID(),
+  branchLain: randomUUID(),
+  dukuh: randomUUID(),
+  dukuhLain: randomUUID(),
   adminUser: randomUUID(),
   userA: randomUUID(),
   userB: randomUUID(),
@@ -53,12 +56,25 @@ describe('Edit nomor HP petugas — sinkronisasi users & pesan bentrok', () => {
       regionCode: '33',
     });
 
-    await db.insert(schema.branches).values({
-      id: IDS.branch,
-      districtId: IDS.district,
-      code: BRANCH_CODE,
-      name: 'Ranting Edit Nomor',
-    });
+    await db.insert(schema.branches).values([
+      {
+        id: IDS.branch,
+        districtId: IDS.district,
+        code: BRANCH_CODE,
+        name: 'Ranting Edit Nomor',
+      },
+      {
+        id: IDS.branchLain,
+        districtId: IDS.district,
+        code: `${BRANCH_CODE}L`,
+        name: 'Ranting Lain Edit Nomor',
+      },
+    ]);
+
+    await db.insert(schema.dukuhs).values([
+      { id: IDS.dukuh, branchId: IDS.branch, name: 'Dukuh Edit' },
+      { id: IDS.dukuhLain, branchId: IDS.branchLain, name: 'Dukuh Lain Edit' },
+    ]);
 
     await db.insert(schema.users).values([
       {
@@ -144,7 +160,12 @@ describe('Edit nomor HP petugas — sinkronisasi users & pesan bentrok', () => {
     }
     await db.delete(schema.officers).where(eq(schema.officers.branchId, IDS.branch));
     await db.delete(schema.users).where(eq(schema.users.branchId, IDS.branch));
-    await db.delete(schema.branches).where(eq(schema.branches.id, IDS.branch));
+    await db.delete(schema.dukuhs).where(
+      inArray(schema.dukuhs.branchId, [IDS.branch, IDS.branchLain]),
+    );
+    await db.delete(schema.branches).where(
+      inArray(schema.branches.id, [IDS.branch, IDS.branchLain]),
+    );
     await db.delete(schema.districts).where(eq(schema.districts.id, IDS.district));
     await closeApp();
   });
@@ -215,10 +236,63 @@ describe('Edit nomor HP petugas — sinkronisasi users & pesan bentrok', () => {
         full_name: 'Petugas Pemakai Nomor Lama',
         phone: NOMOR.petugasA,
         branch_id: IDS.branch,
+        dukuh_id: IDS.dukuh,
       },
     });
 
     expect(res.statusCode).toBe(201);
+  });
+
+  it('mengisi dukuh_id petugas yang belum dipetakan', async () => {
+    const app = await getApp();
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/v1/admin/officers/${IDS.officerB}`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { dukuh_id: IDS.dukuh },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.dukuh_id).toBe(IDS.dukuh);
+
+    const officer = await db.query.officers.findFirst({
+      where: eq(schema.officers.id, IDS.officerB),
+    });
+    expect(officer?.dukuhId).toBe(IDS.dukuh);
+  });
+
+  it('melepas dukuh_id dengan nilai null', async () => {
+    const app = await getApp();
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/v1/admin/officers/${IDS.officerB}`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { dukuh_id: null },
+    });
+
+    expect(res.statusCode).toBe(200);
+
+    const officer = await db.query.officers.findFirst({
+      where: eq(schema.officers.id, IDS.officerB),
+    });
+    expect(officer?.dukuhId).toBeNull();
+  });
+
+  it('menolak Dukuh dari ranting lain saat edit', async () => {
+    const app = await getApp();
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/v1/admin/officers/${IDS.officerB}`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { dukuh_id: IDS.dukuhLain },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('VALIDATION_ERROR');
+    expect(res.json().error.message).toContain('bukan milik ranting');
   });
 
   it('input tidak valid dijawab 400, bukan kesalahan server', async () => {

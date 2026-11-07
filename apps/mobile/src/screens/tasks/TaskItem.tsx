@@ -6,7 +6,7 @@ import type {Task} from '@lazisnu/shared-types';
 import {CanCondition} from '@lazisnu/shared-types';
 import {AppCard, StatusBadge} from '../../components/ui';
 import {Colors, Radius, Spacing, Typography} from '../../theme';
-import {formatCurrency, formatPeriod} from '../../utils';
+import {formatCanAddress, formatCurrency, formatPeriod} from '../../utils';
 
 export interface TaskItemProps {
   item: Task;
@@ -37,7 +37,7 @@ export const TaskItem = memo(({item, index, onCopy, onPress, onLongPressDrag}: T
               {item.owner_name}
             </Text>
             <Text style={styles.ownerAddress} numberOfLines={2}>
-              {item.owner_address || 'Alamat belum tersedia'}
+              {formatCanAddress(item)}
             </Text>
           </View>
           <StatusBadge

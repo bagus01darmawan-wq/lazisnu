@@ -39,6 +39,7 @@ interface OfficerDetail {
   updatedAt?: string;
   branch?: { id: string; name: string; code: string } | null;
   district?: { id: string; name: string; code: string } | null;
+  dukuh?: { id: string; name: string } | null;
   stats: {
     totalCollections: number;
     totalAmount: number;

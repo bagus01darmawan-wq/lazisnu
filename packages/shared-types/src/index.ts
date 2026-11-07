@@ -413,6 +413,10 @@ export interface Collection {
     qr_code: string;
     owner_name: string;
     owner_address: string;
+    /** Wilayah administratif kaleng; dipakai kartu mobile untuk alamat. */
+    dukuh_name?: string;
+    rt?: string | null;
+    rw?: string | null;
   };
   server_timestamp?: string;
   device_info?: DeviceInfo;
@@ -465,6 +469,10 @@ export interface Task {
   owner_name: string;
   owner_phone: string;
   owner_address: string;
+  /** Wilayah administratif kaleng (diutamakan untuk tampilan alamat). */
+  dukuh_name?: string;
+  rt?: string | null;
+  rw?: string | null;
   latitude?: number;
   longitude?: number;
   /** Kondisi kaleng (B2): menentukan perlakuan — NON_AKTIF butuh kunjungan, bukan penjemputan. */
@@ -505,6 +513,10 @@ export interface VisitTask {
   qr_code: string;
   owner_name: string;
   owner_address: string;
+  /** Wilayah administratif kaleng (diutamakan untuk tampilan alamat). */
+  dukuh_name?: string;
+  rt?: string | null;
+  rw?: string | null;
   latitude?: number;
   longitude?: number;
   condition: CanCondition;
@@ -732,6 +744,9 @@ export interface DashboardTaskItem {
   qr_code: string;
   owner_name: string;
   address: string;
+  dukuh_name?: string;
+  rt?: string | null;
+  rw?: string | null;
   latitude?: number;
   longitude?: number;
   assigned_at: string;
@@ -810,6 +825,9 @@ export interface HistoryItem {
   qr_code: string;
   owner_name: string;
   owner_address: string;
+  dukuh_name?: string;
+  rt?: string | null;
+  rw?: string | null;
   nominal: number;
   collected_at: string;
   /** Periode assignment ("YYYY-MM"), bukan bulan collected_at. */

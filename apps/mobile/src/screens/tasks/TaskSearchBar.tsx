@@ -18,7 +18,7 @@ export const TaskSearchBar: React.FC<TaskSearchBarProps> = ({
     <View style={styles.searchContainer}>
       <Icon name={'magnify'} size={ComponentSizes.fieldIconSize} color={Colors.brand.deepGreen} />
       <TextInput
-        placeholder={'Cari nama donatur atau alamat...'}
+        placeholder={'Cari nama, alamat, atau RT/RW...'}
         placeholderTextColor={Colors.brand.deepGreen + '70'}
         value={searchQuery}
         onChangeText={onChangeText}

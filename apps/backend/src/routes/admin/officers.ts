@@ -60,6 +60,9 @@ export async function officersRoutes(fastify: FastifyInstance) {
           with: {
             branch: {
               columns: { name: true }
+            },
+            dukuh: {
+              columns: { id: true, name: true }
             }
           },
         }),
@@ -130,6 +133,28 @@ export async function officersRoutes(fastify: FastifyInstance) {
       const branchRes = await db.query.branches.findFirst({ where: eq(schema.branches.id, targetBranchId) });
       if (!branchRes) return sendError(reply, 404, 'NOT_FOUND', 'Ranting tidak ditemukan');
 
+      // Dukuh wajib dipilih bila ranting sudah punya Dukuh. Ranting tanpa
+      // Dukuh tetap boleh membuat petugas (banner yang akan menandainya).
+      const dukuhCount = await db.$count(
+        schema.dukuhs,
+        eq(schema.dukuhs.branchId, targetBranchId),
+      );
+      if (dukuhCount > 0 && !body.dukuh_id) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Dukuh wajib dipilih untuk ranting ini');
+      }
+      if (body.dukuh_id) {
+        const dukuh = await db.query.dukuhs.findFirst({
+          where: eq(schema.dukuhs.id, body.dukuh_id),
+          columns: { id: true, branchId: true },
+        });
+        if (!dukuh) {
+          return sendError(reply, 400, 'VALIDATION_ERROR', 'Dukuh tidak ditemukan');
+        }
+        if (dukuh.branchId !== targetBranchId) {
+          return sendError(reply, 400, 'VALIDATION_ERROR', 'Dukuh bukan milik ranting tujuan');
+        }
+      }
+
       if (user.role === 'ADMIN_KECAMATAN' && !user.districtId) {
         return sendError(reply, 400, 'MISSING_DISTRICT', 'Data wilayah admin tidak ditemukan. Silakan coba login ulang.');
       }
@@ -176,6 +201,7 @@ export async function officersRoutes(fastify: FastifyInstance) {
           phone: body.phone,
           districtId: user.districtId!,
           branchId: targetBranchId,
+          dukuhId: body.dukuh_id ?? null,
         }).returning();
 
         return { insertedOfficer: newOfficer };
@@ -228,11 +254,27 @@ export async function officersRoutes(fastify: FastifyInstance) {
       if (user.role === 'ADMIN_KECAMATAN' && existing.districtId !== user.districtId) {
         return sendError(reply, 403, 'FORBIDDEN', 'Akses ditolak');
       }
+
+      if (body.dukuh_id) {
+        const dukuh = await db.query.dukuhs.findFirst({
+          where: eq(schema.dukuhs.id, body.dukuh_id),
+          columns: { id: true, branchId: true },
+        });
+        if (!dukuh) {
+          return sendError(reply, 400, 'VALIDATION_ERROR', 'Dukuh tidak ditemukan');
+        }
+        if (dukuh.branchId !== existing.branchId) {
+          return sendError(reply, 400, 'VALIDATION_ERROR', 'Dukuh bukan milik ranting petugas');
+        }
+      }
+      const nextDukuhId = body.dukuh_id === undefined ? existing.dukuhId : body.dukuh_id;
+
       const [updated] = await db.transaction(async (tx) => {
         const updatedOfficers = await tx.update(schema.officers).set({
           fullName: body.full_name ?? existing.fullName,
           phone: body.phone ?? existing.phone,
-          isActive: body.is_active !== undefined ? body.is_active : existing.isActive
+          isActive: body.is_active !== undefined ? body.is_active : existing.isActive,
+          dukuhId: nextDukuhId,
         }).where(eq(schema.officers.id, id)).returning();
 
         if (body.is_active !== undefined) {

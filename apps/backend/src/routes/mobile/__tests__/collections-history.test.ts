@@ -15,6 +15,10 @@ describe('mobile collection history contract', () => {
         qrCode: 'QR-001',
         ownerName: 'Donatur',
         ownerAddress: 'Alamat',
+        dukuh: 'DUKUH LAMA',
+        dukuhDetails: { name: 'BOJONGIRENG' },
+        rt: '001',
+        rw: '002',
         condition: 'HILANG',
       },
     });
@@ -28,6 +32,9 @@ describe('mobile collection history contract', () => {
       nominal: 75000,
       sync_status: 'COMPLETED',
       submit_sequence: 1,
+      dukuh_name: 'BOJONGIRENG',
+      rt: '001',
+      rw: '002',
     });
   });
 });

@@ -17,6 +17,7 @@ interface ProfileCardProps {
     createdAt?: string;
     branch?: { name: string } | null;
     district?: { name: string } | null;
+    dukuh?: { id: string; name: string } | null;
   };
 }
 
@@ -124,7 +125,7 @@ export function ProfileCard({ officer }: ProfileCardProps) {
                 </div>
                 <div>
                   <p className="text-[10px] font-bold text-[#F4F1EA]/40 uppercase tracking-wider">Wilayah Tugas</p>
-                  <p className="text-sm font-bold text-[#F4F1EA]">{officer.assignedZone || '-'}</p>
+                  <p className="text-sm font-bold text-[#F4F1EA]">{officer.dukuh?.name || officer.assignedZone || '-'}</p>
                 </div>
               </div>
 

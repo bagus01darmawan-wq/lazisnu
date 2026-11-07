@@ -30,6 +30,10 @@ export const createOfficerSchema = z.object({
   phone: z.string().min(10).max(20),
   assigned_zone: z.string().optional(),
   photo_url: z.string().url().optional(),
+  dukuh_id: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.string().uuid().optional().nullable(),
+  ),
 });
 
 export const updateOfficerSchema = createOfficerSchema.partial().extend({

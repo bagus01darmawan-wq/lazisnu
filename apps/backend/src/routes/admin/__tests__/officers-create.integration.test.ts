@@ -19,6 +19,9 @@ const BRANCH_CODE = `EK${TAG}`;
 const IDS = {
   district: randomUUID(),
   branch: randomUUID(),
+  branchLain: randomUUID(),
+  dukuh: randomUUID(),
+  dukuhLain: randomUUID(),
   adminUser: randomUUID(),
   officerUser1: randomUUID(),
   officerUser2: randomUUID(),
@@ -39,12 +42,25 @@ describe('Pembuatan petugas baru — kode otomatis', () => {
       regionCode: '33',
     });
 
-    await db.insert(schema.branches).values({
-      id: IDS.branch,
-      districtId: IDS.district,
-      code: BRANCH_CODE,
-      name: 'Ranting Kode Petugas',
-    });
+    await db.insert(schema.branches).values([
+      {
+        id: IDS.branch,
+        districtId: IDS.district,
+        code: BRANCH_CODE,
+        name: 'Ranting Kode Petugas',
+      },
+      {
+        id: IDS.branchLain,
+        districtId: IDS.district,
+        code: `${BRANCH_CODE}L`,
+        name: 'Ranting Lain Kode Petugas',
+      },
+    ]);
+
+    await db.insert(schema.dukuhs).values([
+      { id: IDS.dukuh, branchId: IDS.branch, name: 'Dukuh Utama' },
+      { id: IDS.dukuhLain, branchId: IDS.branchLain, name: 'Dukuh Lain' },
+    ]);
 
     await db.insert(schema.users).values([
       {
@@ -131,7 +147,12 @@ describe('Pembuatan petugas baru — kode otomatis', () => {
     }
     await db.delete(schema.officers).where(eq(schema.officers.branchId, IDS.branch));
     await db.delete(schema.users).where(eq(schema.users.branchId, IDS.branch));
-    await db.delete(schema.branches).where(eq(schema.branches.id, IDS.branch));
+    await db.delete(schema.dukuhs).where(
+      inArray(schema.dukuhs.branchId, [IDS.branch, IDS.branchLain]),
+    );
+    await db.delete(schema.branches).where(
+      inArray(schema.branches.id, [IDS.branch, IDS.branchLain]),
+    );
     await db.delete(schema.districts).where(eq(schema.districts.id, IDS.district));
     await closeApp();
   });
@@ -147,6 +168,7 @@ describe('Pembuatan petugas baru — kode otomatis', () => {
         full_name: 'Petugas Baru Satu',
         phone: `6287301${TAG}`,
         branch_id: IDS.branch,
+        dukuh_id: IDS.dukuh,
       },
     });
 
@@ -163,6 +185,7 @@ describe('Pembuatan petugas baru — kode otomatis', () => {
         full_name: 'Petugas Baru Dua',
         phone: `6287302${TAG}`,
         branch_id: IDS.branch,
+        dukuh_id: IDS.dukuh,
       },
     });
 
@@ -181,6 +204,7 @@ describe('Pembuatan petugas baru — kode otomatis', () => {
         full_name: 'Petugas Nomor Kembar',
         phone: `6287201${TAG}`,
         branch_id: IDS.branch,
+        dukuh_id: IDS.dukuh,
       },
     });
 
@@ -213,5 +237,68 @@ describe('Pembuatan petugas baru — kode otomatis', () => {
     });
     expect(officer?.phone).toBe(phoneBaru);
     expect(user?.phone).toBe(phoneBaru);
+  });
+
+  it('menyimpan dukuh_id pada petugas baru', async () => {
+    const app = await getApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/officers',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        full_name: 'Petugas Berdukuh',
+        phone: `6287303${TAG}`,
+        branch_id: IDS.branch,
+        dukuh_id: IDS.dukuh,
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json().data.dukuh_id).toBe(IDS.dukuh);
+
+    const row = await db.query.officers.findFirst({
+      where: eq(schema.officers.id, res.json().data.id),
+    });
+    expect(row?.dukuhId).toBe(IDS.dukuh);
+  });
+
+  it('menolak membuat petugas tanpa Dukuh saat ranting punya Dukuh', async () => {
+    const app = await getApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/officers',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        full_name: 'Petugas Tanpa Dukuh',
+        phone: `6287304${TAG}`,
+        branch_id: IDS.branch,
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('VALIDATION_ERROR');
+    expect(res.json().error.message).toContain('Dukuh wajib dipilih');
+  });
+
+  it('menolak Dukuh yang berasal dari ranting lain', async () => {
+    const app = await getApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/officers',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        full_name: 'Petugas Dukuh Lain',
+        phone: `6287305${TAG}`,
+        branch_id: IDS.branch,
+        dukuh_id: IDS.dukuhLain,
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('VALIDATION_ERROR');
+    expect(res.json().error.message).toContain('bukan milik ranting');
   });
 });

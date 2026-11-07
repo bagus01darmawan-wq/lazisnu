@@ -4,7 +4,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import type {Task} from '@lazisnu/shared-types';
 import {AppCard} from '../../components/ui';
 import {Colors, Spacing, Typography} from '../../theme';
-import {formatCurrency, formatPeriod} from '../../utils';
+import {formatCanAddress, formatCurrency, formatPeriod} from '../../utils';
 
 export interface KalengInfoCardProps {
   task: Task;
@@ -56,7 +56,7 @@ export const KalengInfoCard: React.FC<KalengInfoCardProps> = ({task, showPeriod 
         <Icon name="map-marker" size={20} color={Colors.brand.emerald} />
         <View style={styles.detailContent}>
           <Text style={styles.detailLabel}>Alamat</Text>
-          <Text style={styles.detailValue}>{task.owner_address || 'Alamat belum tersedia'}</Text>
+          <Text style={styles.detailValue}>{formatCanAddress(task)}</Text>
         </View>
       </View>
 

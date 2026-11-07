@@ -16,7 +16,7 @@ import {collectionService} from '../services/api';
 import {AppButton, AppCard, AppHeader, AppTextInput, SegmentedControl} from '../components/ui';
 import {CanCondition} from '@lazisnu/shared-types';
 import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
-import {formatCurrency, formatInputCurrency} from '../utils';
+import {formatCanAddress, formatCurrency, formatInputCurrency} from '../utils';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Collection'>;
 
@@ -235,7 +235,7 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
             <View style={styles.detailContent}>
               <Text style={styles.detailLabel}>Alamat</Text>
               <Text style={styles.detailValue}>
-                {task.owner_address || 'Alamat belum tersedia'}
+                {formatCanAddress(task)}
               </Text>
             </View>
           </View>

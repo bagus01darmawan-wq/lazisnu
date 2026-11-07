@@ -46,7 +46,10 @@ export function composeUncollectedOffline(
         qr_code: action.qr_code ?? '',
         owner_name: action.owner_name || action.qr_code || 'Kaleng (offline)',
         owner_phone: '',
-        owner_address: 'Alamat belum tersedia',
+        owner_address: '',
+        dukuh_name: cached?.dukuh_name,
+        rt: cached?.rt,
+        rw: cached?.rw,
         status: 'UNCOLLECTED' as Task['status'],
         assigned_at: action.created_at,
         // Periode assignment, bukan bulan aksi di perangkat.

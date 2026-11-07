@@ -1,8 +1,10 @@
 import {
+  formatCanAddress,
   formatCurrency,
   formatInputCurrency,
   formatDate,
   formatPeriod,
+  formatRtRw,
 } from '../../src/utils/format';
 
 describe('format utils', () => {
@@ -83,6 +85,50 @@ describe('format utils', () => {
       expect(formatDate('invalid-date')).toBe('');
       // @ts-expect-error test null input
       expect(formatDate(null)).toBe('');
+    });
+  });
+
+  describe('formatRtRw', () => {
+    it('menggabungkan RT dan RW', () => {
+      expect(formatRtRw('001', '002')).toBe('RT 001 / RW 002');
+    });
+
+    it('menampilkan komponen yang ada saja', () => {
+      expect(formatRtRw('001', null)).toBe('RT 001');
+      expect(formatRtRw('', '002')).toBe('RW 002');
+      expect(formatRtRw(null, null)).toBe('');
+    });
+  });
+
+  describe('formatCanAddress', () => {
+    it('mengutamakan Dukuh + RT/RW', () => {
+      expect(
+        formatCanAddress({
+          dukuh_name: 'BOJONGIRENG',
+          rt: '001',
+          rw: '002',
+          owner_address: 'Jl. Merdeka No. 10',
+        }),
+      ).toBe('BOJONGIRENG · RT 001 / RW 002');
+    });
+
+    it('memakai dukuh legacy bila relasi Dukuh kosong', () => {
+      expect(formatCanAddress({dukuh: 'BOJONGIRENG'})).toBe('BOJONGIRENG');
+    });
+
+    it('tetap menampilkan RT/RW tanpa Dukuh', () => {
+      expect(formatCanAddress({rt: '001', rw: '002'})).toBe('RT 001 / RW 002');
+    });
+
+    it('memakai owner_address hanya bila wilayah kosong', () => {
+      expect(formatCanAddress({owner_address: 'Jl. Merdeka No. 10'})).toBe(
+        'Jl. Merdeka No. 10',
+      );
+    });
+
+    it('memakai fallback saat semua kosong', () => {
+      expect(formatCanAddress({})).toBe('Alamat belum tersedia');
+      expect(formatCanAddress({}, 'Alamat tidak tersedia')).toBe('Alamat tidak tersedia');
     });
   });
 

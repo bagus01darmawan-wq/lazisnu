@@ -28,6 +28,10 @@ type MobileHistoryCollection = {
     qrCode: string | null;
     ownerName: string;
     ownerAddress: string | null;
+    dukuh?: string | null;
+    dukuhDetails?: { name: string | null } | null;
+    rt?: string | null;
+    rw?: string | null;
     condition?: string;
   };
   assignment?: { periodYear: number; periodMonth: number } | null;
@@ -42,6 +46,9 @@ export function toMobileHistoryItem(collection: MobileHistoryCollection) {
     qr_code: collection.can.qrCode || '',
     owner_name: collection.can.ownerName,
     owner_address: collection.can.ownerAddress || '',
+    dukuh_name: collection.can.dukuhDetails?.name || collection.can.dukuh || '',
+    rt: collection.can.rt ?? null,
+    rw: collection.can.rw ?? null,
     nominal: Number(collection.nominal),
     collected_at: collection.collectedAt,
     period: collection.assignment
@@ -202,7 +209,10 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
             latestCollectionCondition
           ),
           with: {
-            can: { columns: { qrCode: true, ownerName: true, ownerAddress: true, condition: true } },
+            can: {
+              columns: { qrCode: true, ownerName: true, ownerAddress: true, dukuh: true, rt: true, rw: true, condition: true },
+              with: { dukuhDetails: { columns: { name: true } } },
+            },
             assignment: { columns: { periodYear: true, periodMonth: true } },
           },
           orderBy: [desc(schema.collections.collectedAt)],
