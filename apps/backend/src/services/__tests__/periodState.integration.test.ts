@@ -113,6 +113,45 @@ describe('periodState — periode berbasis aksi (DB)', () => {
       reason: 'PPK_WAITING_BENDAHARA',
       waiting_for: 'BENDAHARA_RANTING',
     });
+    // Masih ada tugas ACTIVE → banner TTD belum boleh muncul.
+    expect(state.awaiting_signature).toEqual([]);
+  });
+
+  test('semua tugas selesai → banner menunggu bendahara muncul', async () => {
+    await db
+      .update(schema.assignments)
+      .set({ status: 'COMPLETED', completedAt: NOV3 })
+      .where(and(
+        eq(schema.assignments.officerId, officerId),
+        eq(schema.assignments.periodYear, 2026),
+        eq(schema.assignments.periodMonth, 10),
+      ));
+
+    const state = await getPeriodState(officerScope, NOV3);
+    expect(state.unsettled[0]).toMatchObject({ period: '2026-10' });
+    expect(state.awaiting_signature[0]).toMatchObject({
+      period: '2026-10',
+      reason: 'PPK_WAITING_BENDAHARA',
+      waiting_for: 'BENDAHARA_RANTING',
+    });
+  });
+
+  test('semua tugas selesai + BA masih DRAFT → banner menunggu PPK', async () => {
+    await db
+      .update(schema.ppkSubmissions)
+      .set({ status: 'DRAFT', ppkSignerId: null })
+      .where(and(
+        eq(schema.ppkSubmissions.officerId, officerId),
+        eq(schema.ppkSubmissions.periodYear, 2026),
+        eq(schema.ppkSubmissions.periodMonth, 10),
+      ));
+
+    const state = await getPeriodState(officerScope, NOV3);
+    expect(state.awaiting_signature[0]).toMatchObject({
+      period: '2026-10',
+      reason: 'PPK_DRAFT',
+      waiting_for: 'PPK',
+    });
   });
 
   test('gate warn: target November memberi peringatan tanpa menolak', async () => {

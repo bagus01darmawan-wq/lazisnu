@@ -24,6 +24,8 @@ import {
 } from '../../services/cosign';
 import { listPpkBaVersions } from '../../services/baPdfService';
 import { reopenPpkSubmission } from '../../services/reopen';
+import { resolveDisplayPeriod } from '../../services/periodState';
+import { currentOperationalPeriod } from '../../utils/operationalTimeZone';
 
 function actorOf(request: FastifyRequest) {
   const user = request.currentUser!;
@@ -61,9 +63,9 @@ export async function submissionsRoutes(fastify: FastifyInstance) {
         return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
       }
       const query = request.query as { year?: string; month?: string };
-      const now = new Date();
-      const year = query.year ? z.coerce.number().int().min(2020).max(2100).parse(query.year) : now.getFullYear();
-      const month = query.month ? z.coerce.number().int().min(1).max(12).parse(query.month) : now.getMonth() + 1;
+      const display = (await resolveDisplayPeriod(user)) ?? currentOperationalPeriod();
+      const year = query.year ? z.coerce.number().int().min(2020).max(2100).parse(query.year) : display.year;
+      const month = query.month ? z.coerce.number().int().min(1).max(12).parse(query.month) : display.month;
 
       const officer = await db.query.officers.findFirst({
         where: eq(schema.officers.id, officerId),

@@ -1,7 +1,9 @@
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { eq, and, inArray, sql, desc, asc, gte, lte } from 'drizzle-orm';
+import { eq, and, inArray, sql, desc, asc } from 'drizzle-orm';
 import { computeTaskMetrics } from './taskMetrics';
+import { getLatestCollectionCondition } from './collectionSubmission';
+import { currentOperationalPeriod } from '../utils/operationalTimeZone';
 
 export async function getOfficerDetailWithStats(
   officerId: string,
@@ -10,19 +12,11 @@ export async function getOfficerDetailWithStats(
     months?: number[];
   } = {}
 ) {
-  const year = filters.year ?? new Date().getFullYear();
+  const current = currentOperationalPeriod();
+  const year = filters.year ?? current.year;
   const monthList = filters.months && filters.months.length > 0
     ? filters.months
     : Array.from({ length: 12 }, (_, i) => i + 1);
-
-  const startDate = `${year}-${String(monthList[0]).padStart(2, '0')}-01`;
-  const lastMonth = monthList[monthList.length - 1];
-  // Hari terakhir bulan terpilih dihitung dalam UTC (Date.UTC) agar tidak
-  // bergeser mundur sehari oleh konversi `toISOString` (WIB UTC+7: 31 Okt →
-  // "30 Okt"). Batas atas pakai akhir hari 23:59:59.999 supaya jemputan pada
-  // hari terakhir ikut terhitung — collected_at bertipe timestamp, bukan date.
-  const lastDayIso = new Date(Date.UTC(year, lastMonth, 0)).toISOString().slice(0, 10);
-  const endDate = `${lastDayIso} 23:59:59.999`;
 
   const officer = await db.query.officers.findFirst({
     where: eq(schema.officers.id, officerId),
@@ -38,9 +32,19 @@ export async function getOfficerDetailWithStats(
 
   if (!officer) return null;
 
-  // Batas tanggal via operator Drizzle + literal sql`...` (bukan perbandingan
-  // mentah di template) — lihat noRawDateInterpolation.test.ts. Literal tetap
-  // string di driver agar semantik identik; gte/lte menolak string polos.
+  // Atribusi uang = periode assignment (bukan bulan collected_at). Versi
+  // submit terbaru saja agar resubmit tidak dihitung ganda.
+  const periodCondition = and(
+    eq(schema.assignments.periodYear, year),
+    inArray(schema.assignments.periodMonth, monthList),
+  );
+  const collectionCondition = and(
+    eq(schema.collections.officerId, officerId),
+    eq(schema.collections.syncStatus, 'COMPLETED'),
+    getLatestCollectionCondition(),
+    periodCondition,
+  );
+
   const [
     collectionStats,
     assignmentStats,
@@ -53,12 +57,8 @@ export async function getOfficerDetailWithStats(
       count: sql<number>`count(*)::int`,
       total: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
     }).from(schema.collections)
-      .where(and(
-        eq(schema.collections.officerId, officerId),
-        eq(schema.collections.syncStatus, 'COMPLETED'),
-        gte(schema.collections.collectedAt, sql`${startDate}`),
-        lte(schema.collections.collectedAt, sql`${endDate}`),
-      )),
+      .innerJoin(schema.assignments, eq(schema.collections.assignmentId, schema.assignments.id))
+      .where(collectionCondition),
 
     // Assignment counts by status
     db.select({
@@ -72,31 +72,29 @@ export async function getOfficerDetailWithStats(
       ))
       .groupBy(schema.assignments.status),
 
-    // Monthly breakdown for selected year
+    // Monthly breakdown for selected year (bucket periode assignment)
     db.select({
-      month: sql<number>`extract(month from ${schema.collections.collectedAt})::int`,
+      month: sql<number>`${schema.assignments.periodMonth}::int`,
       count: sql<number>`count(*)::int`,
       total: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
     }).from(schema.collections)
+      .innerJoin(schema.assignments, eq(schema.collections.assignmentId, schema.assignments.id))
       .where(and(
         eq(schema.collections.officerId, officerId),
         eq(schema.collections.syncStatus, 'COMPLETED'),
-        sql`extract(year from ${schema.collections.collectedAt}) = ${year}`,
+        getLatestCollectionCondition(),
+        eq(schema.assignments.periodYear, year),
       ))
-      .groupBy(sql`extract(month from ${schema.collections.collectedAt})`),
+      .groupBy(schema.assignments.periodMonth),
 
     // Top 10 donors by total nominal
     db.select({
       owner_name: schema.cans.ownerName,
       total: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
     }).from(schema.collections)
+      .innerJoin(schema.assignments, eq(schema.collections.assignmentId, schema.assignments.id))
       .innerJoin(schema.cans, eq(schema.collections.canId, schema.cans.id))
-      .where(and(
-        eq(schema.collections.officerId, officerId),
-        eq(schema.collections.syncStatus, 'COMPLETED'),
-        gte(schema.collections.collectedAt, sql`${startDate}`),
-        lte(schema.collections.collectedAt, sql`${endDate}`),
-      ))
+      .where(collectionCondition)
       .groupBy(schema.cans.ownerName)
       .orderBy(desc(sql`coalesce(sum(${schema.collections.nominal}), 0)`))
       .limit(10),
@@ -106,13 +104,9 @@ export async function getOfficerDetailWithStats(
       owner_name: schema.cans.ownerName,
       total: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
     }).from(schema.collections)
+      .innerJoin(schema.assignments, eq(schema.collections.assignmentId, schema.assignments.id))
       .innerJoin(schema.cans, eq(schema.collections.canId, schema.cans.id))
-      .where(and(
-        eq(schema.collections.officerId, officerId),
-        eq(schema.collections.syncStatus, 'COMPLETED'),
-        gte(schema.collections.collectedAt, sql`${startDate}`),
-        lte(schema.collections.collectedAt, sql`${endDate}`),
-      ))
+      .where(collectionCondition)
       .groupBy(schema.cans.ownerName)
       .orderBy(asc(sql`coalesce(sum(${schema.collections.nominal}), 0)`))
       .limit(10),

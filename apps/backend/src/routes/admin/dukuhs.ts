@@ -8,6 +8,8 @@ import { sendSuccess, sendError, sendInternalError } from '../../utils/response'
 import { AppError, isAppError } from '../../utils/AppError';
 import { Errors } from '../../utils/errorCatalog';
 import { z } from 'zod';
+import { resolveDisplayPeriod } from '../../services/periodState';
+import { currentOperationalPeriod } from '../../utils/operationalTimeZone';
 
 const rantingOrKec = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
 
@@ -53,9 +55,9 @@ export async function dukuhsRoutes(fastify: FastifyInstance) {
       });
 
       if (filter_assigned) {
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = now.getMonth() + 1;
+        const display = (await resolveDisplayPeriod(user)) ?? currentOperationalPeriod();
+        const year = display.year;
+        const month = display.month;
 
         // Find dukuhs that have AT LEAST one active can NOT assigned for this month
         // We do this by finding all active cans in the branch, joined with their current month assignments

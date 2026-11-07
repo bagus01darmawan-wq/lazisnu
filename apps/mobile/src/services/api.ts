@@ -884,6 +884,8 @@ export interface PeriodContextDto {
   display_period: {year: number; month: number};
   display_reason: PeriodPendingReasonDto | null;
   unsettled: PeriodProgressDto[];
+  /** Periode yang pekerjaannya selesai tetapi tanda tangan belum FINAL. */
+  awaiting_signature?: PeriodProgressDto[];
 }
 
 export interface PpkSubmissionDto {

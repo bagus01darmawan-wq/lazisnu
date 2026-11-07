@@ -123,6 +123,39 @@ export function periodLong(year: number, month: number): string {
   return `${BULAN_ID[month]} ${year}`;
 }
 
+export interface BaCollectionRange {
+  start: Date;
+  end: Date;
+}
+
+/**
+ * Rentang tanggal penghimpunan untuk kalimat BA:
+ * - hari sama        → "06 Oktober 2026"
+ * - bulan sama       → "01 s.d 06 Oktober 2026"
+ * - lintas bulan     → "28 Oktober 2026 s.d 05 November 2026"
+ */
+export function collectionRangeLong(start: Date, end: Date): string {
+  const s = wibParts(start);
+  const e = wibParts(end);
+  if (s.mm === e.mm && s.yyyy === e.yyyy) {
+    if (s.dd === e.dd) return `${e.dd} ${e.month} ${e.yyyy}`;
+    return `${s.dd} s.d ${e.dd} ${e.month} ${e.yyyy}`;
+  }
+  return `${s.dd} ${s.month} ${s.yyyy} s.d ${e.dd} ${e.month} ${e.yyyy}`;
+}
+
+function serahTerimaStatement(
+  sub: { periodYear: number; periodMonth: number },
+  total: number,
+  collectionRange?: BaCollectionRange | null,
+): string {
+  const period = periodLong(sub.periodYear, sub.periodMonth);
+  const collectedClause = collectionRange
+    ? `tanggal ${collectionRangeLong(collectionRange.start, collectionRange.end)}`
+    : `pada ${period}`;
+  return `PIHAK PERTAMA telah menyerahkan uang hasil penghimpunan koin NU periode bulan ${period} kepada PIHAK KEDUA sejumlah ${terbilangRupiah(total)} (${formatRupiah(total)}) yang telah dihimpun ${collectedClause}.`;
+}
+
 export const DRAFT_WARNING = 'DRAFT — belum sah';
 
 /**
@@ -157,6 +190,8 @@ export function buildPpkBaText(params: {
   eventAt?: Date;
   /** F7/D-14: nama bendahara penandatangan (tampil di BA, bukan UUID). */
   bendaharaName?: string | null;
+  /** Tanggal penghimpunan (min–max collected_at) untuk kalimat serah terima. */
+  collectionRange?: BaCollectionRange | null;
 }): PpkBaText {
   const { sub, officerName, branchName, aggregateTotal = 0 } = params;
   const draft = sub.status !== 'FINAL';
@@ -191,7 +226,7 @@ export function buildPpkBaText(params: {
       `Jabatan NU Care Lazisnu : Bendahara Ranting`,
       `Alamat : ${branchName}`,
       `Bertindak sebagai pengurus / manajemen NU Care Lazisnu Ranting ${branchName} yang selanjutnya disebut PIHAK KEDUA`,
-      `PIHAK PERTAMA telah menyerahkan uang hasil penghimpunan koin NU kepada PIHAK KEDUA sejumlah ${terbilangRupiah(total)} (${formatRupiah(total)}) yang telah dihimpun pada ${periodLong(sub.periodYear, sub.periodMonth)}.`,
+      serahTerimaStatement(sub, total, params.collectionRange),
       'Angka di atas dihitung otomatis oleh sistem dari per kaleng; tidak ada ketik manual.',
     ],
     signatures: {
@@ -239,6 +274,8 @@ export function buildBranchBaText(params: {
   /** F7/D-14: nama penandatangan (tampil di BA, bukan UUID). */
   rantingName?: string | null;
   mwcName?: string | null;
+  /** Tanggal penghimpunan (min–max collected_at) untuk kalimat serah terima. */
+  collectionRange?: BaCollectionRange | null;
 }): BranchBaText {
   const { sub, branchName, districtName, ppkList } = params;
   const draft = sub.status !== 'FINAL' && sub.status !== 'FINAL_NOL';
@@ -273,7 +310,7 @@ export function buildBranchBaText(params: {
       `Jabatan NU Care Lazisnu : Bendahara MWC`,
       `Alamat : ${branchName}`,
       `Bertindak sebagai pengurus / manajemen NU Care Lazisnu Ranting ${branchName} yang selanjutnya disebut PIHAK KEDUA`,
-      `PIHAK PERTAMA telah menyerahkan uang hasil penghimpunan koin NU kepada PIHAK KEDUA sejumlah ${terbilangRupiah(total)} (${formatRupiah(total)}) yang telah dihimpun pada ${periodLong(sub.periodYear, sub.periodMonth)}.`,
+      serahTerimaStatement(sub, total, params.collectionRange),
       'Angka di atas dihitung otomatis oleh sistem dari per kaleng; tidak ada ketik manual.',
     ],
     signatures: {

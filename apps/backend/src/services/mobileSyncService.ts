@@ -18,6 +18,8 @@ import { Errors } from '../utils/errorCatalog';
 import { isAppError, AppError } from '../utils/AppError';
 import { insertActivityLog } from './auditLogService';
 import { sendWhatsAppNotification } from './whatsapp';
+import { resolveDisplayPeriod, type PeriodRef } from './periodState';
+import { currentOperationalPeriod } from '../utils/operationalTimeZone';
 
 /** Satu item batch dari request mobile */
 export interface BatchCollectionItem {
@@ -84,6 +86,7 @@ async function getOrCreateVisitAssignment(
   tx: Transaction,
   canId: string,
   officerId: string,
+  period: PeriodRef,
 ) {
   const can = await tx.query.cans.findFirst({
     where: eq(schema.cans.id, canId),
@@ -105,8 +108,11 @@ async function getOrCreateVisitAssignment(
   }
 
   const now = new Date();
-  const periodYear = now.getFullYear();
-  const periodMonth = now.getMonth() + 1;
+  // Periode kerja = periode aksi (display_period), bukan bulan kalender saat
+  // sinkronisasi. Tanpa ini, kunjungan NON_AKTIF yang diantrekan akhir bulan
+  // akan membuat tugas di bulan berikutnya dan uangnya pindah periode.
+  const periodYear = period.year;
+  const periodMonth = period.month;
   const where = and(
     eq(schema.assignments.canId, canId),
     eq(schema.assignments.officerId, officerId),
@@ -115,6 +121,11 @@ async function getOrCreateVisitAssignment(
   );
   const existing = await tx.query.assignments.findFirst({ where });
   if (existing) {
+    if (existing.status !== 'ACTIVE') {
+      throw Errors.VALIDATION_ERROR(
+        `Kaleng ini sudah dijemput pada periode ${periodYear}-${String(periodMonth).padStart(2, '0')} (status: ${existing.status}).`,
+      );
+    }
     return existing;
   }
 
@@ -140,12 +151,41 @@ async function getOrCreateVisitAssignment(
 }
 
 /**
+ * Tentukan assignment untuk kunjungan ISI.
+ *
+ * Prioritas: assignment yang SUDAH dikirim klien (dibuat `ensure-assignment`
+ * memakai display_period). Membuat ulang di sini akan memindahkan uang ke
+ * periode lain setiap kali sinkronisasi tertunda melewati pergantian bulan.
+ * Pembuatan on-demand hanya fallback untuk payload lama tanpa assignment sah.
+ */
+async function resolveVisitAssignment(
+  tx: Transaction,
+  item: BatchCollectionItem,
+  officerId: string,
+  period: PeriodRef,
+) {
+  const sent = await tx.query.assignments.findFirst({
+    where: and(
+      eq(schema.assignments.id, item.assignment_id),
+      eq(schema.assignments.canId, item.can_id),
+      eq(schema.assignments.officerId, officerId),
+      eq(schema.assignments.status, 'ACTIVE'),
+    ),
+    columns: { id: true },
+  });
+  if (sent) return sent;
+
+  return getOrCreateVisitAssignment(tx, item.can_id, officerId, period);
+}
+
+/**
  * Proses satu item batch: duplicate check → transaction submit.
  */
 async function processSyncItem(
   item: BatchCollectionItem,
   officerId: string,
   actorUserId: string,
+  visitPeriod: PeriodRef,
 ): Promise<BatchItemResult> {
   // Duplicate check: offline_id sudah ada di DB
   const existing = await db.query.collections.findFirst({
@@ -170,7 +210,7 @@ async function processSyncItem(
   // memindah ke gagal permanen yang terlihat (tidak spam, tidak hilang).
   const collection = await db.transaction(async (tx) => {
     const visitAssignment = item.visit_outcome
-      ? await getOrCreateVisitAssignment(tx, item.can_id, officerId)
+      ? await resolveVisitAssignment(tx, item, officerId, visitPeriod)
       : undefined;
     const assignment = await validateAssignmentForSubmit(
       tx,
@@ -286,9 +326,17 @@ export async function syncCollectionsBatch(
   let succeeded = 0;
   let failed = 0;
 
+  // Periode aksi dihitung sekali per batch (bukan per item): kunjungan
+  // NON_AKTIF tanpa tugas harus dibuat di periode kerja petugas, bukan
+  // bulan kalender saat HP kembali online.
+  const visitPeriod = (await resolveDisplayPeriod({
+    role: 'PETUGAS',
+    officerId,
+  })) ?? currentOperationalPeriod();
+
   for (const item of items) {
     try {
-      const result = await processSyncItem(item, officerId, actorUserId);
+      const result = await processSyncItem(item, officerId, actorUserId, visitPeriod);
       results.push(result);
       succeeded++;
     } catch (err) {

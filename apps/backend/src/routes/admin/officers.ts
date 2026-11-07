@@ -13,6 +13,8 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { getPostgresError } from '../../utils/error-guards';
 import { buildNextEmployeeCode } from '../../utils/employee-code';
+import { resolveDisplayPeriod } from '../../services/periodState';
+import { currentOperationalPeriod } from '../../utils/operationalTimeZone';
 
 const rantingOrKec = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
 
@@ -92,12 +94,18 @@ export async function officersRoutes(fastify: FastifyInstance) {
         return sendError(reply, 404, 'NOT_FOUND', 'Petugas tidak ditemukan');
       }
 
-      const year = query.year ? parseInt(query.year) : new Date().getFullYear();
+      const explicitPeriod = Boolean(query.year || query.month || query.months);
+      const display = explicitPeriod
+        ? null
+        : (await resolveDisplayPeriod(user)) ?? currentOperationalPeriod();
+      const year = query.year ? parseInt(query.year) : display!.year;
       const months = query.months
         ? query.months.split(',').map(Number).filter(n => n >= 1 && n <= 12)
         : query.month
           ? [parseInt(query.month)]
-          : undefined;
+          : explicitPeriod
+            ? undefined
+            : [display!.month];
 
       const officer = await getOfficerDetailWithStats(id, { year, months });
 

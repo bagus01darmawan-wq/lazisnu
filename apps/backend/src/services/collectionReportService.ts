@@ -5,7 +5,8 @@
  */
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { eq, desc, sql, and, inArray, gte, lte } from 'drizzle-orm';
+import { eq, desc, sql, and, inArray } from 'drizzle-orm';
+import { getLatestCollectionCondition } from './collectionSubmission';
 
 export async function getCollectionDetail(id: string) {
   const [collection, notification] = await Promise.all([
@@ -87,15 +88,6 @@ export async function getReportStats(params: {
   const { year, months, branchId, districtId } = params;
   const monthList = months.length > 0 ? months : Array.from({ length: 12 }, (_, i) => i + 1);
 
-  const startDate = `${year}-${String(monthList[0]).padStart(2, '0')}-01`;
-  const lastMonth = monthList[monthList.length - 1];
-  // Hari terakhir bulan terpilih dihitung dalam UTC (Date.UTC) agar tidak
-  // bergeser mundur sehari oleh konversi `toISOString` (WIB UTC+7: 31 Okt →
-  // "30 Okt"). Batas atas pakai akhir hari 23:59:59.999 supaya jemputan pada
-  // hari terakhir ikut terhitung — collected_at bertipe timestamp, bukan date.
-  const lastDayIso = new Date(Date.UTC(year, lastMonth, 0)).toISOString().slice(0, 10);
-  const endDate = `${lastDayIso} 23:59:59.999`;
-
   let branchScopeCondition: any = undefined;
   let officerScopeCondition: any = undefined;
 
@@ -137,14 +129,13 @@ export async function getReportStats(params: {
     ? and(assignmentPeriodCondition, branchScopeCondition)
     : assignmentPeriodCondition;
 
-  // Batas tanggal via operator Drizzle (ter-bind parameter) — jangan
-  // menulis perbandingan mentah di sql`...` (lihat noRawDateInterpolation.test.ts).
-  // Literal string dibungkus sql`...` agar tetap string di driver (semantik
-  // identik dengan sebelumnya); operator gte/lte menolak string polos.
+  // Atribusi uang = periode assignment (bukan bulan collected_at), versi
+  // submit terbaru saja. Menjaga angka "kaleng kosong/dijemput" sejalan
+  // dengan "total penugasan" di kartu yang sama.
   const collectionPeriod = and(
-    gte(schema.collections.collectedAt, sql`${startDate}`),
-    lte(schema.collections.collectedAt, sql`${endDate}`),
     eq(schema.collections.syncStatus, 'COMPLETED'),
+    getLatestCollectionCondition(),
+    assignmentPeriodCondition,
   );
 
   const collectionBaseConditions = branchScopeCondition
@@ -168,6 +159,7 @@ export async function getReportStats(params: {
 
     db.select({ count: sql<number>`count(*)::int` })
       .from(schema.collections)
+      .innerJoin(schema.assignments, eq(schema.collections.assignmentId, schema.assignments.id))
       .innerJoin(schema.cans, eq(schema.collections.canId, schema.cans.id))
       .where(and(collectionBaseConditions, eq(schema.collections.nominal, BigInt(0)))),
 
@@ -178,6 +170,7 @@ export async function getReportStats(params: {
     db.select({
       count: sql<number>`count(distinct ${schema.collections.canId})::int`,
     }).from(schema.collections)
+      .innerJoin(schema.assignments, eq(schema.collections.assignmentId, schema.assignments.id))
       .innerJoin(schema.cans, eq(schema.collections.canId, schema.cans.id))
       .where(collectionBaseConditions),
 

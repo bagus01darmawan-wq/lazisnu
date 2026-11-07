@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {ScrollView, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -118,18 +118,15 @@ const RangeStatsScreen: React.FC = () => {
   }, []);
 
   const rangeComplete = !!startDate && !!endDate;
-  // Uang = collected_at di dalam rentang; tugas selesai = completed_at di
-  // dalam rentang; sisa = ACTIVE pada periode assignment yang tercakup.
+  // Kejadian di rentang: uang/dijemput/tidak dijemput memakai tanggal yang
+  // dipilih. "Tugas Selesai" = dijemput + tidak dijemput, agar ketiganya
+  // selalu sinkron. "Mencakup periode tugas" berasal dari periode assignment
+  // kejadian tersebut, bukan bulan kalender rentang.
   const collectedInRange = stats?.collected_in_range ?? stats?.collected ?? 0;
   const nominalInRange = stats?.nominal_in_range ?? stats?.total_nominal ?? 0;
   const completedInRange = stats?.task_completed_in_range ?? stats?.task_completed ?? 0;
   const uncollectedInRange = stats?.task_uncollected_in_range ?? stats?.task_uncollected ?? 0;
   const closedInRange = stats?.task_closed_in_range ?? completedInRange + uncollectedInRange;
-  const activeInPeriods = stats?.task_active_in_periods ?? stats?.task_active ?? 0;
-  const taskProgress = useMemo(() => {
-    const denominator = closedInRange + activeInPeriods;
-    return denominator ? closedInRange / denominator : 0;
-  }, [closedInRange, activeInPeriods]);
 
   return (
     <View style={styles.screen}>
@@ -200,7 +197,7 @@ const RangeStatsScreen: React.FC = () => {
                   <StatBlock
                     icon={'package-variant-closed'}
                     value={`${collectedInRange}`}
-                    label={'Penjemputan (rentang)'}
+                    label={'Dijemput (rentang)'}
                   />
                   <StatBlock
                     icon={'cash-multiple'}
@@ -209,23 +206,17 @@ const RangeStatsScreen: React.FC = () => {
                   />
                   <StatBlock
                     icon={'check-circle-outline'}
-                    value={`${completedInRange}`}
+                    value={`${closedInRange}`}
                     label={'Tugas Selesai (rentang)'}
                   />
                   <StatBlock
-                    icon={'progress-check'}
-                    value={`${activeInPeriods}`}
-                    label={'Sisa di Periode'}
-                  />
-                </View>
-                <View style={styles.progressTrack}>
-                  <View
-                    style={[styles.progressFill, {width: `${Math.round(taskProgress * 100)}%`}]}
+                    icon={'close-circle-outline'}
+                    value={`${uncollectedInRange}`}
+                    label={'Tidak Dijemput (rentang)'}
                   />
                 </View>
                 <Text style={styles.monthsText}>
-                  {completedInRange} selesai dalam rentang • {activeInPeriods} sisa pada periode
-                  yang tercakup
+                  {closedInRange} selesai dalam rentang • {uncollectedInRange} tidak dijemput
                 </Text>
                 {!!stats.months_covered.length && (
                   <Text style={styles.monthsText}>
@@ -344,18 +335,6 @@ const styles = StyleSheet.create({
   statLabel: {
     ...Typography.caption,
     color: Colors.text.secondary,
-  },
-  progressTrack: {
-    height: 10,
-    borderRadius: Radius.pill,
-    backgroundColor: Colors.surface.progressTrack,
-    marginTop: Spacing.lg,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: Radius.pill,
-    backgroundColor: Colors.brand.emerald,
   },
   monthsText: {
     ...Typography.caption,

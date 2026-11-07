@@ -1,6 +1,6 @@
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { eq, and, or, sql, ExtractTablesWithRelations } from 'drizzle-orm';
+import { eq, and, or, inArray, sql, ExtractTablesWithRelations } from 'drizzle-orm';
 import { alias, PgTransaction } from 'drizzle-orm/pg-core';
 import { Errors } from '../utils/errorCatalog';
 import {
@@ -58,6 +58,59 @@ export async function sumCollectionsByPeriod(
     .innerJoin(schema.assignments, eq(schema.collections.assignmentId, schema.assignments.id))
     .where(and(...whereParts));
   return { collected: row?.collected ?? 0, total_nominal: Number(row?.total_nominal ?? 0) };
+}
+
+export interface CollectionDateRange {
+  start: Date;
+  end: Date;
+}
+
+/**
+ * Rentang tanggal penghimpunan (min–max `collected_at`) untuk sekumpulan
+ * petugas pada satu periode assignment. Filter disamakan dengan total BA:
+ * COMPLETED + versi submit terbaru. `null` bila belum ada koleksi.
+ */
+export async function getCollectionDateRange(filter: {
+  officerId?: string;
+  officerIds?: string[];
+  year: number;
+  month: number;
+}): Promise<CollectionDateRange | null> {
+  const officerCondition = filter.officerId
+    ? eq(schema.collections.officerId, filter.officerId)
+    : filter.officerIds && filter.officerIds.length > 0
+      ? inArray(schema.collections.officerId, filter.officerIds)
+      : undefined;
+  if (filter.officerId === undefined && (!filter.officerIds || filter.officerIds.length === 0)) {
+    return null;
+  }
+
+  const [row] = await db
+    .select({
+      start: sql<Date | string | null>`min(${schema.collections.collectedAt})`,
+      end: sql<Date | string | null>`max(${schema.collections.collectedAt})`,
+    })
+    .from(schema.collections)
+    .innerJoin(schema.assignments, eq(schema.collections.assignmentId, schema.assignments.id))
+    .where(and(
+      officerCondition,
+      eq(schema.assignments.periodYear, filter.year),
+      eq(schema.assignments.periodMonth, filter.month),
+      eq(schema.collections.syncStatus, 'COMPLETED'),
+      getLatestCollectionCondition(),
+    ));
+
+  if (!row?.start || !row?.end) return null;
+  // postgres-js mengembalikan agregat MIN/MAX timestamp sebagai string tanpa
+  // zona ("2026-11-05 03:00:00"). Nilai tersimpan UTC — parse sebagai UTC,
+  // bukan waktu lokal server.
+  const toDate = (value: Date | string): Date => {
+    if (value instanceof Date) return value;
+    const normalized = value.includes('T') ? value : value.replace(' ', 'T');
+    const hasZone = /(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(normalized);
+    return new Date(hasZone ? normalized : `${normalized}Z`);
+  };
+  return { start: toDate(row.start), end: toDate(row.end) };
 }
 
 // ---------------------------------------------------------------------------

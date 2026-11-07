@@ -269,6 +269,11 @@ export interface PeriodStateView {
   display_period: PeriodRefView;
   display_reason: PeriodPendingReason | null;
   unsettled: PeriodProgressView[];
+  /**
+   * Periode yang pekerjaannya sudah selesai (tidak ada tugas ACTIVE) tetapi
+   * tanda tangan belum FINAL. Banner Beranda hanya memakai daftar ini.
+   */
+  awaiting_signature?: PeriodProgressView[];
 }
 
 // ─── User ─────────────────────────────────────────────────────────────────────
@@ -686,15 +691,19 @@ export interface RangeStatsResponse {
   /** COMPLETED + UNCOLLECTED (opsional untuk kompatibilitas server lama). */
   task_closed?: number;
   task_uncollected?: number;
-  /** Periode yang tersentuh rentang, format "YYYY-MM". */
+  /**
+   * Periode assignment yang punya kejadian di rentang (penjemputan atau
+   * penandaan tidak dijemput), format "YYYY-MM". Bukan bulan kalender rentang.
+   */
   months_covered: string[];
   /** Uang yang benar-benar tercatat (collected_at) di dalam rentang tanggal. */
   collected_in_range?: number;
   nominal_in_range?: number;
-  /** Tugas yang completed_at-nya jatuh di dalam rentang tanggal. */
+  /** Tugas COMPLETED yang completed_at-nya jatuh di dalam rentang (legacy). */
   task_completed_in_range?: number;
   /** Tugas yang ditutup (UNCOLLECTED) di dalam rentang tanggal. */
   task_uncollected_in_range?: number;
+  /** Event-based: dijemput + tidak dijemput pada rentang yang sama. */
   task_closed_in_range?: number;
   /** Sisa tugas ACTIVE pada periode assignment yang tercakup rentang. */
   task_active_in_periods?: number;

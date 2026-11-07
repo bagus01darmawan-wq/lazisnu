@@ -30,6 +30,7 @@ import { Errors } from '../utils/errorCatalog';
 import { BAST_LOGO_PNG_BASE64 } from './bastLogo';
 import { downloadFromR2, uploadToR2 } from './r2';
 import { getAggregateTotal } from './emergencyAggregates';
+import { getCollectionDateRange } from './collectionSubmission';
 import {
   asciiSafe,
   baContentHash,
@@ -572,6 +573,11 @@ export async function ensurePpkBaPdf(submissionId: string, opts: { force?: boole
   const [ppkImg, bendaharaImg] = await fetchSignatureImages([sub.ppkSignatureUrl, sub.bendaharaSignatureUrl]);
   const names = await signerDisplayNames([sub.ppkSignerId, sub.bendaharaSignerId]);
   const { total: aggregateTotal } = await getAggregateTotal(db, sub.officerId, sub.periodYear, sub.periodMonth);
+  const collectionRange = await getCollectionDateRange({
+    officerId: sub.officerId,
+    year: sub.periodYear,
+    month: sub.periodMonth,
+  });
   const ba = buildPpkBaText({
     sub,
     // Nama PIHAK PERTAMA = data akun yang benar-benar menandatangani
@@ -583,6 +589,7 @@ export async function ensurePpkBaPdf(submissionId: string, opts: { force?: boole
     baNumber,
     eventAt: sub.finalizedAt ?? sub.ppkSignedAt ?? new Date(),
     bendaharaName: (sub.bendaharaSignerId && names.get(sub.bendaharaSignerId)) || null,
+    collectionRange,
   });
   const pdf = await renderBaPdf({
     ba,
@@ -626,6 +633,11 @@ export async function ensureBranchBaPdf(submissionId: string, opts: { force?: bo
   const qrPayload = buildBaVerifyPayload({ type: 'branch', id: sub.id, version: sub.version, hash: contentHash });
   const [rantingImg, mwcImg] = await fetchSignatureImages([sub.rantingSignatureUrl, sub.mwcBendaharaSignatureUrl]);
   const names = await signerDisplayNames([sub.rantingSignerId, sub.mwcBendaharaSignerId]);
+  const collectionRange = await getCollectionDateRange({
+    officerIds: ppks.map((p) => p.officerId),
+    year: sub.periodYear,
+    month: sub.periodMonth,
+  });
   const ba = buildBranchBaText({
     sub,
     branchName: sub.branch?.name ?? '',
@@ -635,6 +647,7 @@ export async function ensureBranchBaPdf(submissionId: string, opts: { force?: bo
     eventAt: sub.finalizedAt ?? sub.rantingSignedAt ?? new Date(),
     rantingName: (sub.rantingSignerId && names.get(sub.rantingSignerId)) || null,
     mwcName: (sub.mwcBendaharaSignerId && names.get(sub.mwcBendaharaSignerId)) || null,
+    collectionRange,
   });
   const pdf = await renderBaPdf({
     ba,

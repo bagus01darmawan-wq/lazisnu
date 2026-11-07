@@ -111,14 +111,23 @@ const DashboardScreen: React.FC = () => {
   const [period, setPeriod] = useState<PeriodFilter>('today');
   // Periode tertua yang belum tuntas untuk cakupan pengguna (mis. BA Oktober
   // menunggu bendahara). Banner ini informasi + jalan pintas, bukan blokir.
-  const periodBanner = usePeriodStore(state => state.context?.unsettled[0] ?? null);
+  // Banner hanya untuk periode yang PEKERJAANNYA sudah selesai tetapi rantai
+  // tanda tangan belum FINAL. Selama masih ada tugas ACTIVE, jangan menagih TTD.
+  const periodBanner = usePeriodStore(state => {
+    const context = state.context;
+    if (!context) return null;
+    const awaiting = context.awaiting_signature ?? [];
+    if (awaiting.length === 0) return null;
+    const display = periodKeyOf(context.display_period);
+    return awaiting.find(item => item.period === display) ?? null;
+  });
   const refreshPeriod = usePeriodStore(state => state.refresh);
   const displayYear = usePeriodStore(state => state.context?.display_period.year);
   const displayMonth = usePeriodStore(state => state.context?.display_period.month);
   const displayKey =
     displayYear && displayMonth ? periodKeyOf({year: displayYear, month: displayMonth}) : null;
   const monthLabel = displayKey
-    ? `BULAN ${formatPeriod(displayKey).toUpperCase()}`
+    ? `PERIODE ${formatPeriod(displayKey).toUpperCase()}`
     : 'PERIODE BERJALAN';
 
   // Refetch setiap kali tab kembali fokus: layar tab tidak pernah di-unmount,
@@ -292,7 +301,7 @@ const DashboardScreen: React.FC = () => {
                 </View>
                 <View style={styles.metaTextWrap}>
                   <Text style={styles.metaNum}>{monthStats?.collected || 0}</Text>
-                  <Text style={styles.metaTxt}>penjemputan periode</Text>
+                  <Text style={styles.metaTxt}>penjemputan</Text>
                 </View>
               </View>
               <View style={styles.metaDivider} />

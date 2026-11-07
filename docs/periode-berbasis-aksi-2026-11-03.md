@@ -35,8 +35,13 @@ periodeTampil(cakupan) = periode berhak tertua yang belum tuntas
 
 | Endpoint | Isi |
 |---|---|
-| `GET /v1/mobile/period-context` | `{ current_period, display_period, display_reason, unsettled[] }` |
+| `GET /v1/mobile/period-context` | `{ current_period, display_period, display_reason, unsettled[], awaiting_signature[] }` |
 | `GET /v1/admin/period-context` | idem, cakupan admin |
+
+`unsettled[]` = periode berhak yang belum FINAL (bisa karena pekerjaan atau tanda
+tangan). `awaiting_signature[]` = subset yang **tidak lagi punya assignment
+ACTIVE** tetapi tanda tangan belum FINAL. Banner Beranda hanya memakai
+`awaiting_signature[]`, sehingga tidak menagih TTD selama tugas masih berjalan.
 
 Alasan tunggakan: `PPK_DRAFT`, `PPK_WAITING_BENDAHARA`, `BRANCH_DRAFT`,
 `BRANCH_WAITING_MWC`, `DISTRICT_UNSETTLED`, dengan `waiting_for` pelakunya.
@@ -83,18 +88,36 @@ Contoh: kurir 10 paket, transfer 3, selesaikan 7 → progres 100%.
   Setoran, Keuangan, Profil (BA & Selesai Periode), Persetujuan, dan Rekap.
   Pengecualian yang tetap tanggal: toggle Beranda "Hari Ini/Minggu Ini"
   (aktivitas `collected_at`) dan "Penjemputan Terakhir".
-  Statistik Rentang: uang = `collected_at` di dalam rentang; tugas selesai =
-  `completed_at` di dalam rentang; sisa = ACTIVE pada periode assignment yang
-  tercakup; daftar bulan ditampilkan dengan nama bulan.
+  Statistik Rentang: uang/dijemput/tidak dijemput = kejadian di dalam rentang
+  tanggal yang dipilih; tugas selesai = dijemput + tidak dijemput pada rentang
+  yang sama (agar kartu selalu sinkron); "periode tugas" diturunkan dari
+  periode assignment kejadian tersebut, bukan bulan kalender rentang.
 - **Web**: `useOperationalPeriod()` → `display_period` menjadi nilai awal
   pemilih periode di Overview, Berita Acara, Rekap MWC, Persetujuan, Penugasan,
-  dan Kelola Kaleng. Pemilih periode tetap ada.
+  Kelola Kaleng, **Laporan Keuangan (Reports)**, dan **Detail Petugas**.
+  Reports memakai server-side period-context karena berupa server component.
+  Pemilih periode tetap ada.
 
 ## 8. Belum tercakup
 
-- Halaman web `reports` (server component) dan `audit-log` masih default bulan
-  kalender; dapat menyusul dengan pola hook yang sama.
+- Halaman web `audit-log` masih default bulan kalender — domainnya log aktivitas
+  (`created_at`), bukan atribusi koleksi.
 - Notifikasi ke bendahara saat giliran TTD berpindah (transfer final juga belum
   mengirim notifikasi ke petugas pengganti).
 - `kunciPeriode` masih memakai fase waktu untuk memilih perilaku
   REKAP vs FINAL_NOL; aksinya sendiri tetap manual oleh MWC.
+
+## 9. Perbaikan 2026-11-06: kunjungan NON_AKTIF berisi
+
+`getOrCreateVisitAssignment` (sinkronisasi offline) sebelumnya memakai bulan
+kalender saat HP kembali online. Akibatnya kunjungan NON_AKTIF yang ditemukan
+berisi di akhir/awal bulan membuat tugas di periode berikutnya dan memindahkan
+uang ke periode itu. Sekarang:
+
+1. Assignment yang sudah dikirim klien (`ensure-assignment`, yang memakai
+   `display_period`) dipakai apa adanya.
+2. Pembuatan on-demand hanya fallback, dan memakai `display_period` petugas
+   (dihitung sekali per batch), bukan `new Date()`.
+
+Catatan: kaleng NON_AKTIF **bukan** RUSAK/HILANG. RUSAK dan HILANG tetap
+menerima tugas jemput bulanan; NON_AKTIF hanya dikunjungi untuk verifikasi.

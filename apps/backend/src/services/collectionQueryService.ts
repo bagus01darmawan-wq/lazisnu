@@ -47,9 +47,27 @@ async function getCanIdsByDistrict(districtId: string): Promise<string[]> {
   return cans.map(c => c.id);
 }
 
+/**
+ * Kondisi periode assignment untuk koleksi: assignment_id milik periode
+ * yang diminta. Dipakai laporan web agar atribusi uang = periode penugasan,
+ * bukan bulan `collected_at`.
+ */
+export function assignmentPeriodCondition(year: number, months: number[]) {
+  return inArray(
+    schema.collections.assignmentId,
+    db.select({ id: schema.assignments.id }).from(schema.assignments)
+      .where(and(
+        eq(schema.assignments.periodYear, year),
+        inArray(schema.assignments.periodMonth, months),
+      )),
+  );
+}
+
 export async function buildCollectionsQuery(params: {
   startDate?: string;
   endDate?: string;
+  /** Bila diisi, filter memakai periode assignment (menang atas tanggal). */
+  period?: { year: number; months: number[] };
   officerId?: string;
   districtId?: string;
   branchId?: string;
@@ -59,7 +77,9 @@ export async function buildCollectionsQuery(params: {
   const latestCollectionCondition = getLatestCollectionCondition();
   const conditions: any[] = [eq(schema.collections.syncStatus, 'COMPLETED')];
 
-  if (params.startDate && params.endDate) {
+  if (params.period) {
+    conditions.push(assignmentPeriodCondition(params.period.year, params.period.months));
+  } else if (params.startDate && params.endDate) {
     conditions.push(and(
       gte(schema.collections.collectedAt, new Date(params.startDate)),
       lte(schema.collections.collectedAt, new Date(params.endDate))

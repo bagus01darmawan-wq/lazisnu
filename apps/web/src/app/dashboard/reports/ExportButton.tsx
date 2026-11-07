@@ -1,30 +1,28 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Button } from '@/components/ui/Button';
 import { Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { authHelper } from '@/lib/auth';
-import { Modal } from '@/components/ui/Modal';
-import { GlassDatePicker } from '@/components/ui/GlassDatePicker';
 
-export default function ExportButton() {
-  const [isOpen, setIsOpen] = useState(false);
+/**
+ * Ekspor CSV mengikuti periode laporan yang sedang tampil (periode assignment),
+ * bukan rentang 30 hari terakhir yang tidak berhubungan dengan filter.
+ */
+export default function ExportButton({
+  year,
+  month,
+  months,
+  periodLabel,
+}: {
+  year: string;
+  month: string;
+  months: string;
+  periodLabel: string;
+}) {
   const [loading, setLoading] = useState(false);
-  const [startDate, setStartDate] = useState(() => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
 
   const handleExport = async () => {
-    if (!startDate || !endDate) {
-      toast.error('Silakan pilih rentang tanggal');
-      return;
-    }
-
-    if (new Date(startDate) > new Date(endDate)) {
-      toast.error('Tanggal mulai tidak boleh lebih besar dari tanggal selesai');
-      return;
-    }
-
     setLoading(true);
     try {
       const token = authHelper.getToken();
@@ -33,8 +31,14 @@ export default function ExportButton() {
         return;
       }
 
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001');
-      const res = await fetch(`${API_URL}/v1/bendahara/export?start_date=${startDate}&end_date=${endDate}`, {
+      const API_URL =
+        process.env.NEXT_PUBLIC_API_URL ||
+        (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001');
+      const params = new URLSearchParams({ year });
+      if (months) params.set('months', months);
+      else if (month) params.set('month', month);
+
+      const res = await fetch(`${API_URL}/v1/bendahara/export?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -44,14 +48,13 @@ export default function ExportButton() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `laporan-lazisnu-${startDate}-${endDate}.csv`;
+      a.download = `laporan-lazisnu-${periodLabel.replace(/\s+/g, '-').toLowerCase()}.csv`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      
-      toast.success('Laporan berhasil diunduh');
-      setIsOpen(false);
+
+      toast.success(`Laporan ${periodLabel} berhasil diunduh`);
     } catch (error) {
       console.error('Export error:', error);
       toast.error('Gagal mengunduh laporan CSV');
@@ -61,59 +64,13 @@ export default function ExportButton() {
   };
 
   return (
-    <>
-      <button 
-        onClick={() => setIsOpen(true)}
-        className="h-[35px] px-4 rounded-xl text-[11px] font-bold bg-[#EAD19B] text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 hover:bg-[#EAD19B]/90 transition-all active:scale-95 flex items-center gap-2"
-      >
-        <Download size={14} strokeWidth={3} />
-        Ekspor CSV
-      </button>
-
-      <Modal
-        isOpen={isOpen}
-        onClose={() => setIsOpen(false)}
-        title="Export Laporan CSV"
-        variant="glass"
-        footer={
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setIsOpen(false)} className="border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-white/10 hover:text-[#F4F1EA]">
-              Batal
-            </Button>
-            <Button
-              onClick={handleExport}
-              isLoading={loading}
-              className="bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] font-bold px-6 rounded-xl"
-            >
-              Download CSV
-            </Button>
-          </div>
-        }
-      >
-        <div className="space-y-4 py-2">
-          <p className="text-sm text-[#F4F1EA]/60 mb-4">
-            Pilih rentang tanggal penjemputan infaq yang ingin diunduh dalam format CSV.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-[#F4F1EA]/60 uppercase">Tanggal Mulai</label>
-              <GlassDatePicker
-                value={startDate}
-                onChange={(val) => setStartDate(val)}
-                max={endDate}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-[#F4F1EA]/60 uppercase">Tanggal Selesai</label>
-              <GlassDatePicker
-                value={endDate}
-                onChange={(val) => setEndDate(val)}
-                min={startDate}
-              />
-            </div>
-          </div>
-        </div>
-      </Modal>
-    </>
+    <button
+      onClick={handleExport}
+      disabled={loading}
+      className="h-[35px] px-4 rounded-xl text-[11px] font-bold bg-[#EAD19B] text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 hover:bg-[#EAD19B]/90 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-60"
+    >
+      <Download size={14} strokeWidth={3} />
+      {loading ? 'Menyiapkan...' : 'Ekspor CSV'}
+    </button>
   );
 }

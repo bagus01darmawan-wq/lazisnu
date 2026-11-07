@@ -8,6 +8,7 @@ import {
   buildBaVerifyPayload,
   buildBranchBaText,
   buildPpkBaText,
+  collectionRangeLong,
   formatRupiah,
   sha256Hex,
 } from '../beritaAcara';
@@ -179,5 +180,42 @@ describe('builder teks BA (§10)', () => {
     expect(all).toContain('Admin Agus');
     expect(all).toContain('Bendahara MWC Budi');
     expect(all).not.toMatch(/mengetahui/i);
+  });
+
+  test('rentang tanggal penghimpunan: hari sama, bulan sama, lintas bulan', () => {
+    expect(collectionRangeLong(
+      new Date('2026-09-06T03:00:00Z'),
+      new Date('2026-09-06T10:00:00Z'),
+    )).toBe('06 September 2026');
+    expect(collectionRangeLong(
+      new Date('2026-09-01T03:00:00Z'),
+      new Date('2026-09-06T10:00:00Z'),
+    )).toBe('01 s.d 06 September 2026');
+    expect(collectionRangeLong(
+      new Date('2026-09-28T03:00:00Z'),
+      new Date('2026-10-05T10:00:00Z'),
+    )).toBe('28 September 2026 s.d 05 Oktober 2026');
+  });
+
+  test('BA menyebut periode bulan + tanggal penghimpunan', () => {
+    const ba = buildPpkBaText({
+      sub: ppkSub,
+      officerName: 'Petugas Satu',
+      branchName: 'Ranting A',
+      collectionRange: {
+        start: new Date('2026-09-01T03:00:00Z'),
+        end: new Date('2026-09-06T10:00:00Z'),
+      },
+    });
+    const all = ba.statements.join('\n');
+    expect(all).toContain('hasil penghimpunan koin NU periode bulan September 2026 kepada PIHAK KEDUA');
+    expect(all).toContain('yang telah dihimpun tanggal 01 s.d 06 September 2026.');
+  });
+
+  test('BA tanpa rentang tetap memakai kalimat periode lama', () => {
+    const ba = buildPpkBaText({ sub: ppkSub, officerName: 'Petugas Satu', branchName: 'Ranting A' });
+    const all = ba.statements.join('\n');
+    expect(all).toContain('hasil penghimpunan koin NU periode bulan September 2026 kepada PIHAK KEDUA');
+    expect(all).toContain('yang telah dihimpun pada September 2026.');
   });
 });

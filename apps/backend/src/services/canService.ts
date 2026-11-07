@@ -8,6 +8,7 @@ import { JWTPayload } from '../middleware/auth';
 import { isTransitionAllowed, isTrackedForCondition, ASSIGNABLE_CONDITIONS } from './conditionRules';
 import type { CanConditionValue } from './conditionRules';
 import { buildDraftLockError, type DraftLockInfo } from './canDraftLock';
+import { currentOperationalPeriod } from '../utils/operationalTimeZone';
 
 export interface CreateCanInput {
   branch_id?: string | null;
@@ -77,7 +78,7 @@ export async function assertCanAccess(
 }
 
 export async function getCans(
-  params: { page: number; limit: number; offset: number; search?: string; status?: string; branch_id?: string; dukuh_id?: string },
+  params: { page: number; limit: number; offset: number; search?: string; status?: string; branch_id?: string; dukuh_id?: string; period?: { year: number; month: number } },
   ctx: AccessContext
 ) {
   const searchCondition = params.search ? or(
@@ -96,9 +97,9 @@ export async function getCans(
     searchCondition,
   ];
 
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth() + 1;
+  const currentPeriod = params.period ?? currentOperationalPeriod();
+  const currentYear = currentPeriod.year;
+  const currentMonth = currentPeriod.month;
 
   // Filter kondisi bisnis — memakai `condition`, bukan `is_active`.
   // Alias lama dipertahankan agar UI lama tidak putus:

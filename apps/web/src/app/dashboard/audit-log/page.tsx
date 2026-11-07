@@ -86,12 +86,25 @@ export default function AuditLogPage() {
   const [year, setYear] = useState<number>(filterAwal().year);
   const [months, setMonths] = useState<number[]>(filterAwal().months);
 
-  const fetchLogs = async (currentPage = page, searchQuery = search, m = month, y = year, limit = pageSize) => {
+  const fetchLogs = async (
+    currentPage = page,
+    searchQuery = search,
+    m = month,
+    y = year,
+    limit = pageSize,
+    monthList: number[] = months,
+  ) => {
     try {
       setLoading(true);
 
-      const startOfMonth = new Date(Number(y), Number(m) - 1, 1).toISOString();
-      const endOfMonth = new Date(Number(y), Number(m), 0, 23, 59, 59).toISOString();
+      // Hormati pilihan multi-bulan: awal bulan pertama s/d akhir bulan terakhir.
+      const selected = (monthList.length > 0 ? monthList : [m])
+        .filter((value) => Number.isInteger(value) && value >= 1 && value <= 12)
+        .sort((a, b) => a - b);
+      const firstMonth = selected[0] ?? m;
+      const lastMonth = selected[selected.length - 1] ?? m;
+      const startOfMonth = new Date(Number(y), firstMonth - 1, 1).toISOString();
+      const endOfMonth = new Date(Number(y), lastMonth, 0, 23, 59, 59).toISOString();
 
       const response = await api.get('/admin/audit-logs', {
         params: {
@@ -117,10 +130,10 @@ export default function AuditLogPage() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setPage(1);
-      fetchLogs(1, search, month, year, pageSize);
+      fetchLogs(1, search, month, year, pageSize, months);
     }, 500);
     return () => clearTimeout(timer);
-  }, [search, month, year, pageSize]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, month, year, months, pageSize]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleReset = () => {
     const awal = filterAwal();
@@ -135,7 +148,7 @@ export default function AuditLogPage() {
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || newPage > totalPages) return;
     setPage(newPage);
-    fetchLogs(newPage, search, month, year);
+    fetchLogs(newPage, search, month, year, pageSize, months);
   };
 
   const columns: ColumnDef<IAuditLog>[] = [

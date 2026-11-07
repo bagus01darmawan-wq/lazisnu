@@ -573,10 +573,44 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       const startDate = parsed.startDate!;
       const endDate = parsed.endDate!;
 
-      // Daftar periode (YYYY-MM) yang tersentuh rentang — dipakai untuk filter
-      // tugas dan dilaporkan kembali sebagai months_covered.
+      // Daftar periode kalender yang tersentuh rentang — hanya untuk kontrak
+      // lama (`collected`/`total_nominal`). Untuk keterangan "periode tugas",
+      // kita memakai periode assignment dari kejadian di rentang (di bawah).
       const monthsCovered = computeMonthsCovered(startDate, endDate);
-      const periodConditions = monthsCovered.map((period) => {
+
+      // Periode assignment yang benar-benar punya kejadian di rentang:
+      // penjemputan (collected_at) + penandaan tidak dijemput (completed_at).
+      const [collectedPeriodRows, uncollectedPeriodRows] = await Promise.all([
+        db.selectDistinct({
+          year: schema.assignments.periodYear,
+          month: schema.assignments.periodMonth,
+        }).from(schema.collections)
+          .innerJoin(schema.assignments, eq(schema.collections.assignmentId, schema.assignments.id))
+          .where(and(
+            eq(schema.collections.officerId, officerId),
+            eq(schema.collections.syncStatus, 'COMPLETED'),
+            getLatestCollectionCondition(),
+            gte(schema.collections.collectedAt, startDate),
+            lte(schema.collections.collectedAt, endDate),
+          )),
+        db.selectDistinct({
+          year: schema.assignments.periodYear,
+          month: schema.assignments.periodMonth,
+        }).from(schema.assignments)
+          .where(and(
+            eq(schema.assignments.officerId, officerId),
+            eq(schema.assignments.status, 'UNCOLLECTED'),
+            gte(schema.assignments.completedAt, startDate),
+            lte(schema.assignments.completedAt, endDate),
+          )),
+      ]);
+
+      const eventPeriods = Array.from(new Set(
+        [...collectedPeriodRows, ...uncollectedPeriodRows].map(
+          (row) => `${row.year}-${String(row.month).padStart(2, '0')}`,
+        ),
+      )).sort();
+      const eventPeriodConditions = eventPeriods.map((period) => {
         const [y, m] = period.split('-').map(Number);
         return and(eq(schema.assignments.periodYear, y), eq(schema.assignments.periodMonth, m));
       });
@@ -604,13 +638,15 @@ export async function tasksRoutes(fastify: FastifyInstance) {
             lte(schema.collections.collectedAt, endDate),
           ))
           .then((rows) => rows[0]),
+        // Progres tugas pada periode assignment yang punya kejadian di rentang
+        // (bukan bulan kalender rentang). Dipakai untuk field lama + sisa.
         db.select({
           status: schema.assignments.status,
           count: sql<number>`count(*)::int`,
         }).from(schema.assignments)
           .where(and(
             eq(schema.assignments.officerId, officerId),
-            or(...periodConditions)
+            eventPeriodConditions.length > 0 ? or(...eventPeriodConditions) : sql`false`,
           ))
           .groupBy(schema.assignments.status),
         // Tugas yang ditutup (COMPLETED/UNCOLLECTED) di dalam rentang tanggal.
@@ -632,6 +668,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         Number(rows.find((row) => row.status === value)?.count ?? 0);
       const completedInRange = countStatus(closedRangeRows, 'COMPLETED');
       const uncollectedInRange = countStatus(closedRangeRows, 'UNCOLLECTED');
+      const collectedInRange = Number(rangeColRes?.collected ?? 0);
       return sendSuccess(reply, {
         collected: colRes.collected,
         total_nominal: Number(colRes.total_nominal),
@@ -640,12 +677,16 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         task_closed: metrics.task_closed,
         task_uncollected: metrics.task_uncollected,
         task_total: metrics.task_total,
-        months_covered: monthsCovered,
-        collected_in_range: Number(rangeColRes?.collected ?? 0),
+        // Periode assignment yang punya kejadian di rentang — bukan bulan
+        // kalender rentang. Dipakai label "Mencakup periode tugas".
+        months_covered: eventPeriods,
+        collected_in_range: collectedInRange,
         nominal_in_range: Number(rangeColRes?.total_nominal ?? 0),
         task_completed_in_range: completedInRange,
         task_uncollected_in_range: uncollectedInRange,
-        task_closed_in_range: completedInRange + uncollectedInRange,
+        // Kontrak event-based: selesai = dijemput + tidak dijemput pada rentang
+        // yang sama, sehingga angka kartu selalu sinkron.
+        task_closed_in_range: collectedInRange + uncollectedInRange,
         task_active_in_periods: metrics.task_active,
       });
     } catch (error) {

@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { PeriodPicker } from '@/components/ui/PeriodPicker';
+import { useOperationalPeriod } from '@/hooks/useOperationalPeriod';
 import { ProfileCard } from './ProfileCard';
 import { StatsCards } from './StatsCards';
 import { DonorList } from './DonorList';
@@ -61,13 +62,27 @@ export default function OfficerDetailPage({ params }: { params: Promise<{ id: st
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  // Default = seluruh tahun berjalan (12 bulan). Sebelumnya state kosong `[]`,
-  // yang di backend berarti "setahun penuh" juga, tetapi picker menampilkan
-  // bulan berjalan → label dan angka tidak sinkron.
-  const [selectedMonths, setSelectedMonths] = useState<number[]>(
-    () => Array.from({ length: 12 }, (_, i) => i + 1),
-  );
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [selectedMonths, setSelectedMonths] = useState<number[]>([]);
+  const userChangedPeriod = useRef(false);
+  const periodContext = useOperationalPeriod();
+
+  // Nilai awal = display_period (periode aksi), bukan bulan kalender.
+  useEffect(() => {
+    if (userChangedPeriod.current || selectedYear != null) return;
+    if (periodContext.displayYear != null && periodContext.displayMonth != null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedYear(periodContext.displayYear);
+      setSelectedMonths([periodContext.displayMonth]);
+      return;
+    }
+    // Konteks gagal dimuat → fallback kalender agar halaman tidak menggantung.
+    if (!periodContext.loading) {
+      const now = new Date();
+      setSelectedYear(now.getFullYear());
+      setSelectedMonths([now.getMonth() + 1]);
+    }
+  }, [periodContext.displayYear, periodContext.displayMonth, periodContext.loading, selectedYear]);
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -78,6 +93,7 @@ export default function OfficerDetailPage({ params }: { params: Promise<{ id: st
   });
 
   const fetchOfficer = async () => {
+    if (selectedYear == null) return;
     setLoading(true);
     setError(null);
     try {
@@ -118,6 +134,7 @@ export default function OfficerDetailPage({ params }: { params: Promise<{ id: st
     // default backend (12 bulan) sementara label kembali ke bulan berjalan.
     // Abaikan agar label & data tetap konsisten (pola sama dengan overview).
     if (months.length === 0) return;
+    userChangedPeriod.current = true;
     setSelectedMonths(months);
     setSelectedYear(year);
   }, []);
@@ -237,7 +254,7 @@ export default function OfficerDetailPage({ params }: { params: Promise<{ id: st
           </h2>
           <PeriodPicker
             months={selectedMonths}
-            year={selectedYear}
+            year={selectedYear ?? periodContext.displayYear ?? new Date().getFullYear()}
             onChange={handlePeriodChange}
           />
         </div>

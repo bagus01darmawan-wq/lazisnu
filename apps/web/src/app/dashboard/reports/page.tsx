@@ -30,6 +30,27 @@ function apiUrl(path: string): URL {
   return new URL(path, apiBaseUrl());
 }
 
+/**
+ * Periode aksi untuk nilai awal laporan (server component tidak bisa memakai
+ * hook `useOperationalPeriod`). Gagal/kosong → pemanggil memakai kalender.
+ */
+async function getDisplayPeriod(token?: string): Promise<{ year: number; month: number } | null> {
+  if (!token) return null;
+  try {
+    const res = await fetch(apiUrl('/v1/admin/period-context').toString(), {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const period = json.data?.display_period ?? json.data?.displayPeriod;
+    if (!period || typeof period.year !== 'number' || typeof period.month !== 'number') return null;
+    return { year: period.year, month: period.month };
+  } catch {
+    return null;
+  }
+}
+
 async function getStatsData(month: string, months: string, year: string, branch: string, officer: string) {
   const cookieStore = await cookies();
   const token = cookieStore.get('lazisnu_token')?.value;
@@ -97,28 +118,10 @@ async function TransactionList({ month, months, year, branch, officer, search, p
   try {
     const url = apiUrl('/v1/bendahara/collections');
 
-    let startDate: string;
-    let endDate: string;
-
-    if (months) {
-      const monthNums = months.split(',').map(Number).filter(n => n >= 1 && n <= 12);
-      if (monthNums.length > 0) {
-        startDate = new Date(Number(year), monthNums[0] - 1, 1).toISOString();
-        endDate = new Date(Number(year), monthNums[monthNums.length - 1], 0, 23, 59, 59, 999).toISOString();
-      } else {
-        startDate = new Date(Number(year), 0, 1).toISOString();
-        endDate = new Date(Number(year), 12, 0, 23, 59, 59, 999).toISOString();
-      }
-    } else if (month) {
-      startDate = new Date(Number(year), Number(month) - 1, 1).toISOString();
-      endDate = new Date(Number(year), Number(month), 0, 23, 59, 59, 999).toISOString();
-    } else {
-      startDate = new Date(Number(year), 0, 1).toISOString();
-      endDate = new Date(Number(year), 12, 0, 23, 59, 59, 999).toISOString();
-    }
-
-    url.searchParams.append('start_date', startDate);
-    url.searchParams.append('end_date', endDate);
+    // Laporan = periode assignment, bukan rentang collected_at.
+    url.searchParams.append('year', year);
+    if (months) url.searchParams.append('months', months);
+    else if (month) url.searchParams.append('month', month);
     url.searchParams.append('limit', limit);
     url.searchParams.append('page', page);
     if (branch) url.searchParams.append('branch_id', branch);
@@ -170,15 +173,30 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
   const isRanting = userRole === 'ADMIN_RANTING';
 
   const searchParams = await props.searchParams;
-  const hasPeriodParam = !!(searchParams.month || searchParams.months);
-  const month = searchParams.month || (hasPeriodParam ? '' : (new Date().getMonth() + 1).toString());
+  const displayPeriod = await getDisplayPeriod(token);
+  const defaultYear = displayPeriod?.year ?? new Date().getFullYear();
+  const defaultMonth = displayPeriod?.month ?? new Date().getMonth() + 1;
+  const hasExplicitPeriod = !!(searchParams.month || searchParams.months || searchParams.year);
+  const month = searchParams.month || (hasExplicitPeriod ? '' : defaultMonth.toString());
   const months = searchParams.months || '';
-  const year = searchParams.year || new Date().getFullYear().toString();
+  const year = searchParams.year || defaultYear.toString();
   const branch = isRanting && userBranchId ? userBranchId : (searchParams.branch || '');
   const officer = searchParams.officer || '';
   const search = searchParams.search || '';
   const page = searchParams.page || '1';
   const limit = searchParams.limit || '10';
+
+  const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  const selectedMonths = months
+    ? months.split(',').map(Number).filter(n => n >= 1 && n <= 12).sort((a, b) => a - b)
+    : month
+      ? [Number(month)]
+      : [];
+  const periodLabel = selectedMonths.length === 0
+    ? `Tahun ${year}`
+    : selectedMonths.length === 1
+      ? `${monthNames[selectedMonths[0] - 1]} ${year}`
+      : `${monthNames[selectedMonths[0] - 1]}–${monthNames[selectedMonths[selectedMonths.length - 1] - 1]} ${year}`;
 
   const stats = await getStatsData(month, months, year, branch, officer);
   const additionalStats = await getAdditionalStats(month, months, year, branch);
@@ -206,7 +224,7 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <ExportButton />
+          <ExportButton year={year} month={month} months={months} periodLabel={periodLabel} />
         </div>
       </div>
 
@@ -253,7 +271,7 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
               <span className="flex items-center text-[10px] font-black text-[#F4F1EA]/40 bg-white/5 px-2.5 py-1.5 rounded-xl border border-white/5 uppercase tracking-wider">
                 Nilai Efisiensi
               </span>
-              <span className="text-xs text-[#6B9E9F] font-bold">Bulan Ini</span>
+              <span className="text-xs text-[#6B9E9F] font-bold">{periodLabel}</span>
             </div>
           </div>
         </Card>
@@ -327,7 +345,7 @@ export default async function ReportsPage(props: { searchParams: Promise<{ month
 
       {/* Transparent Toolbar Section */}
       <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-start w-full bg-transparent p-4 border-none shadow-none">
-        <FilterDropdown />
+        <FilterDropdown defaultYear={defaultYear} defaultMonth={defaultMonth} />
       </div>
 
       {/* Recent Collections Table as a Report */}

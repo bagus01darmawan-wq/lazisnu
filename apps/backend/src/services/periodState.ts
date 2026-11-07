@@ -57,7 +57,17 @@ export interface PeriodState {
   current_period: PeriodRef;
   display_period: PeriodRef;
   display_reason: PeriodPendingReason | null;
+  /**
+   * Semua periode berhak yang belum tuntas (pekerjaan maupun tanda tangan).
+   * Dipakai untuk memilih `display_period`.
+   */
   unsettled: PeriodProgress[];
+  /**
+   * Periode yang pekerjaannya SUDAH selesai (tidak ada assignment ACTIVE)
+   * tetapi rantai tanda tangan belum FINAL. Hanya daftar ini yang boleh
+   * memunculkan banner "periode belum tuntas" di Beranda.
+   */
+  awaiting_signature: PeriodProgress[];
 }
 
 export interface PeriodGateResult {
@@ -70,6 +80,8 @@ interface PeriodCell {
   settled: boolean;
   reason: PeriodPendingReason | null;
   waitingFor: PeriodWaitingFor | null;
+  /** Masih ada assignment ACTIVE — pekerjaan belum selesai. */
+  hasActiveWork?: boolean;
   /** Khusus ranting: sudah ditandatangani bendahara ranting (menunggu MWC). */
   signed?: boolean;
 }
@@ -148,7 +160,7 @@ function cellOf(map: Map<string, PeriodCell>, p: PeriodRef): PeriodCell {
   const key = periodKey(p);
   let cell = map.get(key);
   if (!cell) {
-    cell = { eligible: false, settled: false, reason: null, waitingFor: null };
+    cell = { eligible: false, settled: false, reason: null, waitingFor: null, hasActiveWork: false };
     map.set(key, cell);
   }
   return cell;
@@ -168,6 +180,7 @@ async function officerCells(officerId: string, periods: PeriodRef[]) {
         month: schema.assignments.periodMonth,
         total: sql<number>`count(*)::int`,
         reassigned: sql<number>`count(*) filter (where ${schema.assignments.status} = 'REASSIGNED')::int`,
+        active: sql<number>`count(*) filter (where ${schema.assignments.status} = 'ACTIVE')::int`,
       })
       .from(schema.assignments)
       .where(
@@ -204,9 +217,11 @@ async function officerCells(officerId: string, periods: PeriodRef[]) {
   ]);
 
   const work = new Map<string, number>();
+  const hasActive = new Map<string, boolean>();
   for (const row of assignmentRows) {
     const key = periodKey({ year: row.year, month: row.month });
     work.set(key, (work.get(key) ?? 0) + (Number(row.total) - Number(row.reassigned)));
+    if (Number(row.active) > 0) hasActive.set(key, true);
   }
 
   for (const row of submissionRows) {
@@ -216,6 +231,7 @@ async function officerCells(officerId: string, periods: PeriodRef[]) {
     // Submission ber-TTD tetap berhak walau semua assignment-nya sudah dialihkan.
     cell.eligible = cell.eligible || hasWork || row.status !== 'DRAFT' || row.signed;
     cell.settled = row.status === 'FINAL';
+    cell.hasActiveWork = (hasActive.get(periodKey(p)) ?? false) || !!cell.hasActiveWork;
     if (!cell.settled) {
       cell.reason = row.status === 'PPK_SIGNED' ? 'PPK_WAITING_BENDAHARA' : 'PPK_DRAFT';
       cell.waitingFor = row.status === 'PPK_SIGNED' ? 'BENDAHARA_RANTING' : 'PPK';
@@ -227,6 +243,7 @@ async function officerCells(officerId: string, periods: PeriodRef[]) {
     const [year, month] = key.split('-').map(Number);
     const cell = cellOf(map, { year, month });
     cell.eligible = true;
+    cell.hasActiveWork = (hasActive.get(key) ?? false) || !!cell.hasActiveWork;
     if (!cell.settled && cell.reason === null) {
       // Ada tugas tetapi belum ada submission ber-TTD.
       cell.reason = 'PPK_DRAFT';
@@ -249,6 +266,7 @@ async function branchCells(branchId: string, periods: PeriodRef[]) {
         month: schema.assignments.periodMonth,
         total: sql<number>`count(*)::int`,
         reassigned: sql<number>`count(*) filter (where ${schema.assignments.status} = 'REASSIGNED')::int`,
+        active: sql<number>`count(*) filter (where ${schema.assignments.status} = 'ACTIVE')::int`,
       })
       .from(schema.assignments)
       .innerJoin(schema.officers, eq(schema.assignments.officerId, schema.officers.id))
@@ -310,9 +328,11 @@ async function branchCells(branchId: string, periods: PeriodRef[]) {
   ]);
 
   const work = new Map<string, number>();
+  const hasActive = new Map<string, boolean>();
   for (const row of assignmentRows) {
     const key = periodKey({ year: row.year, month: row.month });
     work.set(key, (work.get(key) ?? 0) + (Number(row.total) - Number(row.reassigned)));
+    if (Number(row.active) > 0) hasActive.set(key, true);
   }
 
   const ppkByPeriod = new Map<string, { draft: number; signed: number; other: number }>();
@@ -330,6 +350,7 @@ async function branchCells(branchId: string, periods: PeriodRef[]) {
     const cell = cellOf(map, p);
     cell.eligible = true;
     cell.settled = row.status === 'FINAL' || row.status === 'FINAL_NOL';
+    cell.hasActiveWork = (hasActive.get(periodKey(p)) ?? false) || !!cell.hasActiveWork;
     if (!cell.settled) {
       cell.signed = row.signed;
     }
@@ -338,7 +359,9 @@ async function branchCells(branchId: string, periods: PeriodRef[]) {
   for (const [key, activeWork] of work) {
     if (activeWork <= 0) continue;
     const [year, month] = key.split('-').map(Number);
-    cellOf(map, { year, month }).eligible = true;
+    const cell = cellOf(map, { year, month });
+    cell.eligible = true;
+    cell.hasActiveWork = (hasActive.get(key) ?? false) || !!cell.hasActiveWork;
   }
 
   // Alasan tunggakan: PPK dulu, baru ranting.
@@ -376,6 +399,7 @@ async function districtCells(districtId: string, periods: PeriodRef[]) {
         branchId: schema.officers.branchId,
         total: sql<number>`count(*)::int`,
         reassigned: sql<number>`count(*) filter (where ${schema.assignments.status} = 'REASSIGNED')::int`,
+        active: sql<number>`count(*) filter (where ${schema.assignments.status} = 'ACTIVE')::int`,
       })
       .from(schema.assignments)
       .innerJoin(schema.officers, eq(schema.assignments.officerId, schema.officers.id))
@@ -419,13 +443,15 @@ async function districtCells(districtId: string, periods: PeriodRef[]) {
 
   const branchesWithWork = new Map<string, Set<string>>();
   for (const row of assignmentRows) {
-    const active = Number(row.total) - Number(row.reassigned);
-    if (active <= 0) continue;
+    const workCount = Number(row.total) - Number(row.reassigned);
+    if (workCount <= 0) continue;
     const key = periodKey({ year: row.year, month: row.month });
     const set = branchesWithWork.get(key) ?? new Set<string>();
     set.add(row.branchId);
     branchesWithWork.set(key, set);
-    cellOf(map, { year: row.year, month: row.month }).eligible = true;
+    const cell = cellOf(map, { year: row.year, month: row.month });
+    cell.eligible = true;
+    if (Number(row.active) > 0) cell.hasActiveWork = true;
   }
 
   const settledBranches = new Map<string, Set<string>>();
@@ -485,16 +511,21 @@ export async function getPeriodState(
   const map = await cellsForScope(scope, periods);
 
   const unsettled: PeriodProgress[] = [];
+  const awaiting_signature: PeriodProgress[] = [];
   for (const p of periods) {
     const cell = map.get(periodKey(p));
     if (!cell || !cell.eligible || cell.settled) continue;
     if (!cell.reason || !cell.waitingFor) continue;
-    unsettled.push({
+    const entry: PeriodProgress = {
       ...p,
       period: periodKey(p),
       reason: cell.reason,
       waiting_for: cell.waitingFor,
-    });
+    };
+    unsettled.push(entry);
+    // Banner tanda tangan hanya muncul setelah tidak ada tugas ACTIVE pada
+    // periode itu. Selama pekerjaan berjalan, jangan menagih tanda tangan.
+    if (!cell.hasActiveWork) awaiting_signature.push({ ...entry });
   }
 
   const first = unsettled[0];
@@ -503,6 +534,7 @@ export async function getPeriodState(
     display_period: first ? { year: first.year, month: first.month } : current,
     display_reason: first ? first.reason : null,
     unsettled,
+    awaiting_signature,
   };
 }
 

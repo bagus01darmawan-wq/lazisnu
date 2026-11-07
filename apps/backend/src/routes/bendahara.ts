@@ -6,6 +6,32 @@ import { getCollectionScope, buildCollectionsQuery, getCollectionsList, getColle
 import { getCollectionDetail, getReportSummary, getReportStats } from '../services/collectionReportService';
 import { getBendaharaDashboard } from '../services/dashboardReportService';
 import { insertActivityLog } from '../services/auditLogService';
+import { resolveDisplayPeriod } from '../services/periodState';
+import { currentOperationalPeriod } from '../utils/operationalTimeZone';
+
+/**
+ * Periode laporan: parameter eksplisit menang; tanpa parameter memakai
+ * `display_period` (periode aksi), bukan bulan kalender.
+ */
+async function resolveReportPeriod(request: FastifyRequest): Promise<{
+  year: number;
+  months: number[];
+}> {
+  const query = request.query as { year?: string; month?: string; months?: string };
+  const explicit = Boolean(query.year || query.month || query.months);
+  if (!explicit) {
+    const display = (await resolveDisplayPeriod(request.currentUser!)) ?? currentOperationalPeriod();
+    return { year: display.year, months: [display.month] };
+  }
+  const fallback = currentOperationalPeriod();
+  const year = query.year ? parseInt(query.year) : fallback.year;
+  const months = query.months
+    ? query.months.split(',').map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 12)
+    : query.month
+      ? [parseInt(query.month)].filter((n) => Number.isInteger(n) && n >= 1 && n <= 12)
+      : [];
+  return { year: Number.isInteger(year) ? year : fallback.year, months };
+}
 
 export async function bendaharaRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', authenticate);
@@ -22,17 +48,24 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
 
   fastify.get('/collections', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const query = request.query as { start_date?: string; end_date?: string; officer_id?: string; district_id?: string; branch_id?: string; search?: string; page?: string; limit?: string };
+      const query = request.query as { start_date?: string; end_date?: string; year?: string; month?: string; months?: string; officer_id?: string; district_id?: string; branch_id?: string; search?: string; page?: string; limit?: string };
       const page = parseInt(query.page || '1');
       const limit = Math.min(100, parseInt(query.limit || '20'));
       const skip = (page - 1) * limit;
 
       const user = request.currentUser!;
       const scope = getCollectionScope(user.role, user.branchId, user.districtId);
+      const hasPeriod = Boolean(query.year || query.month || query.months);
+      const period = hasPeriod
+        ? await resolveReportPeriod(request)
+        : undefined;
 
       const { whereClause, emptyResult } = await buildCollectionsQuery({
         startDate: query.start_date,
         endDate: query.end_date,
+        period: period
+          ? { year: period.year, months: period.months.length > 0 ? period.months : Array.from({ length: 12 }, (_, i) => i + 1) }
+          : undefined,
         officerId: query.officer_id,
         districtId: query.district_id,
         branchId: query.branch_id,
@@ -93,13 +126,18 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
 
   fastify.get('/export', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const query = request.query as { start_date?: string; end_date?: string; officer_id?: string; district_id?: string; branch_id?: string; search?: string };
+      const query = request.query as { start_date?: string; end_date?: string; year?: string; month?: string; months?: string; officer_id?: string; district_id?: string; branch_id?: string; search?: string };
       const user = request.currentUser!;
       const scope = getCollectionScope(user.role, user.branchId, user.districtId);
+      const hasPeriod = Boolean(query.year || query.month || query.months);
+      const period = hasPeriod ? await resolveReportPeriod(request) : undefined;
 
       const { whereClause, emptyResult } = await buildCollectionsQuery({
         startDate: query.start_date,
         endDate: query.end_date,
+        period: period
+          ? { year: period.year, months: period.months.length > 0 ? period.months : Array.from({ length: 12 }, (_, i) => i + 1) }
+          : undefined,
         officerId: query.officer_id,
         districtId: query.district_id,
         branchId: query.branch_id,
@@ -170,28 +208,15 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
   fastify.get('/reports/summary', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const query = request.query as { year?: string; month?: string; months?: string; branch_id?: string; officer_id?: string };
-      const year = parseInt(query.year || new Date().getFullYear().toString());
-      const monthList = query.months
-        ? query.months.split(',').map(Number).filter(n => n >= 1 && n <= 12)
-        : query.month
-          ? [parseInt(query.month)]
-          : Array.from({ length: 12 }, (_, i) => i + 1);
+      const { year, months } = await resolveReportPeriod(request);
+      const monthList = months.length > 0 ? months : Array.from({ length: 12 }, (_, i) => i + 1);
 
       const user = request.currentUser!;
       const scope = getCollectionScope(user.role, user.branchId, user.districtId);
 
-      const startDate = `${year}-${String(monthList[0]).padStart(2, '0')}-01 00:00:00`;
-      const lastMonth = monthList[monthList.length - 1];
-      // Hari terakhir dihitung dalam UTC (Date.UTC) agar tidak bergeser mundur
-      // sehari oleh `toISOString` (WIB UTC+7). Kedua batas memakai waktu lokal
-      // penuh (tanggal + jam) agar `new Date(...)` di buildCollectionsQuery
-      // membacanya konsisten: awal hari 00:00:00 s/d akhir hari 23:59:59.999.
-      const lastDayIso = new Date(Date.UTC(year, lastMonth, 0)).toISOString().slice(0, 10);
-      const endDate = `${lastDayIso} 23:59:59.999`;
-
+      // Uang diatribusikan ke PERIODE ASSIGNMENT, bukan bulan collected_at.
       const { whereClause, emptyResult } = await buildCollectionsQuery({
-        startDate,
-        endDate,
+        period: { year, months: monthList },
         branchId: query.branch_id,
         officerId: query.officer_id,
         scope,
@@ -218,12 +243,8 @@ export async function bendaharaRoutes(fastify: FastifyInstance) {
   fastify.get('/reports/stats', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const query = request.query as { year?: string; month?: string; months?: string; branch_id?: string };
-      const year = parseInt(query.year || new Date().getFullYear().toString());
-      const monthList = query.months
-        ? query.months.split(',').map(Number).filter(n => n >= 1 && n <= 12)
-        : query.month
-          ? [parseInt(query.month)]
-          : Array.from({ length: 12 }, (_, i) => i + 1);
+      const { year, months } = await resolveReportPeriod(request);
+      const monthList = months.length > 0 ? months : Array.from({ length: 12 }, (_, i) => i + 1);
 
       const user = request.currentUser!;
 

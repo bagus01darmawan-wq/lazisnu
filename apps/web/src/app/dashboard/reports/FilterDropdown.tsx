@@ -15,23 +15,16 @@ interface OfficerExtended extends Omit<Officer, 'full_name' | 'branch_id'> {
 }
 
 /**
- * Satu sumber kebenaran untuk kondisi filter saat halaman pertama dibuka.
- * Berbeda dari halaman lain: filter Reports RAWAN DIBAGIKAN karena ditulis ke
- * URL, jadi yang jadi "patok awal" di sini adalah nilai URL default (bukan
- * keadaan yang mungkin sudah terisi orang lain di tautan yang Anda buka).
- * `handleReset` dan pembacaan nilai awal sama-sama memakai konstanta ini.
+ * Nilai awal filter berasal dari server (`display_period`), bukan jam dinding
+ * browser. URL tetap menjadi sumber utama bila pengguna sudah memilih periode.
  */
-const FILTER_AWAL = () => {
-  const sekarang = new Date();
-  return {
-    tahun: sekarang.getFullYear().toString(),
-    bulanAktif: (sekarang.getMonth() + 1).toString(),
-    months: [sekarang.getMonth() + 1],
-    search: '',
-  };
-};
-
-export default function FilterDropdown() {
+export default function FilterDropdown({
+  defaultYear,
+  defaultMonth,
+}: {
+  defaultYear: number;
+  defaultMonth: number;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuthStore();
@@ -39,7 +32,7 @@ export default function FilterDropdown() {
 
   const currentMonth = searchParams.get('month') || '';
   const monthsParam = searchParams.get('months') || '';
-  const currentYear = searchParams.get('year') || new Date().getFullYear().toString();
+  const currentYear = searchParams.get('year') || defaultYear.toString();
   const currentBranch = searchParams.get('branch') || '';
   const currentOfficer = searchParams.get('officer') || '';
   const initialSearch = searchParams.get('search') || '';
@@ -48,7 +41,7 @@ export default function FilterDropdown() {
     ? monthsParam.split(',').map(Number).filter(n => n >= 1 && n <= 12)
     : currentMonth
       ? [parseInt(currentMonth)]
-      : [new Date().getMonth() + 1];
+      : [defaultMonth];
 
   const [selectedMonths, setSelectedMonths] = useState<number[]>(initialMonths);
   const [selectedYear, setSelectedYear] = useState(parseInt(currentYear));
@@ -135,14 +128,13 @@ export default function FilterDropdown() {
   };
 
   const handleReset = () => {
-    const awal = FILTER_AWAL();
-    setSearchTerm(awal.search);
-    setDebouncedSearchTerm(awal.search);
-    setSelectedMonths(awal.months);
-    setSelectedYear(parseInt(awal.tahun));
+    setSearchTerm('');
+    setDebouncedSearchTerm('');
+    setSelectedMonths([defaultMonth]);
+    setSelectedYear(defaultYear);
     const params = new URLSearchParams();
-    params.set('year', awal.tahun);
-    params.set('month', awal.bulanAktif);
+    params.set('year', defaultYear.toString());
+    params.set('month', defaultMonth.toString());
     router.push(`?${params.toString()}`);
   };
 

@@ -13,6 +13,8 @@ import * as schema from '../../database/schema';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { getSignedDownloadUrl } from '../../services/r2';
 import { insertActivityLog } from '../../services/auditLogService';
+import { resolveDisplayPeriod } from '../../services/periodState';
+import { currentOperationalPeriod } from '../../utils/operationalTimeZone';
 
 const rantingOrKec = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
 
@@ -22,9 +24,11 @@ export async function cansRoutes(fastify: FastifyInstance) {
       const user = request.currentUser!;
       const query = request.query as { page?: string; limit?: string; search?: string; status?: string; branch_id?: string; dukuh_id?: string };
       const { page, limit, offset } = getPaginationParams(query);
+      const display = (await resolveDisplayPeriod(user)) ?? currentOperationalPeriod();
 
       const { cans, total } = await canService.getCans({
-        page, limit, offset, search: query.search, status: query.status, branch_id: query.branch_id, dukuh_id: query.dukuh_id
+        page, limit, offset, search: query.search, status: query.status, branch_id: query.branch_id, dukuh_id: query.dukuh_id,
+        period: { year: display.year, month: display.month },
       }, user);
 
       return sendSuccess(reply, formatPaginatedResponse(cans, total, page, limit, 'cans'));

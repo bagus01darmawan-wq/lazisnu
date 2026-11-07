@@ -59,6 +59,8 @@ export interface PeriodStateView {
   displayPeriod: { year: number; month: number };
   displayReason: PeriodPendingReason | null;
   unsettled: PeriodProgressView[];
+  /** Periode yang pekerjaannya selesai tetapi tanda tangan belum FINAL. */
+  awaitingSignature?: PeriodProgressView[];
 }
 
 export interface PpkPenyusun {

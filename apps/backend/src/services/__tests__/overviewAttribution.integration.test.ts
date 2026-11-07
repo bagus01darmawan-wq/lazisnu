@@ -15,6 +15,9 @@ import {
   getTaskSummary,
 } from '../overviewService';
 import { getCollectionOutcome, getOfficerProductivity } from '../productivityService';
+import { getCollectionDateRange } from '../collectionSubmission';
+import { getReportStats, getReportSummary } from '../collectionReportService';
+import { buildCollectionsQuery } from '../collectionQueryService';
 
 const BRANCH_CODE = 'BOV-ATTR';
 const DISTRICT_CODE = 'DOV-ATTR';
@@ -189,5 +192,44 @@ describe('Atribusi periode overview (assignment, bukan collected_at)', () => {
       collected: 1,
       filled: 1,
     });
+  });
+
+  test('Rentang tanggal penghimpunan BA memakai min–max collected_at periode assignment', async () => {
+    const range = await getCollectionDateRange({ officerId, year: 2026, month: 10 });
+    expect(range?.start).toEqual(new Date(2026, 10, 5, 10, 0, 0));
+    expect(range?.end).toEqual(new Date(2026, 10, 5, 10, 0, 0));
+
+    const byOfficerIds = await getCollectionDateRange({ officerIds: [officerId], year: 2026, month: 10 });
+    expect(byOfficerIds?.start).toEqual(new Date(2026, 10, 5, 10, 0, 0));
+
+    expect(await getCollectionDateRange({ officerId, year: 2026, month: 11 })).toBeNull();
+  });
+
+  test('Laporan web (summary + stats) memakai periode assignment, bukan collected_at', async () => {
+    const octoberQuery = await buildCollectionsQuery({
+      period: { year: 2026, months: [10] },
+      scope: { branchId },
+    });
+    expect(octoberQuery.emptyResult).toBe(false);
+    const octoberSummary = await getReportSummary(octoberQuery.whereClause);
+    expect(Number(octoberSummary.totalRes?.total ?? 0)).toBe(50000);
+    expect(Number(octoberSummary.totalRes?.count ?? 0)).toBe(1);
+
+    const novemberQuery = await buildCollectionsQuery({
+      period: { year: 2026, months: [11] },
+      scope: { branchId },
+    });
+    const novemberSummary = await getReportSummary(novemberQuery.whereClause);
+    expect(Number(novemberSummary.totalRes?.total ?? 0)).toBe(0);
+    expect(Number(novemberSummary.totalRes?.count ?? 0)).toBe(0);
+
+    const octoberStats = await getReportStats({ year: 2026, months: [10], branchId });
+    expect(octoberStats.total_collected_cans).toBe(1);
+    expect(octoberStats.zero_nominal_count).toBe(0);
+    expect(octoberStats.total_assignments).toBe(1);
+
+    const novemberStats = await getReportStats({ year: 2026, months: [11], branchId });
+    expect(novemberStats.total_collected_cans).toBe(0);
+    expect(novemberStats.total_assignments).toBe(0);
   });
 });

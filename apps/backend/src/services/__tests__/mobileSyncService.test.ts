@@ -3,6 +3,14 @@ import { AppError } from '../../utils/AppError';
 import { db } from '../../config/database';
 import { submitCollection, validateAssignmentForSubmit } from '../collectionSubmission';
 
+jest.mock('../periodState', () => ({
+  resolveDisplayPeriod: jest.fn(),
+}));
+
+jest.mock('../../utils/operationalTimeZone', () => ({
+  currentOperationalPeriod: jest.fn(() => ({ year: 2026, month: 10 })),
+}));
+
 jest.mock('../../config/database', () => ({
   db: {
     query: {
@@ -52,6 +60,10 @@ describe('mobileSyncService syncCollectionsBatch', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    const { resolveDisplayPeriod } = jest.requireMock('../periodState') as {
+      resolveDisplayPeriod: jest.Mock;
+    };
+    resolveDisplayPeriod.mockResolvedValue({ year: 2026, month: 10 });
   });
 
   it('berhasil memproses item baru yang belum pernah disinkronisasi', async () => {
@@ -125,12 +137,49 @@ describe('mobileSyncService syncCollectionsBatch', () => {
     expect(sendWhatsAppNotification).not.toHaveBeenCalled();
   });
 
-  it('memakai assignment kunjungan on-demand untuk visit_outcome ISI', async () => {
-    const visitAssignment = {
-      id: 'visit-assignment-1',
-      periodYear: 2026,
-      periodMonth: 9,
+  it('memakai assignment kunjungan yang sudah dibuat klien (periode aksi), bukan membuat ulang', async () => {
+    const clientAssignment = { id: 'client-visit-assignment', periodYear: 2026, periodMonth: 10 };
+    const tx = {
+      query: {
+        cans: { findFirst: jest.fn() },
+        officers: { findFirst: jest.fn() },
+        assignments: { findFirst: jest.fn().mockResolvedValue(clientAssignment) },
+      },
+      insert: jest.fn(() => ({ values: jest.fn().mockResolvedValue(undefined) })),
     };
+
+    (db.query.collections.findFirst as jest.Mock).mockResolvedValue(null);
+    (db.query.cans.findFirst as jest.Mock).mockResolvedValue(null);
+    (db.query.officers.findFirst as jest.Mock).mockResolvedValue(null);
+    (db.transaction as jest.Mock).mockImplementation(async (cb) => cb(tx));
+    (validateAssignmentForSubmit as jest.Mock).mockResolvedValue(clientAssignment);
+    (submitCollection as jest.Mock).mockResolvedValue({ id: 'srv-visit-1' });
+
+    const result = await syncCollectionsBatch(
+      [{ ...validItem, assignment_id: clientAssignment.id, visit_outcome: 'ISI' }],
+      officerId,
+      'user-123',
+    );
+
+    expect(result.succeeded).toBe(1);
+    // Tidak membuat tugas baru — ID kiriman klien dipakai apa adanya.
+    const insertedTables = (tx.insert as jest.Mock).mock.calls.map(
+      ([table]: [Record<PropertyKey, unknown>]) => table[Symbol.for('drizzle:Name')] as string,
+    );
+    expect(insertedTables).not.toContain('assignments');
+    expect(validateAssignmentForSubmit).toHaveBeenCalledWith(
+      tx,
+      clientAssignment.id,
+      validItem.can_id,
+      officerId,
+    );
+  });
+
+  it('membuat assignment kunjungan on-demand di display_period, bukan bulan sinkronisasi', async () => {
+    const createdAssignment = { id: 'created-visit-assignment', periodYear: 2026, periodMonth: 10 };
+    const returning = jest.fn().mockResolvedValue([createdAssignment]);
+    const onConflictDoNothing = jest.fn(() => ({ returning }));
+    const values = jest.fn(() => ({ onConflictDoNothing }));
     const tx = {
       query: {
         cans: {
@@ -144,41 +193,39 @@ describe('mobileSyncService syncCollectionsBatch', () => {
           findFirst: jest.fn().mockResolvedValue({ branchId: 'branch-1' }),
         },
         assignments: {
-          findFirst: jest.fn().mockResolvedValue(visitAssignment),
+          findFirst: jest.fn().mockResolvedValue(null),
         },
       },
-      insert: jest.fn(() => ({
-        values: jest.fn().mockResolvedValue(undefined),
-      })),
+      insert: jest.fn(() => ({ values })),
     };
 
     (db.query.collections.findFirst as jest.Mock).mockResolvedValue(null);
     (db.query.cans.findFirst as jest.Mock).mockResolvedValue(null);
     (db.query.officers.findFirst as jest.Mock).mockResolvedValue(null);
     (db.transaction as jest.Mock).mockImplementation(async (cb) => cb(tx));
-    (validateAssignmentForSubmit as jest.Mock).mockResolvedValue({
-      periodYear: 2026,
-      periodMonth: 9,
-    });
-    (submitCollection as jest.Mock).mockResolvedValue({ id: 'srv-visit-1' });
+    (validateAssignmentForSubmit as jest.Mock).mockResolvedValue(createdAssignment);
+    (submitCollection as jest.Mock).mockResolvedValue({ id: 'srv-visit-2' });
 
     const result = await syncCollectionsBatch(
-      [{ ...validItem, assignment_id: 'ordinary-assignment-1', visit_outcome: 'ISI' }],
+      [{ ...validItem, assignment_id: '00000000-0000-4000-8000-000000000009', visit_outcome: 'ISI' }],
       officerId,
       'user-123',
     );
 
     expect(result.succeeded).toBe(1);
+    expect(values).toHaveBeenCalledWith(
+      expect.objectContaining({ periodYear: 2026, periodMonth: 10 }),
+    );
     expect(validateAssignmentForSubmit).toHaveBeenCalledWith(
       tx,
-      'visit-assignment-1',
+      createdAssignment.id,
       validItem.can_id,
       officerId,
     );
     expect(submitCollection).toHaveBeenCalledWith(
       tx,
       expect.objectContaining({
-        assignmentId: 'visit-assignment-1',
+        assignmentId: createdAssignment.id,
         visitOutcome: 'ISI',
       }),
     );

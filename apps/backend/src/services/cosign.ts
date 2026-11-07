@@ -48,7 +48,7 @@ import {
 } from './ppkSubmissions';
 import { periodKey, REOPEN_WINDOW_HOURS } from './periodCalendar';
 import { nextBaNumber } from './baNumbering';
-import { assertReopenWindowOpen } from './collectionSubmission';
+import { assertReopenWindowOpen, getCollectionDateRange } from './collectionSubmission';
 import { getAggregateTotal } from './emergencyAggregates';
 import { notifyBaSiapBranch, notifyPpkFinal, notifySelisih } from './notifications';
 
@@ -810,6 +810,11 @@ export async function getPpkBeritaAcara(actor: SubmissionActor, submissionId: st
     districtId: sub.branch.districtId,
   });
   const names = await signerDisplayNames([sub.ppkSignerId, sub.bendaharaSignerId]);
+  const collectionRange = await getCollectionDateRange({
+    officerId: sub.officerId,
+    year: sub.periodYear,
+    month: sub.periodMonth,
+  });
   return buildPpkBaText({
     sub,
     officerName: sub.officer.fullName,
@@ -818,6 +823,7 @@ export async function getPpkBeritaAcara(actor: SubmissionActor, submissionId: st
     baNumber: sub.baNumber,
     eventAt: sub.finalizedAt ?? sub.ppkSignedAt ?? new Date(),
     bendaharaName: (sub.bendaharaSignerId && names.get(sub.bendaharaSignerId)) || null,
+    collectionRange,
   });
 }
 
@@ -869,6 +875,11 @@ export async function getBranchBeritaAcara(actor: SubmissionActor, submissionId:
     with: { officer: { columns: { fullName: true } } },
   });
   const names = await signerDisplayNames([sub.rantingSignerId, sub.mwcBendaharaSignerId]);
+  const collectionRange = await getCollectionDateRange({
+    officerIds: ppks.map((p) => p.officerId),
+    year: sub.periodYear,
+    month: sub.periodMonth,
+  });
   // DRAFT = belum dikunci → angka cache belum tentu benar; hitung dari sumber.
   const live = sub.status === 'DRAFT' ? await liveDraftBranchNumbers(sub.branchId, ppks) : null;
   const base = live
@@ -893,6 +904,7 @@ export async function getBranchBeritaAcara(actor: SubmissionActor, submissionId:
     eventAt: sub.finalizedAt ?? sub.rantingSignedAt ?? new Date(),
     rantingName: (sub.rantingSignerId && names.get(sub.rantingSignerId)) || null,
     mwcName: (sub.mwcBendaharaSignerId && names.get(sub.mwcBendaharaSignerId)) || null,
+    collectionRange,
   });
 }
 
