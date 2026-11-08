@@ -84,6 +84,7 @@ jobs:
       backend: ${{ steps.decide.outputs.backend }}
       web: ${{ steps.decide.outputs.web }}
       mobile: ${{ steps.decide.outputs.mobile }}
+      mobile_code: ${{ steps.decide.outputs.mobile_code }}
       infra: ${{ steps.decide.outputs.infra }}
       # Apakah ada berkas kode yang benar-benar berubah? Dipakai job
       # `ci-status` supaya ia menolak melaporkan hijau ketika seluruh job
@@ -139,6 +140,12 @@ jobs:
               - 'apps/mobile/**'
               - 'packages/shared-types/**'
               - 'pnpm-lock.yaml'
+            # Hanya berkas yang ikut terbundel ke APK. `pnpm-lock.yaml` sengaja
+            # TIDAK masuk: perubahan dependensi tetap mengetes JS mobile lewat
+            # `mobile`, tetapi tidak boleh menyalakan dua build APK penuh.
+            mobile_code:
+              - 'apps/mobile/**'
+              - 'packages/shared-types/**'
             infra:
               - 'docker-compose*.yml'
               - 'nginx/**'
@@ -158,12 +165,13 @@ jobs:
           F_BACKEND: ${{ steps.filter.outputs.backend }}
           F_WEB: ${{ steps.filter.outputs.web }}
           F_MOBILE: ${{ steps.filter.outputs.mobile }}
+          F_MOBILE_CODE: ${{ steps.filter.outputs.mobile_code }}
           F_INFRA: ${{ steps.filter.outputs.infra }}
         run: |
           set -euo pipefail
           emit() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
           semua_berubah() {
-            emit backend true; emit web true; emit mobile true; emit infra true; emit code true
+            emit backend true; emit web true; emit mobile true; emit mobile_code true; emit infra true; emit code true
           }
 
           # Filter tidak dijalankan (workflow_dispatch / ref tag dari
@@ -210,6 +218,7 @@ jobs:
           emit backend "$F_BACKEND"
           emit web     "$F_WEB"
           emit mobile  "$F_MOBILE"
+          emit mobile_code "$F_MOBILE_CODE"
           emit infra   "$F_INFRA"
           emit code    "$code"
 
@@ -444,7 +453,7 @@ jobs:
       always() && !cancelled() &&
       needs.verify.result == 'success' &&
       needs.test-mobile.result != 'failure' &&
-      (needs.changes.outputs.mobile == 'true' ||
+      (needs.changes.outputs.mobile_code == 'true' ||
        github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -506,7 +515,7 @@ jobs:
       always() && !cancelled() &&
       needs.verify.result == 'success' &&
       needs.test-mobile.result != 'failure' &&
-      (needs.changes.outputs.mobile == 'true' ||
+      (needs.changes.outputs.mobile_code == 'true' ||
        github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 45
