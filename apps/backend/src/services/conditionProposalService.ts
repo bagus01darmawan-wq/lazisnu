@@ -17,6 +17,7 @@ import { AppError } from '../utils/AppError';
 import { Errors } from '../utils/errorCatalog';
 import { getLatestCollectionCondition } from './collectionSubmission';
 import { assertCanAccess } from './canService';
+import { syncActiveAssignmentKindForCan } from './assignmentKindService';
 import {
   ASSIGNABLE_CONDITIONS,
   EMPTY_STREAK_THRESHOLD,
@@ -149,6 +150,8 @@ export async function approveConditionProposal(
       .set({ condition: to, isActive: isTrackedForCondition(to), updatedAt: now })
       .where(eq(schema.cans.id, proposal.canId));
 
+    await syncActiveAssignmentKindForCan(tx, proposal.canId, to, now);
+
     await tx.update(schema.canConditionProposals)
       .set({
         status: 'APPROVED',
@@ -255,9 +258,18 @@ export async function evaluateEmptyStreakForCan(canId: string, client: any = db)
   const latestNominal = nominals[0] ?? 0;
 
   if (shouldRestoreActive(condition, latestNominal)) {
-    await client.update(schema.cans)
-      .set({ condition: 'AKTIF', isActive: true, updatedAt: new Date() })
-      .where(eq(schema.cans.id, canId));
+    const now = new Date();
+    const applyRestore = async (tx: any) => {
+      await tx.update(schema.cans)
+        .set({ condition: 'AKTIF', isActive: true, updatedAt: now })
+        .where(eq(schema.cans.id, canId));
+      await syncActiveAssignmentKindForCan(tx, canId, 'AKTIF', now);
+    };
+    if (typeof client.transaction === 'function') {
+      await client.transaction(applyRestore);
+    } else {
+      await applyRestore(client);
+    }
     return { can_id: canId, empty_streak: emptyStreak, action: 'RESTORED_ACTIVE' as EmptyStreakAction };
   }
 
@@ -271,6 +283,8 @@ export async function evaluateEmptyStreakForCan(canId: string, client: any = db)
       await tx.update(schema.cans)
         .set({ condition: 'NON_AKTIF', isActive: true, updatedAt: now })
         .where(eq(schema.cans.id, canId));
+
+      await syncActiveAssignmentKindForCan(tx, canId, 'NON_AKTIF', now);
 
       await tx.insert(schema.canConditionProposals).values({
         canId,

@@ -38,6 +38,17 @@ export const collectionStatusEnum = pgEnum('collection_status', ['PENDING', 'COM
 export const assignmentStatusEnum = pgEnum('assignment_status', ['ACTIVE', 'COMPLETED', 'REASSIGNED', 'UNCOLLECTED']);
 
 /**
+ * Jenis tugas bulanan:
+ * - PICKUP : penjemputan kaleng AKTIF/RUSAK/HILANG.
+ * - VISIT  : kunjungan verifikasi kaleng NON_AKTIF.
+ *
+ * Dipisahkan dari `condition` karena satu kaleng bisa berganti kondisi di
+ * tengah periode, sedangkan jenis tugas yang disetujui admin tidak boleh
+ * berubah diam-diam.
+ */
+export const assignmentKindEnum = pgEnum('assignment_kind', ['PICKUP', 'VISIT']);
+
+/**
  * Kondisi kaleng — sumber kebenaran perilaku bisnis (menggantikan makna ganda `is_active`).
  * - AKTIF        : dijemput, dihitung pada cakupan penempatan
  * - NON_AKTIF    : tidak dijemput, cukup dikunjungi untuk verifikasi
@@ -172,6 +183,7 @@ export const assignments = pgTable('assignments', {
   backupOfficerId: uuid('backup_officer_id').references(() => officers.id),
   periodYear: integer('period_year').notNull(),
   periodMonth: integer('period_month').notNull(),
+  kind: assignmentKindEnum('kind').default('PICKUP').notNull(),
   status: assignmentStatusEnum('status').default('ACTIVE').notNull(),
   assignedAt: timestamp('assigned_at').defaultNow().notNull(),
   completedAt: timestamp('completed_at'),
@@ -183,6 +195,11 @@ export const assignments = pgTable('assignments', {
 }, (t) => ({
   unq: uniqueIndex('can_officer_period_unq').on(t.canId, t.officerId, t.periodYear, t.periodMonth),
   assignmentsStatusPeriodIdx: index('assignments_status_period_idx').on(t.status, t.periodYear, t.periodMonth),
+  // Satu kaleng hanya boleh punya satu tugas kunjungan per periode, meskipun
+  // ada beberapa petugas aktif di ranting yang sama.
+  assignmentsVisitPeriodUnq: uniqueIndex('assignments_visit_period_unq')
+    .on(t.canId, t.periodYear, t.periodMonth)
+    .where(sql`${t.kind} = 'VISIT'`),
 }));
 
 // Collections
@@ -526,6 +543,7 @@ export const periodDraftItems = pgTable('period_draft_items', {
   canId: uuid('can_id').references(() => cans.id).notNull(),
   officerId: uuid('officer_id').references(() => officers.id).notNull(),
   backupOfficerId: uuid('backup_officer_id').references(() => officers.id),
+  kind: assignmentKindEnum('kind').default('PICKUP').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => ({
   draftCanUnq: uniqueIndex('period_draft_item_draft_can_unq').on(t.draftId, t.canId),

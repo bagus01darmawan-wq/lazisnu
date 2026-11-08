@@ -33,7 +33,9 @@ import {
   ChevronLeft,
   ChevronRight,
   User,
-  CheckCircle2
+  CheckCircle2,
+  PauseCircle,
+  PlayCircle
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -565,6 +567,56 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
     reader.readAsText(importFile);
   };
 
+  const handleSetNonActive = async (id: string) => {
+    toast.custom((t: string | number) => (
+      <ConfirmToast
+        id={t}
+        title="Jadikan Non-Aktif?"
+        description="Kaleng tidak lagi masuk tugas penjemputan. Bulan berikutnya ia masuk tugas kunjungan untuk diverifikasi."
+        confirmLabel="Ya, Non-Aktifkan"
+        onConfirm={() => {
+          toast.promise(
+            api.put(`/admin/cans/${id}`, { condition: 'NON_AKTIF' }).then((res) => {
+              void fetchData();
+              return res;
+            }),
+            {
+              loading: 'Memproses...',
+              success: 'Kaleng ditandai non-aktif',
+              error: (err: ApiError) => err.error?.message || err.message || 'Gagal menandai non-aktif',
+            }
+          )
+        }}
+        variant="warning"
+      />
+    ), { duration: 4000 });
+  };
+
+  const handleSetActive = async (id: string) => {
+    toast.custom((t: string | number) => (
+      <ConfirmToast
+        id={t}
+        title="Aktifkan Kaleng?"
+        description="Kaleng kembali masuk daftar penjemputan dan tugas kunjungan bulan ini dihentikan."
+        confirmLabel="Ya, Aktifkan"
+        onConfirm={() => {
+          toast.promise(
+            api.put(`/admin/cans/${id}`, { condition: 'AKTIF' }).then((res) => {
+              void fetchData();
+              return res;
+            }),
+            {
+              loading: 'Mengaktifkan...',
+              success: 'Kaleng kembali aktif',
+              error: (err: ApiError) => err.error?.message || err.message || 'Gagal mengaktifkan kaleng',
+            }
+          )
+        }}
+        variant="info"
+      />
+    ), { duration: 3000 });
+  };
+
   const handleReactivate = async (id: string) => {
     toast.custom((t: string | number) => (
       <ConfirmToast
@@ -702,7 +754,8 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
       id: 'actions',
       header: '',
       cell: ({ row }) => {
-        const isNonActiveRow = !row.original.isActive;
+        const isReturned = isReturnedCan(row.original);
+        const isNonActive = row.original.condition === 'NON_AKTIF';
         const isAssigned = row.original.assignments && row.original.assignments.length > 0;
 
         return (
@@ -718,7 +771,7 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
                 <QrCode size={14} className="text-[#1F8243] group-hover:text-[#EAD19B]" />
               </Button>
             )}
-            {isNonActiveRow ? (
+            {isReturned ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -729,26 +782,49 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
                 <RotateCcw size={14} className="text-[#EAD19B]" />
               </Button>
             ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-white/10 transition-all duration-300 group"
-                onClick={() => handleEdit(row.original)}
-                title="Edit Data"
-              >
-                <Edit size={14} className="text-[#EAD19B]" />
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-white/10 transition-all duration-300 group"
+                  onClick={() => handleEdit(row.original)}
+                  title="Edit Data"
+                >
+                  <Edit size={14} className="text-[#EAD19B]" />
+                </Button>
+                {isNonActive ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-[#1F8243]/20 transition-all duration-300 group"
+                    onClick={() => handleSetActive(row.original.id)}
+                    title="Aktifkan Kaleng"
+                  >
+                    <PlayCircle size={14} className="text-[#1F8243]" />
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8 p-0 rounded-xl border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:text-[#F4F1EA] hover:bg-[#EAD19B]/15 transition-all duration-300 group"
+                    onClick={() => handleSetNonActive(row.original.id)}
+                    title="Jadikan Non-Aktif"
+                  >
+                    <PauseCircle size={14} className="text-[#EAD19B]" />
+                  </Button>
+                )}
+              </>
             )}
 
             {!isAssigned && (
               <Button
                 variant="outline"
                 size="sm"
-                className={`h-8 w-8 p-0 rounded-xl transition-all duration-300 border-white/10 bg-white/5 group ${isNonActiveRow ? 'hover:bg-red-500/20 hover:text-[#D97A76] hover:border-red-500/30' : 'hover:bg-red-500/10 hover:text-[#D97A76] hover:border-red-500/20'}`}
-                onClick={() => handleDelete(row.original.id, isNonActiveRow)}
-                title={isNonActiveRow ? 'Hapus Permanen' : 'Tandai Dikembalikan'}
+                className={`h-8 w-8 p-0 rounded-xl transition-all duration-300 border-white/10 bg-white/5 group ${isReturned ? 'hover:bg-red-500/20 hover:text-[#D97A76] hover:border-red-500/30' : 'hover:bg-red-500/10 hover:text-[#D97A76] hover:border-red-500/20'}`}
+                onClick={() => handleDelete(row.original.id, isReturned)}
+                title={isReturned ? 'Hapus Permanen' : 'Tandai Dikembalikan'}
               >
-                {isNonActiveRow ? (
+                {isReturned ? (
                   <AlertTriangle size={14} className="text-[#D97A76]" />
                 ) : (
                   <Trash2 size={14} className="text-[#F4F1EA]/60 group-hover:text-[#D97A76]" />

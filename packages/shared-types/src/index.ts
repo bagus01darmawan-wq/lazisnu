@@ -64,6 +64,12 @@ export enum AssignmentStatus {
   UNCOLLECTED = "UNCOLLECTED",
 }
 
+/** Jenis tugas bulanan: penjemputan atau kunjungan kaleng NON_AKTIF. */
+export enum AssignmentKind {
+  PICKUP = "PICKUP",
+  VISIT = "VISIT",
+}
+
 export enum SyncStatus {
   PENDING = "PENDING",
   COMPLETED = "COMPLETED",
@@ -351,6 +357,7 @@ export interface Assignment {
   backup_officer_id?: string;
   period_year: number;
   period_month: number;
+  kind?: AssignmentKind;
   status: AssignmentStatus;
   assigned_at: string;
   completed_at?: string;
@@ -479,6 +486,8 @@ export interface Task {
   condition?: CanCondition;
   is_active?: boolean;
   status: AssignmentStatus;
+  /** PICKUP = penjemputan; VISIT = kunjungan kaleng NON_AKTIF. */
+  kind?: AssignmentKind;
   assigned_at: string;
   period: string;
   /** Kode alasan baku saat tugas berstatus UNCOLLECTED (dipakai tab Riwayat). */
@@ -530,6 +539,7 @@ export interface VisitTask {
    */
   assignment_id?: string | null;
   assignment_status?: string | null;
+  kind?: AssignmentKind;
   last_visit: string | null;
   last_visit_purpose: CanVisitPurpose | null;
   last_visit_outcome: CanVisitOutcome | null;

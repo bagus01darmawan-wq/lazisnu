@@ -196,12 +196,18 @@ export async function preparePeriodDraft(
 
   // Hitungan generator yang sama dengan tombol manual lama — global, lalu
   // dikelompokkan per ranting agar tiap draft hanya berisi kalengnya sendiri.
-  const { cansToAssign } = await findCansWithoutAssignment(year, month);
-  const cansByBranch = new Map<string, typeof cansToAssign>();
+  const { cansToAssign, visitCansToAssign } = await findCansWithoutAssignment(year, month);
+  const pickupByBranch = new Map<string, typeof cansToAssign>();
   for (const can of cansToAssign) {
-    const list = cansByBranch.get(can.branchId) ?? [];
+    const list = pickupByBranch.get(can.branchId) ?? [];
     list.push(can);
-    cansByBranch.set(can.branchId, list);
+    pickupByBranch.set(can.branchId, list);
+  }
+  const visitByBranch = new Map<string, typeof visitCansToAssign>();
+  for (const can of visitCansToAssign) {
+    const list = visitByBranch.get(can.branchId) ?? [];
+    list.push(can);
+    visitByBranch.set(can.branchId, list);
   }
 
   const drafts: PrepareBranchResult[] = [];
@@ -215,14 +221,18 @@ export async function preparePeriodDraft(
         ),
       });
 
-      const branchCans = cansByBranch.get(branch.id) ?? [];
+      const branchPickup = pickupByBranch.get(branch.id) ?? [];
+      const branchVisit = visitByBranch.get(branch.id) ?? [];
 
       // Draft sudah APPROVED → sapuan susulan (§6 tgl 20): selisih kaleng baru
       // langsung jadi assignment (sudah disetujui manusianya), tercatat audit.
       if (existing && existing.status === 'APPROVED') {
         let direct = 0;
-        if (branchCans.length > 0) {
-          const built = buildFirstOfficerAssignments(branchCans, year, month);
+        if (branchPickup.length > 0 || branchVisit.length > 0) {
+          const built = [
+            ...buildFirstOfficerAssignments(branchPickup, year, month, 'PICKUP'),
+            ...buildFirstOfficerAssignments(branchVisit, year, month, 'VISIT'),
+          ];
           if (built.length > 0) {
             const inserted = await tx
               .insert(schema.assignments)
@@ -233,6 +243,7 @@ export async function preparePeriodDraft(
                   backupOfficerId: a.backupOfficerId ?? null,
                   periodYear: year,
                   periodMonth: month,
+                  kind: a.kind ?? 'PICKUP',
                   status: 'ACTIVE' as const,
                   assignedAt: now,
                 })),
@@ -324,10 +335,14 @@ export async function preparePeriodDraft(
         .from(schema.periodDraftItems)
         .where(eq(schema.periodDraftItems.draftId, draftId));
       const presentSet = new Set(present.map((r) => r.canId));
-      const fresh = branchCans.filter((c) => !presentSet.has(c.id));
+      const freshPickup = branchPickup.filter((c) => !presentSet.has(c.id));
+      const freshVisit = branchVisit.filter((c) => !presentSet.has(c.id));
       let added = 0;
-      if (fresh.length > 0) {
-        const built = buildFirstOfficerAssignments(fresh, year, month);
+      if (freshPickup.length > 0 || freshVisit.length > 0) {
+        const built = [
+          ...buildFirstOfficerAssignments(freshPickup, year, month, 'PICKUP'),
+          ...buildFirstOfficerAssignments(freshVisit, year, month, 'VISIT'),
+        ];
         if (built.length > 0) {
           const inserted = await tx
             .insert(schema.periodDraftItems)
@@ -337,6 +352,7 @@ export async function preparePeriodDraft(
                 canId: a.canId!,
                 officerId: a.officerId!,
                 backupOfficerId: a.backupOfficerId ?? null,
+                kind: a.kind ?? 'PICKUP',
               })),
             )
             .onConflictDoNothing({
@@ -677,6 +693,7 @@ export async function approveDraft(
             backupOfficerId: it.backupOfficerId ?? null,
             periodYear: draft.periodYear,
             periodMonth: draft.periodMonth,
+            kind: it.kind ?? 'PICKUP',
             status: 'ACTIVE' as const,
             assignedAt: now,
           })),

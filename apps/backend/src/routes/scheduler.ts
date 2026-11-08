@@ -64,9 +64,12 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
       const body = generateTasksSchema.parse(request.body);
       const { year, month } = body;
 
-      const { cansToAssign } = await findCansWithoutAssignment(year, month);
+      const { cansToAssign, visitCansToAssign } = await findCansWithoutAssignment(year, month);
 
-      const assignmentItems = buildFirstOfficerAssignments(cansToAssign, year, month);
+      const assignmentItems = [
+        ...buildFirstOfficerAssignments(cansToAssign, year, month, 'PICKUP'),
+        ...buildFirstOfficerAssignments(visitCansToAssign, year, month, 'VISIT'),
+      ];
 
       // Kunci kaleng lalu saring ulang yang masih belum ditugaskan di dalam
       // transaksi yang sama. Jalur admin (bulk-branch/bulk-cans/transfer)
@@ -116,7 +119,7 @@ export async function schedulerRoutes(fastify: FastifyInstance) {
       return sendSuccess(reply, {
         total_assignments: eligibleItems.length,
         assigned_to_officers: new Set(eligibleItems.map((item) => item.officerId)).size,
-        skipped_no_officer: cansToAssign.length - assignmentItems.length,
+        skipped_no_officer: (cansToAssign.length + visitCansToAssign.length) - assignmentItems.length,
         skipped_already_assigned: skippedAlreadyAssigned,
         period: periodKey(year, month),
       });

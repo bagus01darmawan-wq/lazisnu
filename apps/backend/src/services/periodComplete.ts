@@ -49,7 +49,7 @@ export async function completeOfficerPeriod(
   ]);
 
   if (activeCount === 0 && expiredCount === 0) {
-    return { period, skipped_count: 0, expired_closed_count: 0, message: 'Tidak ada kaleng yang perlu ditandai' };
+    return { period, skipped_count: 0, expired_closed_count: 0, message: 'Tidak ada tugas yang perlu ditandai' };
   }
 
   const stamp = new Date();
@@ -85,7 +85,7 @@ export async function completeOfficerPeriod(
     skipped_count: activeCount,
     expired_closed_count: expiredCount,
     message: expiredCount > 0
-      ? `${activeCount} kaleng periode berjalan + ${expiredCount} kaleng kedaluwarsa ditandai tidak dijemput`
-      : `${activeCount} kaleng ditandai tidak dijemput untuk periode berjalan`,
+      ? `${activeCount} tugas periode berjalan + ${expiredCount} tugas kedaluwarsa ditandai tidak selesai`
+      : `${activeCount} tugas ditandai tidak selesai untuk periode berjalan`,
   };
 }

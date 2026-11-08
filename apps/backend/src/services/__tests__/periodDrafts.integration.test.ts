@@ -218,7 +218,8 @@ describe('C1-T3 generate approve (DB)', () => {
     const mine = res.drafts.filter((d) => [branchR, branchT, branchR2].includes(d.branchId));
     expect(mine).toHaveLength(3);
     const byBranch = new Map(mine.map((d) => [d.branchId, d]));
-    expect(byBranch.get(branchR)).toMatchObject({ draftStatus: 'DRAFT', totalItems: 3 });
+    // 3 PICKUP + 1 VISIT (kaleng NON_AKTIF) = 4 item draft.
+    expect(byBranch.get(branchR)).toMatchObject({ draftStatus: 'DRAFT', totalItems: 4 });
     expect(byBranch.get(branchT)).toMatchObject({ draftStatus: 'DRAFT', totalItems: 1 });
     expect(byBranch.get(branchR2)).toMatchObject({ draftStatus: 'DRAFT', totalItems: 1 });
     rDraftId = byBranch.get(branchR)!.draftId;
@@ -227,7 +228,7 @@ describe('C1-T3 generate approve (DB)', () => {
 
     // Petugas pertama (tertua) memegang semua item ranting R.
     const detail = await getDraftDetail(stafR, rDraftId);
-    expect(detail.items).toHaveLength(3);
+    expect(detail.items).toHaveLength(4);
     expect(detail.items.every((it) => it.officerId === offA)).toBe(true);
   });
 
@@ -235,7 +236,7 @@ describe('C1-T3 generate approve (DB)', () => {
     const res = await preparePeriodDraft(2026, 9, { now: OCT5 });
     const mine = res.drafts.filter((d) => [branchR, branchT, branchR2].includes(d.branchId));
     expect(mine.every((d) => d.addedItems === 0)).toBe(true);
-    expect(mine.find((d) => d.branchId === branchR)).toMatchObject({ totalItems: 3 });
+    expect(mine.find((d) => d.branchId === branchR)).toMatchObject({ totalItems: 4 });
   });
 
   test('robot menyiapkan bulan yang diminta tanpa gerbang tanggal', async () => {
@@ -243,9 +244,9 @@ describe('C1-T3 generate approve (DB)', () => {
     expect(res.period).toBe('2026-12');
   });
 
-  test('Staf setujui draft R → 3 assignment ACTIVE Sept + tombol mati', async () => {
+  test('Staf setujui draft R → 4 assignment ACTIVE Sept + tombol mati', async () => {
     const res = await approveDraft(stafR, rDraftId, new Date(2026, 9, 5, 12, 0, 0));
-    expect(res).toMatchObject({ period: '2026-09', itemCount: 3, createdAssignments: 3, escalated: false });
+    expect(res).toMatchObject({ period: '2026-09', itemCount: 4, createdAssignments: 4, escalated: false });
 
     const asg = await db.query.assignments.findMany({
       where: and(
@@ -255,7 +256,7 @@ describe('C1-T3 generate approve (DB)', () => {
           (await db.select({ id: schema.cans.id }).from(schema.cans).where(eq(schema.cans.branchId, branchR))).map((c) => c.id)),
       ),
     });
-    expect(asg).toHaveLength(3);
+    expect(asg).toHaveLength(4);
     expect(asg.every((a) => a.status === 'ACTIVE')).toBe(true);
     expect(asg.every((a) => a.assignedAt.getTime() === new Date(2026, 9, 5, 12, 0, 0).getTime())).toBe(true);
     expect(asg.some((a) => a.backupOfficerId === offB)).toBe(true);

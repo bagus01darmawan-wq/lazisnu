@@ -262,6 +262,7 @@ describe('Sync Service (sync.ts)', () => {
         kind: 'VISIT',
         can_id: 'can_visit_1',
         qr_code: 'QR-V1',
+        assignment_id: '11111111-1111-4111-8111-111111111111',
         outcome: 'DIKEMBALIKAN',
         created_at: new Date().toISOString(),
       });
@@ -279,7 +280,12 @@ describe('Sync Service (sync.ts)', () => {
       const result = await syncService.autoSyncActions();
 
       expect(result.synced).toBe(1);
-      expect(visitSpy).toHaveBeenCalledWith('can_visit_1', 'DIKEMBALIKAN', undefined);
+      expect(visitSpy).toHaveBeenCalledWith(
+        'can_visit_1',
+        'DIKEMBALIKAN',
+        undefined,
+        '11111111-1111-4111-8111-111111111111',
+      );
       expect(actionQueue.getQueueCount()).toBe(0);
     });
 

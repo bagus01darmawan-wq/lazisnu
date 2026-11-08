@@ -212,9 +212,18 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
 
       const can = await db.query.cans.findFirst({
         where: eq(schema.cans.id, body.can_id),
-        columns: { id: true, branchId: true },
+        columns: { id: true, branchId: true, condition: true, isActive: true },
       });
       if (!can) return sendError(reply, 404, 'CAN_NOT_FOUND', 'Kaleng tidak ditemukan');
+
+      const kind = body.kind ?? (can.condition === 'NON_AKTIF' ? 'VISIT' : 'PICKUP');
+      if (kind === 'VISIT') {
+        if (!can.isActive || can.condition !== 'NON_AKTIF') {
+          return sendError(reply, 400, 'VALIDATION_ERROR', 'Tugas kunjungan hanya untuk kaleng NON_AKTIF yang masih dilacak');
+        }
+      } else if (!can.isActive || !(ASSIGNABLE_CONDITIONS as string[]).includes(can.condition)) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Tugas penjemputan hanya untuk kaleng AKTIF/RUSAK/HILANG');
+      }
 
       if (user.role === 'ADMIN_RANTING') {
         if (can.branchId !== user.branchId) {
@@ -255,6 +264,7 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
           backupOfficerId: body.backup_officer_id,
           periodYear: body.period_year,
           periodMonth: body.period_month,
+          kind,
         }).returning();
       });
       if (!inserted) {
@@ -279,7 +289,10 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
         dukuh_ids: z.array(z.string().uuid()).optional().nullable(),
         period_year: z.number().int().min(2020).max(2100).optional(),
         period_month: z.number().int().min(1).max(12).optional(),
+        kind: z.enum(['PICKUP', 'VISIT']).optional(),
       }).parse(request.body);
+
+      const kind = body.kind ?? 'PICKUP';
 
       const user = request.currentUser!;
       await assertBranchAccess(user, body.branch_id);
@@ -301,9 +314,10 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       const candidateConditions: any[] = [
         eq(schema.cans.branchId, body.branch_id),
         eq(schema.cans.isActive, true),
-        // Hanya AKTIF, RUSAK, dan HILANG yang boleh menerima tugas penjemputan.
-        // NON_AKTIF cukup dikunjungi untuk verifikasi; DIKEMBALIKAN sudah keluar.
-        inArray(schema.cans.condition, ASSIGNABLE_CONDITIONS),
+        // PICKUP: AKTIF/RUSAK/HILANG. VISIT: hanya NON_AKTIF.
+        kind === 'VISIT'
+          ? eq(schema.cans.condition, 'NON_AKTIF')
+          : inArray(schema.cans.condition, ASSIGNABLE_CONDITIONS),
       ];
 
       if (body.dukuh_ids && body.dukuh_ids.length > 0) {
@@ -361,6 +375,7 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
           officerId: body.officer_id,
           periodYear: currentYear,
           periodMonth: currentMonth,
+          kind,
           status: 'ACTIVE' as const,
         }));
 
@@ -371,6 +386,7 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       request.auditContext = { newData: newAssignments };
       return sendSuccess(reply, {
         assigned_count: assignedCount,
+        kind,
         period: `${currentMonth}/${currentYear}`
       }, 201);
     } catch (error: unknown) {
@@ -395,8 +411,10 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
         can_ids: z.array(z.string().uuid()).min(1).max(500),
         period_year: z.number().int().min(2020).max(2100).optional(),
         period_month: z.number().int().min(1).max(12).optional(),
+        kind: z.enum(['PICKUP', 'VISIT']).optional(),
       }).parse(request.body);
 
+      const kind = body.kind ?? 'PICKUP';
       const user = request.currentUser!;
       const uniqueCanIds = Array.from(new Set(body.can_ids));
 
@@ -471,7 +489,9 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
         const eligible = lockedCans.filter(
           (can) =>
             can.isActive &&
-            (ASSIGNABLE_CONDITIONS as string[]).includes(can.condition) &&
+            (kind === 'VISIT'
+              ? can.condition === 'NON_AKTIF'
+              : (ASSIGNABLE_CONDITIONS as string[]).includes(can.condition)) &&
             !assignedCanIds.has(can.id)
         );
 
@@ -484,6 +504,7 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
           officerId: body.officer_id,
           periodYear: currentYear,
           periodMonth: currentMonth,
+          kind,
           status: 'ACTIVE' as const,
         }));
 
@@ -499,12 +520,125 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       return sendSuccess(reply, {
         assigned_count: assignedCount,
         skipped_count: skippedCount,
+        kind,
         period: `${currentMonth}/${currentYear}`,
       }, 201);
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
         return sendError(reply, 400, 'VALIDATION_ERROR', 'Input tidak valid', error.issues);
       }
+      if (isAppError(error)) {
+        return sendError(reply, error.statusCode, error.code, error.message);
+      }
+      return sendInternalError(reply, error, fastify.log);
+    }
+  });
+
+  /**
+   * Antrean kunjungan: kaleng NON_AKTIF yang belum punya tugas VISIT pada
+   * periode tersebut. Dipakai web untuk "belum ditugaskan untuk kunjungan".
+   * Kaleng yang sudah punya VISIT (status apa pun) tidak masuk antrean.
+   */
+  fastify.get('/assignments/visit-queue', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const query = request.query as {
+        branch_id?: string;
+        year?: string;
+        month?: string;
+        dukuh_id?: string;
+      };
+      const user = request.currentUser!;
+      const branchId = user.role === 'ADMIN_RANTING' ? user.branchId : query.branch_id;
+      if (!branchId) {
+        return sendError(reply, 400, 'MISSING_BRANCH', 'Ranting wajib dipilih');
+      }
+      await assertBranchAccess(user, branchId);
+
+      const operational = currentOperationalPeriod();
+      const year = Number.parseInt(query.year || '', 10) || operational.year;
+      const month = Number.parseInt(query.month || '', 10) || operational.month;
+      if (month < 1 || month > 12) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Bulan tidak valid');
+      }
+
+      const canConditions = [
+        eq(schema.cans.branchId, branchId),
+        eq(schema.cans.isActive, true),
+        eq(schema.cans.condition, 'NON_AKTIF'),
+      ];
+      if (query.dukuh_id) {
+        canConditions.push(eq(schema.cans.dukuhId, query.dukuh_id));
+      }
+
+      const canRows = await db
+        .select({
+          id: schema.cans.id,
+          qrCode: schema.cans.qrCode,
+          ownerName: schema.cans.ownerName,
+          ownerAddress: schema.cans.ownerAddress,
+          dukuhId: schema.cans.dukuhId,
+          dukuhName: schema.dukuhs.name,
+          rt: schema.cans.rt,
+          rw: schema.cans.rw,
+        })
+        .from(schema.cans)
+        .leftJoin(schema.dukuhs, eq(schema.cans.dukuhId, schema.dukuhs.id))
+        .where(and(...canConditions))
+        .orderBy(asc(schema.dukuhs.name), asc(schema.cans.qrCode));
+
+      const canIds = canRows.map((can) => can.id);
+      const assignedRows = canIds.length === 0
+        ? []
+        : await db
+            .select({ canId: schema.assignments.canId })
+            .from(schema.assignments)
+            .where(and(
+              inArray(schema.assignments.canId, canIds),
+              eq(schema.assignments.periodYear, year),
+              eq(schema.assignments.periodMonth, month),
+              eq(schema.assignments.kind, 'VISIT'),
+            ));
+      const assignedSet = new Set(assignedRows.map((row) => row.canId));
+      const unassigned = canRows.filter((can) => !assignedSet.has(can.id));
+
+      const groupsMap = new Map<string, {
+        dukuh_id: string | null;
+        dukuh_name: string;
+        can_ids: string[];
+        cans: typeof unassigned;
+      }>();
+      for (const can of unassigned) {
+        const key = can.dukuhId ?? 'tanpa-dukuh';
+        const group = groupsMap.get(key) ?? {
+          dukuh_id: can.dukuhId,
+          dukuh_name: can.dukuhName || 'TANPA DUKUH',
+          can_ids: [],
+          cans: [],
+        };
+        group.can_ids.push(can.id);
+        group.cans.push(can);
+        groupsMap.set(key, group);
+      }
+
+      const officers = await db.query.officers.findMany({
+        where: and(
+          eq(schema.officers.branchId, branchId),
+          eq(schema.officers.isActive, true),
+        ),
+        columns: { id: true, fullName: true, employeeCode: true },
+        orderBy: [asc(schema.officers.fullName)],
+      });
+
+      return sendSuccess(reply, {
+        period: { year, month },
+        branch_id: branchId,
+        total_visit_cans: canRows.length,
+        assigned_visit_cans: assignedSet.size,
+        unassigned_visit_cans: unassigned.length,
+        groups: Array.from(groupsMap.values()),
+        officers,
+      });
+    } catch (error: unknown) {
       if (isAppError(error)) {
         return sendError(reply, error.statusCode, error.code, error.message);
       }

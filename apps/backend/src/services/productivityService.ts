@@ -156,6 +156,7 @@ export async function getOfficerProductivity(
       .innerJoin(schema.cans, eq(schema.assignments.canId, schema.cans.id))
       .where(and(
         scopeCondition(scope),
+        eq(schema.assignments.kind, 'PICKUP'),
         inAssignmentPeriod(year, months),
       ))
       .groupBy(schema.assignments.officerId),

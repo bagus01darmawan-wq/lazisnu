@@ -8,6 +8,7 @@ import { JWTPayload } from '../middleware/auth';
 import { isTransitionAllowed, isTrackedForCondition, ASSIGNABLE_CONDITIONS } from './conditionRules';
 import type { CanConditionValue } from './conditionRules';
 import { buildDraftLockError, type DraftLockInfo } from './canDraftLock';
+import { syncActiveAssignmentKindForCan } from './assignmentKindService';
 import { currentOperationalPeriod } from '../utils/operationalTimeZone';
 
 export interface CreateCanInput {
@@ -343,22 +344,31 @@ export async function updateCan(canId: string, body: UpdateCanInput, ctx: Access
     newCondition = requestedCondition;
   }
 
-  const updated = await db.update(schema.cans).set({
-    branchId: newBranchId,
-    ownerName: body.owner_name ?? existing.ownerName,
-    ownerPhone: body.owner_whatsapp || body.owner_phone || existing.ownerPhone,
-    ownerAddress: body.owner_address !== undefined ? body.owner_address : existing.ownerAddress,
-    ownerWhatsapp: body.owner_whatsapp ?? existing.ownerWhatsapp,
-    dukuhId: newDukuhId,
-    dukuh: newDukuhName,
-    rt: body.rt !== undefined ? body.rt : existing.rt,
-    rw: body.rw !== undefined ? body.rw : existing.rw,
-    latitude: body.latitude !== undefined ? (body.latitude ? String(body.latitude) : null) : existing.latitude,
-    longitude: body.longitude !== undefined ? (body.longitude ? String(body.longitude) : null) : existing.longitude,
-    locationNotes: body.location_notes !== undefined ? body.location_notes : existing.locationNotes,
-    condition: newCondition,
-    isActive: isTrackedForCondition(newCondition),
-  }).where(eq(schema.cans.id, canId)).returning();
+  const updated = await db.transaction(async (tx) => {
+    const rows = await tx.update(schema.cans).set({
+      branchId: newBranchId,
+      ownerName: body.owner_name ?? existing.ownerName,
+      ownerPhone: body.owner_whatsapp || body.owner_phone || existing.ownerPhone,
+      ownerAddress: body.owner_address !== undefined ? body.owner_address : existing.ownerAddress,
+      ownerWhatsapp: body.owner_whatsapp ?? existing.ownerWhatsapp,
+      dukuhId: newDukuhId,
+      dukuh: newDukuhName,
+      rt: body.rt !== undefined ? body.rt : existing.rt,
+      rw: body.rw !== undefined ? body.rw : existing.rw,
+      latitude: body.latitude !== undefined ? (body.latitude ? String(body.latitude) : null) : existing.latitude,
+      longitude: body.longitude !== undefined ? (body.longitude ? String(body.longitude) : null) : existing.longitude,
+      locationNotes: body.location_notes !== undefined ? body.location_notes : existing.locationNotes,
+      condition: newCondition,
+      isActive: isTrackedForCondition(newCondition),
+      updatedAt: new Date(),
+    }).where(eq(schema.cans.id, canId)).returning();
+
+    if (newCondition !== existing.condition) {
+      await syncActiveAssignmentKindForCan(tx, canId, newCondition);
+    }
+
+    return rows;
+  });
 
   return { can: updated[0], oldData: existing };
 }
@@ -417,9 +427,12 @@ export async function deleteCan(canId: string, permanent: boolean, ctx: AccessCo
 
   // Soft delete = penarikan kaleng. Harus menjadi transisi eksplisit menuju
   // DIKEMBALIKAN, bukan sekadar `is_active = false` tanpa kondisi.
-  await db.update(schema.cans)
-    .set({ isActive: false, condition: 'DIKEMBALIKAN', updatedAt: new Date() })
-    .where(eq(schema.cans.id, canId));
+  await db.transaction(async (tx) => {
+    await tx.update(schema.cans)
+      .set({ isActive: false, condition: 'DIKEMBALIKAN', updatedAt: new Date() })
+      .where(eq(schema.cans.id, canId));
+    await syncActiveAssignmentKindForCan(tx, canId, 'DIKEMBALIKAN');
+  });
   return {
     deleted: false,
     oldData: existing,

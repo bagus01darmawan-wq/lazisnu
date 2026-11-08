@@ -145,14 +145,17 @@ export function countTrailingEmptyCollections(nominalsNewestFirst: number[]): nu
 
 /**
  * Apakah kondisi ini perlu diusulkan menjadi NON_AKTIF?
- * Hanya berlaku untuk kondisi yang masih dijemput (AKTIF, RUSAK, HILANG).
+ *
+ * Hanya untuk AKTIF. RUSAK/HILANG adalah label kondisi fisik dan tetap
+ * dijemput; mengubahnya menjadi NON_AKTIF akan menghapus tindakan
+ * "ganti unit/beri unit baru" (keputusan produk 2026-11-08).
  */
 export function shouldProposeInactive(
   condition: CanConditionValue,
   emptyStreak: number,
   threshold: number = EMPTY_STREAK_THRESHOLD,
 ): boolean {
-  if (!isAssignableCondition(condition)) return false;
+  if (condition !== 'AKTIF') return false;
   return emptyStreak >= threshold;
 }
 

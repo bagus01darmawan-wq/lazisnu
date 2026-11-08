@@ -300,6 +300,7 @@ export async function getTaskSummary(
     .where(and(
       scopeCondition(scope),
       inAssignmentPeriod(period.year, effectiveMonths(period)),
+      eq(schema.assignments.kind, 'PICKUP'),
     ))
     .groupBy(schema.assignments.status);
 
@@ -378,6 +379,7 @@ export async function getMonthlyOperationalTrend(
       .innerJoin(schema.cans, eq(schema.assignments.canId, schema.cans.id))
       .where(and(
         scopeCondition(scope),
+        eq(schema.assignments.kind, 'PICKUP'),
         sql`(${schema.assignments.periodYear} * 100 + ${schema.assignments.periodMonth}) between ${Number(firstKey.replace('-', ''))} and ${Number(lastKey.replace('-', ''))}`,
       ))
       .groupBy(schema.assignments.periodYear, schema.assignments.periodMonth),
@@ -436,6 +438,7 @@ export async function getBranchComparison(
       .innerJoin(schema.branches, eq(schema.cans.branchId, schema.branches.id))
       .where(and(
         eq(schema.branches.districtId, districtId),
+        eq(schema.assignments.kind, 'PICKUP'),
         inAssignmentPeriod(period.year, months),
       ))
       .groupBy(schema.cans.branchId),

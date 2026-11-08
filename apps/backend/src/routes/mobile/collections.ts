@@ -134,6 +134,8 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
           offlineId: body.offline_id,
           deviceInfo: body.device_info as any,
           condition: body.condition,
+          allowNonActiveRestore: body.visit_outcome === 'ISI',
+          visitOutcome: body.visit_outcome,
         });
         await evaluateEmptyStreakForCan(body.can_id, tx);
         return result;

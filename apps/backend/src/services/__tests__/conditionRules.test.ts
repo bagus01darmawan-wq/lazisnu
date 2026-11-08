@@ -70,10 +70,11 @@ describe('hitungan penjemputan kosong berturut-turut', () => {
 });
 
 describe('usulan dan transisi kondisi', () => {
-  it('mengusulkan NON_AKTIF hanya untuk kondisi yang masih dijemput', () => {
+  it('mengusulkan NON_AKTIF hanya untuk AKTIF', () => {
     expect(shouldProposeInactive('AKTIF', 6)).toBe(true);
-    expect(shouldProposeInactive('RUSAK', 6)).toBe(true);
-    expect(shouldProposeInactive('HILANG', 6)).toBe(true);
+    // RUSAK/HILANG adalah label kondisi fisik, bukan status siklus.
+    expect(shouldProposeInactive('RUSAK', 6)).toBe(false);
+    expect(shouldProposeInactive('HILANG', 6)).toBe(false);
     expect(shouldProposeInactive('AKTIF', 5)).toBe(false);
     expect(shouldProposeInactive('NON_AKTIF', 6)).toBe(false);
     expect(shouldProposeInactive('DIKEMBALIKAN', 99)).toBe(false);

@@ -18,6 +18,8 @@ export const collectionSchema = z.object({
   offline_id: z.string().optional(),
   /** Kondisi fisik wajib dari PPK; batch biasa tidak menerima status lifecycle. */
   condition: z.enum(['AKTIF', 'RUSAK', 'HILANG']),
+  /** Penanda satu-satunya jalur NOMINAL untuk NON_AKTIF. */
+  visit_outcome: z.literal('ISI').optional(),
 }).strict();
 
 export const batchCollectionSchema = z.object({
@@ -96,6 +98,8 @@ export const canVisitSubmitSchema = collectionSchema.extend({
 export const canVisitSchema = z.object({
   outcome: z.enum(['ISI', 'KOSONG', 'DIKEMBALIKAN', 'TIDAK_DIKUNJUNGI']),
   condition: z.enum(['AKTIF', 'RUSAK', 'HILANG']).optional(),
+  /** Tugas VISIT yang sedang dikerjakan (wajib untuk APK baru). */
+  assignment_id: z.string().uuid().optional(),
   visited_at: z.string().datetime().optional(),
   notes: z.string().max(255).optional(),
 }).strict().superRefine((body, ctx) => {

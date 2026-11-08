@@ -129,11 +129,27 @@ async function getOrCreateVisitAssignment(
     return existing;
   }
 
+  // Satu kaleng hanya boleh punya satu tugas VISIT per periode. Jangan
+  // menciptakan duplikat untuk petugas lain.
+  const otherVisit = await tx.query.assignments.findFirst({
+    where: and(
+      eq(schema.assignments.canId, canId),
+      eq(schema.assignments.periodYear, periodYear),
+      eq(schema.assignments.periodMonth, periodMonth),
+      eq(schema.assignments.kind, 'VISIT'),
+    ),
+    columns: { officerId: true },
+  });
+  if (otherVisit && otherVisit.officerId !== officerId) {
+    throw Errors.VALIDATION_ERROR('Kaleng ini sudah memiliki tugas kunjungan milik petugas lain');
+  }
+
   const [created] = await tx.insert(schema.assignments).values({
     canId,
     officerId,
     periodYear,
     periodMonth,
+    kind: 'VISIT',
     status: 'ACTIVE',
     assignedAt: now,
     notes: 'Dibuat otomatis oleh sinkronisasi kunjungan NON_AKTIF',

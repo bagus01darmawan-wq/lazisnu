@@ -168,7 +168,8 @@ async function buildBranchGroups(branchId: string, year: number, month: number) 
       and(
         eq(schema.assignments.canId, schema.cans.id),
         eq(schema.assignments.periodYear, year),
-        eq(schema.assignments.periodMonth, month)
+        eq(schema.assignments.periodMonth, month),
+        eq(schema.assignments.kind, 'PICKUP')
       )
     )
     .where(and(eq(schema.cans.branchId, branchId), isNotNull(schema.cans.dukuhId)))
@@ -204,7 +205,8 @@ async function buildBranchGroups(branchId: string, year: number, month: number) 
       and(
         eq(schema.assignments.canId, schema.cans.id),
         eq(schema.assignments.periodYear, year),
-        eq(schema.assignments.periodMonth, month)
+        eq(schema.assignments.periodMonth, month),
+        eq(schema.assignments.kind, 'PICKUP')
       )
     )
     .where(
@@ -244,7 +246,8 @@ async function buildDukuhGroups(dukuhId: string, year: number, month: number) {
       and(
         eq(schema.assignments.canId, schema.cans.id),
         eq(schema.assignments.periodYear, year),
-        eq(schema.assignments.periodMonth, month)
+        eq(schema.assignments.periodMonth, month),
+        eq(schema.assignments.kind, 'PICKUP')
       )
     )
     .where(and(eq(schema.cans.dukuhId, dukuhId), assignableFilter, isNull(schema.assignments.id)))
@@ -299,7 +302,8 @@ export async function getAssignmentWorkQueue(
       and(
         eq(schema.assignments.canId, schema.cans.id),
         eq(schema.assignments.periodYear, period.year),
-        eq(schema.assignments.periodMonth, period.month)
+        eq(schema.assignments.periodMonth, period.month),
+        eq(schema.assignments.kind, 'PICKUP')
       )
     )
     .where(scopeFilter);
@@ -315,7 +319,8 @@ export async function getAssignmentWorkQueue(
       and(
         scopeFilter,
         eq(schema.assignments.periodYear, period.year),
-        eq(schema.assignments.periodMonth, period.month)
+        eq(schema.assignments.periodMonth, period.month),
+        eq(schema.assignments.kind, 'PICKUP')
       )
     );
 
@@ -362,7 +367,8 @@ export async function getAssignmentWorkQueue(
             and(
               inArray(schema.assignments.officerId, officerIds),
               eq(schema.assignments.periodYear, period.year),
-              eq(schema.assignments.periodMonth, period.month)
+              eq(schema.assignments.periodMonth, period.month),
+              eq(schema.assignments.kind, 'PICKUP')
             )
           )
           .groupBy(schema.assignments.officerId);

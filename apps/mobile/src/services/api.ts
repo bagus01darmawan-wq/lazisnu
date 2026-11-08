@@ -758,6 +758,7 @@ export const collectionService = {
     canId: string,
     outcome: CanVisitOutcome,
     notes?: string,
+    assignmentId?: string,
   ): Promise<
     ApiResponse<{
       id: string;
@@ -769,7 +770,11 @@ export const collectionService = {
   > => {
     return apiRequest(`/mobile/cans/${canId}/visits`, {
       method: 'POST',
-      body: JSON.stringify(notes ? {outcome, notes} : {outcome}),
+      body: JSON.stringify({
+        outcome,
+        ...(notes ? {notes} : {}),
+        ...(assignmentId ? {assignment_id: assignmentId} : {}),
+      }),
     });
   },
 

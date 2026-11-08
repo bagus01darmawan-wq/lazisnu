@@ -3,10 +3,12 @@ import {Alert, StyleSheet, Text, View} from 'react-native';
 import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import NetInfo from '@react-native-community/netinfo';
 import {AppButton, AppHeader, SkipReasonSheet} from '../components/ui';
 import type {SkipReasonCode} from '../components/ui';
 import {useTasksStore} from '../stores';
 import {collectionService, tasksService} from '../services/api';
+import {actionQueue} from '../services/offline/actionQueue';
 import {CanCondition, CanVisitOutcome, AssignmentStatus} from '@lazisnu/shared-types';
 import type {ProposalStatusResponse} from '@lazisnu/shared-types';
 import {KalengInfoCard} from './scan';
@@ -37,7 +39,9 @@ const TaskDetailScreen: React.FC = () => {
   // "visit-<can_id>" bila backend belum menyediakan assignment_id. Jangan
   // kirim id sintetis ke endpoint assignment — itu UUID di DB (invalid input
   // → crash). Hanya panggil bila id ini assignment asli.
-  const isVisitTaskWithoutAssignment = !!(task.is_visit_task && task.id.startsWith('visit-'));
+  const isVisitTask =
+    task.kind === 'VISIT' || task.is_visit_task || task.condition === CanCondition.NON_AKTIF;
+  const isVisitTaskWithoutAssignment = !!(isVisitTask && task.id.startsWith('visit-'));
   useEffect(() => {
     let cancelled = false;
     if (isVisitTaskWithoutAssignment) {
@@ -63,7 +67,7 @@ const TaskDetailScreen: React.FC = () => {
   // Tindakan NON_AKTIF dipisahkan dari submit ordinary. ISI tetap diarahkan
   // ke CollectionScreen agar nominal dan kondisi fisik berada dalam satu transaksi.
   const visitAlreadyCollectedThisPeriod = !!(
-    task.is_visit_task &&
+    isVisitTask &&
     task.assignment_status &&
     task.assignment_status !== AssignmentStatus.ACTIVE
   );
@@ -71,7 +75,30 @@ const TaskDetailScreen: React.FC = () => {
   const submitVisitOutcome = async (outcome: Exclude<CanVisitOutcome, 'ISI'>) => {
     setVisiting(true);
     try {
-      const res = await collectionService.recordCanVisit(task.can_id, outcome);
+      const netInfo = await NetInfo.fetch();
+      const isOnline = !!(netInfo.isConnected && netInfo.isInternetReachable);
+      if (!isOnline) {
+        actionQueue.enqueue({
+          kind: 'VISIT',
+          can_id: task.can_id,
+          qr_code: task.qr_code,
+          outcome,
+          assignment_id: task.id.startsWith('visit-') ? undefined : task.id,
+          created_at: new Date().toISOString(),
+        });
+        Alert.alert(
+          'Tersimpan di Perangkat',
+          'Tindakan kunjungan tercatat offline dan terkirim otomatis saat internet tersedia.',
+          [{text: 'OK', onPress: () => navigation.goBack()}],
+        );
+        return;
+      }
+      const res = await collectionService.recordCanVisit(
+        task.can_id,
+        outcome,
+        undefined,
+        task.id.startsWith('visit-') ? undefined : task.id,
+      );
       if (!res.success) {
         Alert.alert('Gagal Mencatat', res.error?.message || 'Gagal menyimpan tindakan kaleng.');
         return;
@@ -161,17 +188,17 @@ const TaskDetailScreen: React.FC = () => {
         ) : null}
 
         {/** B2: kaleng NON_AKTIF — perlakuan berbeda: kunjungan + pencabutan. */}
-        {task.condition === CanCondition.NON_AKTIF ? (
+        {isVisitTask ? (
           <View style={styles.proposalBox}>
             <Text style={styles.proposalTitle}>Kaleng Nonaktif</Text>
             <Text style={styles.proposalText}>
-              Kaleng ini sudah 6x kosong berturut-turut. Bukan tugas penjemputan biasa — cabut
-              kalengnya untuk dikembalikan ke kantor, atau catat jika kaleng ternyata berisi.
+              Tugas kunjungan bulan ini. Catat kaleng berisi, kosong, atau kembalikan kaleng ke
+              kantor. Jika tidak dikunjungi sampai periode selesai, tugas menjadi TERLEWAT.
             </Text>
           </View>
         ) : null}
 
-        {task.condition === CanCondition.NON_AKTIF ? (
+        {isVisitTask ? (
           <View style={styles.actions}>
             <AppButton label="Kaleng Isi" icon="cash-multiple" onPress={handleFilled} fullWidth />
             <AppButton
@@ -187,14 +214,6 @@ const TaskDetailScreen: React.FC = () => {
               icon="package-down"
               variant="outline"
               onPress={() => void submitVisitOutcome('DIKEMBALIKAN')}
-              fullWidth
-              disabled={visiting}
-            />
-            <AppButton
-              label="Tidak Dikunjungi"
-              icon="map-marker-off-outline"
-              variant="outline"
-              onPress={() => void submitVisitOutcome('TIDAK_DIKUNJUNGI')}
               fullWidth
               disabled={visiting}
             />

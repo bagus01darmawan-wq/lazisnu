@@ -29,6 +29,8 @@ export interface QueuedVisitAction {
   offline_id: string;
   can_id: string;
   qr_code?: string;
+  /** Tugas VISIT yang dikerjakan; opsional untuk data lama. */
+  assignment_id?: string;
   outcome: Exclude<CanVisitOutcome, 'ISI'>;
   notes?: string;
   created_at: string;

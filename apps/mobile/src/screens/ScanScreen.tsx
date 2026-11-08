@@ -177,6 +177,7 @@ const ScanScreen: React.FC = () => {
           kind: 'VISIT',
           can_id: scannedData.can_id,
           qr_code: scannedData.qr_code,
+          assignment_id: scannedData.id,
           outcome,
           created_at: new Date().toISOString(),
         });
@@ -188,7 +189,12 @@ const ScanScreen: React.FC = () => {
         );
         return;
       }
-      const result = await collectionService.recordCanVisit(scannedData.can_id, outcome);
+      const result = await collectionService.recordCanVisit(
+        scannedData.can_id,
+        outcome,
+        undefined,
+        scannedData.id,
+      );
       if (!result.success) {
         Alert.alert('Gagal Mencatat', result.error?.message || 'Gagal menyimpan tindakan kaleng.');
         return;

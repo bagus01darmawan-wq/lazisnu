@@ -34,6 +34,7 @@ import { AssignmentConfirmSheet } from '@/components/assignments/AssignmentConfi
 import { AssignmentTabs } from '@/components/assignments/AssignmentTabs';
 import { AssignmentHistoryCard } from '@/components/assignments/AssignmentHistoryCard';
 import { AssignmentEmptyState } from '@/components/assignments/AssignmentEmptyState';
+import { VisitQueuePanel } from '@/components/assignments/VisitQueuePanel';
 import { useAssignmentWorkQueue } from '@/components/assignments/useAssignmentWorkQueue';
 import {
   MONTH_NAMES,
@@ -557,6 +558,17 @@ export default function AssignmentsDetailPage({
   const totalHistoryPages = Math.max(1, Math.ceil(historyTotal / historyLimit));
 
   const renderKelola = () => {
+    const visitPanel = queue ? (
+      <VisitQueuePanel
+        branchId={queue.region.branchId}
+        dukuhId={regionKind === 'dukuh' ? regionId : undefined}
+        year={period.year}
+        month={period.month}
+        officers={officers}
+        onAssigned={reloadQueue}
+      />
+    ) : null;
+
     if (queueError) {
       return (
         <AssignmentEmptyState
@@ -584,13 +596,16 @@ export default function AssignmentsDetailPage({
 
       if (summary.assignableCans === 0) {
         return (
-          <AssignmentEmptyState
-            variant="no-cans"
-            title="Tidak ada kaleng yang dapat ditugaskan"
-            description={`${summary.nonAssignableCans} kaleng di wilayah ini berstatus non-aktif atau dikembalikan, sehingga tidak ikut penugasan.`}
-            primaryLabel="Buka Kelola Kaleng"
-            onPrimary={() => router.push('/dashboard/cans')}
-          />
+          <>
+            <AssignmentEmptyState
+              variant="no-cans"
+              title="Tidak ada kaleng yang dapat ditugaskan"
+              description={`${summary.nonAssignableCans} kaleng di wilayah ini berstatus non-aktif atau dikembalikan, sehingga tidak ikut penugasan penjemputan.`}
+              primaryLabel="Buka Kelola Kaleng"
+              onPrimary={() => router.push('/dashboard/cans')}
+            />
+            {visitPanel}
+          </>
         );
       }
 
@@ -608,19 +623,22 @@ export default function AssignmentsDetailPage({
 
       if (summary.unassignedAssignableCans === 0) {
         return (
-          <AssignmentEmptyState
-            variant="all-assigned"
-            title="Semua sudah ditugaskan"
-            description={`${summary.assignableCans} kaleng di ${displayName} sudah punya petugas untuk ${MONTH_NAMES[period.month - 1]} ${period.year}.`}
-            primaryLabel="Lihat Riwayat"
-            onPrimary={() => setActiveTab('riwayat')}
-            secondaryLabel="Ganti Periode"
-            onSecondary={() => {
-              const nextMonth = period.month === 12 ? 1 : period.month + 1;
-              const nextYear = period.month === 12 ? period.year + 1 : period.year;
-              changePeriod(nextMonth, nextYear);
-            }}
-          />
+          <>
+            <AssignmentEmptyState
+              variant="all-assigned"
+              title="Semua penjemputan sudah ditugaskan"
+              description={`${summary.assignableCans} kaleng di ${displayName} sudah punya petugas untuk ${MONTH_NAMES[period.month - 1]} ${period.year}.`}
+              primaryLabel="Lihat Riwayat"
+              onPrimary={() => setActiveTab('riwayat')}
+              secondaryLabel="Ganti Periode"
+              onSecondary={() => {
+                const nextMonth = period.month === 12 ? 1 : period.month + 1;
+                const nextYear = period.month === 12 ? period.year + 1 : period.year;
+                changePeriod(nextMonth, nextYear);
+              }}
+            />
+            {visitPanel}
+          </>
         );
       }
     }
@@ -688,6 +706,8 @@ export default function AssignmentsDetailPage({
             </div>
           </aside>
         </div>
+
+        {visitPanel}
 
         <AssignmentActionBar
           selectedGroups={selectedGroups.length}

@@ -19,6 +19,7 @@ import { currentOperationalPeriod } from '../utils/operationalTimeZone';
 export interface ScanAssignmentRow {
   id: string;
   status: string;
+  kind?: string;
   periodYear: number;
   periodMonth: number;
   assignedAt: Date;

@@ -24,6 +24,7 @@ const IDS = {
   officer: randomUUID(),
   otherOfficer: randomUUID(),
   can: randomUUID(),
+  canVisit: randomUUID(),
 };
 
 let token = '';
@@ -140,17 +141,30 @@ describe('POST /v1/admin/assignments/bulk-cans', () => {
       },
     ]);
 
-    await db.insert(schema.cans).values({
-      id: IDS.can,
-      branchId: IDS.branch,
-      dukuhId: IDS.dukuh,
-      ownerName: 'Warga Bulk Cans',
-      ownerWhatsapp: `6286601${TAG}`,
-      rt: '001',
-      rw: '001',
-      condition: 'AKTIF',
-      isActive: true,
-    });
+    await db.insert(schema.cans).values([
+      {
+        id: IDS.can,
+        branchId: IDS.branch,
+        dukuhId: IDS.dukuh,
+        ownerName: 'Warga Bulk Cans',
+        ownerWhatsapp: `6286601${TAG}`,
+        rt: '001',
+        rw: '001',
+        condition: 'AKTIF',
+        isActive: true,
+      },
+      {
+        id: IDS.canVisit,
+        branchId: IDS.branch,
+        dukuhId: IDS.dukuh,
+        ownerName: 'Warga Kunjungan',
+        ownerWhatsapp: `6286602${TAG}`,
+        rt: '001',
+        rw: '001',
+        condition: 'NON_AKTIF',
+        isActive: true,
+      },
+    ]);
 
     token = app.jwt.sign({
       userId: IDS.adminUser,
@@ -175,8 +189,8 @@ describe('POST /v1/admin/assignments/bulk-cans', () => {
       );
     await db
       .delete(schema.assignments)
-      .where(eq(schema.assignments.canId, IDS.can));
-    await db.delete(schema.cans).where(eq(schema.cans.id, IDS.can));
+      .where(inArray(schema.assignments.canId, [IDS.can, IDS.canVisit]));
+    await db.delete(schema.cans).where(inArray(schema.cans.id, [IDS.can, IDS.canVisit]));
     await db
       .delete(schema.officers)
       .where(inArray(schema.officers.id, [IDS.officer, IDS.otherOfficer]));
@@ -191,6 +205,38 @@ describe('POST /v1/admin/assignments/bulk-cans', () => {
       .delete(schema.districts)
       .where(inArray(schema.districts.id, [IDS.district, IDS.otherDistrict]));
     await closeApp();
+  });
+
+  it('menugaskan kaleng NON_AKTIF sebagai tugas VISIT', async () => {
+    const app = await getApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/assignments/bulk-cans',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        officer_id: IDS.officer,
+        can_ids: [IDS.canVisit],
+        kind: 'VISIT',
+        period_year: 2027,
+        period_month: 3,
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      success: true,
+      data: { assigned_count: 1, kind: 'VISIT', period: '3/2027' },
+    });
+
+    const [row] = await db
+      .select({ kind: schema.assignments.kind, status: schema.assignments.status })
+      .from(schema.assignments)
+      .where(and(
+        eq(schema.assignments.canId, IDS.canVisit),
+        eq(schema.assignments.periodYear, 2027),
+        eq(schema.assignments.periodMonth, 3),
+      ));
+    expect(row).toMatchObject({ kind: 'VISIT', status: 'ACTIVE' });
   });
 
   it('menugaskan pada periode terpilih, bukan bulan berjalan', async () => {

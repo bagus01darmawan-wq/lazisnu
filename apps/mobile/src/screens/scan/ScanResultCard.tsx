@@ -33,7 +33,7 @@ export const ScanResultCard: React.FC<ScanResultCardProps> = ({
 
       <KalengInfoCard task={task} />
 
-      {task.condition === CanCondition.NON_AKTIF ? (
+      {task.kind === 'VISIT' || task.condition === CanCondition.NON_AKTIF ? (
         <View style={styles.actionButtons}>
           <AppButton
             label="Kaleng Isi"
@@ -54,14 +54,6 @@ export const ScanResultCard: React.FC<ScanResultCardProps> = ({
             icon="package-down"
             variant="outline"
             onPress={() => onVisitOutcome('DIKEMBALIKAN')}
-            fullWidth
-            disabled={visiting}
-          />
-          <AppButton
-            label="Tidak Dikunjungi"
-            icon="map-marker-off-outline"
-            variant="outline"
-            onPress={() => onVisitOutcome('TIDAK_DIKUNJUNGI')}
             fullWidth
             disabled={visiting}
           />

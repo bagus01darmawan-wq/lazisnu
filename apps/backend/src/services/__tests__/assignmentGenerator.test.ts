@@ -101,8 +101,18 @@ describe('buildRoundRobinAssignments', () => {
       officerId: 'off-1',
       periodYear: 2026,
       periodMonth: 5,
+      kind: 'PICKUP',
       status: 'ACTIVE',
     });
+  });
+
+  it('membuat kind VISIT untuk tugas kunjungan', () => {
+    const officer = { id: 'off-1', fullName: 'A' };
+    const cans = [makeCan('can-1', 'branch-1', [officer])];
+
+    const result = buildRoundRobinAssignments(cans as any, 2026, 5, 'VISIT');
+
+    expect(result[0]).toMatchObject({ kind: 'VISIT', status: 'ACTIVE' });
   });
 
   it('array kosong mengembalikan array kosong', () => {
@@ -132,6 +142,15 @@ describe('buildFirstOfficerAssignments', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].backupOfficerId).toBeNull();
+  });
+
+  it('membuat kind VISIT untuk draft kunjungan', () => {
+    const offA = { id: 'off-1', fullName: 'A' };
+    const cans = [makeCan('can-1', 'branch-1', [offA])];
+
+    const result = buildFirstOfficerAssignments(cans as any, 2026, 5, 'VISIT');
+
+    expect(result[0]).toMatchObject({ kind: 'VISIT', status: 'ACTIVE' });
   });
 
   it('skip kaleng tanpa petugas', () => {

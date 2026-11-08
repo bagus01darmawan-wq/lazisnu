@@ -46,6 +46,7 @@ export const createAssignmentSchema = z.object({
   backup_officer_id: z.string().uuid().optional(),
   period_year: z.number().min(2020).max(2100),
   period_month: z.number().min(1).max(12),
+  kind: z.enum(['PICKUP', 'VISIT']).optional(),
 });
 
 /** C1-T3: ganti petugas satu item draft (harus aktif + satu ranting/program). */

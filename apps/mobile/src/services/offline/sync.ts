@@ -179,7 +179,12 @@ export const syncService = {
                 action.reason_code,
                 action.notes,
               )
-            : await collectionService.recordCanVisit(action.can_id, action.outcome, action.notes);
+            : await collectionService.recordCanVisit(
+                action.can_id,
+                action.outcome,
+                action.notes,
+                action.assignment_id,
+              );
 
         if (response.success) {
           actionQueue.dequeue([action.offline_id]);

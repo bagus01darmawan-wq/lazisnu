@@ -207,7 +207,12 @@ async function aggregate(
     .where(regionFilter)
     .groupBy(schema.cans[regionColumn]);
 
-  const assignmentConds: any[] = [regionFilter];
+  // Metrik assignment di kartu adalah metrik PICKUP. Tugas VISIT dihitung
+  // terpisah (nonActive/visit queue), bukan sebagai penugasan penjemputan.
+  const assignmentConds: any[] = [
+    regionFilter,
+    eq(schema.assignments.kind, 'PICKUP'),
+  ];
   if (period) {
     assignmentConds.push(eq(schema.assignments.periodYear, period.year));
     assignmentConds.push(eq(schema.assignments.periodMonth, period.month));

@@ -126,8 +126,8 @@ export async function getReportStats(params: {
   );
 
   const assignmentBaseConditions = branchScopeCondition
-    ? and(assignmentPeriodCondition, branchScopeCondition)
-    : assignmentPeriodCondition;
+    ? and(assignmentPeriodCondition, branchScopeCondition, eq(schema.assignments.kind, 'PICKUP'))
+    : and(assignmentPeriodCondition, eq(schema.assignments.kind, 'PICKUP'));
 
   // Atribusi uang = periode assignment (bukan bulan collected_at), versi
   // submit terbaru saja. Menjaga angka "kaleng kosong/dijemput" sejalan

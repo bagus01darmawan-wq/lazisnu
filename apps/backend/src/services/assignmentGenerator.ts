@@ -22,11 +22,16 @@ export async function findCansWithoutAssignment(year: number, month: number) {
   });
   const assignedCanIds = existingAssignments.map((a) => a.canId);
 
+  const baseConditions = [
+    eq(schema.cans.isActive, true),
+    assignedCanIds.length > 0 ? notInArray(schema.cans.id, assignedCanIds) : undefined,
+  ];
+
+  // Tugas penjemputan: AKTIF/RUSAK/HILANG.
   const cansToAssign = await db.query.cans.findMany({
     where: and(
-      eq(schema.cans.isActive, true),
+      ...baseConditions,
       inArray(schema.cans.condition, ASSIGNABLE_CONDITIONS),
-      assignedCanIds.length > 0 ? notInArray(schema.cans.id, assignedCanIds) : undefined
     ),
     with: {
       branch: {
@@ -40,7 +45,27 @@ export async function findCansWithoutAssignment(year: number, month: number) {
     },
   });
 
-  return { cansToAssign, assignedCanIds };
+  // Tugas kunjungan: NON_AKTIF. Satu kaleng hanya boleh punya satu tugas
+  // kunjungan per periode; kalau sudah punya assignment apa pun pada periode
+  // itu, kaleng tidak masuk kandidat.
+  const visitCansToAssign = await db.query.cans.findMany({
+    where: and(
+      ...baseConditions,
+      eq(schema.cans.condition, 'NON_AKTIF'),
+    ),
+    with: {
+      branch: {
+        with: {
+          officers: {
+            where: eq(schema.officers.isActive, true),
+            orderBy: [asc(schema.officers.createdAt)],
+          },
+        },
+      },
+    },
+  });
+
+  return { cansToAssign, visitCansToAssign, assignedCanIds };
 }
 
 type CanWithOfficers = typeof schema.cans.$inferSelect & {
@@ -59,7 +84,8 @@ type AssignmentInsert = typeof schema.assignments.$inferInsert;
 export function buildRoundRobinAssignments(
   cansToAssign: CanWithOfficers[],
   year: number,
-  month: number
+  month: number,
+  kind: 'PICKUP' | 'VISIT' = 'PICKUP',
 ): AssignmentInsert[] {
   const assignmentData: AssignmentInsert[] = [];
   const branchCounter = new Map<string, number>();
@@ -79,6 +105,7 @@ export function buildRoundRobinAssignments(
       officerId: assignedOfficer.id,
       periodYear: year,
       periodMonth: month,
+      kind,
       status: 'ACTIVE' as const,
     });
   }
@@ -92,7 +119,8 @@ export function buildRoundRobinAssignments(
 export function buildFirstOfficerAssignments(
   cansToAssign: CanWithOfficers[],
   year: number,
-  month: number
+  month: number,
+  kind: 'PICKUP' | 'VISIT' = 'PICKUP',
 ): AssignmentInsert[] {
   const assignmentData: AssignmentInsert[] = [];
 
@@ -109,6 +137,7 @@ export function buildFirstOfficerAssignments(
       backupOfficerId: backupOfficer?.id || null,
       periodYear: year,
       periodMonth: month,
+      kind,
       status: 'ACTIVE' as const,
       assignedAt: new Date(),
     });

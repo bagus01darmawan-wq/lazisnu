@@ -111,7 +111,11 @@ export const TaskItem = memo(({item, index, onCopy, onPress, onLongPressDrag}: T
   return (
     <TouchableOpacity
       accessibilityRole={'button'}
-      accessibilityLabel={`Buka detail penjemputan ${item.owner_name}`}
+      accessibilityLabel={
+        item.kind === 'VISIT'
+          ? `Buka detail kunjungan ${item.owner_name}`
+          : `Buka detail penjemputan ${item.owner_name}`
+      }
       activeOpacity={0.85}
       delayLongPress={220}
       onLongPress={onLongPressDrag}

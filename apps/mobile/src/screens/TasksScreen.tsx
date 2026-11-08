@@ -17,8 +17,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
 import type {Task} from '@lazisnu/shared-types';
-import {AssignmentStatus, CanCondition, VisitTask} from '@lazisnu/shared-types';
-import {collectionService} from '../services/api';
+import {CanCondition} from '@lazisnu/shared-types';
 import {useTasksStore, useSyncStore, usePeriodStore} from '../stores';
 import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
 import type {MainNavigationProp} from '../navigation/types';
@@ -57,19 +56,7 @@ const TasksScreen: React.FC = () => {
   const refreshPeriod = usePeriodStore(state => state.refresh);
   const [searchQuery, setSearchQuery] = useState('');
   const [issuesVisible, setIssuesVisible] = useState(false);
-  const [visitRequired, setVisitRequired] = useState<VisitTask[]>([]);
   const [taskTab, setTaskTab] = useState<TaskTab>('aktif');
-
-  const fetchVisitRequired = useCallback(async () => {
-    try {
-      const res = await collectionService.getVisitRequired();
-      if (res.success && res.data) {
-        setVisitRequired(res.data.items);
-      }
-    } catch {
-      // Bukan halangan utama — daftar penjemputan tetap tampil.
-    }
-  }, []);
 
   // Geser samping untuk berpindah tab Aktif ↔ Non-Aktif (urutan pill).
   const tabSwipeGesture = useTabSwipeSwitch({
@@ -89,13 +76,12 @@ const TasksScreen: React.FC = () => {
         const display = usePeriodStore.getState().context?.display_period;
         fetchTasks();
         fetchStats(display);
-        fetchVisitRequired();
         checkStatus();
       })();
       return () => {
         cancelled = true;
       };
-    }, [checkStatus, fetchTasks, fetchStats, fetchVisitRequired, refreshPeriod]),
+    }, [checkStatus, fetchTasks, fetchStats, refreshPeriod]),
   );
 
   const copyToClipboard = useCallback((text: string) => {
@@ -103,46 +89,24 @@ const TasksScreen: React.FC = () => {
     ToastAndroid.show('Kode QR disalin', ToastAndroid.SHORT);
   }, []);
 
+  // Tugas penjemputan: semua assignment ACTIVE dengan kind PICKUP. Kaleng
+  // NON_AKTIF tetap disaring dari tab ini sebagai jaring pengaman data lama.
   const filteredTasks = tasks.filter(task => {
-    // B2: kaleng NON_AKTIF mendapat section sendiri ("Perlu Dikunjungi").
-    // Meskipun backend /tasks mengembalikan assignment periode berjalan untuk
-    // kaleng NON_AKTIF (diperlukan agar penjemputan berisi bisa tersimpan),
-    // kaleng itu BUKAN tugas penjemputan biasa — jangan tampilkan dua-duanya.
-    if (task.condition === CanCondition.NON_AKTIF) {
+    if (task.kind === 'VISIT' || task.condition === CanCondition.NON_AKTIF) {
       return false;
     }
     return matchesTaskQuery(task, searchQuery);
   });
 
-  // Kaleng NON_AKTIF tidak punya assignment asli — bentuk tugas ringkas dari
-  // data visit-required supaya layar detail bisa dipakai.
-  // B2: assignment_id dari backend (periode berjalan) bila sudah ada; kalau
-  // belum, id sintetis dipakai hanya sebagai key React — TaskDetailScreen tahu
-  // membedakannya via is_visit_task. Pencarian berlaku sama seperti tab aktif.
+  // Tugas kunjungan: assignment VISIT bulan ini, sudah per petugas dan
+  // tersimpan di cache yang sama dengan tugas penjemputan.
   const visitTasks = useMemo<Task[]>(() => {
-    return visitRequired
-      .filter(v => matchesTaskQuery(v, searchQuery))
-      .map(v => ({
-        id: v.assignment_id ?? `visit-${v.can_id}`,
-        can_id: v.can_id,
-        qr_code: v.qr_code,
-        owner_name: v.owner_name,
-        owner_phone: '',
-        owner_address: v.owner_address ?? '',
-        dukuh_name: v.dukuh_name,
-        rt: v.rt,
-        rw: v.rw,
-        latitude: v.latitude,
-        longitude: v.longitude,
-        condition: CanCondition.NON_AKTIF,
-        is_active: v.is_active,
-        status: AssignmentStatus.ACTIVE,
-        assigned_at: v.last_visit ?? new Date().toISOString(),
-        period: '',
-        is_visit_task: true,
-        assignment_status: (v.assignment_status as AssignmentStatus | null) ?? null,
-      }));
-  }, [searchQuery, visitRequired]);
+    return tasks.filter(
+      task =>
+        (task.kind === 'VISIT' || task.condition === CanCondition.NON_AKTIF) &&
+        matchesTaskQuery(task, searchQuery),
+    );
+  }, [tasks, searchQuery]);
 
   // Pengganti drag-reorder: react-native-draggable-flatlist 4.0.3 tidak
   // kompatibel dengan reanimated 4 + gesture-handler 3 (scroll daftar mati
@@ -191,13 +155,12 @@ const TasksScreen: React.FC = () => {
 
   const renderVisitItem = useCallback(
     ({item}: {item: Task}) => (
-      <TouchableOpacity
-        accessibilityRole={'button'}
-        accessibilityLabel={`Detail kaleng nonaktif ${item.qr_code}`}
-        activeOpacity={0.8}
-        onPress={() => navigation.navigate('TaskDetail', {task: item})}>
-        <TaskItem item={item} index={0} onCopy={copyToClipboard} />
-      </TouchableOpacity>
+      <TaskItem
+        item={item}
+        index={0}
+        onCopy={copyToClipboard}
+        onPress={task => navigation.navigate('TaskDetail', {task})}
+      />
     ),
     [copyToClipboard, navigation],
   );
@@ -338,7 +301,6 @@ const TasksScreen: React.FC = () => {
                 onRefresh={() => {
                   fetchTasks();
                   fetchStats();
-                  fetchVisitRequired();
                   checkStatus();
                 }}
                 colors={[Colors.brand.emerald]}
@@ -346,8 +308,7 @@ const TasksScreen: React.FC = () => {
               />
             }
             onEndReached={() => {
-              // Paginasi hanya untuk daftar tugas; visit-required datang sekaligus.
-              if (taskTab === 'aktif' && !isLoading && page < totalPages) {
+              if (!isLoading && page < totalPages) {
                 loadMore();
               }
             }}
