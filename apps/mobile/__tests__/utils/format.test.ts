@@ -121,9 +121,7 @@ describe('format utils', () => {
     });
 
     it('memakai owner_address hanya bila wilayah kosong', () => {
-      expect(formatCanAddress({owner_address: 'Jl. Merdeka No. 10'})).toBe(
-        'Jl. Merdeka No. 10',
-      );
+      expect(formatCanAddress({owner_address: 'Jl. Merdeka No. 10'})).toBe('Jl. Merdeka No. 10');
     });
 
     it('memakai fallback saat semua kosong', () => {

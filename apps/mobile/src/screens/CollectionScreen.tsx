@@ -234,9 +234,7 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
             <Icon name="map-marker" size={20} color={Colors.brand.emerald} />
             <View style={styles.detailContent}>
               <Text style={styles.detailLabel}>Alamat</Text>
-              <Text style={styles.detailValue}>
-                {formatCanAddress(task)}
-              </Text>
+              <Text style={styles.detailValue}>{formatCanAddress(task)}</Text>
             </View>
           </View>
 
