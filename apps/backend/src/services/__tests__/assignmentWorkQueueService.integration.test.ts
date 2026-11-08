@@ -138,6 +138,7 @@ describe('assignmentWorkQueueService', () => {
         id: IDS.canAktif,
         branchId: IDS.branch,
         dukuhId: IDS.dukuh,
+        qrCode: `QWQAKTIF${TAG}`,
         ownerName: 'Warga Aktif',
         ownerWhatsapp: `6284401${TAG}`,
         rt: '001',
@@ -149,6 +150,7 @@ describe('assignmentWorkQueueService', () => {
         id: IDS.canRusak,
         branchId: IDS.branch,
         dukuhId: IDS.dukuh,
+        qrCode: `QWQRUSAK${TAG}`,
         ownerName: 'Warga Rusak',
         ownerWhatsapp: `6284402${TAG}`,
         rt: '001',
@@ -160,6 +162,7 @@ describe('assignmentWorkQueueService', () => {
         id: IDS.canHilang,
         branchId: IDS.branch,
         dukuhId: IDS.dukuh,
+        qrCode: `QWQHILANG${TAG}`,
         ownerName: 'Warga Hilang',
         ownerWhatsapp: `6284403${TAG}`,
         rt: '002',
@@ -344,6 +347,50 @@ describe('assignmentWorkQueueService', () => {
     expect(result.groups.flatMap((group) => group.canIds ?? []).sort()).toEqual(
       [IDS.canAktif, IDS.canRusak, IDS.canHilang].sort()
     );
+  });
+
+  it('scope dukuh mengirim detail kaleng yang sepadan dengan canIds', async () => {
+    const result = await getAssignmentWorkQueue(rantingAdmin, {
+      year: String(PERIOD.year),
+      month: String(PERIOD.month),
+      dukuh_id: IDS.dukuh,
+    });
+
+    const rtGroups = result.groups.filter((group) => group.kind === 'rt');
+    expect(rtGroups).toHaveLength(2);
+    for (const group of rtGroups) {
+      expect(group.cans).toBeDefined();
+      expect(group.cans).toHaveLength(group.unassignedCans);
+      expect(group.cans!.map((can) => can.id)).toEqual(group.canIds);
+    }
+
+    const details = result.groups.flatMap((group) => group.cans ?? []);
+    expect(details.map((can) => can.id).sort()).toEqual(
+      [IDS.canAktif, IDS.canRusak, IDS.canHilang].sort()
+    );
+    expect(details.find((can) => can.id === IDS.canAktif)).toMatchObject({
+      qrCode: `QWQAKTIF${TAG}`,
+      ownerName: 'Warga Aktif',
+      rt: '001',
+      rw: '001',
+      condition: 'AKTIF',
+    });
+    // Kaleng yang sudah punya assignment, non-aktif, atau DIKEMBALIKAN tidak
+    // boleh ikut tampil di rincian.
+    expect(details.some((can) => can.id === IDS.canAssigned)).toBe(false);
+    expect(details.some((can) => can.id === IDS.canTransferred)).toBe(false);
+    expect(details.some((can) => can.id === IDS.canNonAktif)).toBe(false);
+    expect(details.some((can) => can.id === IDS.canDikembalikan)).toBe(false);
+  });
+
+  it('scope ranting tidak membawa detail cans', async () => {
+    const result = await getAssignmentWorkQueue(rantingAdmin, {
+      year: String(PERIOD.year),
+      month: String(PERIOD.month),
+      branch_id: IDS.branch,
+    });
+
+    expect(result.groups.every((group) => group.cans === undefined)).toBe(true);
   });
 
   it('petugas aktif membawa beban kerja periode berjalan', async () => {

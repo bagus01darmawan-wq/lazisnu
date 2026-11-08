@@ -4,6 +4,15 @@ export type RegionKind = 'branch' | 'dukuh';
 
 export type WorkQueueGroupKind = 'dukuh' | 'rt' | 'can';
 
+export interface WorkQueueCan {
+  id: string;
+  qrCode: string | null;
+  ownerName: string;
+  rt: string | null;
+  rw: string | null;
+  condition: string;
+}
+
 export interface WorkQueueGroup {
   kind: WorkQueueGroupKind;
   id: string;
@@ -12,6 +21,7 @@ export interface WorkQueueGroup {
   assignedCans: number;
   unassignedCans: number;
   canIds: string[] | null;
+  cans?: WorkQueueCan[] | null;
 }
 
 export interface WorkQueueOfficer {

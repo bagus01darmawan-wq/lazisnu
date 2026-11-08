@@ -19,6 +19,15 @@ import { currentOperationalPeriod } from '../utils/operationalTimeZone';
 export type WorkQueueScope = 'branch' | 'dukuh';
 export type WorkQueueGroupKind = 'dukuh' | 'rt' | 'can';
 
+export interface WorkQueueCan {
+  id: string;
+  qrCode: string | null;
+  ownerName: string;
+  rt: string | null;
+  rw: string | null;
+  condition: string;
+}
+
 export interface WorkQueueGroup {
   kind: WorkQueueGroupKind;
   id: string;
@@ -27,6 +36,7 @@ export interface WorkQueueGroup {
   assignedCans: number;
   unassignedCans: number;
   canIds: string[] | null;
+  cans?: WorkQueueCan[];
 }
 
 export interface WorkQueueOfficer {
@@ -236,9 +246,11 @@ async function buildDukuhGroups(dukuhId: string, year: number, month: number) {
   const rows = await db
     .select({
       id: schema.cans.id,
+      qrCode: schema.cans.qrCode,
       ownerName: schema.cans.ownerName,
       rt: schema.cans.rt,
       rw: schema.cans.rw,
+      condition: schema.cans.condition,
     })
     .from(schema.cans)
     .leftJoin(
@@ -257,11 +269,20 @@ async function buildDukuhGroups(dukuhId: string, year: number, month: number) {
   for (const can of rows) {
     const hasRt = Boolean(can.rt || can.rw);
     const key = hasRt ? `rt:${can.rt ?? '-'}:rw:${can.rw ?? '-'}` : `can:${can.id}`;
+    const detail: WorkQueueCan = {
+      id: can.id,
+      qrCode: can.qrCode,
+      ownerName: can.ownerName,
+      rt: can.rt,
+      rw: can.rw,
+      condition: can.condition,
+    };
     const existing = byRt.get(key);
     if (existing) {
       existing.totalCans += 1;
       existing.unassignedCans += 1;
       existing.canIds!.push(can.id);
+      existing.cans!.push(detail);
       continue;
     }
     byRt.set(key, {
@@ -272,6 +293,7 @@ async function buildDukuhGroups(dukuhId: string, year: number, month: number) {
       assignedCans: 0,
       unassignedCans: 1,
       canIds: [can.id],
+      cans: [detail],
     });
   }
 
