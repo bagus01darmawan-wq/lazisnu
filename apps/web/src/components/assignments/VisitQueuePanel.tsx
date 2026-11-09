@@ -1,11 +1,16 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckSquare, MapPin, RefreshCcw, Square } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  CheckSquare,
+  Loader2,
+  RefreshCcw,
+  Square,
+} from 'lucide-react';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
 import { GlassSelect } from '@/components/ui/GlassSelect';
 import type { WorkQueueOfficer } from './types';
 
@@ -110,6 +115,10 @@ export function VisitQueuePanel({
   );
   const selectedGroupCount = selectedGroupIds.size;
   const selectedCanCount = selectedGroups.reduce((sum, group) => sum + group.canIds.length, 0);
+  const allGroupsSelected =
+    groups.length > 0 && groups.every((group) => selectedGroupIds.has(groupKey(group)));
+  const selectedOfficer = officers.find((officer) => officer.id === officerId) ?? null;
+  const hasOfficers = officers.length > 0;
 
   const toggleGroup = (group: VisitQueueGroup) => {
     const key = groupKey(group);
@@ -166,155 +175,205 @@ export function VisitQueuePanel({
 
   if (loading && !data) {
     return (
-      <Card variant="glass" className="space-y-3 p-4 md:p-5">
-        <div className="h-5 w-48 animate-pulse rounded bg-white/10" />
-        <div className="h-20 animate-pulse rounded-xl bg-white/5" />
-      </Card>
+      <section className="rounded-2xl border border-white/10 bg-white/5">
+        <div className="border-b border-white/10 px-4 py-3 md:px-5">
+          <div className="h-4 w-48 animate-pulse rounded bg-white/10" />
+          <div className="mt-2 h-3 w-40 animate-pulse rounded bg-white/5" />
+        </div>
+        <div className="space-y-2 p-4">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="h-16 animate-pulse rounded-xl bg-white/5" />
+          ))}
+        </div>
+      </section>
     );
   }
 
   return (
-    <Card variant="glass" className="space-y-4 p-4 md:p-5">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <MapPin size={15} className="text-[#EAD19B]" />
-            <h2 className="text-sm font-black uppercase tracking-widest text-[#F4F1EA]">
-              Kunjungan Non-Aktif
-            </h2>
-          </div>
-          <p className="mt-1 text-xs text-[#F4F1EA]/50">
-            Kaleng NON_AKTIF yang belum punya tugas kunjungan untuk periode ini.
+    <section
+      className="rounded-2xl border border-white/10 bg-white/5"
+      aria-label="Kunjungan kaleng non-aktif"
+    >
+      <div className="flex items-start justify-between gap-3 border-b border-white/10 px-4 py-3 md:px-5">
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/40">
+            Kunjungan Non-Aktif
+          </p>
+          <p className="text-sm font-black text-[#F4F1EA]">
+            {data ? `${data.unassignedVisitCans} kaleng · ${groups.length} grup` : 'Antrean kunjungan'}
+          </p>
+          <p className="mt-0.5 text-[10px] font-medium text-[#F4F1EA]/40">
+            {data
+              ? `${data.assignedVisitCans} sudah dikunjungi · ${data.totalVisitCans} total kaleng non-aktif`
+              : 'Kaleng NON_AKTIF yang belum punya tugas kunjungan periode ini.'}
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void load()}
-          className="h-9 gap-2 rounded-xl border-white/10 bg-white/5 text-xs font-bold"
-          isLoading={loading}
-        >
-          <RefreshCcw size={13} />
-          Muat ulang
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading}
+            aria-label="Muat ulang antrean kunjungan"
+            className="flex h-9 items-center gap-2 rounded-2xl border border-[#F4F1EA]/20 bg-[#F4F1EA]/10 px-3 text-xs font-bold text-white/90 backdrop-blur-md transition-all duration-300 hover:bg-[#F4F1EA]/20 active:scale-95 disabled:opacity-50"
+          >
+            <RefreshCcw
+              size={13}
+              strokeWidth={3}
+              className={`text-[#EAD19B] ${loading ? 'animate-spin' : ''}`}
+            />
+            <span className="hidden sm:inline">Muat ulang</span>
+          </button>
+          <button
+            type="button"
+            onClick={selectAll}
+            disabled={groups.length === 0}
+            aria-label="Pilih semua grup"
+            className="flex min-h-11 items-center gap-2 rounded-xl px-3 text-[11px] font-bold text-[#EAD19B] transition-all hover:bg-[#EAD19B]/10 active:scale-95 disabled:opacity-40"
+          >
+            {allGroupsSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+            <span>Pilih semua</span>
+          </button>
+        </div>
       </div>
 
       {error ? (
-        <p className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-xs text-[#D97A76]">
-          {error}
-        </p>
+        <div className="px-4 py-8 text-center">
+          <AlertTriangle size={22} className="mx-auto text-[#DE6F4A]" />
+          <p className="mt-2 text-sm font-bold text-[#F4F1EA]">{error}</p>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="mt-3 h-9 rounded-xl border border-[#EAD19B]/40 px-4 text-[11px] font-bold text-[#EAD19B] transition-all hover:bg-[#EAD19B]/10 active:scale-95"
+          >
+            Coba lagi
+          </button>
+        </div>
       ) : !data || data.totalVisitCans === 0 ? (
-        <p className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-center text-xs text-[#F4F1EA]/40">
-          Belum ada kaleng non-aktif di wilayah ini.
-        </p>
+        <div className="px-5 py-8 text-center">
+          <p className="text-xs font-bold uppercase tracking-widest text-[#F4F1EA]/40">
+            Belum ada kaleng non-aktif di wilayah ini
+          </p>
+        </div>
       ) : data.unassignedVisitCans === 0 ? (
-        <p className="rounded-xl border border-[#1F8243]/20 bg-[#1F8243]/10 p-4 text-center text-xs text-[#1F8243]">
-          Semua {data.totalVisitCans} kaleng non-aktif sudah punya tugas kunjungan periode ini.
-        </p>
+        <div className="px-5 py-8 text-center">
+          <p className="text-xs font-bold text-[#1F8243]">
+            Semua {data.totalVisitCans} kaleng non-aktif sudah punya tugas kunjungan periode ini.
+          </p>
+        </div>
       ) : (
         <>
-          <div className="flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-widest">
-            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[#F4F1EA]/60">
-              Total {data.totalVisitCans}
-            </span>
-            <span className="rounded-full border border-[#1F8243]/20 bg-[#1F8243]/10 px-3 py-1 text-[#1F8243]">
-              Sudah {data.assignedVisitCans}
-            </span>
-            <span className="rounded-full border border-[#EAD19B]/20 bg-[#EAD19B]/10 px-3 py-1 text-[#EAD19B]">
-              Belum {data.unassignedVisitCans}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between gap-2">
-            <button
-              type="button"
-              onClick={selectAll}
-              className="flex items-center gap-2 text-[11px] font-bold text-[#F4F1EA]/60 hover:text-[#F4F1EA]"
-            >
-              {groups.length > 0 && groups.every((group) => selectedGroupIds.has(groupKey(group))) ? (
-                <CheckSquare size={15} className="text-[#1F8243]" />
-              ) : (
-                <Square size={15} />
-              )}
-              Pilih semua grup
-            </button>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/40">
-              {selectedCanCount} kaleng dipilih
-            </span>
-          </div>
-
-          <div className="grid max-h-72 gap-2 overflow-y-auto sm:grid-cols-2">
+          <ul className="divide-y divide-white/5">
             {groups.map((group) => {
               const key = groupKey(group);
               const selected = selectedGroupIds.has(key);
               return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => toggleGroup(group)}
-                  className={`rounded-xl border p-3 text-left transition-all ${
-                    selected
-                      ? 'border-[#EAD19B]/60 bg-[#EAD19B]/10'
-                      : 'border-white/10 bg-white/[0.03] hover:bg-white/5'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-bold text-[#F4F1EA]">
-                        {group.dukuhName}
-                      </p>
-                      <p className="mt-0.5 text-[10px] text-[#F4F1EA]/40">
-                        {group.canIds.length} kaleng
-                      </p>
-                    </div>
-                    {selected ? (
-                      <CheckSquare size={15} className="shrink-0 text-[#1F8243]" />
-                    ) : (
-                      <Square size={15} className="shrink-0 text-[#F4F1EA]/30" />
-                    )}
-                  </div>
-                  <div className="mt-1 space-y-0.5">
-                    {group.cans.slice(0, 3).map((can) => (
-                      <p key={can.id} className="truncate text-[10px] text-[#F4F1EA]/50">
-                        {can.ownerName} · #{can.qrCode || '-'}
-                        {can.rt || can.rw ? ` · RT ${can.rt || '-'}/RW ${can.rw || '-'}` : ''}
-                      </p>
-                    ))}
-                    {group.cans.length > 3 && (
-                      <p className="text-[10px] text-[#F4F1EA]/30">
-                        +{group.cans.length - 3} lainnya
-                      </p>
-                    )}
-                  </div>
-                </button>
+                <li key={key}>
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(group)}
+                    aria-pressed={selected}
+                    className={`flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition-colors md:px-5 ${
+                      selected ? 'bg-[#EAD19B]/10' : 'hover:bg-white/5'
+                    }`}
+                  >
+                    <span
+                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition-all ${
+                        selected
+                          ? 'border-[#EAD19B] bg-[#EAD19B] text-[#2C473E]'
+                          : 'border-white/15 bg-white/5 text-[#F4F1EA]/30'
+                      }`}
+                      aria-hidden="true"
+                    >
+                      {selected ? <CheckSquare size={18} /> : <Square size={18} />}
+                    </span>
+
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="truncate text-sm font-bold text-[#F4F1EA]">
+                          {group.dukuhName}
+                        </span>
+                        <span className="shrink-0 text-[11px] font-black text-[#EAD19B]">
+                          {group.canIds.length} kaleng
+                        </span>
+                      </span>
+                      <span className="mt-1 flex items-center justify-between gap-2">
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-[#F4F1EA]/30">
+                          DUKUH
+                        </span>
+                        <span className="text-[10px] font-bold text-[#F4F1EA]/40">
+                          Kunjungan verifikasi
+                        </span>
+                      </span>
+                      <span className="mt-1 block space-y-0.5">
+                        {group.cans.slice(0, 2).map((can) => (
+                          <span key={can.id} className="block truncate text-[10px] text-[#F4F1EA]/50">
+                            {can.ownerName} · #{can.qrCode || '-'}
+                            {can.rt || can.rw
+                              ? ` · RT ${can.rt || '-'}/RW ${can.rw || '-'}`
+                              : ''}
+                          </span>
+                        ))}
+                        {group.cans.length > 2 && (
+                          <span className="block text-[10px] text-[#F4F1EA]/30">
+                            +{group.cans.length - 2} lainnya
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                  </button>
+                </li>
               );
             })}
-          </div>
+          </ul>
 
-          <div className="flex flex-col gap-3 border-t border-white/10 pt-3 sm:flex-row sm:items-end">
-            <div className="flex-1">
-              <GlassSelect
-                value={officerId}
-                onChange={setOfficerId}
-                label="Petugas kunjungan"
-                placeholder="-- Pilih Petugas --"
-                options={officers.map((officer) => ({
-                  label: `${officer.fullName}${officer.employeeCode ? ` (${officer.employeeCode})` : ''}`,
-                  value: officer.id,
-                }))}
-              />
+          <div className="rounded-b-2xl border-t border-white/10 bg-[#2C473E]/90 px-4 py-3 md:px-5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0" aria-live="polite">
+                <p className="text-[11px] font-bold text-[#F4F1EA]">
+                  {selectedGroupCount > 0
+                    ? `${selectedCanCount} kaleng · ${selectedGroupCount} grup dipilih`
+                    : 'Pilih grup untuk mulai menugaskan'}
+                </p>
+                <p className="truncate text-[10px] font-medium text-[#F4F1EA]/50">
+                  {!hasOfficers
+                    ? 'Belum ada petugas aktif di wilayah ini'
+                    : selectedOfficer
+                      ? `${selectedOfficer.fullName} · petugas kunjungan`
+                      : 'Pilih petugas tujuan'}
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="w-full sm:w-[220px]">
+                  <GlassSelect
+                    value={officerId}
+                    onChange={setOfficerId}
+                    placeholder="Pilih petugas"
+                    disabled={!hasOfficers}
+                    options={officers.map((officer) => ({
+                      label: `${officer.fullName}${officer.employeeCode ? ` (${officer.employeeCode})` : ''}`,
+                      value: officer.id,
+                    }))}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void assign()}
+                  disabled={!officerId || selectedGroupCount === 0 || submitting}
+                  className="flex h-11 items-center justify-center gap-2 rounded-xl bg-[#EAD19B] px-4 text-[11px] font-black text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 transition-all hover:bg-[#EAD19B]/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {submitting ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <CheckCircle2 size={15} />
+                  )}
+                  {selectedCanCount > 0 ? `Tugaskan ${selectedCanCount} Kaleng` : 'Tugaskan'}
+                </button>
+              </div>
             </div>
-            <Button
-              onClick={() => void assign()}
-              disabled={!officerId || selectedGroupCount === 0}
-              isLoading={submitting}
-              className="h-11 rounded-xl bg-[#EAD19B] px-5 text-xs font-black text-[#2C473E] shadow-lg shadow-[#EAD19B]/20 hover:bg-[#EAD19B]/90"
-            >
-              Tugaskan Kunjungan ({selectedCanCount})
-            </Button>
           </div>
         </>
       )}
-    </Card>
+    </section>
   );
 }

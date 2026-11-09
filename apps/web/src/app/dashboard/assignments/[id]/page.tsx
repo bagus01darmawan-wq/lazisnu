@@ -621,93 +621,21 @@ export default function AssignmentsDetailPage({
         );
       }
 
-      if (summary.unassignedAssignableCans === 0) {
-        return (
-          <>
-            <AssignmentEmptyState
-              variant="all-assigned"
-              title="Semua penjemputan sudah ditugaskan"
-              description={`${summary.assignableCans} kaleng di ${displayName} sudah punya petugas untuk ${MONTH_NAMES[period.month - 1]} ${period.year}.`}
-              primaryLabel="Lihat Riwayat"
-              onPrimary={() => setActiveTab('riwayat')}
-              secondaryLabel="Ganti Periode"
-              onSecondary={() => {
-                const nextMonth = period.month === 12 ? 1 : period.month + 1;
-                const nextYear = period.month === 12 ? period.year + 1 : period.year;
-                changePeriod(nextMonth, nextYear);
-              }}
-            />
-            {visitPanel}
-          </>
-        );
-      }
     }
 
     return (
       <>
         <AssignmentCoverage summary={summary} loading={queueLoading} />
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
-          <UnassignedQueue
-            groups={groups}
-            selectedIds={selectedGroupIds}
-            onToggle={toggleGroup}
-            onToggleAll={toggleAllGroups}
-            loading={queueLoading}
-            error={queueError}
-            onRetry={reloadQueue}
-          />
-
-          <aside className="hidden lg:block">
-            <div className="rounded-2xl border border-white/10 bg-white/5">
-              <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
-                <Users size={14} className="text-[#EAD19B]" />
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/50">
-                  Petugas & beban kerja
-                </p>
-              </div>
-              {officers.length === 0 ? (
-                <p className="px-4 py-6 text-center text-xs text-[#F4F1EA]/40">
-                  Belum ada petugas aktif
-                </p>
-              ) : (
-                <ul className="max-h-[420px] space-y-1 overflow-y-auto p-2">
-                  {officers.map((officer) => {
-                    const selected = officer.id === selectedOfficerId;
-                    return (
-                      <li key={officer.id}>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedOfficerId(officer.id)}
-                          className={`w-full rounded-xl border px-3 py-2.5 text-left transition-all ${
-                            selected
-                              ? 'border-[#EAD19B]/60 bg-[#EAD19B]/10'
-                              : 'border-transparent hover:bg-white/5'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="truncate text-xs font-bold text-[#F4F1EA]">
-                              {officer.fullName}
-                            </span>
-                            <span className="shrink-0 text-[10px] font-black text-[#EAD19B]">
-                              {officer.assignedCount}
-                            </span>
-                          </div>
-                          <p className="mt-0.5 truncate text-[10px] text-[#F4F1EA]/40">
-                            {officer.completedCount} selesai · {officer.uncollectedCount} terlewat
-                            {officer.dukuhName ? ` · ${officer.dukuhName}` : ''}
-                          </p>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          </aside>
-        </div>
-
-        {visitPanel}
+        <UnassignedQueue
+          groups={groups}
+          selectedIds={selectedGroupIds}
+          onToggle={toggleGroup}
+          onToggleAll={toggleAllGroups}
+          loading={queueLoading}
+          error={queueError}
+          onRetry={reloadQueue}
+        />
 
         <AssignmentActionBar
           selectedGroups={selectedGroups.length}
@@ -718,6 +646,8 @@ export default function AssignmentsDetailPage({
           onOpenOfficer={() => setIsOfficerSheetOpen(true)}
           onSubmit={openConfirm}
         />
+
+        {visitPanel}
       </>
     );
   };
@@ -870,10 +800,58 @@ export default function AssignmentsDetailPage({
     </>
   );
 
+  const officersPanel = (
+    <div className="rounded-2xl border border-white/10 bg-white/5">
+      <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
+        <Users size={14} className="text-[#EAD19B]" />
+        <p className="text-[10px] font-bold uppercase tracking-widest text-[#F4F1EA]/50">
+          Petugas & beban kerja
+        </p>
+      </div>
+      {officers.length === 0 ? (
+        <p className="px-4 py-6 text-center text-xs text-[#F4F1EA]/40">
+          Belum ada petugas aktif
+        </p>
+      ) : (
+        <ul className="max-h-[420px] space-y-1 overflow-y-auto p-2">
+          {officers.map((officer) => {
+            const selected = officer.id === selectedOfficerId;
+            return (
+              <li key={officer.id}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedOfficerId(officer.id)}
+                  className={`w-full rounded-xl border px-3 py-2.5 text-left transition-all ${
+                    selected
+                      ? 'border-[#EAD19B]/60 bg-[#EAD19B]/10'
+                      : 'border-transparent hover:bg-white/5'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-xs font-bold text-[#F4F1EA]">
+                      {officer.fullName}
+                    </span>
+                    <span className="shrink-0 text-[10px] font-black text-[#EAD19B]">
+                      {officer.assignedCount}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 truncate text-[10px] text-[#F4F1EA]/40">
+                    {officer.completedCount} selesai · {officer.uncollectedCount} terlewat
+                    {officer.dukuhName ? ` · ${officer.dukuhName}` : ''}
+                  </p>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-4 pb-28 md:space-y-6 lg:pb-0">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="flex min-w-0 items-center gap-3 md:pt-1">
           <button
             type="button"
             onClick={() => router.push('/dashboard/assignments')}
@@ -895,12 +873,15 @@ export default function AssignmentsDetailPage({
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-2 md:justify-end">
-          <PeriodPicker
-            months={[period.month]}
-            year={period.year}
-            onChange={(months, year) => changePeriod(months[0] || period.month, year)}
-          />
+        <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-start sm:justify-end md:w-auto">
+          <div className="flex justify-end md:pt-1">
+            <PeriodPicker
+              months={[period.month]}
+              year={period.year}
+              onChange={(months, year) => changePeriod(months[0] || period.month, year)}
+            />
+          </div>
+          <div className="w-full sm:w-[300px] sm:shrink-0">{officersPanel}</div>
         </div>
       </div>
 
