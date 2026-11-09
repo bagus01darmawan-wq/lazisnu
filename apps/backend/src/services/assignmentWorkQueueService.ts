@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { alias, and, asc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { JWTPayload } from '../middleware/auth';
@@ -111,6 +111,42 @@ const assignableFilter = sql`${schema.cans.isActive} = true AND ${schema.cans.co
   sql`, `
 )})`;
 
+/**
+ * Benarkah kaleng ini sudah punya setoran untuk periode (year, month)?
+ *
+ * Periode diambil dari `assignments.period_year/period_month`, BUKAN dari
+ * `collections.collected_at`: setoran yang masuk lewat jendela toleransi bisa
+ * bertanggal bulan berikutnya (lihat collectionSubmission.ts:201-203), dan
+ * atribusi uang memang memakai periode tugasnya. `collections.assignment_id`
+ * bertanda NOT NULL, jadi INNER JOIN ini aman.
+ *
+ * Sengaja TIDAK memakai getLatestCollectionCondition(): di sini kita hanya
+ * menanyakan keberadaan setoran, bukan menjumlah nominal. Koreksi/resubmit
+ * menambah baris dengan submit_sequence lebih tinggi dan tetap harus membuat
+ * kaleng keluar dari antrean. Hanya sync_status COMPLETED yang dianggap sah.
+ */
+function collectedInPeriod(year: number, month: number) {
+  const collected = alias(schema.collections, 'wq_collected');
+  const collectedAssignment = alias(schema.assignments, 'wq_collected_assignment');
+  const subquery = db
+    .select({ one: sql<number>`1` })
+    .from(collected)
+    .innerJoin(collectedAssignment, eq(collectedAssignment.id, collected.assignmentId))
+    .where(
+      and(
+        eq(collected.canId, schema.cans.id),
+        eq(collectedAssignment.periodYear, year),
+        eq(collectedAssignment.periodMonth, month),
+        eq(collected.syncStatus, 'COMPLETED')
+      )
+    );
+  return sql<boolean>`EXISTS (${subquery})`;
+}
+
+function uncollectedInPeriod(year: number, month: number) {
+  return sql<boolean>`NOT (${collectedInPeriod(year, month)})`;
+}
+
 function toNumber(value: unknown): number {
   return Number(value ?? 0);
 }
@@ -161,6 +197,8 @@ async function resolveRegion(user: JWTPayload, params: WorkQueueParams) {
 }
 
 async function buildBranchGroups(branchId: string, year: number, month: number) {
+  const collected = collectedInPeriod(year, month);
+  const uncollected = uncollectedInPeriod(year, month);
   const rows = await db
     .select({
       id: schema.cans.dukuhId,
@@ -168,8 +206,11 @@ async function buildBranchGroups(branchId: string, year: number, month: number) 
       // count(DISTINCT), bukan count(*): kaleng yang pernah di-transfer punya
       // lebih dari satu baris assignment pada periode yang sama (baris lama
       // REASSIGNED + baris baru ACTIVE), dan LEFT JOIN menggandakannya.
+      // Setoran lewat tugas VISIT juga dihitung "sudah", walau tidak ada baris
+      // PICKUP — kalau tidak, antrean menjanjikan kaleng yang pasti ditolak
+      // bulk-cans saat disimpan.
       total: sql<number>`count(DISTINCT ${schema.cans.id}) FILTER (WHERE ${assignableFilter})`,
-      assigned: sql<number>`count(DISTINCT ${schema.cans.id}) FILTER (WHERE ${assignableFilter} AND ${schema.assignments.id} IS NOT NULL)`,
+      assigned: sql<number>`count(DISTINCT ${schema.cans.id}) FILTER (WHERE ${assignableFilter} AND (${schema.assignments.id} IS NOT NULL OR ${collected}))`,
     })
     .from(schema.cans)
     .leftJoin(schema.dukuhs, eq(schema.cans.dukuhId, schema.dukuhs.id))
@@ -224,7 +265,8 @@ async function buildBranchGroups(branchId: string, year: number, month: number) 
         eq(schema.cans.branchId, branchId),
         isNull(schema.cans.dukuhId),
         assignableFilter,
-        isNull(schema.assignments.id)
+        isNull(schema.assignments.id),
+        uncollected
       )
     )
     .orderBy(asc(schema.cans.ownerName));
@@ -243,6 +285,7 @@ async function buildBranchGroups(branchId: string, year: number, month: number) 
 }
 
 async function buildDukuhGroups(dukuhId: string, year: number, month: number) {
+  const uncollected = uncollectedInPeriod(year, month);
   const rows = await db
     .select({
       id: schema.cans.id,
@@ -262,7 +305,12 @@ async function buildDukuhGroups(dukuhId: string, year: number, month: number) {
         eq(schema.assignments.kind, 'PICKUP')
       )
     )
-    .where(and(eq(schema.cans.dukuhId, dukuhId), assignableFilter, isNull(schema.assignments.id)))
+    .where(and(
+      eq(schema.cans.dukuhId, dukuhId),
+      assignableFilter,
+      isNull(schema.assignments.id),
+      uncollected
+    ))
     .orderBy(asc(schema.cans.rt), asc(schema.cans.rw), asc(schema.cans.ownerName));
 
   const byRt = new Map<string, WorkQueueGroup>();
@@ -311,12 +359,16 @@ export async function getAssignmentWorkQueue(
       ? eq(schema.cans.dukuhId, region.id)
       : eq(schema.cans.branchId, region.branchId);
 
+  const collected = collectedInPeriod(period.year, period.month);
   const [canAggRow] = await db
     .select({
       // count(DISTINCT) juga di sini — alasan sama dengan buildBranchGroups.
       totalCans: sql<number>`count(DISTINCT ${schema.cans.id})`,
       assignableCans: sql<number>`count(DISTINCT ${schema.cans.id}) FILTER (WHERE ${assignableFilter})`,
-      assignedAssignableCans: sql<number>`count(DISTINCT ${schema.cans.id}) FILTER (WHERE ${assignableFilter} AND ${schema.assignments.id} IS NOT NULL)`,
+      // Ringkasan WAJIB memakai aturan yang sama dengan daftar grup: kaleng
+      // yang sudah disetor lewat VISIT tanpa baris PICKUP tidak boleh tetap
+      // terbaca sebagai "belum ditugaskan" di AssignmentCoverage.
+      assignedAssignableCans: sql<number>`count(DISTINCT ${schema.cans.id}) FILTER (WHERE ${assignableFilter} AND (${schema.assignments.id} IS NOT NULL OR ${collected}))`,
     })
     .from(schema.cans)
     .leftJoin(

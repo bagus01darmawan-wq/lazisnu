@@ -5,6 +5,8 @@
  *   - `unassignedAssignableCans` sama dengan total `unassignedCans` grup;
  *   - kaleng NON_AKTIF / DIKEMBALIKAN tidak masuk antrean;
  *   - scope dukuh mengembalikan grup berisi `canIds` agar bisa di-assign subset;
+ *   - kaleng yang sudah disetor lewat tugas VISIT tidak muncul lagi pada periode
+ *     yang sama (tetap muncul di periode berikutnya);
  *   - ADMIN_RANTING tidak bisa meminta work queue ranting lain.
  */
 import { eq, inArray } from 'drizzle-orm';
@@ -33,6 +35,16 @@ const IDS = {
   assignment: randomUUID(),
   assignmentTransferredOld: randomUUID(),
   assignmentTransferredNew: randomUUID(),
+  // Fixture terpisah di ranting kedua: menguji setoran lewat tugas VISIT tanpa
+  // mengubah angka-angka yang sudah dikunci tes lain di ranting utama.
+  dukuhCollected: randomUUID(),
+  canSudahSetor: randomUUID(),
+  canBelumSetor: randomUUID(),
+  canSetorPending: randomUUID(),
+  assignmentVisit: randomUUID(),
+  assignmentVisitPending: randomUUID(),
+  collectionCompleted: randomUUID(),
+  collectionPending: randomUUID(),
 };
 
 const TAG = randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase();
@@ -43,6 +55,14 @@ const rantingAdmin = {
   role: 'ADMIN_RANTING',
   districtId: IDS.district,
   branchId: IDS.branch,
+} as any;
+
+// ADMIN_KECAMATAN boleh membaca ranting kedua yang masih satu kecamatan.
+const kecamatanAdmin = {
+  userId: randomUUID(),
+  role: 'ADMIN_KECAMATAN',
+  districtId: IDS.district,
+  branchId: null,
 } as any;
 
 describe('assignmentWorkQueueService', () => {
@@ -244,9 +264,112 @@ describe('assignmentWorkQueueService', () => {
         status: 'ACTIVE',
       },
     ]);
+
+    // Kasus nyata 8 November 2026: kaleng NON_AKTIF dikunjungi (VISIT),
+    // dinyatakan ISI, nominal 20.000 tersimpan, kondisi berubah jadi RUSAK.
+    // Tidak ada baris assignment PICKUP yang pernah dibuat untuk periode itu.
+    await db.insert(schema.dukuhs).values({
+      id: IDS.dukuhCollected,
+      branchId: IDS.otherBranch,
+      name: 'Dukuh Sudah Setor',
+    });
+
+    await db.insert(schema.cans).values([
+      {
+        id: IDS.canSudahSetor,
+        branchId: IDS.otherBranch,
+        dukuhId: IDS.dukuhCollected,
+        qrCode: `QWQSETOR${TAG}`,
+        ownerName: 'Warga Sudah Disetor',
+        ownerWhatsapp: `6284408${TAG}`,
+        rt: '001',
+        rw: '001',
+        condition: 'RUSAK',
+        isActive: true,
+      },
+      {
+        id: IDS.canBelumSetor,
+        branchId: IDS.otherBranch,
+        dukuhId: IDS.dukuhCollected,
+        qrCode: `QWQBELUM${TAG}`,
+        ownerName: 'Warga Belum Disetor',
+        ownerWhatsapp: `6284409${TAG}`,
+        rt: '001',
+        rw: '001',
+        condition: 'RUSAK',
+        isActive: true,
+      },
+      {
+        id: IDS.canSetorPending,
+        branchId: IDS.otherBranch,
+        dukuhId: IDS.dukuhCollected,
+        qrCode: `QWQPENDING${TAG}`,
+        ownerName: 'Warga Setor Pending',
+        ownerWhatsapp: `6284410${TAG}`,
+        rt: '002',
+        rw: '001',
+        condition: 'RUSAK',
+        isActive: true,
+      },
+    ]);
+
+    await db.insert(schema.assignments).values([
+      {
+        id: IDS.assignmentVisit,
+        canId: IDS.canSudahSetor,
+        officerId: IDS.officer,
+        periodYear: PERIOD.year,
+        periodMonth: PERIOD.month,
+        kind: 'VISIT',
+        status: 'COMPLETED',
+      },
+      {
+        // Sengaja VISIT (bukan PICKUP) agar satu-satunya pembeda dengan kaleng
+        // di atas adalah sync_status setorannya: PENDING belum dianggap sah.
+        id: IDS.assignmentVisitPending,
+        canId: IDS.canSetorPending,
+        officerId: IDS.officer,
+        periodYear: PERIOD.year,
+        periodMonth: PERIOD.month,
+        kind: 'VISIT',
+        status: 'ACTIVE',
+      },
+    ]);
+
+    await db.insert(schema.collections).values([
+      {
+        id: IDS.collectionCompleted,
+        assignmentId: IDS.assignmentVisit,
+        canId: IDS.canSudahSetor,
+        officerId: IDS.officer,
+        nominal: BigInt(20000),
+        // SENGAJA di luar bulan periode: setoran lewat jendela toleransi bisa
+        // bertanggal bulan berikutnya. Periode harus dibaca dari assignment,
+        // bukan dari collected_at, atau kaleng ini tetap muncul di antrean.
+        collectedAt: new Date('2026-11-08T14:18:32.961Z'),
+        submittedAt: new Date('2026-11-08T14:18:36.410Z'),
+        syncedAt: new Date('2026-11-08T14:18:36.410Z'),
+        syncStatus: 'COMPLETED',
+        serverTimestamp: new Date('2026-11-08T14:18:36.410Z'),
+        submitSequence: 1,
+      },
+      {
+        id: IDS.collectionPending,
+        assignmentId: IDS.assignmentVisitPending,
+        canId: IDS.canSetorPending,
+        officerId: IDS.officer,
+        nominal: BigInt(15000),
+        collectedAt: new Date('2026-10-20T03:00:00.000Z'),
+        syncStatus: 'PENDING',
+        submitSequence: 1,
+      },
+    ]);
   });
 
   afterAll(async () => {
+    await db
+      .delete(schema.collections)
+      .where(inArray(schema.collections.id, [IDS.collectionCompleted, IDS.collectionPending]));
     await db
       .delete(schema.assignments)
       .where(
@@ -254,6 +377,8 @@ describe('assignmentWorkQueueService', () => {
           IDS.assignment,
           IDS.assignmentTransferredOld,
           IDS.assignmentTransferredNew,
+          IDS.assignmentVisit,
+          IDS.assignmentVisitPending,
         ])
       );
     await db
@@ -267,13 +392,18 @@ describe('assignmentWorkQueueService', () => {
           IDS.canDikembalikan,
           IDS.canAssigned,
           IDS.canTransferred,
+          IDS.canSudahSetor,
+          IDS.canBelumSetor,
+          IDS.canSetorPending,
         ])
       );
     await db.delete(schema.officers).where(inArray(schema.officers.id, [IDS.officer, IDS.officer2]));
     await db
       .delete(schema.users)
       .where(inArray(schema.users.id, [IDS.user, IDS.officerUser, IDS.officer2User]));
-    await db.delete(schema.dukuhs).where(eq(schema.dukuhs.id, IDS.dukuh));
+    await db
+      .delete(schema.dukuhs)
+      .where(inArray(schema.dukuhs.id, [IDS.dukuh, IDS.dukuhCollected]));
     await db
       .delete(schema.branches)
       .where(inArray(schema.branches.id, [IDS.branch, IDS.otherBranch]));
@@ -408,6 +538,65 @@ describe('assignmentWorkQueueService', () => {
     expect(officer?.dukuhName).toBe('Dukuh Queue');
     const officer2 = result.officers.find((row) => row.id === IDS.officer2);
     expect(officer2?.assignedCount).toBe(1);
+  });
+
+  it('kaleng bersetoran VISIT tidak masuk antrean scope dukuh pada periode itu', async () => {
+    const result = await getAssignmentWorkQueue(kecamatanAdmin, {
+      year: String(PERIOD.year),
+      month: String(PERIOD.month),
+      dukuh_id: IDS.dukuhCollected,
+    });
+
+    // collected_at fixture bertanggal 8 November, sedangkan periode tugasnya
+    // Oktober. Kalau filter memakai tanggal setoran, kaleng ini akan lolos
+    // kembali dan tes ini gagal.
+    const listed = result.groups.flatMap((group) => group.canIds ?? []);
+    expect(listed).not.toContain(IDS.canSudahSetor);
+    // Setoran PENDING belum sah, jadi kalengnya tetap boleh ditugaskan.
+    expect(listed.sort()).toEqual([IDS.canBelumSetor, IDS.canSetorPending].sort());
+
+    expect(result.summary.unassignedAssignableCans).toBe(2);
+    expect(result.groups.reduce((sum, group) => sum + group.unassignedCans, 0)).toBe(
+      result.summary.unassignedAssignableCans
+    );
+    for (const group of result.groups) {
+      expect(group.cans).toHaveLength(group.unassignedCans);
+      expect(group.cans!.map((can) => can.id)).toEqual(group.canIds);
+    }
+  });
+
+  it('scope ranting ikut menghitung setoran VISIT sebagai sudah ditugaskan', async () => {
+    const result = await getAssignmentWorkQueue(kecamatanAdmin, {
+      year: String(PERIOD.year),
+      month: String(PERIOD.month),
+      branch_id: IDS.otherBranch,
+    });
+
+    expect(result.summary.totalCans).toBe(3);
+    expect(result.summary.assignableCans).toBe(3);
+    expect(result.summary.assignedAssignableCans).toBe(1);
+    expect(result.summary.unassignedAssignableCans).toBe(2);
+    expect(result.groups).toHaveLength(1);
+    expect(result.groups[0].totalCans).toBe(3);
+    expect(result.groups[0].assignedCans).toBe(1);
+    expect(result.groups[0].unassignedCans).toBe(2);
+    expect(result.groups.reduce((sum, group) => sum + group.unassignedCans, 0)).toBe(
+      result.summary.unassignedAssignableCans
+    );
+  });
+
+  it('setoran periode Oktober tidak menghilangkan kaleng di periode November', async () => {
+    const result = await getAssignmentWorkQueue(kecamatanAdmin, {
+      year: String(PERIOD.year),
+      month: '11',
+      dukuh_id: IDS.dukuhCollected,
+    });
+
+    const listed = result.groups.flatMap((group) => group.canIds ?? []);
+    expect(listed.sort()).toEqual(
+      [IDS.canSudahSetor, IDS.canBelumSetor, IDS.canSetorPending].sort()
+    );
+    expect(result.summary.unassignedAssignableCans).toBe(3);
   });
 
   it('ADMIN_RANTING dipaksa memakai ranting dari JWT', async () => {
