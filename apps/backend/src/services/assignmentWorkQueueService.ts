@@ -1,4 +1,5 @@
-import { alias, and, asc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { JWTPayload } from '../middleware/auth';

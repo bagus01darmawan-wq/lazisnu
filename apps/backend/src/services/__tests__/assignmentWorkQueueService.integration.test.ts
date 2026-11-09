@@ -9,11 +9,26 @@
  *     yang sama (tetap muncul di periode berikutnya);
  *   - ADMIN_RANTING tidak bisa meminta work queue ranting lain.
  */
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
 import { getAssignmentWorkQueue } from '../assignmentWorkQueueService';
+
+/**
+ * RULE immutable koleksi memblokir DELETE pada collections. Cleanup fixture
+ * perlu menonaktifkannya sementara lalu membuatnya kembali.
+ */
+async function withImmutableRulesDisabled(fn: () => Promise<void>) {
+  await db.execute(sql`DROP RULE IF EXISTS disable_delete_koleksi ON collections`);
+  await db.execute(sql`DROP RULE IF EXISTS disable_update_nominal_koleksi ON collections`);
+  try {
+    await fn();
+  } finally {
+    await db.execute(sql`CREATE OR REPLACE RULE disable_delete_koleksi AS ON DELETE TO collections DO INSTEAD NOTHING`);
+    await db.execute(sql`CREATE OR REPLACE RULE disable_update_nominal_koleksi AS ON UPDATE TO collections WHERE NEW.nominal <> OLD.nominal DO INSTEAD NOTHING`);
+  }
+}
 
 const IDS = {
   district: randomUUID(),
@@ -367,20 +382,22 @@ describe('assignmentWorkQueueService', () => {
   });
 
   afterAll(async () => {
-    await db
-      .delete(schema.collections)
-      .where(inArray(schema.collections.id, [IDS.collectionCompleted, IDS.collectionPending]));
-    await db
-      .delete(schema.assignments)
-      .where(
-        inArray(schema.assignments.id, [
-          IDS.assignment,
-          IDS.assignmentTransferredOld,
-          IDS.assignmentTransferredNew,
-          IDS.assignmentVisit,
-          IDS.assignmentVisitPending,
-        ])
-      );
+    await withImmutableRulesDisabled(async () => {
+      await db
+        .delete(schema.collections)
+        .where(inArray(schema.collections.id, [IDS.collectionCompleted, IDS.collectionPending]));
+      await db
+        .delete(schema.assignments)
+        .where(
+          inArray(schema.assignments.id, [
+            IDS.assignment,
+            IDS.assignmentTransferredOld,
+            IDS.assignmentTransferredNew,
+            IDS.assignmentVisit,
+            IDS.assignmentVisitPending,
+          ])
+        );
+    });
     await db
       .delete(schema.cans)
       .where(
