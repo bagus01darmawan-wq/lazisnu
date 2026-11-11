@@ -277,6 +277,8 @@ async function processSyncItem(
       await tx.insert(schema.canVisits).values({
         canId: item.can_id,
         officerId,
+        periodYear: assignment.periodYear,
+        periodMonth: assignment.periodMonth,
         purpose: 'VERIFIKASI',
         outcome: item.visit_outcome,
         condition: item.condition,

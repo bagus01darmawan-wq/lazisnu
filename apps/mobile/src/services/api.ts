@@ -54,8 +54,8 @@ export function getAuthStorage(): MMKV {
 }
 
 const getApiOrigin = (): string => {
-  // API_URL di-inline saat bundling via
-  // babel-plugin-transform-inline-environment-variables (set di .env).
+  // API_URL di-inline saat bundling via babel-plugin-transform-inline-environment-variables.
+  // Gunakan `pnpm start:mobile:staging` agar Metro memakai API staging.
   // development: http://10.0.2.2:3001 (backend lokal, dari emulator AVD)
   // production:  https://api.lazisnu.site
   if (process.env.API_URL) {

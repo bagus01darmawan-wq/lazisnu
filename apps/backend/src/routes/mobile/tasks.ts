@@ -23,7 +23,7 @@ import { insertActivityLog } from '../../services/auditLogService';
 import { completeOfficerPeriod } from '../../services/periodComplete';
 import { getPeriodState, resolveDisplayPeriod } from '../../services/periodState';
 import { currentOperationalPeriod } from '../../utils/operationalTimeZone';
-import { ErrorCode } from '../../utils/errorCatalog';
+import { ErrorCode, Errors } from '../../utils/errorCatalog';
 import {
   classifyScan,
   scanAlreadyCollectedMessage,
@@ -1115,8 +1115,10 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       const month = parseInt(query.month || '', 10);
       if (Number.isInteger(year) && year >= 2020 && year <= 2100 && Number.isInteger(month) && month >= 1 && month <= 12) {
         conditions.push(
-          gte(schema.canVisits.visitedAt, new Date(year, month - 1, 1)),
-          lt(schema.canVisits.visitedAt, new Date(year, month, 1)),
+          and(
+            eq(schema.canVisits.periodYear, year),
+            eq(schema.canVisits.periodMonth, month),
+          ),
         );
       }
       // Riwayat Kunjungan berisi aktivitas non-penjemputan. Hasil ISI sudah
@@ -1194,7 +1196,8 @@ export async function tasksRoutes(fastify: FastifyInstance) {
 
       // Tugas VISIT milik petugas ini. APK baru mengirim assignment_id;
       // APK lama tidak, jadi fallback ke VISIT ACTIVE pada display_period.
-      let targetAssignment: { id: string } | null = null;
+      let visitPeriod = (await resolveDisplayPeriod(user)) ?? currentOperationalPeriod();
+      let targetAssignment: { id: string; periodYear: number; periodMonth: number } | null = null;
       if (body.assignment_id) {
         const found = await db.query.assignments.findFirst({
           where: and(
@@ -1204,32 +1207,37 @@ export async function tasksRoutes(fastify: FastifyInstance) {
             eq(schema.assignments.kind, 'VISIT'),
             eq(schema.assignments.status, 'ACTIVE'),
           ),
-          columns: { id: true },
+          columns: { id: true, periodYear: true, periodMonth: true },
         });
         targetAssignment = found ?? null;
         if (!targetAssignment) {
           return sendError(reply, 403, 'ASSIGNMENT_INVALID', 'Tugas kunjungan tidak valid atau bukan milik Anda');
         }
+        visitPeriod = { year: targetAssignment.periodYear, month: targetAssignment.periodMonth };
       } else {
-        const display = (await resolveDisplayPeriod(user)) ?? currentOperationalPeriod();
         const found = await db.query.assignments.findFirst({
           where: and(
             eq(schema.assignments.canId, canId),
             eq(schema.assignments.officerId, officerId),
             eq(schema.assignments.kind, 'VISIT'),
-            eq(schema.assignments.periodYear, display.year),
-            eq(schema.assignments.periodMonth, display.month),
+            eq(schema.assignments.periodYear, visitPeriod.year),
+            eq(schema.assignments.periodMonth, visitPeriod.month),
             eq(schema.assignments.status, 'ACTIVE'),
           ),
-          columns: { id: true },
+          columns: { id: true, periodYear: true, periodMonth: true },
         });
         targetAssignment = found ?? null;
+        if (targetAssignment) {
+          visitPeriod = { year: targetAssignment.periodYear, month: targetAssignment.periodMonth };
+        }
       }
 
       const [visit] = await db.transaction(async (tx) => {
         const inserted = await tx.insert(schema.canVisits).values({
           canId,
           officerId,
+          periodYear: visitPeriod.year,
+          periodMonth: visitPeriod.month,
           purpose: 'VERIFIKASI',
           outcome: body.outcome,
           condition: body.condition ?? null,
@@ -1318,6 +1326,16 @@ export async function tasksRoutes(fastify: FastifyInstance) {
 
       const visitedAt = body.collected_at ? new Date(body.collected_at) : new Date();
       const [collection, visit] = await db.transaction(async (tx) => {
+        const assignment = await tx.query.assignments.findFirst({
+          where: and(
+            eq(schema.assignments.id, body.assignment_id),
+            eq(schema.assignments.canId, canId),
+            eq(schema.assignments.officerId, officerId),
+            eq(schema.assignments.status, 'ACTIVE'),
+          ),
+          columns: { periodYear: true, periodMonth: true },
+        });
+        if (!assignment) throw Errors.ASSIGNMENT_INVALID();
         const submitted = await submitCollection(tx, {
           assignmentId: body.assignment_id,
           canId,
@@ -1334,6 +1352,8 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         const inserted = await tx.insert(schema.canVisits).values({
           canId,
           officerId,
+          periodYear: assignment.periodYear,
+          periodMonth: assignment.periodMonth,
           purpose: 'VERIFIKASI',
           outcome: 'ISI',
           condition: body.condition,

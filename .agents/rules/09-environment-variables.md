@@ -71,15 +71,16 @@ ROLLBAR_ACCESS_TOKEN=<rollbar-access-token>
 
 ---
 
-## apps/mobile/.env
+## Konfigurasi build-time apps/mobile
 
 ```bash
 # ── API ───────────────────────────────────────────────────────────
-API_BASE_URL=http://10.0.2.2:3001
-# CATATAN: 10.0.2.2 adalah alias localhost dari Android emulator
-# Untuk device fisik: ganti dengan IP komputer di jaringan yang sama
-# Staging : https://api-staging.lazisnu.app
-# Production: https://api.lazisnu.app
+API_URL=http://10.0.2.2:3001
+# API_URL di-inline oleh Babel ketika Metro/build berjalan.
+# Untuk staging jalankan `pnpm start:mobile:staging` dari root repo.
+# Development: http://10.0.2.2:3001 (alias localhost di emulator AVD)
+# Staging: https://staging-api.lazisnu.site
+# Production: https://api.lazisnu.site
 
 # ── CodePush OTA Update ───────────────────────────────────────────
 CODEPUSH_KEY_STAGING=isi_dari_app_center_staging
@@ -117,7 +118,7 @@ NEXT_PUBLIC_APP_NAME=Lazisnu Infaq System
 |---|---|---|---|
 | `DATABASE_URL` | localhost:5432 | Railway staging DB | Railway production DB |
 | `NODE_ENV` | development | staging | production |
-| `API_BASE_URL` | 10.0.2.2:3001 | api-staging.lazisnu.app | api.lazisnu.app |
+| `API_URL` | 10.0.2.2:3001 | `staging-api.lazisnu.site` | `api.lazisnu.site` |
 | `WA_ACCESS_TOKEN` | Token test (sandbox) | Token live terbatas | Token live penuh |
 | `CODEPUSH_KEY` | - | KEY_STAGING | KEY_PRODUCTION |
 

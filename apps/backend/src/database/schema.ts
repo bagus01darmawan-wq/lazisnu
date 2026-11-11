@@ -265,6 +265,10 @@ export const canVisits = pgTable('can_visits', {
   id: uuid('id').primaryKey().defaultRandom(),
   canId: uuid('can_id').references(() => cans.id, { onDelete: 'cascade' }).notNull(),
   officerId: uuid('officer_id').references(() => officers.id).notNull(),
+  // Periode tugas, bukan bulan kalender saat kunjungan disinkronkan.
+  // Diisi dari periode assignment, atau display period untuk kunjungan tanpa tugas.
+  periodYear: integer('period_year').notNull(),
+  periodMonth: integer('period_month').notNull(),
   /** 'VERIFIKASI' | 'PENGGANTIAN' */
   purpose: varchar('purpose', { length: 20 }).notNull(),
   visitedAt: timestamp('visited_at').notNull(),
@@ -278,6 +282,7 @@ export const canVisits = pgTable('can_visits', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => ({
   visitsCanVisitedIdx: index('can_visits_can_visited_idx').on(t.canId, t.visitedAt),
+  visitsOfficerPeriodIdx: index('can_visits_officer_period_idx').on(t.officerId, t.periodYear, t.periodMonth),
 }));
 
 // Notifications

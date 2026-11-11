@@ -137,6 +137,29 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
           allowNonActiveRestore: body.visit_outcome === 'ISI',
           visitOutcome: body.visit_outcome,
         });
+        if (body.visit_outcome === 'ISI') {
+          await tx.insert(schema.canVisits).values({
+            canId: body.can_id,
+            officerId,
+            periodYear: assignment.periodYear,
+            periodMonth: assignment.periodMonth,
+            purpose: 'VERIFIKASI',
+            outcome: 'ISI',
+            condition: body.condition,
+            visitedAt: new Date(body.collected_at),
+          });
+          await insertActivityLog({
+            userId: user.userId,
+            officerId,
+            actionType: 'CAN_VISIT_RECORDED',
+            entityType: 'can',
+            entityId: body.can_id,
+            oldData: { from: 'NON_AKTIF' },
+            newData: { outcome: 'ISI', to: body.condition, nominal: body.nominal },
+            ipAddress: 'can-visit-filled',
+            userAgent: request.headers['user-agent'] || null,
+          }, tx);
+        }
         await evaluateEmptyStreakForCan(body.can_id, tx);
         return result;
       });

@@ -76,8 +76,9 @@ const HistoryScreen: React.FC = () => {
   const {checkStatus, failedCorrectionsCount} = useSyncStore();
   const [visits, setVisits] = useState<CanVisitHistoryItem[]>([]);
   const [visitCount, setVisitCount] = useState(0);
-  const [visitsPeriodKey, setVisitsPeriodKey] = useState<string | null>(null);
+  const [visitsPeriodKey, setVisitsPeriodKey] = useState<string | null | undefined>(undefined);
   const [visitsLoading, setVisitsLoading] = useState(false);
+  const [visitsError, setVisitsError] = useState<string | null>(null);
   // Masing-masing tab menampung satu jenis aktivitas: koleksi, tidak dijemput,
   // atau catatan kunjungan tanpa pengambilan.
   const [historyTab, setHistoryTab] = useState<HistoryFilter>('terjemput');
@@ -107,10 +108,13 @@ const HistoryScreen: React.FC = () => {
   const [failureItem, setFailureItem] = useState<Collection | null>(null);
   const [showFailedCorrections, setShowFailedCorrections] = useState(false);
   const [failedCorrectionItems, setFailedCorrectionItems] = useState<QueuedCorrection[]>([]);
-  const visitsThisPeriod = visitsPeriodKey === displayKey ? visits : [];
-  const visitCountThisPeriod = visitsPeriodKey === displayKey ? visitCount : 0;
+  const visitsLoadedForDisplayPeriod = visitsPeriodKey !== undefined && visitsPeriodKey === displayKey;
+  const visitsThisPeriod = visitsLoadedForDisplayPeriod ? visits : [];
+  const visitCountThisPeriod = visitsLoadedForDisplayPeriod ? visitCount : null;
   const collectionCountThisPeriod = collectionsThisMonth.length;
-  const periodActivityCount = collectionCountThisPeriod + uncollectedCount + visitCountThisPeriod;
+  const periodActivityCount = visitCountThisPeriod === null
+    ? null
+    : collectionCountThisPeriod + uncollectedCount + visitCountThisPeriod;
 
   const openFailedCorrections = useCallback(() => {
     setFailedCorrectionItems(correctionQueue.getFailedPermanent());
@@ -156,6 +160,7 @@ const HistoryScreen: React.FC = () => {
 
   const fetchVisits = useCallback(async () => {
     setVisitsLoading(true);
+    setVisitsError(null);
     try {
       const response = await collectionService.getVisits({
         limit: 500,
@@ -166,9 +171,12 @@ const HistoryScreen: React.FC = () => {
         setVisits(response.data.items || []);
         setVisitCount(response.data.pagination?.total ?? response.data.items?.length ?? 0);
         setVisitsPeriodKey(displayKey);
+      } else {
+        setVisitsError(response.error?.message || 'Riwayat kunjungan gagal dimuat. Coba lagi.');
       }
     } catch {
-      // Riwayat yang terakhir berhasil dimuat tetap tersedia saat offline.
+      // Pertahankan data terakhir, tetapi jangan menyamarkan kegagalan sebagai nol.
+      setVisitsError('Koneksi gagal. Riwayat kunjungan belum dapat diperbarui.');
     } finally {
       setVisitsLoading(false);
     }
@@ -397,7 +405,7 @@ const HistoryScreen: React.FC = () => {
             color={Colors.brand.deepGreen}
           />
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryValue}>{periodActivityCount}</Text>
+            <Text style={styles.summaryValue}>{periodActivityCount ?? '—'}</Text>
             <Text style={styles.summaryLabel}>Aktivitas {periodLabel}</Text>
           </View>
         </View>
@@ -409,7 +417,11 @@ const HistoryScreen: React.FC = () => {
           {[
             {label: 'Terjemput', count: collectionCountThisPeriod, value: 'terjemput' as const},
             {label: 'Tidak Dijemput', count: uncollectedCount, value: 'tidak' as const},
-            {label: 'Kunjungan', count: visitCountThisPeriod, value: 'kunjungan' as const},
+            {
+              label: 'Kunjungan',
+              count: visitsError ? '!' : visitCountThisPeriod ?? (visitsLoading ? '…' : '—'),
+              value: 'kunjungan' as const,
+            },
           ].map(option => {
             const selected = historyTab === option.value;
             return (
@@ -448,6 +460,20 @@ const HistoryScreen: React.FC = () => {
           <Icon name={'alert-circle-outline'} size={20} color={Colors.text.white} />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity onPress={() => fetchCollections()}>
+            <Text style={styles.retryText}>Coba lagi</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {historyTab === 'kunjungan' && visitsError && (
+        <View style={styles.errorBanner} accessibilityRole="alert">
+          <Icon name={'alert-circle-outline'} size={20} color={Colors.text.white} />
+          <Text style={styles.errorText}>{visitsError}</Text>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Coba muat ulang riwayat kunjungan"
+            onPress={() => void fetchVisits()}
+            style={styles.retryAction}>
             <Text style={styles.retryText}>Coba lagi</Text>
           </TouchableOpacity>
         </View>
@@ -574,7 +600,7 @@ const HistoryScreen: React.FC = () => {
               ListEmptyComponent={
                 visitsLoading ? (
                   <ActivityIndicator style={styles.loadingFooter} color={Colors.brand.emerald} />
-                ) : (
+                ) : visitsError ? null : (
                   <View style={styles.emptyContainer}>
                     <View style={styles.emptyIcon}>
                       <Icon name="eye-check-outline" size={42} color={Colors.brand.deepGreen} />
@@ -862,6 +888,12 @@ const styles = StyleSheet.create({
     marginHorizontal: Spacing.sm,
   },
   retryText: {...Typography.label, color: Colors.text.white},
+  retryAction: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+  },
   loadingFooter: {paddingVertical: Spacing.lg},
   failedCorrectionBanner: {
     position: 'absolute',

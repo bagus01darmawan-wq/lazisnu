@@ -134,6 +134,13 @@
       "when": 1794200000000,
       "tag": "0018_assignment_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794410242168,
+      "tag": "0019_can_visit_task_period",
+      "breakpoints": true
     }
   ]
 }
