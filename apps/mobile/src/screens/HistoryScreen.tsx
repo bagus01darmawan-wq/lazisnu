@@ -602,7 +602,7 @@ const HistoryScreen: React.FC = () => {
               ListEmptyComponent={
                 visitsLoading ? (
                   <ActivityIndicator style={styles.loadingFooter} color={Colors.brand.emerald} />
-                ) : visitsError ? null : (
+                ) : visitsError ? undefined : (
                   <View style={styles.emptyContainer}>
                     <View style={styles.emptyIcon}>
                       <Icon name="eye-check-outline" size={42} color={Colors.brand.deepGreen} />
