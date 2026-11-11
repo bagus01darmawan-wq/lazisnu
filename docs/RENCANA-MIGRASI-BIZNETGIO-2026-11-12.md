@@ -192,8 +192,32 @@ arsip tidak bisa mengunduh dirinya sendiri.
 | `png` | Belum dipindah; keputusan hapus/vhost masih pending |
 | GHCR | Login manual via token `gh`; CI akan memakai token sendiri |
 
-**Sebelum Fase 5:** putuskan `png`, konfirmasi jendela cutover, dan jangan aktifkan cron
-VM baru sebelum DNS berpindah.
+### 3.6 Hasil Fase 5 — cutover 12 Nov 2026 03:21 WIB
+
+| Item | Nilai |
+|---|---|
+| DNS | 6 record A → `139.190.106.152`; `png` → NXDOMAIN (dihapus) |
+| Redis final | prod `revoked=1`, `refresh=8`, DBSIZE 10; staging DBSIZE 45; AOF rewrite ok |
+| Cron Biznet | root crontab + 5 cron.d; baris healthcheck prod memakai kutipan |
+| Cron Oracle | root crontab dihapus; cron.d dipindah ke `/root/cron.d.disabled` |
+| CI secrets | `VM_HOST` repo + `Production` + `staging` = `139.190.106.152` |
+| Public | api ready, dashboard ok, staging-api ok, staging 307, status 302, grafana 200, auth/me 401 |
+| Auth probe | public `LOGIN_OK` → `SUCCESS` |
+| Config/health | config drift OK; tiga healthcheck SUCCESS |
+| Container | 13; blue HEALTHY |
+| Old VM | penulis blue/staging stop; cron off; Alertmanager stop; rollback mungkin |
+| CI deploy | **BELUM dijalankan** — patch belum masuk `main`/`staging` |
+
+**Sisa pekerjaan:**
+
+1. Merge patch ke `main` dan `staging` **sebelum** push/CI deploy. CI `git reset --hard`
+   akan menimpa patch lokal di VM.
+   - `migration/biznetgio-main` — `9cc289b` (patch main-based).
+   - `migration/biznetgio-2026-11-12` — patch staging-based + log eksekusi.
+2. Jalankan deploy CI staging lalu produksi secara berurutan; jangan buat tag `v*`.
+3. E2E yang belum diuji: OTP WhatsApp, aplikasi Android/sync, unduh APK per-ABI,
+   test-down Discord Kuma, dan backup 02:00 WIB berikutnya.
+4. Teardown Oracle setelah 48–72 jam stabil.
 
 ---
 
@@ -1027,11 +1051,11 @@ lalu pastikan bila `nginx -t` gagal, file lama dipulihkan dan nginx reload.
    sudo crontab /root/crontab.pre-migration.txt
    sudo mv /root/cron.d.disabled/lazisnu-* /etc/cron.d/
    ```
-3. Kembalikan 7 record A ke `168.110.198.70`.
+3. Kembalikan 6 record A ke `168.110.198.70` (dan buat ulang `png` bila memang perlu).
 4. Kembalikan `VM_HOST` di level secret efektif (repo + environment).
-5. Pastikan VM Oracle masih hidup dan melayani; hidupkan kembali penulisnya:
+5. Pastikan VM Oracle masih hidup dan melayani; hidupkan kembali penulis + Alertmanager:
    ```bash
-   docker start blue-backend blue-worker
+   docker start blue-backend blue-worker lazisnu-alertmanager-1
    docker compose -f docker-compose.staging.yml start backend-staging worker-staging
    ```
 6. Tangani state Redis: perubahan denylist/sesi dari Biznet tidak otomatis ada di Oracle.
