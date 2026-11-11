@@ -19,7 +19,9 @@ overrides:
   '@babel/plugin-transform-modules-systemjs': 7.29.7
   '@grpc/grpc-js@<1.14.5': 1.14.5 # GHSA-m9gg (high), GHSA-f596 (low) — advisory server-side; 1.9.16 (via @firebase/firestore ~1.9.0, pin ekosistem firebase) tidak pernah dieksekusi di repo ini: web hanya firebase/app+analytics+performance, mobile native-only, backend admin jalur 1.14.5. Pekas 2026-10-06: 1.14.4 masih rentan. Lepas saat firebase JS SDK naikkan pin grpc-js
   '@tootallnate/once@<2.0.1': 2.0.1 # <2.0.1 (GHSA-vpq2-c234-7xj6) — via dev tooling
-  '@typescript-eslint/typescript-estree>minimatch': 9.0.7
+  '@typescript-eslint/typescript-estree>minimatch': 11.0.7 # GHSA-g3hv-75wg-m249 — minimatch tidak diimpor oleh paket ini; menjaga jalur ESLint keluar dari rentang advisory
+  '@ts-morph/common>minimatch': 11.0.7 # GHSA-g3hv-75wg-m249 — minimatch tidak diimpor oleh paket ini
+  'test-exclude@7>minimatch': 11.0.7 # GHSA-g3hv-75wg-m249 — API fungsi minimatch yang dipakai test-exclude lolos smoke check
   '@xmldom/xmldom@<0.9.0': 0.8.15 # GHSA-6gmq-8vp8-gcm6 — jalur @expo/plist 0.x
   '@xmldom/xmldom@>=0.9.0 <0.9.12': 0.9.12 # GHSA-6gmq-8vp8-gcm6 — jalur plist 0.9.x
   'ajv@8': 8.20.0 # >=7.0.0-alpha.0 <8.18.0 (GHSA-xxxx) — dulu via eas-cli (dihapus 2026-09-02) dkk; ajv@6 tetap
@@ -44,6 +46,9 @@ overrides:
   'js-yaml@3': 3.15.2
   'js-yaml@4': 4.3.2
   'minimatch@5': 5.1.8 # 5.x <5.1.8 (GHSA-xxxx) — @9/@10 di tree tetap
+  '@google-cloud/firestore': 9.4.1 # Perbarui firestore-api/google-gax; menghilangkan jalur runtime glob@10/minimatch@9 dari Firebase Admin
+  'glob@13': 14.0.4 # Jest 30 memakai API glob publik yang tersedia di versi 14; menghapus minimatch@10 dari tooling
+  'test-exclude@7>glob': 14.0.4 # Menghindari glob@10/minimatch@9; API glob.sync yang dipakai test-exclude tetap tersedia
   # Transitive rentan — diblokir dependabot (security_update_not_possible):
   # - nanoid < 3.3.18 (GHSA-2v37-7h3g-55p8) — dulu di-pin eas-cli@22.2.0 (eas-cli dihapus 2026-09-02)
   # - js-yaml@3 < 3.15.1 (GHSA-5p4m-2wfm-xmqj, CVE-2026-59870) — via @oclif/core dkk
