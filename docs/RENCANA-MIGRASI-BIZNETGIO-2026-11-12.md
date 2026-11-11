@@ -162,6 +162,39 @@ arsip tidak bisa mengunduh dirinya sendiri.
 | Bootstrap | `nginx/upstream.conf` dari example; direktori volume + flag backup dibuat |
 | Catatan | Repo VM menunjukkan modifikasi lokal dari patch; CI reset ke `main` nanti akan menimpa — pastikan patch masuk commit produksi |
 
+### 3.4 Hasil Fase 2 — restore artefak
+
+| Item | Nilai |
+|---|---|
+| Bundel | Diekstrak; `MANIFEST.txt` + `REVISION 21757aa` |
+| Sertifikat | 5 domain di `nginx/certbot/conf/live`; symlink `*.pem` ada |
+| Cron | Staged di `cron/staged/`; template healthcheck 17/18/19; QCloud dihapus |
+| Kuma | `kuma.db` 6,7 MB direstore; `/dashboard` HTTP 200 |
+| Env | `.env`, `.env.alertmanager`, `apps/backend/.env*` = 600 ubuntu; `secrets/` = 700 root; `.env.backup*` = 600 root |
+| Compose | `docker compose config` base + staging OK; deploy blue-green sukses |
+| Catatan | Ekstraksi tar sebagai root mengubah `apps/` dan `scripts/` menjadi root:700; sudah diperbaiki ke ubuntu:ubuntu 755. Redis preliminer belum disalin; snapshot final di Fase 5.1. |
+
+### 3.5 Hasil Fase 3–4 — stack dan uji pra-DNS
+
+| Item | Nilai |
+|---|---|
+| Container | **13** aktif |
+| Blue-green | Blue active, `blue-backend` HEALTHY, green DOWN |
+| Prod health | `/health/ready` → db ok, redis ok; web `/api/health` ok |
+| Staging health | backend/web via nginx → ok |
+| Backup default | `backups/lazisnu_20261112_030004.sql.gz` — 647.170 byte, SUCCESS |
+| Backup prod-specific | `backups-prod/lazisnu_20261112_030042.sql.gz` — 647.171 byte, SUCCESS |
+| Healthcheck | default, staging, prod-specific → SUCCESS |
+| Config drift | `PROD_OK`, `STAGING_OK`, `SUCCESS` |
+| TLS | `api`, `dashboard`, `staging-api`, `staging`, `status`, `grafana` valid **tanpa `-k`** |
+| Auth probe | LOGIN_OK, ME_OK, PREFETCH_OK, REFRESH_OK, ME_AFTER_REFRESH_OK |
+| Kuma | `/dashboard` 200; DB restored |
+| `png` | Belum dipindah; keputusan hapus/vhost masih pending |
+| GHCR | Login manual via token `gh`; CI akan memakai token sendiri |
+
+**Sebelum Fase 5:** putuskan `png`, konfirmasi jendela cutover, dan jangan aktifkan cron
+VM baru sebelum DNS berpindah.
+
 ---
 
 ## 4. Target: Biznet Gio NEO Lite MS 4.2
