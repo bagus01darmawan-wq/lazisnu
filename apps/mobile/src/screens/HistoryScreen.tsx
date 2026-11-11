@@ -108,13 +108,15 @@ const HistoryScreen: React.FC = () => {
   const [failureItem, setFailureItem] = useState<Collection | null>(null);
   const [showFailedCorrections, setShowFailedCorrections] = useState(false);
   const [failedCorrectionItems, setFailedCorrectionItems] = useState<QueuedCorrection[]>([]);
-  const visitsLoadedForDisplayPeriod = visitsPeriodKey !== undefined && visitsPeriodKey === displayKey;
+  const visitsLoadedForDisplayPeriod =
+    visitsPeriodKey !== undefined && visitsPeriodKey === displayKey;
   const visitsThisPeriod = visitsLoadedForDisplayPeriod ? visits : [];
   const visitCountThisPeriod = visitsLoadedForDisplayPeriod ? visitCount : null;
   const collectionCountThisPeriod = collectionsThisMonth.length;
-  const periodActivityCount = visitCountThisPeriod === null
-    ? null
-    : collectionCountThisPeriod + uncollectedCount + visitCountThisPeriod;
+  const periodActivityCount =
+    visitCountThisPeriod === null
+      ? null
+      : collectionCountThisPeriod + uncollectedCount + visitCountThisPeriod;
 
   const openFailedCorrections = useCallback(() => {
     setFailedCorrectionItems(correctionQueue.getFailedPermanent());
@@ -419,7 +421,7 @@ const HistoryScreen: React.FC = () => {
             {label: 'Tidak Dijemput', count: uncollectedCount, value: 'tidak' as const},
             {
               label: 'Kunjungan',
-              count: visitsError ? '!' : visitCountThisPeriod ?? (visitsLoading ? '…' : '—'),
+              count: visitsError ? '!' : (visitCountThisPeriod ?? (visitsLoading ? '…' : '—')),
               value: 'kunjungan' as const,
             },
           ].map(option => {
