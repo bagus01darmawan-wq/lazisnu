@@ -123,7 +123,12 @@ jobs:
           echo "value=$b" >> "$GITHUB_OUTPUT"
 
       - id: filter
-        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/staging'
+        if: >-
+          github.event_name != 'workflow_dispatch' &&
+          (github.event_name == 'pull_request' ||
+           github.ref == 'refs/heads/main' ||
+           github.ref == 'refs/heads/master' ||
+           github.ref == 'refs/heads/staging')
         uses: dorny/paths-filter@v4
         with:
           filters: |
