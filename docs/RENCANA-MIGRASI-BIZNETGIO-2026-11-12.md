@@ -144,6 +144,24 @@ Dijalankan read-only dengan `scripts/migration-preflight.sh`:
 `.env.backup` tetap harus disiapkan out-of-band (scp/token baca R2) untuk mengunduh bundel;
 arsip tidak bisa mengunduh dirinya sendiri.
 
+### 3.3 Hasil Fase 1 — VM Biznet
+
+| Item | Nilai |
+|---|---|
+| IP publik | **139.190.106.152** |
+| Hostname | `lazispaninggaran` |
+| OS | Ubuntu 24.04.4 LTS, x86_64 |
+| User | `ubuntu` uid 1000, sudo passwordless, group `docker` |
+| Docker | 29.9.3; Compose v5.7.1 |
+| AWS CLI | 2.40.0 (`/usr/local/bin/aws`) |
+| pg_dump | 17.11 (`/usr/lib/postgresql/17/bin/pg_dump`) |
+| Swap | 2 GB (`/swapfile`, masuk `/etc/fstab`) |
+| Timezone | `Asia/Jakarta` (WIB) |
+| UFW | active; 22/80/443 |
+| Repo | HTTPS clone di `21757aa`; patch exporter/rollback/healthcheck/alert di-scp |
+| Bootstrap | `nginx/upstream.conf` dari example; direktori volume + flag backup dibuat |
+| Catatan | Repo VM menunjukkan modifikasi lokal dari patch; CI reset ke `main` nanti akan menimpa — pastikan patch masuk commit produksi |
+
 ---
 
 ## 4. Target: Biznet Gio NEO Lite MS 4.2
@@ -411,10 +429,19 @@ aws --version
 `pg_dump` 17 untuk `scripts/backup.sh`:
 
 ```bash
-sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh </dev/null
+sudo install -d /usr/share/postgresql-common/pgdg
+curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+  | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
+. /etc/os-release
+echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+  | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+sudo apt update
 sudo apt install -y postgresql-client-17
 /usr/lib/postgresql/17/bin/pg_dump --version
 ```
+
+Catatan: `apt.postgresql.org.sh` meminta Enter dan gagal di sesi non-interaktif. Langkah
+repo manual di atas sudah terbukti di VM Biznet.
 
 #### 1.3 Swap, sysctl, firewall
 
