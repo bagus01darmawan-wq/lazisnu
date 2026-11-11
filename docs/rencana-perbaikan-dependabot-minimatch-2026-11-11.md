@@ -2,7 +2,7 @@
 
 Tanggal: 11 November 2026
 Repo: `bagus01darmawan-wq/lazisnu`
-Status: **IMPLEMENTASI LOKAL SELESAI — menunggu commit, push, CI, dan pemindaian Dependabot.**
+Status: **SELESAI — commit `43768c8` sudah dipush; CI dan Security lulus; alert #237 sudah fixed.**
 
 ## Ringkasan
 
@@ -61,6 +61,6 @@ Backend mensyaratkan Node.js `>=22`. Metadata npm untuk `minimatch@11.0.1` menca
 - `pnpm -r why minimatch` kini hanya menampilkan `3.1.5` dan `11.0.7`; versi `3.1.5` berada di bawah rentang advisory. Audit tidak melaporkan GHSA ini.
 - Basis audit diperbarui untuk membuang entri usang `GHSA-g3hv-75wg-m249` (minimatch) dan `GHSA-3g3m-2fjr-6pw4` (glob).
 - Build backend lulus; lint web dan mobile lulus dengan peringatan yang sudah ada; gerbang `audit-baseline.mjs` lulus tanpa temuan baru.
-- Tes Jest backend penuh dicoba tetapi tidak selesai bersih di lingkungan lokal: tes integrasi melaporkan mismatch status aplikasi dan koneksi PostgreSQL ke `localhost:5432` tidak tersedia. Proses dihentikan setelah kegagalan itu. Karena itu, hasil ini tidak menyatakan seluruh suite lulus.
-
-Commit/push dan hasil CI serta pemindaian ulang alert dicatat setelah perubahan dipublikasikan ke branch default `staging`.
+- Tes Jest backend penuh di lingkungan lokal dicoba tetapi dihentikan setelah sejumlah tes integrasi gagal, termasuk karena PostgreSQL lokal di `localhost:5432` tidak tersedia. Runner GitHub kemudian menjalankan tes backend unit dan integrasi hingga selesai dengan status lulus.
+- Commit `43768c8` dipush ke branch default `staging`. [CI run](https://github.com/bagus01darmawan-wq/lazisnu/actions/runs/42955622313) lulus, termasuk lint, typecheck, test backend/web/mobile, build image, dan deploy staging. Deploy production dilewati. [Security run](https://github.com/bagus01darmawan-wq/lazisnu/actions/runs/42955622253) juga lulus, termasuk audit pnpm dan CodeQL.
+- Dependabot alert [#237](https://github.com/bagus01darmawan-wq/lazisnu/security/dependabot/237) berubah otomatis ke status **fixed** setelah push.
