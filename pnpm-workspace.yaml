@@ -34,6 +34,7 @@ overrides:
   'expo': '-' # auto-install optional peer @react-native-firebase/app; TIDAK dipakai (mobile bare RN, build via gradle) — sumber node-forge & zod toolchain
   'fast-jwt': 6.3.4 # <=6.3.3 (GHSA-x937-hj6v-793p) — via @fastify/jwt@10; 6.3.4 masih masuk ^6.2.4
   'fast-uri@3': 3.1.9 # <3.1.9 (GHSA-w74x/xhq7/wjr9/333x) — via fastify 5.12.6; 3.1.9 & 4.2.3 di tree aman
+  'fast-xml-parser@>=5.0.0 <5.12.0': 5.12.0 # GHSA-474x-hrwr-fgx4 — parser versi 5.11.x di jalur Firebase Admin dan React Native CLI
   'fast-xml-builder': 1.1.7 # <=1.1.6 (GHSA-xxxx) — 1.1.5 di tree
   'follow-redirects@>=1.16.0 <1.16.2': 1.16.2 # GHSA-8r9p-f939-6h3c, GHSA-q3jh-wrc6-jgq8, GHSA-mrwp-f3q8-3g9p (rentan >=1.16.0 <=1.16.1) — via axios (web); stripping kredensial header bypass + cross-realm sensitiveHeaders
   'form-data@<2.5.6': 2.5.6 # 2.x <2.5.6 (GHSA-xxxx) — 2.5.5 di tree

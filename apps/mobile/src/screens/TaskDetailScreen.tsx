@@ -258,12 +258,7 @@ const TaskDetailScreen: React.FC = () => {
 
           {isVisitTask ? (
             <View style={[styles.actions, styles.visitActions]}>
-              <AppButton
-                label="Kaleng Isi"
-                icon="cash-multiple"
-                onPress={handleFilled}
-                fullWidth
-              />
+              <AppButton label="Kaleng Isi" icon="cash-multiple" onPress={handleFilled} fullWidth />
               <View style={styles.secondaryActions}>
                 <View style={styles.secondaryAction}>
                   <AppButton

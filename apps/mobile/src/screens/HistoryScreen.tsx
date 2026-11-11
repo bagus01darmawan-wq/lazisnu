@@ -110,8 +110,7 @@ const HistoryScreen: React.FC = () => {
   const visitsThisPeriod = visitsPeriodKey === displayKey ? visits : [];
   const visitCountThisPeriod = visitsPeriodKey === displayKey ? visitCount : 0;
   const collectionCountThisPeriod = collectionsThisMonth.length;
-  const periodActivityCount =
-    collectionCountThisPeriod + uncollectedCount + visitCountThisPeriod;
+  const periodActivityCount = collectionCountThisPeriod + uncollectedCount + visitCountThisPeriod;
 
   const openFailedCorrections = useCallback(() => {
     setFailedCorrectionItems(correctionQueue.getFailedPermanent());
@@ -425,11 +424,17 @@ const HistoryScreen: React.FC = () => {
                   numberOfLines={1}
                   adjustsFontSizeToFit
                   minimumFontScale={0.75}
-                  style={[styles.historyFilterLabel, selected && styles.historyFilterLabelSelected]}>
+                  style={[
+                    styles.historyFilterLabel,
+                    selected && styles.historyFilterLabelSelected,
+                  ]}>
                   {option.label}
                 </Text>
                 <Text
-                  style={[styles.historyFilterCount, selected && styles.historyFilterCountSelected]}>
+                  style={[
+                    styles.historyFilterCount,
+                    selected && styles.historyFilterCountSelected,
+                  ]}>
                   {option.count}
                 </Text>
               </TouchableOpacity>
@@ -563,9 +568,7 @@ const HistoryScreen: React.FC = () => {
               ListHeaderComponent={
                 <View style={styles.visitListHeader}>
                   <Text style={styles.visitListTitle}>Daftar kunjungan</Text>
-                  <Text style={styles.visitListSubtitle}>
-                    Catatan kunjungan tanpa penjemputan
-                  </Text>
+                  <Text style={styles.visitListSubtitle}>Catatan kunjungan tanpa penjemputan</Text>
                 </View>
               }
               ListEmptyComponent={
