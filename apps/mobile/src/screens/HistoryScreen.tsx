@@ -417,8 +417,8 @@ const HistoryScreen: React.FC = () => {
       <View style={styles.filterWrap}>
         <View style={styles.historyFilters}>
           {[
-            {label: 'Terjemput', count: collectionCountThisPeriod, value: 'terjemput' as const},
-            {label: 'Tidak Dijemput', count: uncollectedCount, value: 'tidak' as const},
+            {label: 'Dijemput', count: collectionCountThisPeriod, value: 'terjemput' as const},
+            {label: 'Gagal', count: uncollectedCount, value: 'tidak' as const},
             {
               label: 'Kunjungan',
               count: visitsError ? '!' : (visitCountThisPeriod ?? (visitsLoading ? '…' : '—')),
