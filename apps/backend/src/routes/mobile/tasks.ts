@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
-import { eq, and, desc, asc, gte, lte, inArray, or, sql } from 'drizzle-orm';
+import { eq, and, desc, asc, gte, lte, lt, inArray, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { isValidQRCode } from '../../utils/qr';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
@@ -464,7 +464,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
     try {
       const user = request.currentUser!;
       const officerId = user.officerId;
-      const query = request.query as { status?: string; page?: string; limit?: string; year?: string; month?: string; all?: string; current_period?: string };
+      const query = request.query as { status?: string; kind?: string; page?: string; limit?: string; year?: string; month?: string; all?: string; current_period?: string };
 
       if (!officerId) {
         return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
@@ -479,6 +479,9 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         eq(schema.assignments.officerId, officerId!),
         eq(schema.assignments.status, status as any),
       ];
+      if (query.kind === 'PICKUP' || query.kind === 'VISIT') {
+        conditions.push(eq(schema.assignments.kind, query.kind));
+      }
       // Periode eksplisit (`year`+`month`) berlaku untuk SEMUA status —
       // dibutuhkan layar berbasis periode aksi (Riwayat, hitungan kartu).
       // Tanpa parameter: ACTIVE mengikuti display_period (periode lebih tua
@@ -1100,15 +1103,38 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
       }
 
-      const query = request.query as { limit?: string };
-      const limit = Math.min(Math.max(parseInt(query.limit || '10', 10) || 10, 1), 50);
+      const query = request.query as {
+        limit?: string;
+        year?: string;
+        month?: string;
+        exclude_collected?: string;
+      };
+      const limit = Math.min(Math.max(parseInt(query.limit || '50', 10) || 50, 1), 500);
+      const conditions: any[] = [eq(schema.canVisits.officerId, officerId)];
+      const year = parseInt(query.year || '', 10);
+      const month = parseInt(query.month || '', 10);
+      if (Number.isInteger(year) && year >= 2020 && year <= 2100 && Number.isInteger(month) && month >= 1 && month <= 12) {
+        conditions.push(
+          gte(schema.canVisits.visitedAt, new Date(year, month - 1, 1)),
+          lt(schema.canVisits.visitedAt, new Date(year, month, 1)),
+        );
+      }
+      // Riwayat Kunjungan berisi aktivitas non-penjemputan. Hasil ISI sudah
+      // dicatat sebagai collection dan tetap muncul pada daftar Terjemput.
+      if (query.exclude_collected === 'true') {
+        conditions.push(inArray(schema.canVisits.outcome, ['KOSONG', 'DIKEMBALIKAN', 'TIDAK_DIKUNJUNGI']));
+      }
+      const whereClause = and(...conditions);
 
-      const rows = await db.query.canVisits.findMany({
-        where: eq(schema.canVisits.officerId, officerId),
-        with: { can: { columns: { qrCode: true, ownerName: true } } },
-        orderBy: [desc(schema.canVisits.visitedAt)],
-        limit,
-      });
+      const [rows, total] = await Promise.all([
+        db.query.canVisits.findMany({
+          where: whereClause,
+          with: { can: { columns: { qrCode: true, ownerName: true } } },
+          orderBy: [desc(schema.canVisits.visitedAt)],
+          limit,
+        }),
+        db.$count(schema.canVisits, whereClause),
+      ]);
 
       return sendSuccess(reply, {
         items: rows.map((v) => ({
@@ -1123,6 +1149,11 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           visited_at: v.visitedAt,
           notes: v.notes,
         })),
+        pagination: {
+          limit,
+          total,
+          total_pages: Math.ceil(total / limit),
+        },
       });
     } catch (error) {
       return sendInternalError(reply, error, fastify.log);

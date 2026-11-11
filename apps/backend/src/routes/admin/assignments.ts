@@ -535,9 +535,9 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
   });
 
   /**
-   * Antrean kunjungan: kaleng NON_AKTIF yang belum punya tugas VISIT pada
-   * periode tersebut. Dipakai web untuk "belum ditugaskan untuk kunjungan".
-   * Kaleng yang sudah punya VISIT (status apa pun) tidak masuk antrean.
+   * Antrean kunjungan: kaleng NON_AKTIF yang belum punya penugasan apa pun
+   * pada periode tersebut. Syarat ini harus sama dengan bulk-cans, yang
+   * menolak kaleng bila sudah punya tugas PICKUP maupun VISIT.
    */
   fastify.get('/assignments/visit-queue', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
@@ -590,16 +590,18 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
       const assignedRows = canIds.length === 0
         ? []
         : await db
-            .select({ canId: schema.assignments.canId })
+            .select({ canId: schema.assignments.canId, kind: schema.assignments.kind })
             .from(schema.assignments)
             .where(and(
               inArray(schema.assignments.canId, canIds),
               eq(schema.assignments.periodYear, year),
               eq(schema.assignments.periodMonth, month),
-              eq(schema.assignments.kind, 'VISIT'),
             ));
-      const assignedSet = new Set(assignedRows.map((row) => row.canId));
-      const unassigned = canRows.filter((can) => !assignedSet.has(can.id));
+      const assignedPeriodSet = new Set(assignedRows.map((row) => row.canId));
+      const assignedVisitSet = new Set(
+        assignedRows.filter((row) => row.kind === 'VISIT').map((row) => row.canId),
+      );
+      const unassigned = canRows.filter((can) => !assignedPeriodSet.has(can.id));
 
       const groupsMap = new Map<string, {
         dukuh_id: string | null;
@@ -633,7 +635,8 @@ export async function assignmentsRoutes(fastify: FastifyInstance) {
         period: { year, month },
         branch_id: branchId,
         total_visit_cans: canRows.length,
-        assigned_visit_cans: assignedSet.size,
+        assigned_visit_cans: assignedVisitSet.size,
+        assigned_period_cans: assignedPeriodSet.size,
         unassigned_visit_cans: unassigned.length,
         groups: Array.from(groupsMap.values()),
         officers,

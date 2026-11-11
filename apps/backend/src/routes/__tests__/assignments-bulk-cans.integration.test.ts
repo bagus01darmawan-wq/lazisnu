@@ -239,6 +239,88 @@ describe('POST /v1/admin/assignments/bulk-cans', () => {
     expect(row).toMatchObject({ kind: 'VISIT', status: 'ACTIVE' });
   });
 
+  it('tidak memasukkan ulang tugas VISIT yang sudah selesai pada periode yang sama', async () => {
+    const app = await getApp();
+    await db
+      .update(schema.assignments)
+      .set({ status: 'COMPLETED' })
+      .where(and(
+        eq(schema.assignments.canId, IDS.canVisit),
+        eq(schema.assignments.periodYear, 2027),
+        eq(schema.assignments.periodMonth, 3),
+        eq(schema.assignments.kind, 'VISIT'),
+      ));
+
+    const queueResponse = await app.inject({
+      method: 'GET',
+      url: `/v1/admin/assignments/visit-queue?branch_id=${IDS.branch}&year=2027&month=3`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(queueResponse.statusCode).toBe(200);
+    expect(queueResponse.json().data).toMatchObject({
+      assigned_visit_cans: 1,
+      assigned_period_cans: 1,
+      unassigned_visit_cans: 0,
+      groups: [],
+    });
+
+    const repeatResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/assignments/bulk-cans',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        officer_id: IDS.officer,
+        can_ids: [IDS.canVisit],
+        kind: 'VISIT',
+        period_year: 2027,
+        period_month: 3,
+      },
+    });
+    expect(repeatResponse.statusCode).toBe(400);
+    expect(repeatResponse.json().error.code).toBe('ALREADY_ASSIGNED');
+  });
+
+  it('mengeluarkan kaleng dari antrean VISIT jika sudah punya tugas PICKUP periode itu', async () => {
+    const app = await getApp();
+    await db.insert(schema.assignments).values({
+      canId: IDS.canVisit,
+      officerId: IDS.officer,
+      periodYear: 2027,
+      periodMonth: 4,
+      kind: 'PICKUP',
+      status: 'COMPLETED',
+    });
+
+    const queueResponse = await app.inject({
+      method: 'GET',
+      url: `/v1/admin/assignments/visit-queue?branch_id=${IDS.branch}&year=2027&month=4`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(queueResponse.statusCode).toBe(200);
+    expect(queueResponse.json().data).toMatchObject({
+      total_visit_cans: 1,
+      assigned_visit_cans: 0,
+      assigned_period_cans: 1,
+      unassigned_visit_cans: 0,
+      groups: [],
+    });
+
+    const repeatResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/assignments/bulk-cans',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        officer_id: IDS.officer,
+        can_ids: [IDS.canVisit],
+        kind: 'VISIT',
+        period_year: 2027,
+        period_month: 4,
+      },
+    });
+    expect(repeatResponse.statusCode).toBe(400);
+    expect(repeatResponse.json().error.code).toBe('ALREADY_ASSIGNED');
+  });
+
   it('menugaskan pada periode terpilih, bukan bulan berjalan', async () => {
     const app = await getApp();
     const response = await app.inject({

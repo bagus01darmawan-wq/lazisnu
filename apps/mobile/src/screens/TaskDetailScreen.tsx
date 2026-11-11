@@ -1,18 +1,20 @@
 import React, {useEffect, useState} from 'react';
-import {Alert, StyleSheet, Text, View} from 'react-native';
+import {Alert, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import NetInfo from '@react-native-community/netinfo';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {AppButton, AppHeader, SkipReasonSheet} from '../components/ui';
 import type {SkipReasonCode} from '../components/ui';
-import {useTasksStore} from '../stores';
+import {usePeriodStore, useTasksStore} from '../stores';
 import {collectionService, tasksService} from '../services/api';
 import {actionQueue} from '../services/offline/actionQueue';
 import {CanCondition, CanVisitOutcome, AssignmentStatus} from '@lazisnu/shared-types';
-import type {ProposalStatusResponse} from '@lazisnu/shared-types';
+import type {ProposalStatusResponse, Task} from '@lazisnu/shared-types';
 import {KalengInfoCard} from './scan';
 import {Colors, Radius, Spacing, Typography} from '../theme';
+import {periodKeyOf} from '../utils/format';
 import type {RootStackParamList} from '../navigation/types';
 
 /**
@@ -25,10 +27,17 @@ const TaskDetailScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'TaskDetail'>>();
   const {task} = route.params;
+  const insets = useSafeAreaInsets();
+  const displayPeriod = usePeriodStore(state => state.context?.display_period);
 
   const [skipSheetVisible, setSkipSheetVisible] = useState(false);
   const [skipping, setSkipping] = useState(false);
   const [visiting, setVisiting] = useState(false);
+  const [serverDetails, setServerDetails] = useState<{
+    key: string;
+    owner_phone: string;
+    period: string;
+  } | null>(null);
   const [proposal, setProposal] = useState<NonNullable<ProposalStatusResponse['proposal']> | null>(
     null,
   );
@@ -42,6 +51,48 @@ const TaskDetailScreen: React.FC = () => {
   const isVisitTask =
     task.kind === 'VISIT' || task.is_visit_task || task.condition === CanCondition.NON_AKTIF;
   const isVisitTaskWithoutAssignment = !!(isVisitTask && task.id.startsWith('visit-'));
+  const detailKey = `${task.id}:${task.qr_code}:${task.period}`;
+
+  // Task lama/offline kadang belum membawa owner_phone atau period. Ambil ulang
+  // detail dari endpoint scan milik petugas; bila jaringan gagal, konteks periode
+  // tampilan tetap menjadi fallback dan nomor ditandai jelas sebagai belum ada.
+  useEffect(() => {
+    let cancelled = false;
+    if (task.owner_phone?.trim() && task.period?.trim()) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    tasksService
+      .getTaskByQR(task.qr_code)
+      .then(res => {
+        if (!cancelled && res.success && res.data) {
+          setServerDetails({
+            key: detailKey,
+            owner_phone: res.data.owner_phone,
+            period: res.data.period,
+          });
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detailKey, task.owner_phone, task.period, task.qr_code]);
+
+  const currentServerDetails = serverDetails?.key === detailKey ? serverDetails : null;
+
+  const detailTask: Task = {
+    ...task,
+    owner_phone: task.owner_phone?.trim() || currentServerDetails?.owner_phone?.trim() || '',
+    period:
+      task.period?.trim() ||
+      currentServerDetails?.period?.trim() ||
+      (displayPeriod ? periodKeyOf(displayPeriod) : ''),
+  };
+
   useEffect(() => {
     let cancelled = false;
     if (isVisitTaskWithoutAssignment) {
@@ -123,7 +174,7 @@ const TaskDetailScreen: React.FC = () => {
       );
       return;
     }
-    navigation.navigate('Collection', {task});
+    navigation.navigate('Collection', {task: detailTask});
   };
 
   const handleSkipConfirm = async (reasonCode: SkipReasonCode, notes: string) => {
@@ -161,75 +212,94 @@ const TaskDetailScreen: React.FC = () => {
     <View style={styles.screen}>
       <AppHeader variant="stack" onBack={() => navigation.goBack()} />
 
-      <View style={styles.head}>
-        <View style={styles.headIcon}>
-          <Icon name="clipboard-list-outline" size={48} color={Colors.brand.deepGreen} />
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[styles.scrollContent, {paddingBottom: insets.bottom + Spacing.lg}]}
+        showsVerticalScrollIndicator={false}>
+        <View style={[styles.head, isVisitTask && styles.visitHead]}>
+          {!isVisitTask && (
+            <View style={styles.headIcon}>
+              <Icon name="clipboard-list-outline" size={48} color={Colors.brand.deepGreen} />
+            </View>
+          )}
+          <Text style={[styles.headTitle, isVisitTask && styles.visitHeadTitle]}>
+            {isVisitTask ? 'Detail Kunjungan' : 'Detail Penjemputan'}
+          </Text>
         </View>
-        <Text style={styles.headTitle}>Detail Penjemputan</Text>
-      </View>
 
-      <View style={styles.body}>
-        <KalengInfoCard task={task} showPeriod />
+        <View style={styles.body}>
+          <KalengInfoCard task={detailTask} showPeriod />
 
-        {proposal ? (
-          <View style={styles.proposalBox}>
-            <Text style={styles.proposalTitle}>
-              {proposal.status === 'PENDING'
-                ? 'Usulan menunggu persetujuan admin'
-                : proposal.status === 'APPROVED'
-                  ? 'Usulan disetujui admin'
-                  : 'Usulan ditolak admin'}
-            </Text>
-            <Text style={styles.proposalText}>
-              {proposal.to_condition}
-              {proposal.action_label ? ` — ${proposal.action_label}` : ''}
-            </Text>
-          </View>
-        ) : null}
+          {proposal ? (
+            <View style={styles.proposalBox}>
+              <Text style={styles.proposalTitle}>
+                {proposal.status === 'PENDING'
+                  ? 'Usulan menunggu persetujuan admin'
+                  : proposal.status === 'APPROVED'
+                    ? 'Usulan disetujui admin'
+                    : 'Usulan ditolak admin'}
+              </Text>
+              <Text style={styles.proposalText}>
+                {proposal.to_condition}
+                {proposal.action_label ? ` — ${proposal.action_label}` : ''}
+              </Text>
+            </View>
+          ) : null}
 
-        {/** B2: kaleng NON_AKTIF — perlakuan berbeda: kunjungan + pencabutan. */}
-        {isVisitTask ? (
-          <View style={styles.proposalBox}>
-            <Text style={styles.proposalTitle}>Kaleng Nonaktif</Text>
-            <Text style={styles.proposalText}>
-              Tugas kunjungan bulan ini. Catat kaleng berisi, kosong, atau kembalikan kaleng ke
-              kantor. Jika tidak dikunjungi sampai periode selesai, tugas menjadi TERLEWAT.
-            </Text>
-          </View>
-        ) : null}
+          {/** B2: kaleng NON_AKTIF — perlakuan berbeda: kunjungan + pencabutan. */}
+          {isVisitTask ? (
+            <View style={styles.proposalBox}>
+              <Text style={styles.proposalTitle}>Kaleng Nonaktif</Text>
+              <Text style={styles.proposalText}>
+                Pilih tindakan setelah memeriksa kondisi kaleng.
+              </Text>
+            </View>
+          ) : null}
 
-        {isVisitTask ? (
-          <View style={styles.actions}>
-            <AppButton label="Kaleng Isi" icon="cash-multiple" onPress={handleFilled} fullWidth />
-            <AppButton
-              label="Kaleng Kosong"
-              icon="bottle-soda-outline"
-              variant="outline"
-              onPress={() => void submitVisitOutcome('KOSONG')}
-              fullWidth
-              disabled={visiting}
-            />
-            <AppButton
-              label="Kaleng Dikembalikan"
-              icon="package-down"
-              variant="outline"
-              onPress={() => void submitVisitOutcome('DIKEMBALIKAN')}
-              fullWidth
-              disabled={visiting}
-            />
-          </View>
-        ) : (
-          <View style={styles.actions}>
-            <AppButton label="Tidak Dijemput" variant="outline" onPress={handleSkip} fullWidth />
-            <AppButton
-              label="Lanjutkan"
-              icon="arrow-right"
-              onPress={() => navigation.navigate('Collection', {task})}
-              fullWidth
-            />
-          </View>
-        )}
-      </View>
+          {isVisitTask ? (
+            <View style={[styles.actions, styles.visitActions]}>
+              <AppButton
+                label="Kaleng Isi"
+                icon="cash-multiple"
+                onPress={handleFilled}
+                fullWidth
+              />
+              <View style={styles.secondaryActions}>
+                <View style={styles.secondaryAction}>
+                  <AppButton
+                    label="Kosong"
+                    accessibilityLabel="Kaleng Kosong"
+                    variant="outline"
+                    onPress={() => void submitVisitOutcome('KOSONG')}
+                    fullWidth
+                    disabled={visiting}
+                  />
+                </View>
+                <View style={styles.secondaryAction}>
+                  <AppButton
+                    label="Dikembalikan"
+                    accessibilityLabel="Kaleng Dikembalikan"
+                    variant="outline"
+                    onPress={() => void submitVisitOutcome('DIKEMBALIKAN')}
+                    fullWidth
+                    disabled={visiting}
+                  />
+                </View>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.actions}>
+              <AppButton label="Tidak Dijemput" variant="outline" onPress={handleSkip} fullWidth />
+              <AppButton
+                label="Lanjutkan"
+                icon="arrow-right"
+                onPress={() => navigation.navigate('Collection', {task})}
+                fullWidth
+              />
+            </View>
+          )}
+        </View>
+      </ScrollView>
 
       <SkipReasonSheet
         visible={skipSheetVisible}
@@ -247,10 +317,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.surface.page,
   },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
   head: {
     alignItems: 'center',
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
+  },
+  visitHead: {
+    paddingVertical: Spacing.xs,
   },
   headIcon: {
     width: 72,
@@ -265,6 +344,9 @@ const styles = StyleSheet.create({
     color: Colors.brand.deepGreen,
     textAlign: 'center',
     marginTop: Spacing.sm,
+  },
+  visitHeadTitle: {
+    marginTop: 0,
   },
   body: {
     paddingHorizontal: Spacing.md,
@@ -288,6 +370,17 @@ const styles = StyleSheet.create({
   actions: {
     marginTop: Spacing.lg,
     gap: Spacing.md,
+  },
+  visitActions: {
+    gap: Spacing.sm,
+  },
+  secondaryActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  secondaryAction: {
+    flex: 1,
+    minWidth: 0,
   },
 });
 

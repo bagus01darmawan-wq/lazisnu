@@ -46,7 +46,7 @@ export const KalengInfoCard: React.FC<KalengInfoCardProps> = ({task, showPeriod 
         <Icon name="phone" size={20} color={Colors.brand.emerald} />
         <View style={styles.detailContent}>
           <Text style={styles.detailLabel}>Nomor HP</Text>
-          <Text style={styles.detailValue}>{task.owner_phone}</Text>
+          <Text style={styles.detailValue}>{task.owner_phone?.trim() || 'Belum tersedia'}</Text>
         </View>
       </View>
 
@@ -67,7 +67,9 @@ export const KalengInfoCard: React.FC<KalengInfoCardProps> = ({task, showPeriod 
             <Icon name="calendar-month-outline" size={20} color={Colors.brand.emerald} />
             <View style={styles.detailContent}>
               <Text style={styles.detailLabel}>Periode</Text>
-              <Text style={styles.detailValue}>{formatPeriod(task.period)}</Text>
+              <Text style={styles.detailValue}>
+                {formatPeriod(task.period) || 'Belum tersedia'}
+              </Text>
             </View>
           </View>
         </>

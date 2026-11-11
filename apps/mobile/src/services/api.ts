@@ -577,6 +577,7 @@ export const dashboardService = {
 export const tasksService = {
   getTasks: async (params?: {
     status?: string;
+    kind?: 'PICKUP' | 'VISIT';
     page?: number;
     limit?: number;
     /** Scope paksa ke periode operasional berjalan (tab/hitungan Riwayat). */
@@ -588,6 +589,9 @@ export const tasksService = {
     const queryParams = new URLSearchParams();
     if (params?.status) {
       queryParams.append('status', params.status);
+    }
+    if (params?.kind) {
+      queryParams.append('kind', params.kind);
     }
     if (params?.page) {
       queryParams.append('page', params.page.toString());
@@ -823,8 +827,26 @@ export const collectionService = {
    * Riwayat kunjungan non-penjemputan milik petugas (terbaru dulu).
    * Proyeksi ringan untuk layar Riwayat — bukan angka penjemputan.
    */
-  getVisits: async (limit = 10): Promise<ApiResponse<{items: CanVisitHistoryItem[]}>> => {
-    return apiRequest<{items: CanVisitHistoryItem[]}>(`/mobile/visits?limit=${limit}`);
+  getVisits: async (params?: {
+    limit?: number;
+    year?: number;
+    month?: number;
+    excludeCollected?: boolean;
+  }): Promise<
+    ApiResponse<{
+      items: CanVisitHistoryItem[];
+      pagination: {limit: number; total: number; total_pages: number};
+    }>
+  > => {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.year !== undefined) queryParams.append('year', params.year.toString());
+    if (params?.month !== undefined) queryParams.append('month', params.month.toString());
+    if (params?.excludeCollected) queryParams.append('exclude_collected', 'true');
+    return apiRequest<{
+      items: CanVisitHistoryItem[];
+      pagination: {limit: number; total: number; total_pages: number};
+    }>(`/mobile/visits?${queryParams.toString()}`);
   },
 };
 

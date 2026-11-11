@@ -35,7 +35,7 @@ interface VisitQueueData {
   period: { year: number; month: number };
   branchId: string;
   totalVisitCans: number;
-  assignedVisitCans: number;
+  assignedPeriodCans: number;
   unassignedVisitCans: number;
   groups: VisitQueueGroup[];
   officers: { id: string; fullName: string; employeeCode: string }[];
@@ -204,7 +204,7 @@ export function VisitQueuePanel({
           </p>
           <p className="mt-0.5 text-[10px] font-medium text-[#F4F1EA]/40">
             {data
-              ? `${data.assignedVisitCans} sudah dikunjungi · ${data.totalVisitCans} total kaleng non-aktif`
+              ? `${data.assignedPeriodCans} sudah dijadwalkan periode ini · ${data.totalVisitCans} total kaleng non-aktif`
               : 'Kaleng NON_AKTIF yang belum punya tugas kunjungan periode ini.'}
           </p>
         </div>
@@ -257,7 +257,7 @@ export function VisitQueuePanel({
       ) : data.unassignedVisitCans === 0 ? (
         <div className="px-5 py-8 text-center">
           <p className="text-xs font-bold text-[#1F8243]">
-            Semua {data.totalVisitCans} kaleng non-aktif sudah punya tugas kunjungan periode ini.
+            Semua {data.totalVisitCans} kaleng non-aktif sudah punya penugasan periode ini.
           </p>
         </div>
       ) : (

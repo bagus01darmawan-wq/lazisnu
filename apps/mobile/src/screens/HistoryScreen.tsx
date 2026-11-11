@@ -24,7 +24,7 @@ import {useCollectionsStore, usePeriodStore, useSyncStore, useTasksStore} from '
 import {useFocusEffect} from '@react-navigation/native';
 import {Colors, ComponentSizes, Layout, Radius, Spacing, Typography} from '../theme';
 import {formatPeriod, periodKeyOf} from '../utils/format';
-import {AppButton, SegmentedControl} from '../components/ui';
+import {AppButton} from '../components/ui';
 import {SKIP_REASON_OPTIONS} from '../components/ui/SkipReasonSheet';
 import {useTabSwipeSwitch} from '../hooks/useTabSwipeSwitch';
 import {
@@ -34,6 +34,27 @@ import {
   HistoryFailureModal,
   HistoryItem,
 } from './history';
+
+type HistoryFilter = 'terjemput' | 'tidak' | 'kunjungan';
+
+const VISIT_PURPOSE_LABELS: Record<CanVisitHistoryItem['purpose'], string> = {
+  VERIFIKASI: 'Verifikasi kondisi',
+  PENGGANTIAN: 'Penggantian unit',
+};
+
+const getVisitOutcomeLabel = (outcome: CanVisitHistoryItem['outcome']): string => {
+  switch (outcome) {
+    case 'KOSONG':
+      return 'Kaleng kosong';
+    case 'DIKEMBALIKAN':
+      return 'Dikembalikan';
+    case 'TIDAK_DIKUNJUNGI':
+      return 'Tidak berhasil dikunjungi';
+    case 'ISI':
+      return 'Pengambilan tersimpan';
+  }
+  return 'Kunjungan selesai';
+};
 
 export const updatePendingCollectionNominal = (offlineId: string, nominal: number): boolean =>
   useCollectionsStore.getState().updatePendingNominal(offlineId, nominal);
@@ -54,13 +75,24 @@ const HistoryScreen: React.FC = () => {
   }, [collections, displayKey]);
   const {checkStatus, failedCorrectionsCount} = useSyncStore();
   const [visits, setVisits] = useState<CanVisitHistoryItem[]>([]);
-  // Tab Riwayat: "terjemput" = riwayat penjemputan (list lama); "tidak" =
-  // tugas UNCOLLECTED periode berjalan yang masih bisa dibuka kembali.
-  const [historyTab, setHistoryTab] = useState<'terjemput' | 'tidak'>('terjemput');
-  // Geser samping untuk berpindah tab Terjemput ↔ Tidak Dijemput (urutan pill).
+  const [visitCount, setVisitCount] = useState(0);
+  const [visitsPeriodKey, setVisitsPeriodKey] = useState<string | null>(null);
+  const [visitsLoading, setVisitsLoading] = useState(false);
+  // Masing-masing tab menampung satu jenis aktivitas: koleksi, tidak dijemput,
+  // atau catatan kunjungan tanpa pengambilan.
+  const [historyTab, setHistoryTab] = useState<HistoryFilter>('terjemput');
+  const moveHistoryTab = useCallback((direction: -1 | 1) => {
+    setHistoryTab(current => {
+      const tabs: HistoryFilter[] = ['terjemput', 'tidak', 'kunjungan'];
+      const index = tabs.indexOf(current);
+      const nextIndex = Math.max(0, Math.min(tabs.length - 1, index + direction));
+      return tabs[nextIndex] ?? current;
+    });
+  }, []);
+  // Geser samping berpindah satu filter tanpa melingkar dari ujung ke ujung.
   const tabSwipeGesture = useTabSwipeSwitch({
-    onNext: () => setHistoryTab('tidak'),
-    onPrevious: () => setHistoryTab('terjemput'),
+    onNext: () => moveHistoryTab(1),
+    onPrevious: () => moveHistoryTab(-1),
   });
   const [uncollected, setUncollected] = useState<Task[]>([]);
   // Sumber baca saat offline menyusun daftar — sinkron tiap render.
@@ -68,7 +100,6 @@ const HistoryScreen: React.FC = () => {
   uncollectedRef.current = uncollected;
   const [uncollectedLoading, setUncollectedLoading] = useState(false);
   const [reopeningId, setReopeningId] = useState<string | null>(null);
-  const [completedPeriodCount, setCompletedPeriodCount] = useState(0);
   const [uncollectedCount, setUncollectedCount] = useState(0);
   const [correction, setCorrection] = useState<HistoryCorrectionData | null>(null);
   const [reason, setReason] = useState('');
@@ -76,6 +107,11 @@ const HistoryScreen: React.FC = () => {
   const [failureItem, setFailureItem] = useState<Collection | null>(null);
   const [showFailedCorrections, setShowFailedCorrections] = useState(false);
   const [failedCorrectionItems, setFailedCorrectionItems] = useState<QueuedCorrection[]>([]);
+  const visitsThisPeriod = visitsPeriodKey === displayKey ? visits : [];
+  const visitCountThisPeriod = visitsPeriodKey === displayKey ? visitCount : 0;
+  const collectionCountThisPeriod = collectionsThisMonth.length;
+  const periodActivityCount =
+    collectionCountThisPeriod + uncollectedCount + visitCountThisPeriod;
 
   const openFailedCorrections = useCallback(() => {
     setFailedCorrectionItems(correctionQueue.getFailedPermanent());
@@ -96,12 +132,14 @@ const HistoryScreen: React.FC = () => {
         const composed = composeUncollectedOffline(uncollectedRef.current, actionQueue.getQueue(), {
           displayPeriod: displayKey ?? undefined,
         });
-        setUncollected(composed);
-        setUncollectedCount(composed.length);
+        const pickupTasks = composed.filter(task => task.kind !== 'VISIT' && !task.is_visit_task);
+        setUncollected(pickupTasks);
+        setUncollectedCount(pickupTasks.length);
         return;
       }
       const res = await tasksService.getTasks({
         status: 'UNCOLLECTED',
+        kind: 'PICKUP',
         page: 1,
         limit: 50,
         ...(displayYear && displayMonth ? {year: displayYear, month: displayMonth} : {}),
@@ -117,34 +155,23 @@ const HistoryScreen: React.FC = () => {
     }
   }, [displayKey, displayMonth, displayYear]);
 
-  const fetchRiwayatCounts = useCallback(async () => {
+  const fetchVisits = useCallback(async () => {
+    setVisitsLoading(true);
     try {
-      // Offline: angka server tak bisa diperbarui — Terjemput dihitung dari
-      // daftar lokal (cache + antrean) supaya angka == jumlah kartu tampil;
-      // angka Tidak Dijemput disusun oleh fetchUncollected.
-      const netInfo = await NetInfo.fetch();
-      if (!(netInfo.isConnected && netInfo.isInternetReachable)) {
-        setCompletedPeriodCount(
-          useCollectionsStore.getState().collections.filter(c => c.period === displayKey).length,
-        );
-        return;
-      }
-      const params = displayYear && displayMonth ? {year: displayYear, month: displayMonth} : {};
-      const [done, skipped] = await Promise.all([
-        tasksService.getTasks({status: 'COMPLETED', page: 1, limit: 1, ...params}),
-        tasksService.getTasks({status: 'UNCOLLECTED', page: 1, limit: 1, ...params}),
-      ]);
-      setCompletedPeriodCount(done.data?.pagination?.total || 0);
-      if (!skipped.success) return;
-      setUncollectedCount(skipped.data?.pagination?.total || 0);
-    } catch {
-      // Senyap — angka terakhir dipertahankan; fallback Terjemput dari daftar
-      // lokal bila angka masih nol (baru saja kehilangan koneksi).
-      setCompletedPeriodCount(prev => {
-        if (prev > 0) return prev;
-        return useCollectionsStore.getState().collections.filter(c => c.period === displayKey)
-          .length;
+      const response = await collectionService.getVisits({
+        limit: 500,
+        ...(displayYear && displayMonth ? {year: displayYear, month: displayMonth} : {}),
+        excludeCollected: true,
       });
+      if (response.success && response.data) {
+        setVisits(response.data.items || []);
+        setVisitCount(response.data.pagination?.total ?? response.data.items?.length ?? 0);
+        setVisitsPeriodKey(displayKey);
+      }
+    } catch {
+      // Riwayat yang terakhir berhasil dimuat tetap tersedia saat offline.
+    } finally {
+      setVisitsLoading(false);
     }
   }, [displayKey, displayMonth, displayYear]);
 
@@ -155,19 +182,10 @@ const HistoryScreen: React.FC = () => {
     useCallback(() => {
       refreshPeriod();
       fetchUncollected();
-      fetchRiwayatCounts();
+      fetchVisits();
       fetchCollections();
       checkStatus();
-      // Kunjungan non-penjemputan (gagal senyap — pelengkap, bukan penghalang).
-      collectionService
-        .getVisits(5)
-        .then(res => {
-          if (res.success && res.data) {
-            setVisits(res.data.items || []);
-          }
-        })
-        .catch(() => {});
-    }, [checkStatus, fetchCollections, fetchRiwayatCounts, fetchUncollected, refreshPeriod]),
+    }, [checkStatus, fetchCollections, fetchUncollected, fetchVisits, refreshPeriod]),
   );
 
   const handleReopen = useCallback(
@@ -184,7 +202,7 @@ const HistoryScreen: React.FC = () => {
               try {
                 const res = await tasksService.reopenTask(task.id);
                 if (res.success) {
-                  await Promise.all([fetchUncollected(), fetchRiwayatCounts()]);
+                  await fetchUncollected();
                   Alert.alert(
                     'Tugas Aktif Kembali',
                     'Tugas sudah muncul kembali di layar Tugas dan bisa dijalani.',
@@ -205,7 +223,7 @@ const HistoryScreen: React.FC = () => {
         ],
       );
     },
-    [fetchUncollected, fetchRiwayatCounts, periodLabel],
+    [fetchUncollected, periodLabel],
   );
 
   const dismissFailedCorrection = useCallback((correctionId: string) => {
@@ -331,6 +349,41 @@ const HistoryScreen: React.FC = () => {
     [openCorrection, openFailureDetail],
   );
 
+  const renderVisitItem = useCallback(({item}: {item: CanVisitHistoryItem}) => {
+    const visitedDate = new Date(item.visited_at).toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+
+    return (
+      <View style={styles.visitRowCard}>
+        <View style={styles.visitIconWrap}>
+          <Icon
+            name={item.purpose === 'PENGGANTIAN' ? 'swap-horizontal' : 'eye-check-outline'}
+            size={21}
+            color={Colors.brand.emerald}
+          />
+        </View>
+        <View style={styles.visitTextWrap}>
+          <View style={styles.visitTopRow}>
+            <Text style={styles.visitOwner} numberOfLines={1}>
+              {item.owner_name || item.qr_code || 'Kaleng'}
+            </Text>
+            <Text style={styles.visitOutcome}>{getVisitOutcomeLabel(item.outcome)}</Text>
+          </View>
+          <Text style={styles.visitDescription} numberOfLines={1}>
+            Kaleng non-aktif · {VISIT_PURPOSE_LABELS[item.purpose]}
+          </Text>
+          <View style={styles.visitFooter}>
+            <Text style={styles.visitSub}>{visitedDate}</Text>
+            <Text style={styles.visitNoAmount}>Tanpa nominal</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }, []);
+
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -345,22 +398,44 @@ const HistoryScreen: React.FC = () => {
             color={Colors.brand.deepGreen}
           />
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryValue}>{completedPeriodCount + uncollectedCount}</Text>
-            <Text style={styles.summaryLabel}>Tugas selesai {periodLabel}</Text>
+            <Text style={styles.summaryValue}>{periodActivityCount}</Text>
+            <Text style={styles.summaryLabel}>Aktivitas {periodLabel}</Text>
           </View>
         </View>
       </LinearGradient>
 
       {/* Filter tab — gaya pill "Hari Ini/Minggu Ini" Beranda, tanpa kartu. */}
       <View style={styles.filterWrap}>
-        <SegmentedControl
-          options={[
-            {label: `Terjemput (${completedPeriodCount})`, value: 'terjemput'},
-            {label: `Tidak Dijemput (${uncollectedCount})`, value: 'tidak'},
-          ]}
-          value={historyTab}
-          onChange={setHistoryTab}
-        />
+        <View style={styles.historyFilters}>
+          {[
+            {label: 'Terjemput', count: collectionCountThisPeriod, value: 'terjemput' as const},
+            {label: 'Tidak Dijemput', count: uncollectedCount, value: 'tidak' as const},
+            {label: 'Kunjungan', count: visitCountThisPeriod, value: 'kunjungan' as const},
+          ].map(option => {
+            const selected = historyTab === option.value;
+            return (
+              <TouchableOpacity
+                key={option.value}
+                accessibilityRole="tab"
+                accessibilityState={{selected}}
+                onPress={() => setHistoryTab(option.value)}
+                activeOpacity={0.8}
+                style={[styles.historyFilter, selected && styles.historyFilterSelected]}>
+                <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
+                  style={[styles.historyFilterLabel, selected && styles.historyFilterLabelSelected]}>
+                  {option.label}
+                </Text>
+                <Text
+                  style={[styles.historyFilterCount, selected && styles.historyFilterCountSelected]}>
+                  {option.count}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
 
       {error && !isLoading && (
@@ -381,40 +456,6 @@ const HistoryScreen: React.FC = () => {
               renderItem={renderItem}
               keyExtractor={item => item.id}
               contentContainerStyle={styles.listContent}
-              ListHeaderComponent={
-                <>
-                  {visits.length ? (
-                    <View style={styles.visitCard}>
-                      <Text style={styles.visitTitle}>Kunjungan non-penjemputan</Text>
-                      {visits.map(v => (
-                        <View key={v.id} style={styles.visitRow}>
-                          <Icon
-                            name={
-                              v.purpose === 'PENGGANTIAN' ? 'swap-horizontal' : 'eye-check-outline'
-                            }
-                            size={18}
-                            color={Colors.brand.deepGreen}
-                          />
-                          <View style={styles.visitTextWrap}>
-                            <Text style={styles.visitText}>
-                              {v.purpose === 'PENGGANTIAN' ? 'Penggantian unit' : 'Verifikasi'} ·{' '}
-                              {v.owner_name || v.qr_code}
-                            </Text>
-                            <Text style={styles.visitSub}>
-                              {new Date(v.visited_at).toLocaleDateString('id-ID', {
-                                day: 'numeric',
-                                month: 'short',
-                                year: 'numeric',
-                              })}{' '}
-                              · tanpa nominal
-                            </Text>
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
-                </>
-              }
               ListEmptyComponent={
                 !isLoading ? (
                   <View style={styles.emptyContainer}>
@@ -452,7 +493,7 @@ const HistoryScreen: React.FC = () => {
               }
               showsVerticalScrollIndicator={false}
             />
-          ) : (
+          ) : historyTab === 'tidak' ? (
             <FlatList
               data={uncollected}
               keyExtractor={item => item.id}
@@ -506,10 +547,46 @@ const HistoryScreen: React.FC = () => {
               refreshControl={
                 <RefreshControl
                   refreshing={uncollectedLoading}
-                  onRefresh={() => {
-                    fetchUncollected();
-                    fetchRiwayatCounts();
-                  }}
+                  onRefresh={fetchUncollected}
+                  colors={[Colors.brand.emerald]}
+                  tintColor={Colors.brand.emerald}
+                />
+              }
+              showsVerticalScrollIndicator={false}
+            />
+          ) : (
+            <FlatList
+              data={visitsThisPeriod}
+              keyExtractor={item => item.id}
+              contentContainerStyle={styles.listContent}
+              renderItem={renderVisitItem}
+              ListHeaderComponent={
+                <View style={styles.visitListHeader}>
+                  <Text style={styles.visitListTitle}>Daftar kunjungan</Text>
+                  <Text style={styles.visitListSubtitle}>
+                    Catatan kunjungan tanpa penjemputan
+                  </Text>
+                </View>
+              }
+              ListEmptyComponent={
+                visitsLoading ? (
+                  <ActivityIndicator style={styles.loadingFooter} color={Colors.brand.emerald} />
+                ) : (
+                  <View style={styles.emptyContainer}>
+                    <View style={styles.emptyIcon}>
+                      <Icon name="eye-check-outline" size={42} color={Colors.brand.deepGreen} />
+                    </View>
+                    <Text style={styles.emptyTitle}>Belum ada kunjungan</Text>
+                    <Text style={styles.emptyText}>
+                      Catatan kunjungan non-penjemputan pada {periodLabel} akan muncul di sini.
+                    </Text>
+                  </View>
+                )
+              }
+              refreshControl={
+                <RefreshControl
+                  refreshing={visitsLoading}
+                  onRefresh={fetchVisits}
                   colors={[Colors.brand.emerald]}
                   tintColor={Colors.brand.emerald}
                 />
@@ -589,7 +666,7 @@ const styles = StyleSheet.create({
   headerSummary: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.brand.mutedSand,
+    backgroundColor: Colors.surface.card,
     borderRadius: Radius.lg,
     padding: Spacing.sm,
     paddingHorizontal: Spacing.md,
@@ -608,6 +685,45 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
     marginBottom: Spacing.xs,
   },
+  historyFilters: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+  },
+  historyFilter: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 54,
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: Spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border.warm,
+    backgroundColor: Colors.surface.card,
+  },
+  historyFilterSelected: {
+    borderColor: Colors.brand.deepGreen,
+    backgroundColor: Colors.brand.deepGreen,
+  },
+  historyFilterLabel: {
+    ...Typography.caption,
+    color: Colors.text.secondary,
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  historyFilterLabelSelected: {color: Colors.text.inverse},
+  historyFilterCount: {
+    ...Typography.label,
+    color: Colors.text.primary,
+    fontSize: 13,
+    lineHeight: 17,
+    marginTop: 1,
+    fontVariant: ['tabular-nums'],
+  },
+  historyFilterCountSelected: {color: Colors.brand.mutedSand},
   uncollectedCard: {
     backgroundColor: Colors.surface.card,
     borderRadius: Radius.lg,
@@ -647,20 +763,71 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   sectionTitleFirst: {marginTop: Spacing.md},
-  visitCard: {
+  visitListHeader: {
+    marginTop: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  visitListTitle: {...Typography.heading3, color: Colors.brand.deepGreen},
+  visitListSubtitle: {
+    ...Typography.caption,
+    color: Colors.text.secondary,
+    marginTop: Spacing.xs,
+  },
+  visitRowCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
     backgroundColor: Colors.surface.card,
     borderWidth: 1,
     borderColor: Colors.border.warm,
     borderRadius: Radius.lg,
     padding: Spacing.md,
-    marginTop: Spacing.md,
-    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
   },
-  visitTitle: {...Typography.label, color: Colors.brand.deepGreen},
-  visitRow: {flexDirection: 'row', alignItems: 'center', gap: Spacing.sm},
-  visitTextWrap: {flex: 1},
-  visitText: {...Typography.bodySmall, color: Colors.text.primary},
-  visitSub: {...Typography.caption, color: Colors.text.secondary, marginTop: 1},
+  visitIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.surface.successSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  visitTextWrap: {flex: 1, minWidth: 0},
+  visitTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.xs,
+  },
+  visitOwner: {
+    ...Typography.bodySmall,
+    color: Colors.text.primary,
+    fontWeight: '700',
+    flex: 1,
+  },
+  visitOutcome: {
+    ...Typography.caption,
+    color: Colors.status.success,
+    backgroundColor: Colors.surface.successSubtle,
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    fontWeight: '700',
+    overflow: 'hidden',
+  },
+  visitDescription: {
+    ...Typography.caption,
+    color: Colors.text.secondary,
+    marginTop: 2,
+  },
+  visitFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: Spacing.xs,
+  },
+  visitSub: {...Typography.caption, color: Colors.text.secondary},
+  visitNoAmount: {...Typography.caption, color: Colors.status.warning, fontWeight: '600'},
   emptyContainer: {flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 70},
   emptyIcon: {
     width: 84,

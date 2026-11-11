@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1160" viewBox="0 0 900 1160">
+  <defs>
+    <linearGradient id="page" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F8F5EE"/>
+      <stop offset="1" stop-color="#EAE4D8"/>
+    </linearGradient>
+    <linearGradient id="hero" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#153F34"/>
+      <stop offset="1" stop-color="#0B5740"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.11"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="phoneShadow" x="-30%" y="-20%" width="160%" height="150%">
+      <feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#24332E" flood-opacity="0.20"/>
+    </filter>
+    <filter id="cardShadow" x="-15%" y="-20%" width="130%" height="150%">
+      <feDropShadow dx="0" dy="4" stdDeviation="7" flood-color="#2C473E" flood-opacity="0.06"/>
+    </filter>
+    <clipPath id="screenClip">
+      <rect x="267" y="157" width="366" height="846" rx="43"/>
+    </clipPath>
+  </defs>
+
+  <rect width="900" height="1160" fill="url(#page)"/>
+  <circle cx="90" cy="1040" r="170" fill="#E4D9C7" opacity="0.34"/>
+  <circle cx="820" cy="160" r="210" fill="#DCE8DD" opacity="0.48"/>
+
+  <text x="450" y="58" text-anchor="middle" fill="#1F8243" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="700" letter-spacing="2.2">USULAN TAMPILAN MOBILE</text>
+  <text x="450" y="91" text-anchor="middle" fill="#2C473E" font-family="Inter, Segoe UI, sans-serif" font-size="24" font-weight="700">Riwayat aktivitas lebih jelas</text>
+
+  <g filter="url(#phoneShadow)">
+    <rect x="255" y="145" width="390" height="870" rx="55" fill="#253630"/>
+    <rect x="267" y="157" width="366" height="846" rx="43" fill="#F4F1EA"/>
+  </g>
+
+  <g clip-path="url(#screenClip)" font-family="Inter, Segoe UI, Arial, sans-serif">
+    <rect x="267" y="157" width="366" height="846" fill="#F4F1EA"/>
+    <rect x="267" y="157" width="366" height="250" fill="url(#hero)"/>
+    <circle cx="596" cy="183" r="112" fill="url(#glow)"/>
+
+    <!-- Status bar -->
+    <text x="290" y="184" fill="#FFFFFF" font-size="12" font-weight="700">09:41</text>
+    <g fill="none" stroke="#FFFFFF" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M565 177 Q573 169 581 177 M568 180 Q573 175 578 180 M572 183 Q573 182 574 183"/>
+      <path d="M587 174 h17 a2 2 0 0 1 2 2 v11 a2 2 0 0 1-2 2 h-17 a2 2 0 0 1-2-2 v-11 a2 2 0 0 1 2-2z"/>
+      <path d="M608 178 v7"/>
+    </g>
+    <rect x="589" y="176" width="12" height="9" rx="1" fill="#FFFFFF"/>
+
+    <!-- Header -->
+    <text x="287" y="225" fill="#FFFFFF" font-size="24" font-weight="700">Riwayat Tugas</text>
+    <text x="288" y="248" fill="#DDE9E0" font-size="12.5">Semua aktivitas kaleng dalam satu tempat</text>
+
+    <!-- Monthly summary -->
+    <rect x="285" y="271" width="330" height="101" rx="20" fill="#FFFFFF" fill-opacity="0.96"/>
+    <rect x="300" y="288" width="42" height="42" rx="14" fill="#E8F0E9"/>
+    <g fill="none" stroke="#1F8243" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="311" y="299" width="20" height="19" rx="3"/>
+      <path d="M316 296 v6 M326 296 v6 M311 306 h20"/>
+    </g>
+    <text x="354" y="298" fill="#5F6F69" font-size="9.5" font-weight="700" letter-spacing="1.2">OKTOBER 2026</text>
+    <text x="354" y="327" fill="#2C473E" font-size="24" font-weight="700">13</text>
+    <text x="386" y="326" fill="#2C473E" font-size="12.5" font-weight="600">aktivitas bulan ini</text>
+    <path d="M585 311 h13 m-5-5 5 5-5 5" fill="none" stroke="#6B9E9F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Three distinct filters -->
+    <g>
+      <rect x="285" y="421" width="104" height="59" rx="16" fill="#FFFCF7" stroke="#E5D9C7"/>
+      <text x="337" y="444" text-anchor="middle" fill="#5F6F69" font-size="9.5" font-weight="600">Terjemput</text>
+      <text x="337" y="465" text-anchor="middle" fill="#2C473E" font-size="14" font-weight="700">8</text>
+
+      <rect x="397" y="421" width="104" height="59" rx="16" fill="#FFFCF7" stroke="#E5D9C7"/>
+      <text x="449" y="444" text-anchor="middle" fill="#5F6F69" font-size="9.1" font-weight="600">Tidak Dijemput</text>
+      <text x="449" y="465" text-anchor="middle" fill="#2C473E" font-size="14" font-weight="700">2</text>
+
+      <rect x="509" y="421" width="106" height="59" rx="16" fill="#2C473E" stroke="#2C473E"/>
+      <text x="562" y="444" text-anchor="middle" fill="#F4F1EA" font-size="9.5" font-weight="600">Kunjungan</text>
+      <text x="562" y="465" text-anchor="middle" fill="#EAD19B" font-size="14" font-weight="700">3</text>
+    </g>
+
+    <text x="286" y="514" fill="#2C473E" font-size="16" font-weight="700">Daftar kunjungan</text>
+    <text x="286" y="533" fill="#5F6F69" font-size="11">Catatan kunjungan tanpa penjemputan</text>
+
+    <!-- Visit row 1 -->
+    <g filter="url(#cardShadow)">
+      <rect x="281" y="548" width="338" height="106" rx="18" fill="#FFFCF7" stroke="#E5D9C7"/>
+    </g>
+    <rect x="296" y="565" width="40" height="40" rx="14" fill="#E8F0E9"/>
+    <g fill="none" stroke="#1F8243" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="316" cy="585" r="10"/>
+      <path d="M306 585 h20 M316 575 c4 4 4 16 0 20 M316 575 c-4 4-4 16 0 20"/>
+    </g>
+    <text x="347" y="575" fill="#2C473E" font-size="14" font-weight="700">Bojong 5</text>
+    <rect x="537" y="560" width="67" height="21" rx="10.5" fill="#E8F0E9"/>
+    <text x="570.5" y="574.5" text-anchor="middle" fill="#176B38" font-size="8.2" font-weight="700" letter-spacing="0.5">SELESAI</text>
+    <text x="347" y="596" fill="#5F6F69" font-size="10.5">Kaleng non-aktif · Verifikasi</text>
+    <path d="M297 616 h306" stroke="#EFE7DA"/>
+    <circle cx="303" cy="635" r="4" fill="#6B9E9F"/>
+    <text x="314" y="639" fill="#5F6F69" font-size="9.5">12 Okt 2026</text>
+    <text x="600" y="639" text-anchor="end" fill="#8A5A00" font-size="9.2" font-weight="600">Tanpa nominal</text>
+
+    <!-- Visit row 2 -->
+    <g filter="url(#cardShadow)">
+      <rect x="281" y="665" width="338" height="106" rx="18" fill="#FFFCF7" stroke="#E5D9C7"/>
+    </g>
+    <rect x="296" y="682" width="40" height="40" rx="14" fill="#F1EBDD"/>
+    <g fill="none" stroke="#2C473E" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M306 692 h20 v20 h-20z M310 688 v7 M322 688 v7 M306 699 h20"/>
+      <path d="M312 705 l3 3 6-7"/>
+    </g>
+    <text x="347" y="692" fill="#2C473E" font-size="13" font-weight="700">Kaleng KLG-0821</text>
+    <rect x="537" y="677" width="67" height="21" rx="10.5" fill="#E8F0E9"/>
+    <text x="570.5" y="691.5" text-anchor="middle" fill="#176B38" font-size="8.2" font-weight="700" letter-spacing="0.5">SELESAI</text>
+    <text x="347" y="713" fill="#5F6F69" font-size="10.5">Kaleng non-aktif · Pengecekan</text>
+    <path d="M297 733 h306" stroke="#EFE7DA"/>
+    <circle cx="303" cy="752" r="4" fill="#6B9E9F"/>
+    <text x="314" y="756" fill="#5F6F69" font-size="9.5">10 Okt 2026</text>
+    <text x="600" y="756" text-anchor="end" fill="#8A5A00" font-size="9.2" font-weight="600">Tanpa nominal</text>
+
+    <!-- Visit row 3 -->
+    <g filter="url(#cardShadow)">
+      <rect x="281" y="782" width="338" height="106" rx="18" fill="#FFFCF7" stroke="#E5D9C7"/>
+    </g>
+    <rect x="296" y="799" width="40" height="40" rx="14" fill="#F1EBDD"/>
+    <g fill="none" stroke="#2C473E" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="316" cy="819" r="10"/>
+      <path d="M316 813 v7 l5 3"/>
+    </g>
+    <text x="347" y="809" fill="#2C473E" font-size="13" font-weight="700">Kaleng KLG-0472</text>
+    <rect x="537" y="794" width="67" height="21" rx="10.5" fill="#E8F0E9"/>
+    <text x="570.5" y="808.5" text-anchor="middle" fill="#176B38" font-size="8.2" font-weight="700" letter-spacing="0.5">SELESAI</text>
+    <text x="347" y="830" fill="#5F6F69" font-size="10.5">Kaleng non-aktif · Verifikasi</text>
+    <path d="M297 850 h306" stroke="#EFE7DA"/>
+    <circle cx="303" cy="869" r="4" fill="#6B9E9F"/>
+    <text x="314" y="873" fill="#5F6F69" font-size="9.5">7 Okt 2026</text>
+    <text x="600" y="873" text-anchor="end" fill="#8A5A00" font-size="9.2" font-weight="600">Tanpa nominal</text>
+
+    <!-- Bottom navigation -->
+    <rect x="267" y="913" width="366" height="90" fill="#FFFCF7"/>
+    <path d="M267 913 h366" stroke="#E5D9C7"/>
+    <g fill="none" stroke="#88958F" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M307 940 l12-10 12 10 v15 h-8 v-10 h-8 v10 h-8z"/>
+      <rect x="397" y="932" width="19" height="23" rx="3"/><path d="M402 938 h9 M402 943 h9 M402 948 h6"/>
+      <path d="M489 933 l19 19 M508 933 l-19 19 M489 933 h19 v19"/>
+      <circle cx="581" cy="940" r="8"/><path d="M567 957 c2-7 7-10 14-10s12 3 14 10"/>
+    </g>
+    <g fill="#6A7771" font-size="8.5" text-anchor="middle">
+      <text x="319" y="971">Beranda</text>
+      <text x="406" y="971">Tugas</text>
+      <text x="499" y="971">Pindai</text>
+      <text x="581" y="971" fill="#1F8243" font-weight="700">Riwayat</text>
+    </g>
+    <rect x="408" y="989" width="84" height="4" rx="2" fill="#2C473E" opacity="0.8"/>
+  </g>
+
+  <text x="450" y="1071" text-anchor="middle" fill="#5F6F69" font-family="Inter, Segoe UI, sans-serif" font-size="12">Filter Kunjungan dipisahkan dari Terjemput dan Tidak Dijemput.</text>
+  <text x="450" y="1093" text-anchor="middle" fill="#8A918D" font-family="Inter, Segoe UI, sans-serif" font-size="10.5">Nama kaleng, jumlah, dan tanggal lain hanya contoh tampilan.</text>
+</svg>

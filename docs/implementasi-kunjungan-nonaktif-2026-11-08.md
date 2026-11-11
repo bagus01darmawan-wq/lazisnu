@@ -98,11 +98,14 @@ Endpoint baru:
 GET /v1/admin/assignments/visit-queue?branch_id=&year=&month=&dukuh_id=
 ```
 
-Mengembalikan kaleng NON_AKTIF yang **belum punya tugas VISIT** pada periode
-tersebut, dikelompokkan per Dukuh, plus ringkasan:
+Mengembalikan kaleng NON_AKTIF yang **belum punya penugasan jenis apa pun**
+pada periode tersebut, dikelompokkan per Dukuh, agar antrean konsisten dengan
+validasi `bulk-cans`:
 
 - `total_visit_cans`
 - `assigned_visit_cans`
+- `assigned_period_cans` (penugasan jenis apa pun; kaleng yang sudah punya
+  tugas pada periode tidak ditampilkan di antrean)
 - `unassigned_visit_cans`
 - `groups[].can_ids`
 - `officers`
