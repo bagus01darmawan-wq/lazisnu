@@ -4,19 +4,22 @@ groups:
     rules:
 
       # ──────────────────────────────────────────
-      # CPU > 80% selama 5 menit
-      # Metric: process_cpu_seconds_total (rate = CPU usage fraction)
+      # CPU backend > 70% dari 2 vCPU VM selama 5 menit — alarm P1
+      # Metric: process_cpu_seconds_total — rate-nya = inti terpakai (fraksi
+      # per proses, 1.0 = satu inti penuh). Dibagi 2 (jumlah vCPU VM) agar
+      # ambang 70 berarti 70% kapasitas MESIN, bukan 70% satu inti.
+      # Catatan migrasi Biznet: target 2 vCPU.
       # ──────────────────────────────────────────
       - alert: HighCpuUsage
-        expr: rate(process_cpu_seconds_total{job="lazisnu-backend"}[1m]) * 100 > 80
+        expr: sum(rate(process_cpu_seconds_total{job="lazisnu-backend"}[1m])) / 2 * 100 > 70
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "CPU usage tinggi ({{ $value | printf \"%.1f\" }}%)"
+          summary: "CPU backend tinggi ({{ $value | printf \"%.1f\" }}% dari 2 vCPU)"
           description: >
-            Backend Lazisnu menggunakan CPU lebih dari 80% selama 5 menit.
-            Instance: {{ $labels.instance }}
+            Backend Lazisnu memakai lebih dari 70% kapasitas CPU VM (2 vCPU)
+            selama 5 menit. Instance: {{ $labels.instance }}
 
       # ──────────────────────────────────────────
       # Memory (Heap) > ~85% dari heap_size_limit

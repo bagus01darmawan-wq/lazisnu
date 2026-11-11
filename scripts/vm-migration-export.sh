@@ -7,24 +7,43 @@
 #    ukuran besar & upload lambat; DEFAULT tidak disertakan karena history opsional)
 # Hasil: satu arsip .tar.gz diupload ke R2 (prefix migrasi/).
 #
-# Isi arsip: secrets/ (env files), cron (root crontab + cron.d), letsencrypt
-# (sertifikat dari /opt/lazisnu/nginx/certbot), sshd_config, sysctl. Yang TIDAK
-# perlu dibundel: source repo (di git), backup DB (sudah di R2), backup kuma
-# (sudah di R2).
+# Isi arsip:
+#   - secrets/                  env auth-probe, scheduler, backup staging, dll
+#   - env produksi/staging      .env, .env.alertmanager, .env.backup*,
+#                               apps/backend/.env, apps/backend/.env.staging
+#   - cron/                     root crontab + SEMUA /etc/cron.d/lazisnu-*
+#   - letsencrypt/              sertifikat dari /opt/lazisnu/nginx/certbot
+#   - ssh/sshd_config, sysctl/
+#   - scripts/backup-prod.sh    wrapper VM-local (jika ada)
+#   - data/                     grafana/prometheus, hanya dengan --with-data
+#   - MANIFEST.txt, REVISION
 #
-# Restore di VM baru = clone repo + download arsip ini + extract (lihat
-# docs/MIGRATION-VM.md).
+# TIDAK dibundel: source repo (Git), backup DB (R2), backup Kuma (R2), dan
+# Redis AOF (buat snapshot konsisten terpisah — lihat rencana migrasi).
+#
+# PENTING: r2_key yang dicetak adalah key LENGKAP
+# (migrasi/lazisnu-vm-export-….tar.gz). Saat mengunduh, gunakan key itu SEKALI:
+#   s3://$R2_BUCKET_NAME/$R2_KEY
+# Jangan menambahkan prefix migrasi/ lagi.
+#
+# CATATAN BOOTSTRAP: arsip ini berisi .env.backup, tetapi arsip tidak bisa
+# mengunduh dirinya sendiri. Siapkan .env.backup lewat scp (root, 0600) atau
+# token R2 read-only sebelum mengunduh.
 
 set -euo pipefail
+umask 077
 
 INCLUDE_DATA=0
 if [[ "${1:-}" == "--with-data" ]]; then
   INCLUDE_DATA=1
 fi
 
-ENV_FILE="/opt/lazisnu/secrets/env.backup-2026-07-27"
+# Env sumber kredensial R2 (prod). Override via EXPORT_ENV_FILE bila lokasinya beda.
+# Contoh: sudo EXPORT_ENV_FILE=/opt/lazisnu/.env.backup bash scripts/vm-migration-export.sh
+ENV_FILE="${EXPORT_ENV_FILE:-/opt/lazisnu/.env.backup}"
 if [[ ! -r "$ENV_FILE" ]]; then
   echo "Env file tidak terbaca: $ENV_FILE" >&2
+  echo "Set EXPORT_ENV_FILE=/opt/lazisnu/.env.backup bila lokasinya berbeda." >&2
   exit 1
 fi
 
@@ -39,16 +58,47 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$STAGE_DIR/secrets" "$STAGE_DIR/cron" "$STAGE_DIR/letsencrypt" "$STAGE_DIR/ssh" "$STAGE_DIR/sysctl" "$STAGE_DIR/data"
+mkdir -p "$STAGE_DIR"/{secrets,cron,letsencrypt,ssh,sysctl,data,apps/backend,scripts}
 
-echo "[1/6] secrets"
+copy_env_file() {
+  local src="$1"
+  local dest="$2"
+  local label="$3"
+  if [[ -f "$src" ]]; then
+    mkdir -p "$(dirname "$dest")"
+    cp -a "$src" "$dest"
+    chmod 600 "$dest" 2>/dev/null || true
+    echo "  ok: $label"
+  else
+    echo "  WARN: $label tidak ada: $src"
+  fi
+}
+
+echo "[1/7] secrets + env files"
 cp -a /opt/lazisnu/secrets/. "$STAGE_DIR/secrets/" 2>/dev/null || echo "  WARN: secrets kosong/tidak ada"
+copy_env_file /opt/lazisnu/.env "$STAGE_DIR/.env" ".env"
+copy_env_file /opt/lazisnu/.env.alertmanager "$STAGE_DIR/.env.alertmanager" ".env.alertmanager"
+copy_env_file /opt/lazisnu/.env.backup "$STAGE_DIR/.env.backup" ".env.backup"
+copy_env_file /opt/lazisnu/.env.backup-prod "$STAGE_DIR/.env.backup-prod" ".env.backup-prod"
+copy_env_file /opt/lazisnu/.env.staging "$STAGE_DIR/.env.staging" ".env.staging"
+copy_env_file /opt/lazisnu/apps/backend/.env "$STAGE_DIR/apps/backend/.env" "apps/backend/.env"
+copy_env_file /opt/lazisnu/apps/backend/.env.staging "$STAGE_DIR/apps/backend/.env.staging" "apps/backend/.env.staging"
 
-echo "[2/6] cron"
+echo "[2/7] cron"
 crontab -l > "$STAGE_DIR/cron/root-crontab" 2>/dev/null || echo "  WARN: crontab root tidak terbaca"
-cp -a /etc/cron.d/lazisnu-backup-health "$STAGE_DIR/cron/" 2>/dev/null || echo "  WARN: cron.d healthcheck tidak ada"
+shopt -s nullglob
+cron_files=(/etc/cron.d/lazisnu-*)
+shopt -u nullglob
+if (( ${#cron_files[@]} == 0 )); then
+  echo "  WARN: tidak ada /etc/cron.d/lazisnu-*"
+else
+  for cron_file in "${cron_files[@]}"; do
+    cp -a "$cron_file" "$STAGE_DIR/cron/"
+    echo "  ok: cron.d/$(basename "$cron_file")"
+  done
+fi
 
-echo "[3/6] letsencrypt (sertifikat) — bind mount nginx: /opt/lazisnu/nginx/certbot"
+echo "[3/7] letsencrypt (sertifikat) — bind mount nginx: /opt/lazisnu/nginx/certbot"
 if [[ -d /opt/lazisnu/nginx/certbot ]]; then
   cp -a /opt/lazisnu/nginx/certbot "$STAGE_DIR/letsencrypt/"
   echo "  ok: $(du -sh /opt/lazisnu/nginx/certbot | awk '{print $1}')"
@@ -56,12 +106,12 @@ else
   echo "  WARN: /opt/lazisnu/nginx/certbot tidak ada"
 fi
 
-echo "[4/6] sshd_config + sysctl"
+echo "[4/7] sshd_config + sysctl"
 cp -a /etc/ssh/sshd_config "$STAGE_DIR/ssh/" 2>/dev/null || true
 cp -a /etc/sysctl.conf "$STAGE_DIR/sysctl/" 2>/dev/null || true
 cp -a /etc/sysctl.d "$STAGE_DIR/sysctl/" 2>/dev/null || true
 
-echo "[5/6] data bind-mount (grafana/prometheus)"
+echo "[5/7] data bind-mount (grafana/prometheus)"
 if [[ "$INCLUDE_DATA" == "1" ]]; then
   for d in grafana-data prometheus-data; do
     if [[ -d "/opt/lazisnu/$d" ]]; then
@@ -75,7 +125,29 @@ else
   echo "  skip: history metrik tidak disertakan (gunakan --with-data bila perlu)"
 fi
 
-echo "[6/6] tar + upload R2"
+echo "[6/7] VM-local scripts + manifest"
+if [[ -f /opt/lazisnu/scripts/backup-prod.sh ]]; then
+  cp -a /opt/lazisnu/scripts/backup-prod.sh "$STAGE_DIR/scripts/backup-prod.sh"
+  echo "  ok: scripts/backup-prod.sh"
+else
+  echo "  WARN: /opt/lazisnu/scripts/backup-prod.sh tidak ada (cek /etc/cron.d/lazisnu-backup-prod)"
+fi
+
+if git -C /opt/lazisnu rev-parse HEAD >/dev/null 2>&1; then
+  git -C /opt/lazisnu rev-parse HEAD > "$STAGE_DIR/REVISION"
+  echo "  ok: REVISION $(cat "$STAGE_DIR/REVISION")"
+else
+  echo "  WARN: tidak bisa membaca git HEAD /opt/lazisnu"
+fi
+
+{
+  echo "# Manifest dibuat $(date -Is) dari $(hostname)"
+  echo "# path\tmode\towner\tbytes"
+  find "$STAGE_DIR" -type f -printf '%P\t%m\t%u:%g\t%s\n' | sort
+} > "$STAGE_DIR/MANIFEST.txt"
+echo "  ok: MANIFEST.txt"
+
+echo "[7/7] tar + upload R2"
 tar -czf "$TARBALL" -C "$(dirname "$STAGE_DIR")" "$(basename "$STAGE_DIR")"
 rm -rf "$STAGE_DIR"
 
@@ -106,4 +178,6 @@ fi
 rm -f "$TARBALL"
 
 echo "SUCCESS r2_key=$R2_KEY size_bytes=$SIZE_BYTES"
-echo "Simpan r2_key ini — dibutuhkan saat migrasi (docs/MIGRATION-VM.md)."
+echo "PENTING: gunakan key lengkap di atas SEKALI. Jangan menambahkan prefix migrasi/ lagi."
+echo "Contoh unduh: aws s3 cp s3://\$R2_BUCKET_NAME/\$R2_KEY - --endpoint-url \$R2_ENDPOINT | tar -xzf - -C /opt/lazisnu --strip-components=1"
+echo "Bootstrap: siapkan .env.backup via scp (root 0600) atau token R2 read-only; arsip tidak bisa mengunduh dirinya sendiri."

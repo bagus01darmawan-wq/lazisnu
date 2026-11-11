@@ -6,3 +6,8 @@
 # Healthcheck staging backup (marker terpisah backup-status-staging/; log & alert
 # state terpisah di backups-staging/; alert Discord channel yang sama).
 18 * * * * root /usr/bin/flock -n /run/lock/lazisnu-backup-health-staging.lock /usr/bin/timeout --foreground 5m bash -c 'BACKUP_ENV_FILE=/opt/lazisnu/secrets/env.backup-staging bash /opt/lazisnu/scripts/backup-healthcheck.sh'
+
+# Healthcheck backup produksi khusus (folder/prefix/marker terpisah dari backup
+# produksi default di backups/). WAJIB memakai kutipan pada bash -c: tanpa itu,
+# cron hanya menjalankan assignment variabel dan skrip tidak pernah dieksekusi.
+19 * * * * root /usr/bin/flock -n /run/lock/lazisnu-backup-health-prod.lock /usr/bin/timeout --foreground 5m bash -c 'BACKUP_ENV_FILE=/opt/lazisnu/.env.backup-prod R2_STATUS_KEY=backup-status/lazisnu-prod-latest.json BACKUP_R2_PREFIX=backups-prod BACKUP_DIR=/opt/lazisnu/backups-prod bash /opt/lazisnu/scripts/backup-healthcheck.sh'

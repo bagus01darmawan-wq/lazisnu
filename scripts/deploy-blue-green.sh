@@ -187,6 +187,28 @@ smoke_test() {
   return 1
 }
 
+# ─── Fungsi: pastikan file upstream ada dan berupa file biasa ───
+# Docker Compose membuat direktori jika bind-mount source tidak ada sebelum
+# nginx start. Setelah itu `cat > upstream.conf` akan gagal. Fungsi ini
+# membuat bootstrap dari upstream.conf.example dan menolak direktori.
+ensure_upstream_file() {
+  if [ -d "$NGINX_UPSTREAM_FILE" ]; then
+    err "NGINX_UPSTREAM_FILE adalah direktori: $NGINX_UPSTREAM_FILE"
+    err "Hapus direktori itu, lalu copy nginx/upstream.conf.example."
+    return 1
+  fi
+  if [ ! -f "$NGINX_UPSTREAM_FILE" ]; then
+    if [ -f "$PROJECT_DIR/nginx/upstream.conf.example" ]; then
+      cp "$PROJECT_DIR/nginx/upstream.conf.example" "$NGINX_UPSTREAM_FILE"
+      warn "upstream.conf tidak ada — dibuat dari nginx/upstream.conf.example"
+    else
+      err "upstream.conf tidak ada dan nginx/upstream.conf.example tidak ditemukan"
+      return 1
+    fi
+  fi
+  return 0
+}
+
 # ─── Fungsi: update nginx upstream ───
 update_nginx_upstream() {
   local color=$1
@@ -194,6 +216,8 @@ update_nginx_upstream() {
   local web_port
   backend_port=$(get_backend_port "$color")
   web_port=$(get_web_port "$color")
+
+  ensure_upstream_file || return 1
 
   info "Updating nginx upstream → ${YELLOW}${color}${NC}..."
 
@@ -209,22 +233,31 @@ NGINXEOF
 
 # ─── Fungsi: reload nginx ───
 reload_nginx() {
-  info "Reloading nginx..."
+  local target="${1:?target color required}"
+  local previous="${2:-}"
+
+  info "Reloading nginx (target: ${target}, previous: ${previous:-none})..."
   if docker exec "$NGINX_CONTAINER" nginx -t 2>&1; then
     docker exec "$NGINX_CONTAINER" nginx -s reload
     ok "Nginx reloaded successfully"
-  else
-    err "Nginx config test FAILED — rolling back upstream"
-    # Kembalikan upstream ke warna lama
-    local active
-    active=$(get_active_color)
-    if [ -n "$active" ] && [ "$active" != "$1" ]; then
-      update_nginx_upstream "$active"
-      docker exec "$NGINX_CONTAINER" nginx -s reload
-      err "Rolled back to ${active}"
-    fi
-    return 1
+    return 0
   fi
+
+  err "Nginx config test FAILED — mencoba rollback upstream"
+  # PENTING: update_nginx_upstream() sudah menimpa file SEBELUM nginx -t.
+  # Karena itu warna lama tidak boleh dibaca ulang dari file (get_active_color
+  # akan mengembalikan target). Caller wajib mengoper warna sebelumnya.
+  if [ -n "$previous" ] && [ "$previous" != "$target" ]; then
+    if update_nginx_upstream "$previous" && docker exec "$NGINX_CONTAINER" nginx -t 2>&1; then
+      docker exec "$NGINX_CONTAINER" nginx -s reload
+      err "Rolled back upstream to ${previous}"
+    else
+      err "Rollback upstream ke ${previous} JUGA GAGAL — intervensi manual"
+    fi
+  else
+    err "Tidak ada warna sebelumnya — upstream dibiarkan ${target}; intervensi manual"
+  fi
+  return 1
 }
 
 # ─── Fungsi: teardown warna lama ───
@@ -360,6 +393,7 @@ case "$COMMAND" in
     ;;
   rollback)
     # Rollback: switch ke warna lama
+    ensure_upstream_file || exit 1
     ACTIVE=$(get_active_color)
     if [ -z "$ACTIVE" ]; then
       err "Tidak ada environment yang aktif — tidak bisa rollback"
@@ -382,7 +416,7 @@ case "$COMMAND" in
 
     info "Rolling back to ${YELLOW}${TARGET}${NC}..."
     update_nginx_upstream "$TARGET"
-    reload_nginx "$TARGET"
+    reload_nginx "$TARGET" "$ACTIVE"
     ok "Rollback complete — now serving ${TARGET}"
     exit 0
     ;;
@@ -409,6 +443,7 @@ case "$COMMAND" in
     ;;
 esac
 
+ensure_upstream_file || exit 1
 ACTIVE=$(get_active_color)
 
 # ─── Validasi ───
@@ -472,7 +507,7 @@ fi
 
 # ─── Step 4: Switch nginx ───
 update_nginx_upstream "$TARGET"
-if ! reload_nginx "$TARGET"; then
+if ! reload_nginx "$TARGET" "$ACTIVE"; then
   err "Nginx reload FAILED"
   exit 1
 fi
