@@ -4,28 +4,30 @@ groups:
     rules:
 
       # ──────────────────────────────────────────
-      # CPU backend > 70% dari 4 inti VM selama 5 menit — alarm P1
+      # CPU backend > 70% dari 2 vCPU VM selama 5 menit — alarm P1
       # (keputusan P1 rencana trustProxy 1 Nov 2026: prasyarat tahap 3,
       # batas 200/menit per IP + pemutus arus 3.000/menit).
       # Metric: process_cpu_seconds_total — rate-nya = inti terpakai (fraksi
-      # per proses, 1.0 = satu inti penuh). Dibagi 4 (jumlah inti VM) agar
+      # per proses, 1.0 = satu inti penuh). Dibagi 2 (jumlah vCPU VM) agar
       # ambang 70 berarti 70% kapasitas MESIN, bukan 70% satu inti — kalau
       # dipasang mentah "> 70" (=0,7 inti), alarm akan berbunyi terus pada
-      # beban penuh perkiraan 3.000/menit yang hanya ~0,8 inti (20% mesin).
-      # Perkiraan puncak terukur: 0,8 inti ≈ 20% — alarm baru berbunyi saat
-      # backend memakan 2,8 inti (3,5× puncak perkiraan).
+      # beban penuh perkiraan 3.000/menit yang hanya ~0,8 inti (40% mesin).
+      # Perkiraan puncak terukur: 0,8 inti ≈ 40% — alarm baru berbunyi saat
+      # backend memakan 1,4 inti (1,75× puncak perkiraan).
+      # Catatan migrasi Biznet: target 2 vCPU. Jangan kembalikan ke /4 tanpa
+      # menyesuaikan ulang kapasitas mesin.
       # ──────────────────────────────────────────
       - alert: HighCpuUsage
-        expr: sum(rate(process_cpu_seconds_total{job="lazisnu-backend"}[1m])) / 4 * 100 > 70
+        expr: sum(rate(process_cpu_seconds_total{job="lazisnu-backend"}[1m])) / 2 * 100 > 70
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "CPU backend tinggi ({{ $value | printf \"%.1f\" }}% dari 4 inti)"
+          summary: "CPU backend tinggi ({{ $value | printf \"%.1f\" }}% dari 2 vCPU)"
           description: >
-            Backend Lazisnu memakai lebih dari 70% kapasitas CPU VM (4 inti)
+            Backend Lazisnu memakai lebih dari 70% kapasitas CPU VM (2 vCPU)
             selama 5 menit — alarm P1, prasyarat tahap 3. Perkiraan beban penuh
-            batas 3.000/menit hanya ~20%; bila ini terpicu, ada beban di luar
+            batas 3.000/menit hanya ~40%; bila ini terpicu, ada beban di luar
             model. Cek: docker stats, log backend, query lambat Supabase.
 
       # ──────────────────────────────────────────
