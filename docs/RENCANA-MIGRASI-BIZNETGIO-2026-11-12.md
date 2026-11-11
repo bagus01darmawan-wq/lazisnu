@@ -130,6 +130,20 @@ Dijalankan read-only dengan `scripts/migration-preflight.sh`:
   `lazisnu_vm.pub`. Import public key itu ke Biznet. Key RSA `qUz...` dan key Tencent
   hanya legacy.
 
+### 3.2 Hasil eksekusi Fase 0 — 12 Nov 2026 02:34 WIB
+
+| Item | Nilai |
+|---|---|
+| Kuma backup | `kuma/20261112/kuma_20261112_023405.db.gz` — 1.837.972 byte |
+| Bundel migrasi | `migrasi/lazisnu-vm-export-20261112_023415.tar.gz` — 30.871 byte |
+| Isi bundel | `.env`, `.env.alertmanager`, `.env.backup`, `.env.backup-prod`, `apps/backend/.env*`, 5 cron.d, certbot (termasuk symlink `live/*.pem`), `scripts/backup-prod.sh`, `REVISION 21757aa`, `MANIFEST.txt` |
+| Redis baseline | `revoked=1`, `refresh=8`, `dbsize=11` |
+| CI saat eksekusi | tidak ada run in-progress/queued |
+| Catatan | `.env.staging` top-level tidak ada; `cron/lazisnu-backup-health` di bundel masih versi lama yang kutipannya rusak — Fase 2.3 menggantinya dengan template repo; `cron/root-crontab` masih berisi QCloud — hapus sebelum dipasang |
+
+`.env.backup` tetap harus disiapkan out-of-band (scp/token baca R2) untuk mengunduh bundel;
+arsip tidak bisa mengunduh dirinya sendiri.
+
 ---
 
 ## 4. Target: Biznet Gio NEO Lite MS 4.2
