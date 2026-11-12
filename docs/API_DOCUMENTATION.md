@@ -854,6 +854,10 @@ agar tak ada objek yatim.
 
 **Endpoint:** `GET /admin/branch-submissions?year=&month=` • `GET /admin/branch-submissions/{id}` (+ `ppk_penyusun`)
 
+Daftar dan detail hanya membaca laporan yang sudah ada. Bila belum ada laporan
+untuk periode itu, daftar mengembalikan `[]`; GET tidak membuat atau menyegarkan
+baris DRAFT.
+
 **Endpoint:** `POST /admin/branch-submissions/{id}/sign` (ADMIN_RANTING pemilik)
 
 **Request:**

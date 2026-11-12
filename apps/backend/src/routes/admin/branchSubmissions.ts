@@ -8,10 +8,7 @@ import { assertBranchAccess } from '../../middleware/ownership';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { isAppError } from '../../utils/AppError';
 import { signBranchSchema, reopenBranchSchema } from './schemas';
-import {
-  ensureBranchSubmission,
-  toBranchResponse,
-} from '../../services/ppkSubmissions';
+import { toBranchResponse } from '../../services/ppkSubmissions';
 import {
   deleteBaPdf,
   generateBaPdf,
@@ -55,7 +52,7 @@ function sendAppError(reply: FastifyReply, error: unknown, logger?: { error: (e:
 }
 
 export async function branchSubmissionsRoutes(fastify: FastifyInstance) {
-  // GET /v1/admin/branch-submissions?year=&month= — daftar scope-nya.
+  // GET /v1/admin/branch-submissions?year=&month= returns existing reports only.
   fastify.get('/branch-submissions', rantingOnly, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const user = request.currentUser!;
@@ -96,11 +93,19 @@ export async function branchSubmissionsRoutes(fastify: FastifyInstance) {
       const nameOf = new Map<string, string>();
       for (const b of branchRows) nameOf.set(b.id, b.name);
 
-      const out: (ReturnType<typeof toBranchResponse> & { branch_name: string | null })[] = [];
-      for (const branchId of branchIds) {
-        const sub = await ensureBranchSubmission(branchId, year, month);
-        out.push({ ...toBranchResponse(sub), branch_name: nameOf.get(branchId) ?? null });
-      }
+      const submissions = branchIds.length > 0
+        ? await db.query.branchSubmissions.findMany({
+            where: and(
+              inArray(schema.branchSubmissions.branchId, branchIds),
+              eq(schema.branchSubmissions.periodYear, year),
+              eq(schema.branchSubmissions.periodMonth, month),
+            ),
+          })
+        : [];
+      const out = submissions.map((sub) => ({
+        ...toBranchResponse(sub),
+        branch_name: nameOf.get(sub.branchId) ?? null,
+      }));
       return sendSuccess(reply, out);
     } catch (error: unknown) {
       if (error instanceof z.ZodError) {
@@ -125,7 +130,6 @@ export async function branchSubmissionsRoutes(fastify: FastifyInstance) {
         { userId: user.userId, role: user.role, branchId: user.branchId, districtId: user.districtId },
         sub.branchId,
       );
-      const ensured = await ensureBranchSubmission(sub.branchId, sub.periodYear, sub.periodMonth);
       const ppks = await db.query.ppkSubmissions.findMany({
         where: and(
           eq(schema.ppkSubmissions.branchId, sub.branchId),
@@ -135,7 +139,7 @@ export async function branchSubmissionsRoutes(fastify: FastifyInstance) {
         with: { officer: { columns: { fullName: true } } },
       });
       return sendSuccess(reply, {
-        ...toBranchResponse(ensured.status === 'DRAFT' ? ensured : sub),
+        ...toBranchResponse(sub),
         ppk_penyusun: ppks.map((p) => ({
           officer_name: p.officer?.fullName ?? p.officerId,
           total: Number(p.totalAmount),
