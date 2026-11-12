@@ -70,3 +70,7 @@ redis-data/
 # Build native C++ (CMake/ninja) — artefak lokap, jangan pernah di-commit
 apps/mobile/android/app/.cxx/
 apps/mobile/android/**/.cxx/
+
+# Local taste notes; do not commit.
+.commandcode/taste/taste.md
+.commandcode/taste/taste/taste.md
