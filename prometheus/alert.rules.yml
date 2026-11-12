@@ -5,10 +5,17 @@ groups:
 
       # ──────────────────────────────────────────
       # CPU backend > 70% dari 2 vCPU VM selama 5 menit — alarm P1
+      # (keputusan P1 rencana trustProxy 1 Nov 2026: prasyarat tahap 3,
+      # batas 200/menit per IP + pemutus arus 3.000/menit).
       # Metric: process_cpu_seconds_total — rate-nya = inti terpakai (fraksi
       # per proses, 1.0 = satu inti penuh). Dibagi 2 (jumlah vCPU VM) agar
-      # ambang 70 berarti 70% kapasitas MESIN, bukan 70% satu inti.
-      # Catatan migrasi Biznet: target 2 vCPU.
+      # ambang 70 berarti 70% kapasitas MESIN, bukan 70% satu inti — kalau
+      # dipasang mentah "> 70" (=0,7 inti), alarm akan berbunyi terus pada
+      # beban penuh perkiraan 3.000/menit yang hanya ~0,8 inti (40% mesin).
+      # Perkiraan puncak terukur: 0,8 inti ≈ 40% — alarm baru berbunyi saat
+      # backend memakan 1,4 inti (1,75× puncak perkiraan).
+      # Catatan migrasi Biznet: target 2 vCPU. Jangan kembalikan ke /4 tanpa
+      # menyesuaikan ulang kapasitas mesin.
       # ──────────────────────────────────────────
       - alert: HighCpuUsage
         expr: sum(rate(process_cpu_seconds_total{job="lazisnu-backend"}[1m])) / 2 * 100 > 70
@@ -19,7 +26,32 @@ groups:
           summary: "CPU backend tinggi ({{ $value | printf \"%.1f\" }}% dari 2 vCPU)"
           description: >
             Backend Lazisnu memakai lebih dari 70% kapasitas CPU VM (2 vCPU)
-            selama 5 menit. Instance: {{ $labels.instance }}
+            selama 5 menit — alarm P1, prasyarat tahap 3. Perkiraan beban penuh
+            batas 3.000/menit hanya ~40%; bila ini terpicu, ada beban di luar
+            model. Cek: docker stats, log backend, query lambat Supabase.
+
+      # ──────────────────────────────────────────
+      # Latensi p95 > 500ms selama 5 menit — alarm P1 (pasangan HighCpuUsage)
+      # Metric: http_request_duration_ms_bucket — histogram prom-client, unit
+      # MILLISEKONDI, label le/method/route/statusCode (terverifikasi di
+      # blue-backend:3001/metrics). p95 dihitung agregat kedua warna
+      # blue-green (sum by le); warna idle menyumbang rate 0.
+      # Baseline terukur 1 Nov 2026: p95 143ms (jendela 30 m), 48ms (5 m) pada
+      # beban rendah. Antrean database/pool muncul SEBELUM 429 — gejalanya
+      # latensi naik, bukan penolakan; itulah yang alarm ini tangkap.
+      # ──────────────────────────────────────────
+      - alert: BackendLatencyP95High
+        expr: histogram_quantile(0.95, sum by (le) (rate(http_request_duration_ms_bucket{job="lazisnu-backend"}[5m]))) > 500
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Latensi p95 backend tinggi ({{ $value | printf \"%.0f\" }}ms)"
+          description: >
+            Latensi p95 backend Lazisnu melebihi 500ms selama 5 menit — alarm
+            P1, prasyarat tahap 3. Dugaan utama: antrean di database/pool
+            Supabase (transaction mode, SELECT 1 ≈ 82ms) atau CPU. Cek: Grafana
+            overview, docker logs, Supabase observability.
 
       # ──────────────────────────────────────────
       # Memory (Heap) > ~85% dari heap_size_limit
