@@ -95,15 +95,15 @@ describe('GET /mobile/tasks/stats-range — event-based', () => {
     await db.insert(schema.cans).values(cans);
     canIds.push(...cans.map((c) => c.id));
 
-    // 10 tugas periode Oktober 2026: 1 dijemput, 1 tidak dijemput, 8 ACTIVE.
+    // 10 tugas periode Oktober 2026: 2 dijemput (1 berisi, 1 kosong), 1 tidak dijemput, 7 ACTIVE.
     const assignments = cans.slice(0, 10).map((can, index) => ({
       id: randomUUID(),
       officerId: ids.officer,
       canId: can.id,
       periodYear: 2026,
       periodMonth: 10,
-      status: index === 0 ? ('COMPLETED' as const) : index === 1 ? ('UNCOLLECTED' as const) : ('ACTIVE' as const),
-      completedAt: index <= 1 ? new Date(2026, 10, 5, 10, 0, 0) : null,
+      status: index === 0 || index === 2 ? ('COMPLETED' as const) : index === 1 ? ('UNCOLLECTED' as const) : ('ACTIVE' as const),
+      completedAt: index <= 2 ? new Date(2026, 10, 5, 10, 0, 0) : null,
       skipReasonCode: index === 1 ? ('OWNER_ABSENT' as const) : null,
     }));
     // Tugas November (ACTIVE) tidak boleh ikut dihitung sebagai sisa periode
@@ -120,18 +120,32 @@ describe('GET /mobile/tasks/stats-range — event-based', () => {
     });
     await db.insert(schema.assignments).values(assignments);
 
-    await db.insert(schema.collections).values({
-      assignmentId: assignments[0].id,
-      canId: cans[0].id,
-      officerId: ids.officer,
-      nominal: 50000n,
-      collectedAt: new Date(2026, 10, 5, 10, 0, 0),
-      submittedAt: new Date(2026, 10, 5, 10, 0, 0),
-      syncedAt: new Date(2026, 10, 5, 10, 0, 0),
-      syncStatus: 'COMPLETED',
-      serverTimestamp: new Date(2026, 10, 5, 10, 0, 0),
-      submitSequence: 1,
-    });
+    await db.insert(schema.collections).values([
+      {
+        assignmentId: assignments[0].id,
+        canId: cans[0].id,
+        officerId: ids.officer,
+        nominal: 50000n,
+        collectedAt: new Date(2026, 10, 5, 10, 0, 0),
+        submittedAt: new Date(2026, 10, 5, 10, 0, 0),
+        syncedAt: new Date(2026, 10, 5, 10, 0, 0),
+        syncStatus: 'COMPLETED',
+        serverTimestamp: new Date(2026, 10, 5, 10, 0, 0),
+        submitSequence: 1,
+      },
+      {
+        assignmentId: assignments[2].id,
+        canId: cans[2].id,
+        officerId: ids.officer,
+        nominal: 0n,
+        collectedAt: new Date(2026, 10, 5, 11, 0, 0),
+        submittedAt: new Date(2026, 10, 5, 11, 0, 0),
+        syncedAt: new Date(2026, 10, 5, 11, 0, 0),
+        syncStatus: 'COMPLETED',
+        serverTimestamp: new Date(2026, 10, 5, 11, 0, 0),
+        submitSequence: 1,
+      },
+    ]);
 
     token = app.jwt.sign({
       userId: ids.user,
@@ -158,12 +172,13 @@ describe('GET /mobile/tasks/stats-range — event-based', () => {
     expect(res.statusCode).toBe(200);
     const data = res.json().data;
 
-    expect(data.collected_in_range).toBe(1);
+    expect(data.collected_in_range).toBe(2);
+    expect(data.empty_in_range).toBe(1);
     expect(data.nominal_in_range).toBe(50000);
     expect(data.task_uncollected_in_range).toBe(1);
-    expect(data.task_closed_in_range).toBe(2);
+    expect(data.task_closed_in_range).toBe(3);
     expect(data.months_covered).toEqual(['2026-10']);
-    // 8 ACTIVE Oktober; tugas November tidak ikut karena bukan periode kejadian.
-    expect(data.task_active_in_periods).toBe(8);
+    // 7 ACTIVE Oktober; tugas November tidak ikut karena bukan periode kejadian.
+    expect(data.task_active_in_periods).toBe(7);
   });
 });

@@ -672,9 +672,10 @@ export async function tasksRoutes(fastify: FastifyInstance) {
             return { year: y as number, month: m as number };
           }),
         }),
-        // Kontrak baru: uang yang benar-benar tercatat di dalam rentang tanggal.
+        // Kontrak baru: uang dan jumlah kaleng kosong yang tercatat dalam rentang tanggal.
         db.select({
           collected: sql<number>`count(*)::int`,
+          empty: sql<number>`count(*) filter (where ${schema.collections.nominal} = 0)::int`,
           total_nominal: sql<number>`coalesce(sum(${schema.collections.nominal}), 0)::bigint`,
         }).from(schema.collections)
           .where(and(
@@ -728,6 +729,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         // kalender rentang. Dipakai label "Mencakup periode tugas".
         months_covered: eventPeriods,
         collected_in_range: collectedInRange,
+        empty_in_range: Number(rangeColRes?.empty ?? 0),
         nominal_in_range: Number(rangeColRes?.total_nominal ?? 0),
         task_completed_in_range: completedInRange,
         task_uncollected_in_range: uncollectedInRange,

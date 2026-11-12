@@ -123,6 +123,7 @@ const RangeStatsScreen: React.FC = () => {
   // selalu sinkron. "Mencakup periode tugas" berasal dari periode assignment
   // kejadian tersebut, bukan bulan kalender rentang.
   const collectedInRange = stats?.collected_in_range ?? stats?.collected ?? 0;
+  const emptyInRange = stats?.empty_in_range ?? 0;
   const nominalInRange = stats?.nominal_in_range ?? stats?.total_nominal ?? 0;
   const completedInRange = stats?.task_completed_in_range ?? stats?.task_completed ?? 0;
   const uncollectedInRange = stats?.task_uncollected_in_range ?? stats?.task_uncollected ?? 0;
@@ -200,9 +201,9 @@ const RangeStatsScreen: React.FC = () => {
                     label={'Dijemput (rentang)'}
                   />
                   <StatBlock
-                    icon={'cash-multiple'}
-                    value={formatCurrency(nominalInRange)}
-                    label={'Total Infak (rentang)'}
+                    icon={'water-off'}
+                    value={`${emptyInRange}`}
+                    label={'Kaleng Kosong (rentang)'}
                   />
                   <StatBlock
                     icon={'check-circle-outline'}
@@ -215,8 +216,8 @@ const RangeStatsScreen: React.FC = () => {
                     label={'Tidak Dijemput (rentang)'}
                   />
                 </View>
-                <Text style={styles.monthsText}>
-                  {closedInRange} selesai dalam rentang • {uncollectedInRange} tidak dijemput
+                <Text style={styles.totalInfakText}>
+                  {formatCurrency(nominalInRange)} Total Infak (rentang)
                 </Text>
                 {!!stats.months_covered.length && (
                   <Text style={styles.monthsText}>
@@ -335,6 +336,13 @@ const styles = StyleSheet.create({
   statLabel: {
     ...Typography.caption,
     color: Colors.text.secondary,
+  },
+  totalInfakText: {
+    ...Typography.bodySmall,
+    color: Colors.brand.deepGreen,
+    fontWeight: '800',
+    marginTop: Spacing.sm,
+    textAlign: 'center',
   },
   monthsText: {
     ...Typography.caption,

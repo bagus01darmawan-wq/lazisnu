@@ -6,8 +6,10 @@ import { splitRupiah } from './format';
 interface PerolehanHeroProps {
   /** Total nominal penjemputan pada periode (server, realtime per fetch). */
   nominal: number;
-  /** Jumlah kaleng berhasil dijemput pada periode (cakupan kecamatan). */
+  /** Jumlah seluruh penjemputan berhasil, termasuk yang nominalnya nol. */
   collected: number;
+  /** Jumlah penjemputan yang benar-benar berisi (nominal > 0). */
+  filled: number;
 }
 
 /**
@@ -18,7 +20,7 @@ interface PerolehanHeroProps {
  * server (kecamatan / satu ranting). Baris periode/scope/zona tidak
  * ditampilkan di sini — sudah ada di bawah judul halaman.
  */
-export function PerolehanHero({ nominal, collected }: PerolehanHeroProps) {
+export function PerolehanHero({ nominal, collected, filled }: PerolehanHeroProps) {
   const { currency, amount } = splitRupiah(nominal);
   const avgNominal = collected ? Math.round(Number(nominal || 0) / collected) : 0;
   const { currency: avgCurrency, amount: avgAmount } = splitRupiah(avgNominal);
@@ -40,7 +42,7 @@ export function PerolehanHero({ nominal, collected }: PerolehanHeroProps) {
       <div className="grid grid-cols-2 divide-x divide-white/10" role="list">
         <div className="px-4 text-center" role="listitem">
           <p className="text-xl font-black tracking-tight text-[#EAD19B] md:text-2xl">
-            {Number(collected || 0).toLocaleString('id-ID')}
+            {Number(filled || 0).toLocaleString('id-ID')}
           </p>
           <p className="mt-0.5 text-xs font-semibold text-[#F4F1EA]/60">
             Kaleng isi
