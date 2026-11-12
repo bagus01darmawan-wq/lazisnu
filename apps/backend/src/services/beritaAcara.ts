@@ -228,7 +228,6 @@ export function buildPpkBaText(params: {
       `Alamat : ${branchName}`,
       `Bertindak sebagai pengurus / manajemen NU Care Lazisnu Ranting ${branchName} yang selanjutnya disebut PIHAK KEDUA`,
       serahTerimaStatement(sub, transferAmount, params.collectionRange),
-      'Angka di atas dihitung otomatis oleh sistem dari per kaleng; tidak ada ketik manual.',
     ],
     signatures: {
       ppk: { filled: !!sub.ppkSignerId, signer_id: sub.ppkSignerId, signed_at: sub.ppkSignedAt },
@@ -313,7 +312,6 @@ export function buildBranchBaText(params: {
       `Alamat : ${branchName}`,
       `Bertindak sebagai pengurus / manajemen NU Care Lazisnu Ranting ${branchName} yang selanjutnya disebut PIHAK KEDUA`,
       serahTerimaStatement(sub, transferAmount, params.collectionRange),
-      'Angka di atas dihitung otomatis oleh sistem dari per kaleng; tidak ada ketik manual.',
     ],
     signatures: {
       ranting: { filled: !!sub.rantingSignerId, signer_id: sub.rantingSignerId, signed_at: sub.rantingSignedAt },

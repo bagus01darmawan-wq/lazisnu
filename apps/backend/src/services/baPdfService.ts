@@ -22,7 +22,6 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import * as fontkit from '@pdf-lib/fontkit';
-import QRCode from 'qrcode';
 import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { and, eq, inArray } from 'drizzle-orm';
@@ -164,7 +163,7 @@ async function newBaDoc(title: string): Promise<{ doc: PDFDocument; pages: BaPag
 }
 
 function ensureRoom(p: BaPage, needed: number): void {
-  if (p.y - needed < MARGIN + 120) {
+  if (p.y - needed < MARGIN) {
     p.page = p.doc.addPage([A4_WIDTH, A4_HEIGHT]);
     p.y = A4_HEIGHT - MARGIN;
   }
@@ -233,7 +232,7 @@ async function drawSignatures(
     { title: 'PIHAK PERTAMA', s: pertama },
   ];
   const colW = CONTENT_WIDTH / 2;
-  ensureRoom(p, 150);
+  ensureRoom(p, 160);
   const top = p.y;
   for (let i = 0; i < cols.length; i++) {
     const x = MARGIN + i * colW;
@@ -276,19 +275,9 @@ async function drawSignatures(
   p.y = top - 160;
 }
 
-async function drawQr(p: BaPage, payload: string): Promise<void> {
-  const buf = await QRCode.toBuffer(payload, { type: 'png', margin: 1, width: 140 });
-  const img = await p.doc.embedPng(buf);
-  const y = MARGIN + 10;
-  p.page.drawImage(img, { x: MARGIN, y, width: 110, height: 110 });
-  p.page.drawText(asciiSafe('Pindai untuk verifikasi SAH/TIDAK'), {
-    x: MARGIN + 120, y: y + 50, size: 9, font: p.font, color: rgb(0, 0, 0),
-  });
-}
 
 export interface BaPdfInput {
   ba: PpkBaText | BranchBaText;
-  qrPayload: string;
   signatures: Array<{ label: string; image: Buffer | null; signerId: string | null; name: string | null; at: Date | null }>;
 }
 
@@ -320,6 +309,41 @@ function drawParagraph(p: BaPage, text: string, opts: { size?: number; bold?: bo
   }
   p.y -= opts.gap ?? 6;
 }
+
+function drawStatements(p: BaPage, statements: string[]): void {
+  const size = 12;
+  const rows = statements.map((text) => {
+    const match = /^(Nama Petugas Amil \/ Relawan|No\. SK \/ Surat Tugas|Jabatan NU Care Lazisnu|Nama|Alamat)\s*:\s*(.*)$/.exec(text);
+    return match ? { label: match[1], value: match[2] } : null;
+  });
+  const labelWidth = Math.max(
+    0,
+    ...rows.flatMap((row) => row ? [p.font.widthOfTextAtSize(row.label, size)] : []),
+  );
+  const colonX = MARGIN + labelWidth + 6;
+  const valueX = colonX + 10;
+  const valueWidth = A4_WIDTH - MARGIN - valueX;
+
+  for (let i = 0; i < statements.length; i++) {
+    const row = rows[i];
+    if (!row) {
+      drawParagraph(p, statements[i], { size, gap: 6 });
+      continue;
+    }
+    const lines = wrapText(row.value, p.font, size, valueWidth);
+    for (let line = 0; line < lines.length; line++) {
+      ensureRoom(p, size + 4);
+      if (line === 0) {
+        p.page.drawText(row.label, { x: MARGIN, y: p.y - size, size, font: p.font, color: rgb(0, 0, 0) });
+        p.page.drawText(':', { x: colonX, y: p.y - size, size, font: p.font, color: rgb(0, 0, 0) });
+      }
+      p.page.drawText(lines[line], { x: valueX, y: p.y - size, size, font: p.font, color: rgb(0, 0, 0) });
+      p.y -= size + 4;
+    }
+    p.y -= 6;
+  }
+}
+
 
 /** F7/D-14: kop formulir org — logo + judul + kode, dalam kotak. */
 async function drawKop(p: BaPage, title: string, formCode: string): Promise<void> {
@@ -363,15 +387,12 @@ export async function renderBaPdf(input: BaPdfInput): Promise<Buffer> {
     await drawKop(p, 'BERITA ACARA SERAH TERIMA', input.ba.form_code);
   }
   if (input.ba.ba_number) drawCentered(p, `Nomor : ${input.ba.ba_number}`, { size: 12, bold: true, gap: 6 });
-  drawParagraph(p, `Periode: ${input.ba.period}`, { size: 12, gap: 8 });
-  drawTable(p, input.ba.table);
   if (input.ba.kind === 'branch' && input.ba.ppk_penyusun.length > 0) {
     drawLine(p, 'PPK penyusun:', { size: 12, bold: true, gap: 2 });
     drawTable(p, input.ba.ppk_penyusun.map((x) => ({ label: x.officer_name, value: x.total })));
   }
-  for (const s of input.ba.statements) {
-    drawParagraph(p, s, { size: 12, gap: 6 });
-  }
+  drawStatements(p, input.ba.statements);
+  drawTable(p, input.ba.table);
   if (input.ba.draft_warning) {
     drawLine(p, input.ba.draft_warning, { size: 12, bold: true, gap: 8 });
   }
@@ -385,12 +406,11 @@ export async function renderBaPdf(input: BaPdfInput): Promise<Buffer> {
       { label: 'Bendahara MWC', image: input.signatures[1]?.image ?? null, signerId: input.ba.signatures.mwc_bendahara.signer_id, name: input.signatures[1]?.name ?? null, at: input.ba.signatures.mwc_bendahara.signed_at },
     ];
   await drawSignatures(p, ordered);
-  await drawQr(p, input.qrPayload);
   return Buffer.from(await doc.save());
 }
 
 // ---------------------------------------------------------------------------
-// Snapshot kanonis (masukan hash konten QR + verifikasi).
+// Snapshot kanonis untuk hash konten dan verifikasi.
 // ---------------------------------------------------------------------------
 
 export function ppkContentSnapshot(row: {
@@ -567,9 +587,6 @@ export async function ensurePpkBaPdf(submissionId: string, opts: { force?: boole
   const baNumber = await ensureBaNumber('ppk', {
     id: sub.id, version: sub.version, baNumber: sub.baNumber, branchId: sub.branchId, finalizedAt: sub.finalizedAt,
   });
-  const snapshot = ppkContentSnapshot({ ...sub, baNumber });
-  const contentHash = baContentHash('ppk', snapshot);
-  const qrPayload = buildBaVerifyPayload({ type: 'ppk', id: sub.id, version: sub.version, hash: contentHash });
   const [ppkImg, bendaharaImg] = await fetchSignatureImages([sub.ppkSignatureUrl, sub.bendaharaSignatureUrl]);
   const names = await signerDisplayNames([sub.ppkSignerId, sub.bendaharaSignerId]);
   const { total: aggregateTotal } = await getAggregateTotal(db, sub.officerId, sub.periodYear, sub.periodMonth);
@@ -593,7 +610,6 @@ export async function ensurePpkBaPdf(submissionId: string, opts: { force?: boole
   });
   const pdf = await renderBaPdf({
     ba,
-    qrPayload,
     signatures: [
       { label: 'PPK', image: ppkImg, signerId: sub.ppkSignerId, name: (sub.ppkSignerId && (names.get(sub.ppkSignerId) ?? sub.officer?.fullName)) || null, at: sub.ppkSignedAt },
       { label: 'Bendahara', image: bendaharaImg, signerId: sub.bendaharaSignerId, name: (sub.bendaharaSignerId && names.get(sub.bendaharaSignerId)) || null, at: sub.bendaharaSignedAt },
@@ -628,9 +644,6 @@ export async function ensureBranchBaPdf(submissionId: string, opts: { force?: bo
   const baNumber = await ensureBaNumber('branch', {
     id: sub.id, version: sub.version, baNumber: sub.baNumber, branchId: sub.branchId, districtId: sub.districtId, finalizedAt: sub.finalizedAt,
   });
-  const snapshot = branchContentSnapshot({ ...sub, baNumber });
-  const contentHash = baContentHash('branch', snapshot);
-  const qrPayload = buildBaVerifyPayload({ type: 'branch', id: sub.id, version: sub.version, hash: contentHash });
   const [rantingImg, mwcImg] = await fetchSignatureImages([sub.rantingSignatureUrl, sub.mwcBendaharaSignatureUrl]);
   const names = await signerDisplayNames([sub.rantingSignerId, sub.mwcBendaharaSignerId]);
   const collectionRange = await getCollectionDateRange({
@@ -651,7 +664,6 @@ export async function ensureBranchBaPdf(submissionId: string, opts: { force?: bo
   });
   const pdf = await renderBaPdf({
     ba,
-    qrPayload,
     signatures: [
       { label: 'Bendahara Ranting', image: rantingImg, signerId: sub.rantingSignerId, name: (sub.rantingSignerId && names.get(sub.rantingSignerId)) || null, at: sub.rantingSignedAt },
       { label: 'Bendahara MWC', image: mwcImg, signerId: sub.mwcBendaharaSignerId, name: (sub.mwcBendaharaSignerId && names.get(sub.mwcBendaharaSignerId)) || null, at: sub.mwcBendaharaSignedAt },
@@ -666,7 +678,7 @@ export async function ensureBranchBaPdf(submissionId: string, opts: { force?: bo
  * nama, pihak, atau keberadaan id.
  *
  * C1-T6 (F3): `valid` berarti "BA SAH + konten cocok hash" — baris harus
- * `FINAL`/`FINAL_NOL` (QR hanya dicetak di PDF FINAL). Hash benar + status
+ * `FINAL`/`FINAL_NOL`. Hash benar + status
  * DRAFT/PPK_SIGNED → `false`.
  * C1-T7: versi lama yang sudah di-reopen tetap terverifikasi via
  * `ba_pdf_archives` (hash konten versi itu vs status saat diarsipkan).
