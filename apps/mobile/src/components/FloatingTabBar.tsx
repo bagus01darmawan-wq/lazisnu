@@ -99,6 +99,11 @@ export const FloatingTabBar: React.FC<BottomTabBarProps> = ({state, descriptors,
 
 const styles = StyleSheet.create({
   wrapper: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 20,
     backgroundColor: 'transparent',
   },
   bar: {

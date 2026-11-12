@@ -225,6 +225,7 @@ function mapHistoryToCollection(item: HistoryItem): Collection {
     can: {
       qr_code: item.qr_code,
       owner_name: item.owner_name,
+      owner_phone: item.owner_phone,
       owner_address: item.owner_address,
       dukuh_name: item.dukuh_name,
       rt: item.rt,
@@ -259,6 +260,7 @@ export function mergeCollectionsWithQueues(
       can: {
         qr_code: task?.qr_code || 'Offline',
         owner_name: task?.owner_name || 'Kaleng Masukan QR',
+        owner_phone: task?.owner_phone,
         owner_address: task?.owner_address || '',
         dukuh_name: task?.dukuh_name,
         rt: task?.rt,

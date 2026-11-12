@@ -1,16 +1,15 @@
 import React, {memo} from 'react';
 import {StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import Animated, {FadeInUp, Layout as AnimatedLayout} from 'react-native-reanimated';
 import type {CanCondition, Collection} from '@lazisnu/shared-types';
 import {AppCard} from '../../components/ui';
 import {Colors, Radius, Spacing, Typography} from '../../theme';
-import {formatCanAddress, formatCurrency, formatDate} from '../../utils';
+import {formatDate, formatRtRw} from '../../utils';
 
 export interface HistoryItemProps {
   item: Collection;
   index: number;
-  onCorrect: (item: Collection) => void;
+  onPress: (item: Collection) => void;
   onViewFailureDetail?: (item: Collection) => void;
 }
 
@@ -25,23 +24,15 @@ const CONDITION_LABELS: Record<CanCondition, string> = {
 const getConditionLabel = (condition?: CanCondition): string =>
   condition ? CONDITION_LABELS[condition] : 'Aktif';
 
-/**
- * Kondisi non-AKTIF ditampilkan sebagai teks berwarna tanpa pembungkus
- * (QA 2026-10-25): Rusak = oranye warning, Hilang = merah error — selaras
- * warna tombol kondisi di Input Penjemputan. AKTIF tidak berlabel, dan
- * item tanpa informasi kondisi (entri optimistis pra-sinkron) juga tidak
- * menampilkan apa pun agar tidak menyesatkan.
- *
- * Gaya disiapkan lewat StyleSheet, bukan objek inline, agar lolos
- * react-native/no-inline-styles.
- */
-const CONDITION_TEXT_STYLES = StyleSheet.create({
-  RUSAK: {color: Colors.status.warning, fontWeight: '700'},
-  HILANG: {color: Colors.status.error, fontWeight: '700'},
+const CONDITION_CHIP_STYLES = StyleSheet.create({
+  RUSAK: {backgroundColor: Colors.surface.warningSoft},
+  HILANG: {backgroundColor: Colors.surface.errorSoft},
 });
 
-const getConditionTextStyle = (condition?: CanCondition) =>
-  condition === 'RUSAK' || condition === 'HILANG' ? CONDITION_TEXT_STYLES[condition] : undefined;
+const CONDITION_CHIP_TEXT_STYLES = StyleSheet.create({
+  RUSAK: {color: Colors.status.warning},
+  HILANG: {color: Colors.status.error},
+});
 
 /** Ikon status sinkronisasi tetap terpisah dari kondisi bisnis kaleng. */
 const getStatusIcon = (item: Collection): {name: string; color: string; label: string} => {
@@ -60,15 +51,18 @@ const getStatusIcon = (item: Collection): {name: string; color: string; label: s
   return {name: 'check-circle-outline', color: Colors.status.success, label: 'Tersimpan'};
 };
 
-export const HistoryItem = memo(
-  ({item, index, onCorrect, onViewFailureDetail}: HistoryItemProps) => {
-    const statusIcon = getStatusIcon(item);
-    const conditionTextStyle = getConditionTextStyle(item.condition);
+export const HistoryItem = memo(({item, onPress, onViewFailureDetail}: HistoryItemProps) => {
+  const statusIcon = getStatusIcon(item);
+  const condition =
+    item.condition === 'RUSAK' || item.condition === 'HILANG' ? item.condition : null;
 
-    return (
-      <Animated.View
-        entering={FadeInUp.delay(index * 40).duration(320)}
-        layout={AnimatedLayout.springify()}>
+  return (
+    <TouchableOpacity
+      accessibilityRole={'button'}
+      accessibilityLabel={`Buka detail penjemputan ${item.can?.owner_name || 'Donatur'}`}
+      activeOpacity={0.85}
+      onPress={() => onPress(item)}>
+      <View>
         <AppCard variant={'elevated'} style={styles.historyCard}>
           <View style={styles.cardTopRow}>
             <View style={styles.dateRow}>
@@ -84,84 +78,59 @@ export const HistoryItem = memo(
           </View>
 
           <View style={styles.identityRow}>
-            <View style={styles.packageIcon}>
-              <Icon name={'package-variant-closed'} size={24} color={Colors.brand.deepGreen} />
-            </View>
             <View style={styles.identityContent}>
               <Text style={styles.ownerName} numberOfLines={1}>
                 {item.can?.owner_name || 'Donatur'}
               </Text>
-              <Text style={styles.ownerAddress} numberOfLines={2}>
-                {formatCanAddress(item.can ?? {}, 'Alamat tidak tersedia')}
+              <Text style={styles.ownerRtRw} numberOfLines={1}>
+                {formatRtRw(item.can?.rt, item.can?.rw) || 'RT/RW belum tersedia'}
+              </Text>
+              <Text style={styles.ownerDukuh} numberOfLines={1}>
+                {item.can?.dukuh_name?.trim() ||
+                  item.can?.owner_address?.trim() ||
+                  'Nama dukuh belum tersedia'}
               </Text>
             </View>
-            <Icon
-              name={statusIcon.name}
-              size={22}
-              color={statusIcon.color}
-              accessibilityLabel={statusIcon.label}
-            />
-          </View>
-
-          <View style={styles.valueRow}>
-            <View style={styles.valueCopy}>
-              <Text style={styles.valueLabel}>Nominal diterima</Text>
-              <Text
-                style={styles.nominalValue}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.8}>
-                {formatCurrency(Number(item.nominal))}
-              </Text>
-              {conditionTextStyle ? (
-                <Text style={[styles.conditionLabel, conditionTextStyle]}>
-                  {getConditionLabel(item.condition)}
-                </Text>
+            <View style={styles.conditionStatusStack} testID={'condition-status-stack'}>
+              {condition ? (
+                <View
+                  style={[styles.conditionChip, CONDITION_CHIP_STYLES[condition]]}
+                  testID={'condition-chip'}>
+                  <Text style={[styles.conditionChipText, CONDITION_CHIP_TEXT_STYLES[condition]]}>
+                    {getConditionLabel(condition)}
+                  </Text>
+                </View>
               ) : null}
+              <View
+                accessible
+                accessibilityRole={'image'}
+                accessibilityLabel={statusIcon.label}
+                style={styles.syncStatusIcon}
+                testID={'sync-status-icon'}>
+                <Icon name={statusIcon.name} size={22} color={statusIcon.color} />
+              </View>
             </View>
-            {item.sync_status === 'FAILED' ? (
-              <TouchableOpacity
-                accessibilityRole={'button'}
-                accessibilityLabel={'Lihat detail kegagalan'}
-                onPress={() => onViewFailureDetail?.(item)}
-                style={styles.correctButton}>
-                <Icon name={'alert-circle-outline'} size={17} color={Colors.status.error} />
-                <Text style={[styles.correctButtonText, {color: Colors.status.error}]}>
-                  Detail Gagal
-                </Text>
-              </TouchableOpacity>
-            ) : item.sync_status === 'PENDING' ? (
-              <TouchableOpacity
-                accessibilityRole={'button'}
-                accessibilityLabel={'Koreksi data penjemputan yang belum terkirim'}
-                onPress={() => onCorrect(item)}
-                style={styles.correctButton}>
-                <Icon name={'pencil-outline'} size={17} color={Colors.brand.mutedTeal} />
-                <Text style={[styles.correctButtonText, {color: Colors.brand.mutedTeal}]}>
-                  Koreksi
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                accessibilityRole={'button'}
-                accessibilityLabel={'Koreksi data penjemputan'}
-                onPress={() => onCorrect(item)}
-                style={styles.correctButton}>
-                <Icon name={'pencil-outline'} size={17} color={Colors.brand.deepGreen} />
-                <Text style={styles.correctButtonText}>Koreksi</Text>
-              </TouchableOpacity>
-            )}
           </View>
+          {item.sync_status === 'FAILED' && onViewFailureDetail ? (
+            <TouchableOpacity
+              accessibilityRole={'button'}
+              accessibilityLabel={'Lihat detail kegagalan'}
+              onPress={() => onViewFailureDetail(item)}
+              style={styles.failureButton}>
+              <Icon name={'alert-circle-outline'} size={17} color={Colors.status.error} />
+              <Text style={styles.failureButtonText}>Detail Gagal</Text>
+            </TouchableOpacity>
+          ) : null}
         </AppCard>
-      </Animated.View>
-    );
-  },
-);
+      </View>
+    </TouchableOpacity>
+  );
+});
 
 const styles = StyleSheet.create({
   historyCard: {
     padding: Spacing.md,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
     borderWidth: 1,
     borderColor: Colors.border.warm,
   },
@@ -177,42 +146,29 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   qrText: {...Typography.caption, color: Colors.text.muted, flexShrink: 1},
-  identityRow: {flexDirection: 'row', alignItems: 'center', marginTop: Spacing.md},
-  packageIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surface.successSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: Spacing.sm,
-  },
+  identityRow: {flexDirection: 'row', alignItems: 'center', marginTop: Spacing.sm},
   identityContent: {flex: 1, paddingRight: Spacing.sm},
   ownerName: {...Typography.heading3, color: Colors.brand.deepGreen},
-  ownerAddress: {...Typography.bodySmall, color: Colors.text.secondary, marginTop: 2},
-  valueRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: Colors.surface.cardMuted,
-    borderRadius: Radius.md,
-    padding: Spacing.sm,
-    marginTop: Spacing.md,
+  ownerRtRw: {...Typography.bodySmall, color: Colors.text.secondary, marginTop: 2},
+  ownerDukuh: {...Typography.bodySmall, color: Colors.text.secondary, marginTop: 1},
+  conditionStatusStack: {alignItems: 'flex-end', gap: Spacing.xs},
+  conditionChip: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radius.pill,
   },
-  valueCopy: {flex: 1, paddingRight: Spacing.sm},
-  valueLabel: {...Typography.caption, color: Colors.text.secondary},
-  nominalValue: {...Typography.heading3, color: Colors.brand.emerald, marginTop: 2},
-  conditionLabel: {...Typography.caption, color: Colors.text.secondary, marginTop: 2},
-  correctButton: {
+  conditionChipText: {...Typography.caption, fontWeight: '700'},
+  syncStatusIcon: {alignItems: 'center', justifyContent: 'center'},
+  failureButton: {
     minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingVertical: 7,
-    paddingHorizontal: Spacing.sm,
     justifyContent: 'center',
+    alignSelf: 'flex-end',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
   },
-  correctButtonText: {...Typography.label, color: Colors.brand.deepGreen},
+  failureButtonText: {...Typography.label, color: Colors.status.error},
 });
 
 export default HistoryItem;

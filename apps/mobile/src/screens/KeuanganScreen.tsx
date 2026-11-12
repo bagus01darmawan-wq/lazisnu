@@ -8,7 +8,7 @@ import {AppPressable} from '../components/ui/AppPressable';
 import {AppTextInput} from '../components/ui/AppTextInput';
 import {StatusBadge} from '../components/ui/StatusBadge';
 import {SignSheet} from '../components/SignSheet';
-import {Colors, Radius, Spacing, Typography} from '../theme';
+import {Colors, ComponentSizes, Radius, Spacing, Typography} from '../theme';
 import {formatCurrency, formatPeriod} from '../utils/format';
 import {getErrorMessage} from '../utils/error';
 import {usePeriodStore} from '../stores';
@@ -318,7 +318,11 @@ export const KeuanganScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: Colors.surface.page},
-  body: {padding: Spacing.lg, gap: Spacing.md},
+  body: {
+    padding: Spacing.lg,
+    paddingBottom: ComponentSizes.bottomTabHeight + Spacing.xxl,
+    gap: Spacing.md,
+  },
   rowBetween: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
   branch: {...Typography.heading3, fontWeight: '700', flex: 1},
   meta: {...Typography.body, color: Colors.text.muted, marginTop: Spacing.xs},

@@ -27,6 +27,7 @@ type MobileHistoryCollection = {
   can: {
     qrCode: string | null;
     ownerName: string;
+    ownerPhone?: string | null;
     ownerAddress: string | null;
     dukuh?: string | null;
     dukuhDetails?: { name: string | null } | null;
@@ -45,6 +46,7 @@ export function toMobileHistoryItem(collection: MobileHistoryCollection) {
     can_id: collection.canId,
     qr_code: collection.can.qrCode || '',
     owner_name: collection.can.ownerName,
+    owner_phone: collection.can.ownerPhone || '',
     owner_address: collection.can.ownerAddress || '',
     dukuh_name: collection.can.dukuhDetails?.name || collection.can.dukuh || '',
     rt: collection.can.rt ?? null,
@@ -235,7 +237,16 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
           ),
           with: {
             can: {
-              columns: { qrCode: true, ownerName: true, ownerAddress: true, dukuh: true, rt: true, rw: true, condition: true },
+              columns: {
+                qrCode: true,
+                ownerName: true,
+                ownerPhone: true,
+                ownerAddress: true,
+                dukuh: true,
+                rt: true,
+                rw: true,
+                condition: true,
+              },
               with: { dukuhDetails: { columns: { name: true } } },
             },
             assignment: { columns: { periodYear: true, periodMonth: true } },

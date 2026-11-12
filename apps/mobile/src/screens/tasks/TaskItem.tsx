@@ -29,9 +29,6 @@ export const TaskItem = memo(({item, index, onCopy, onPress, onLongPressDrag}: T
       layout={AnimatedLayout.springify()}>
       <AppCard variant={'elevated'} style={styles.taskCard}>
         <View style={styles.taskHeading}>
-          <View style={styles.taskIcon}>
-            <Icon name={'package-variant-closed'} size={24} color={Colors.brand.deepGreen} />
-          </View>
           <View style={styles.taskIdentity}>
             <Text style={styles.ownerName} numberOfLines={1}>
               {item.owner_name}
@@ -135,15 +132,6 @@ const styles = StyleSheet.create({
   taskHeading: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-  },
-  taskIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surface.successSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: Spacing.sm,
   },
   taskIdentity: {
     flex: 1,

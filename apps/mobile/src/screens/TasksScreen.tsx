@@ -19,7 +19,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import type {Task} from '@lazisnu/shared-types';
 import {CanCondition} from '@lazisnu/shared-types';
 import {useTasksStore, useSyncStore, usePeriodStore} from '../stores';
-import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
+import {Colors, ComponentSizes, Layout, Radius, Spacing, Typography} from '../theme';
 import type {MainNavigationProp} from '../navigation/types';
 import {TaskItem, TaskSearchBar} from './tasks';
 import {SegmentedControl} from '../components/ui';
@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     paddingHorizontal: Layout.screenPadding,
-    paddingBottom: Spacing.xl,
+    paddingBottom: ComponentSizes.bottomTabHeight + Spacing.xxl,
     flexGrow: 1,
   },
   listSectionTitle: {

@@ -2,7 +2,6 @@ import React, {useEffect, useState} from 'react';
 import {Alert, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import NetInfo from '@react-native-community/netinfo';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {AppButton, AppHeader, SkipReasonSheet} from '../components/ui';
@@ -210,23 +209,16 @@ const TaskDetailScreen: React.FC = () => {
 
   return (
     <View style={styles.screen}>
-      <AppHeader variant="stack" onBack={() => navigation.goBack()} />
+      <AppHeader
+        variant="stack"
+        title={isVisitTask ? 'Detail Kunjungan' : 'Detail Penjemputan'}
+        onBack={() => navigation.goBack()}
+      />
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[styles.scrollContent, {paddingBottom: insets.bottom + Spacing.lg}]}
         showsVerticalScrollIndicator={false}>
-        <View style={[styles.head, isVisitTask && styles.visitHead]}>
-          {!isVisitTask && (
-            <View style={styles.headIcon}>
-              <Icon name="clipboard-list-outline" size={48} color={Colors.brand.deepGreen} />
-            </View>
-          )}
-          <Text style={[styles.headTitle, isVisitTask && styles.visitHeadTitle]}>
-            {isVisitTask ? 'Detail Kunjungan' : 'Detail Penjemputan'}
-          </Text>
-        </View>
-
         <View style={styles.body}>
           <KalengInfoCard task={detailTask} showPeriod />
 
@@ -317,31 +309,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-  },
-  head: {
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-  },
-  visitHead: {
-    paddingVertical: Spacing.xs,
-  },
-  headIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: Radius.pill,
-    backgroundColor: Colors.surface.successSubtle,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headTitle: {
-    ...Typography.heading2,
-    color: Colors.brand.deepGreen,
-    textAlign: 'center',
-    marginTop: Spacing.sm,
-  },
-  visitHeadTitle: {
-    marginTop: 0,
   },
   body: {
     paddingHorizontal: Spacing.md,

@@ -14,7 +14,7 @@ import {AppButton} from '../components/ui/AppButton';
 import {AppCard} from '../components/ui/AppCard';
 import {AppHeader} from '../components/ui/AppHeader';
 import {StatusBadge} from '../components/ui/StatusBadge';
-import {Colors, Spacing, Typography} from '../theme';
+import {Colors, ComponentSizes, Spacing, Typography} from '../theme';
 import {getErrorMessage} from '../utils/error';
 import {reminderFor} from '../roles/roleMap';
 import {formatPeriod, periodKeyOf} from '../utils/format';
@@ -157,7 +157,11 @@ export const PersetujuanScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: Colors.surface.page},
-  body: {padding: Spacing.lg, gap: Spacing.md},
+  body: {
+    padding: Spacing.lg,
+    paddingBottom: ComponentSizes.bottomTabHeight + Spacing.xxl,
+    gap: Spacing.md,
+  },
   rowBetween: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
   period: {...Typography.heading3, fontWeight: '700'},
   branch: {...Typography.heading3, fontWeight: '700', flex: 1},

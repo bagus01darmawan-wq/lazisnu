@@ -21,7 +21,7 @@ import {
   useSyncStore,
   useTasksStore,
 } from '../stores';
-import {Colors, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
+import {Colors, ComponentSizes, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
 import {formatCurrency, formatPeriod, getInitials, periodKeyOf} from '../utils';
 import {AppPressable, SegmentedControl} from '../components/ui';
 import {SyncIssuesSheet} from '../components/SyncIssuesSheet';
@@ -396,7 +396,7 @@ const DashboardScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   screen: {flex: 1, backgroundColor: Colors.surface.page},
-  scrollContent: {paddingBottom: Spacing.xl},
+  scrollContent: {paddingBottom: ComponentSizes.bottomTabHeight + Spacing.xxl},
   hero: {
     overflow: 'hidden',
     paddingHorizontal: Layout.screenPadding,

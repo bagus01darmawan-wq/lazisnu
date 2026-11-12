@@ -419,6 +419,7 @@ export interface Collection {
   can?: {
     qr_code: string;
     owner_name: string;
+    owner_phone?: string | null;
     owner_address: string;
     /** Wilayah administratif kaleng; dipakai kartu mobile untuk alamat. */
     dukuh_name?: string;
@@ -720,6 +721,8 @@ export interface RangeStatsResponse {
   months_covered: string[];
   /** Uang yang benar-benar tercatat (collected_at) di dalam rentang tanggal. */
   collected_in_range?: number;
+  /** Jumlah penjemputan dengan nominal nol dalam rentang tanggal. */
+  empty_in_range?: number;
   nominal_in_range?: number;
   /** Tugas COMPLETED yang completed_at-nya jatuh di dalam rentang (legacy). */
   task_completed_in_range?: number;
@@ -834,6 +837,7 @@ export interface HistoryItem {
   can_id: string;
   qr_code: string;
   owner_name: string;
+  owner_phone?: string | null;
   owner_address: string;
   dukuh_name?: string;
   rt?: string | null;

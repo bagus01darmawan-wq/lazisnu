@@ -123,6 +123,19 @@ describe('TaskDetailScreen — detail penjemputan dari kartu tugas', () => {
     expect(text).toContain('Lanjutkan');
   });
 
+  it('menampilkan judul di header, sejajar dengan tombol kembali', async () => {
+    const tree = await renderScreen();
+    const title = tree.root
+      .findAllByType(require('react-native').Text)
+      .find(node => collectText(node.props.children) === 'Detail Penjemputan');
+    expect(title).toBeDefined();
+    expect(
+      title?.parent
+        ?.findAllByType(require('react-native').TouchableOpacity)
+        .some(node => node.props.accessibilityLabel === 'Kembali'),
+    ).toBe(true);
+  });
+
   it('TIDAK menampilkan teks & ikon sukses alur scan (QR Code Terdeteksi!)', async () => {
     const tree = await renderScreen();
     const text = allText(tree);
@@ -156,11 +169,11 @@ describe('TaskDetailScreen — detail penjemputan dari kartu tugas', () => {
     });
 
     // Sheet alasan terbuka (BUKAN Alert lama).
-    const allText = tree.root
+    const screenText = tree.root
       .findAllByType(require('react-native').Text)
       .map(n => collectText(n.props.children))
       .join(' ');
-    expect(allText).toContain('Kenapa tidak terjemput?');
+    expect(screenText).toContain('Kenapa tidak terjemput?');
 
     // Pilih alasan "Lainnya", lalu Simpan.
     const option = tree.root

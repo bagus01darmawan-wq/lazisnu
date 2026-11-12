@@ -27,7 +27,7 @@ import {APP_VERSION} from '../config/appConfig';
 import {AppButton, AppCard, StatusBadge} from '../components/ui';
 import {PeriodChip} from '../components/PeriodChip';
 import {PasswordSheet} from '../components/PasswordSheet';
-import {Colors, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
+import {Colors, ComponentSizes, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
 import {formatCurrency, formatPeriod, periodKeyOf} from '../utils/format';
 import {getErrorMessage} from '../utils/error';
 import {getInitials} from '../utils';
@@ -553,7 +553,7 @@ const InfoRow = ({
 
 const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: Colors.surface.page},
-  content: {paddingBottom: Spacing.xl},
+  content: {paddingBottom: ComponentSizes.bottomTabHeight + Spacing.xxl},
   header: {
     alignItems: 'center',
     paddingHorizontal: Layout.screenPadding,

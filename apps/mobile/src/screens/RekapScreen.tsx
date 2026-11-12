@@ -5,7 +5,7 @@ import {c1Service, type MwcRecapDto} from '../services/api';
 import {AppCard} from '../components/ui/AppCard';
 import {AppHeader} from '../components/ui/AppHeader';
 import {StatusBadge} from '../components/ui/StatusBadge';
-import {Colors, Spacing, Typography} from '../theme';
+import {Colors, ComponentSizes, Spacing, Typography} from '../theme';
 import {formatCurrency, formatPeriod, periodKeyOf} from '../utils/format';
 import {getErrorMessage} from '../utils/error';
 import {useAuthStore, usePeriodStore} from '../stores';
@@ -119,7 +119,11 @@ export const RekapScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: Colors.surface.page},
-  body: {padding: Spacing.lg, gap: Spacing.md},
+  body: {
+    padding: Spacing.lg,
+    paddingBottom: ComponentSizes.bottomTabHeight + Spacing.xxl,
+    gap: Spacing.md,
+  },
   rowBetween: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
   cardTitle: {...Typography.heading3, fontWeight: '700', marginBottom: Spacing.xs},
   branch: {...Typography.heading3, fontWeight: '700', flex: 1},
