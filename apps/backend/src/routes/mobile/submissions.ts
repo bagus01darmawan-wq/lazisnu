@@ -9,6 +9,7 @@ import { isAppError } from '../../utils/AppError';
 import { countersignBranchSchema, forceFinalizePpkSchema, reopenSubmissionSchema, signSubmissionSchema } from './schemas';
 import {
   ensurePpkSubmission,
+  listSignedPpkSubmissions,
   toPpkResponse,
 } from '../../services/ppkSubmissions';
 import {
@@ -53,6 +54,21 @@ function sendAppError(reply: FastifyReply, error: unknown, logger?: { error: (e:
 }
 
 export async function submissionsRoutes(fastify: FastifyInstance) {
+  // GET /mobile/submissions/signed-history — semua BA final milik petugas.
+  fastify.get(
+    '/submissions/signed-history',
+    { preHandler: [authorize('PETUGAS')] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const officerId = request.currentUser?.officerId;
+      if (!officerId) return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
+      try {
+        return sendSuccess(reply, await listSignedPpkSubmissions(officerId));
+      } catch (error: unknown) {
+        return sendInternalError(reply, error, fastify.log);
+      }
+    },
+  );
+
   // GET /mobile/submissions?year=&month= — setoran PPK miliknya (hitung ulang
   // otomatis selama DRAFT; baris FINAL beku).
   fastify.get('/submissions', async (request: FastifyRequest, reply: FastifyReply) => {

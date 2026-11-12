@@ -962,6 +962,15 @@ export interface BaVersionDto {
   is_current: boolean;
 }
 
+export interface SignedPpkBaHistoryDto {
+  id: string;
+  period: string;
+  period_year: number;
+  period_month: number;
+  ba_number: string | null;
+  finalized_at: string | null;
+}
+
 /**
  * Satu baris setoran ranting — bentuk `toBranchResponse` di backend.
  *
@@ -1110,6 +1119,9 @@ export const c1Service = {
     month?: number,
   ): Promise<ApiResponse<PpkSubmissionDto>> => {
     return apiRequest<PpkSubmissionDto>(`/mobile/submissions${periodQuery(year, month)}`);
+  },
+  getSignedBaHistory: async (): Promise<ApiResponse<SignedPpkBaHistoryDto[]>> => {
+    return apiRequest<SignedPpkBaHistoryDto[]>('/mobile/submissions/signed-history');
   },
   signSubmission: async (
     id: string,

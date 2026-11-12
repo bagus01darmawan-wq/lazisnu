@@ -13,14 +13,15 @@ import {useNavigation} from '@react-navigation/native';
 import {
   c1Service,
   type BaTextDto,
-  type BaVersionDto,
   type PeriodInfoDto,
   type PpkSubmissionDto,
+  type SignedPpkBaHistoryDto,
 } from '../services/api';
 import {AppCard} from '../components/ui/AppCard';
 import {AppHeader} from '../components/ui/AppHeader';
 import {AppPressable} from '../components/ui/AppPressable';
 import {StatusBadge, type StatusBadgeStatus} from '../components/ui/StatusBadge';
+import {BaHistorySheet} from '../components/BaHistorySheet';
 import {BaPreviewSheet} from '../components/BaPreviewSheet';
 import {PeriodChip} from '../components/PeriodChip';
 import {SignSheet} from '../components/SignSheet';
@@ -46,13 +47,6 @@ const statusTone = (status: string): StatusBadgeStatus => {
   }
 };
 
-/**
- * Label status di baris versi BA. "DRAFT" diberi periode berjalan supaya jelas
- * bulan mana yang masih berupa draf; status lain dibiarkan apa adanya.
- */
-const versionStatusLabel = (status: string, period: string): string =>
-  status === 'DRAFT' ? `draft ${period}` : status;
-
 export const SetoranScreen: React.FC = () => {
   const navigation = useNavigation();
   const role = normalizeRole(useAuthStore(state => state.user?.role));
@@ -63,7 +57,7 @@ export const SetoranScreen: React.FC = () => {
   const refreshPeriod = usePeriodStore(state => state.refresh);
   const [submission, setSubmission] = useState<PpkSubmissionDto | null>(null);
   const [periodInfo, setPeriodInfo] = useState<PeriodInfoDto | null>(null);
-  const [versions, setVersions] = useState<BaVersionDto[]>([]);
+  const [signedBaHistory, setSignedBaHistory] = useState<SignedPpkBaHistoryDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // C1-T10: TTD interaktif PPK (DRAFT → PPK_SIGNED) via kanvas + PNG murni.
@@ -75,9 +69,29 @@ export const SetoranScreen: React.FC = () => {
   const [baLoading, setBaLoading] = useState(false);
   const [baError, setBaError] = useState<string | null>(null);
   const [previewVisible, setPreviewVisible] = useState(false);
-  // Unduh BA PDF — hanya sah setelah FINAL (server menolak sebelum itu).
-  const [downloadBusy, setDownloadBusy] = useState(false);
+  // Riwayat BA lintas periode dan unduhan per submission.
+  const [historyVisible, setHistoryVisible] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [downloadingSubmissionId, setDownloadingSubmissionId] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  const loadSignedBaHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const historyRes = await c1Service.getSignedBaHistory();
+      if (historyRes.success && historyRes.data) {
+        setSignedBaHistory(historyRes.data);
+        setHistoryError(null);
+      } else {
+        setHistoryError(historyRes.error?.message || 'Gagal memuat riwayat berita acara');
+      }
+    } catch (historyLoadError: unknown) {
+      setHistoryError(getErrorMessage(historyLoadError, 'Gagal memuat riwayat berita acara'));
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -92,8 +106,7 @@ export const SetoranScreen: React.FC = () => {
       }
       setSubmission(subRes.data);
       if (periodRes.success && periodRes.data) setPeriodInfo(periodRes.data);
-      const verRes = await c1Service.getPdfVersions(subRes.data.id);
-      if (verRes.success && verRes.data) setVersions(verRes.data);
+      await loadSignedBaHistory();
       // Isi BA dimuat di awal supaya kartu bisa dibuka kapan saja tanpa
       // menunggu jaringan. Gagal muat TIDAK menggagalkan layar — pesannya
       // tampil di dalam lembar baca, karena yang gagal hanya pratinjau.
@@ -116,7 +129,7 @@ export const SetoranScreen: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [displayYear, displayMonth]);
+  }, [displayYear, displayMonth, loadSignedBaHistory]);
 
   useEffect(() => {
     refreshPeriod();
@@ -127,7 +140,6 @@ export const SetoranScreen: React.FC = () => {
   }, [load]);
 
   const canSign = role === 'PETUGAS' && submission?.status === 'DRAFT';
-  const isFinal = submission?.status === 'FINAL';
 
   const submitSign = async (signaturePngBase64: string) => {
     if (!submission) return;
@@ -154,12 +166,11 @@ export const SetoranScreen: React.FC = () => {
    * diminta), lalu tautannya hanya berlaku 600 detik — karena itu tautan
    * diambil tepat sebelum dibuka, bukan disimpan.
    */
-  const handleDownloadBa = async () => {
-    if (!submission) return;
-    setDownloadBusy(true);
+  const handleDownloadBa = async (submissionId: string) => {
+    setDownloadingSubmissionId(submissionId);
     setDownloadError(null);
     try {
-      const res = await c1Service.getPdf(submission.id);
+      const res = await c1Service.getPdf(submissionId);
       if (!res.success || !res.data) {
         throw new Error(res.error?.message || 'Gagal menyiapkan unduhan');
       }
@@ -167,13 +178,10 @@ export const SetoranScreen: React.FC = () => {
       // false untuk https sehingga unduhan yang sebenarnya dituduh "tak ada
       // aplikasi" (alasan sama dengan ProfileScreen).
       await Linking.openURL(res.data.download_url);
-      // Muat ulang: `pdf_hash` baru terisi setelah berkas dibuat, dan itulah
-      // yang mengubah label versi menjadi "PDF siap".
-      await load();
     } catch (e: unknown) {
       setDownloadError(getErrorMessage(e, 'Tidak dapat mengunduh berita acara'));
     } finally {
-      setDownloadBusy(false);
+      setDownloadingSubmissionId(null);
     }
   };
 
@@ -250,45 +258,46 @@ export const SetoranScreen: React.FC = () => {
                 onClose={() => setSigning(false)}
               />
             ) : null}
-            {versions.length > 0 ? (
+            <AppPressable
+              accessibilityRole="button"
+              accessibilityLabel="Buka riwayat berita acara yang sudah ditandatangani"
+              onPress={() => {
+                setDownloadError(null);
+                setHistoryVisible(true);
+              }}>
               <AppCard>
-                <Text style={styles.cardTitle}>Riwayat Berita Acara ({versions.length})</Text>
-                {versions.map(v => (
-                  <Text key={v.version} style={styles.meta}>
-                    v{v.version} • {versionStatusLabel(v.status, submission.period)}
-                    {v.is_current ? ' • berlaku' : ''} • {v.pdf_hash ? 'PDF siap' : 'belum diunduh'}
-                  </Text>
-                ))}
-                <AppPressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Unduh berita acara PDF"
-                  disabled={!isFinal || downloadBusy}
-                  onPress={handleDownloadBa}
-                  style={styles.actionRow}>
-                  <Icon
-                    name={'download'}
-                    size={16}
-                    color={isFinal ? Colors.brand.emerald : Colors.text.muted}
-                  />
-                  <Text style={[styles.actionText, !isFinal && styles.actionTextMuted]}>
-                    {downloadBusy ? 'Menyiapkan berkas…' : 'Unduh berita acara'}
-                  </Text>
-                  <Icon
-                    name={'chevron-right'}
-                    size={18}
-                    color={isFinal ? Colors.brand.emerald : Colors.text.muted}
-                  />
-                </AppPressable>
-                {!isFinal ? (
-                  <Text style={styles.hint}>Siap setelah kedua tanda tangan lengkap.</Text>
-                ) : null}
-                {downloadError ? <Text style={styles.error}>{downloadError}</Text> : null}
+                <View style={styles.rowBetween}>
+                  <Text style={styles.cardTitle}>Riwayat Berita Acara</Text>
+                  <Icon name="chevron-right" size={20} color={Colors.brand.emerald} />
+                </View>
+                <Text style={styles.meta}>
+                  {historyLoading
+                    ? 'Memuat daftar berita acara…'
+                    : historyError
+                      ? 'Riwayat berita acara belum dapat dimuat'
+                      : `${signedBaHistory.length} berita acara sudah ditandatangani lengkap`}
+                </Text>
+                <View style={styles.actionRow}>
+                  <Icon name="file-document-outline" size={16} color={Colors.brand.emerald} />
+                  <Text style={styles.actionText}>Pilih periode untuk mengunduh</Text>
+                </View>
               </AppCard>
-            ) : null}
+            </AppPressable>
           </>
         ) : null}
         {isLoading && !submission ? <ActivityIndicator size="large" /> : null}
       </ScrollView>
+      <BaHistorySheet
+        visible={historyVisible}
+        history={signedBaHistory}
+        loading={historyLoading}
+        error={historyError}
+        busyId={downloadingSubmissionId}
+        downloadError={downloadError}
+        onDownload={handleDownloadBa}
+        onRetry={loadSignedBaHistory}
+        onClose={() => setHistoryVisible(false)}
+      />
       <BaPreviewSheet
         visible={previewVisible}
         onClose={() => setPreviewVisible(false)}
@@ -322,9 +331,6 @@ const styles = StyleSheet.create({
     color: Colors.brand.emerald,
     fontWeight: '700',
     flex: 1,
-  },
-  actionTextMuted: {
-    color: Colors.text.muted,
   },
   error: {...Typography.body, color: Colors.status.error},
 });

@@ -14,7 +14,7 @@ import {
   saveDeviceToken,
 } from '../mobileRoles';
 import { listBranchBaVersions, listPpkBaVersions } from '../baPdfService';
-import { ensurePpkSubmission, ensureBranchSubmission } from '../ppkSubmissions';
+import { ensurePpkSubmission, ensureBranchSubmission, listSignedPpkSubmissions } from '../ppkSubmissions';
 import { submitCollection } from '../collectionSubmission';
 import {
   countersignPpkSubmission,
@@ -216,6 +216,31 @@ describe('C1-T9 peran mobile server (DB, R2 mock)', () => {
     await deleteMyAuditTrails();
     await withImmutableRulesDisabled(cleanupFixtures);
     await closeDbConnection();
+  });
+
+  test('riwayat BA PPK hanya FINAL milik petugas dan urut periode terbaru', async () => {
+    const ppk2 = await db.query.officers.findFirst({ where: eq(schema.officers.employeeCode, 'EMP-T9-2') });
+    const ppk1 = await db.query.officers.findFirst({ where: eq(schema.officers.employeeCode, 'EMP-T9-1') });
+    expect(ppk2).toBeDefined();
+    expect(ppk1).toBeDefined();
+
+    const october = await ensurePpkSubmission(ppk2!.id, bR2, 2026, 10);
+    const ppk2User = await db.query.users.findFirst({ where: eq(schema.users.email, 'ppk2-t9@test.com') });
+    const keu2User = await db.query.users.findFirst({ where: eq(schema.users.email, 'keu2-t9@test.com') });
+    expect(ppk2User).toBeDefined();
+    expect(keu2User).toBeDefined();
+    const ppk2Actor = { userId: ppk2User!.id, role: 'PETUGAS', branchId: bR2, districtId: dt9, officerId: ppk2!.id };
+    const keu2Actor = { userId: keu2User!.id, role: 'STAF_KEUANGAN', branchId: bR2, districtId: dt9 };
+    await signPpkSubmission(ppk2Actor, {
+      submissionId: october.id, signaturePng: TINY_PNG_B64, consent: true,
+    }, CTX, T0);
+    await countersignPpkSubmission(keu2Actor, {
+      submissionId: october.id, signaturePng: TINY_PNG_B64, consent: true,
+    }, CTX, T0);
+
+    const history = await listSignedPpkSubmissions(ppk2!.id);
+    expect(history.map((item) => item.period)).toEqual(['2026-10', '2026-09']);
+    expect(await listSignedPpkSubmissions(ppk1!.id)).toEqual([]);
   });
 
   test('period-info: batas + countdown deterministik; invalid ditolak', () => {

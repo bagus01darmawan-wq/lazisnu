@@ -151,7 +151,7 @@ describe('builder teks BA (§10)', () => {
     expect(ba.form_code).toBe('F-NUCARE/PYL-10 Rev. 0');
     expect(ba.ba_number).toBe('001/BA/X/2026');
     expect(ba.statements[0]).toContain('Senin tanggal 12 bulan Oktober tahun 2026 (12/10/2026)');
-    expect(ba.statements.join('\n')).toContain('Seratus Tujuh Puluh Lima Ribu Rupiah (Rp 175.000)');
+    expect(ba.statements.join('\n')).toContain('Seratus Lima Puluh Tujuh Ribu Rupiah (Rp 157.000)');
     expect(ba.statements.join('\n')).toContain('September 2026');
     expect(ba.statements.join('\n')).toContain('PIHAK PERTAMA');
     expect(ba.statements.join('\n')).toContain('Bendahara Rini');
@@ -176,7 +176,7 @@ describe('builder teks BA (§10)', () => {
     });
     expect(ba.ba_number).toBe('001/BA/X/2026');
     const all = ba.statements.join('\n');
-    expect(all).toContain('Delapan Puluh Ribu Rupiah (Rp 80.000)');
+    expect(all).toContain('Lima Puluh Ribu Empat Ratus Rupiah (Rp 50.400)');
     expect(all).toContain('Admin Agus');
     expect(all).toContain('Bendahara MWC Budi');
     expect(all).not.toMatch(/mengetahui/i);

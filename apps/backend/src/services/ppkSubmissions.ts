@@ -18,7 +18,7 @@
  */
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { and, eq, inArray, sql, type ExtractTablesWithRelations } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql, type ExtractTablesWithRelations } from 'drizzle-orm';
 import { type PgTransaction } from 'drizzle-orm/pg-core';
 import { Errors } from '../utils/errorCatalog';
 import { insertActivityLog } from './auditLogService';
@@ -739,6 +739,41 @@ export async function finalizeBranchSubmission(actor: SubmissionActor, input: Br
 
 type PpkRow = typeof schema.ppkSubmissions.$inferSelect;
 type BranchRow = typeof schema.branchSubmissions.$inferSelect;
+
+export interface SignedPpkBaHistoryItem {
+  id: string;
+  period: string;
+  period_year: number;
+  period_month: number;
+  ba_number: string | null;
+  finalized_at: Date | null;
+}
+
+/** Riwayat BA PPK yang sudah ditandatangani lengkap, milik petugas tertentu. */
+export async function listSignedPpkSubmissions(officerId: string): Promise<SignedPpkBaHistoryItem[]> {
+  const rows = await db.query.ppkSubmissions.findMany({
+    where: and(
+      eq(schema.ppkSubmissions.officerId, officerId),
+      eq(schema.ppkSubmissions.status, 'FINAL'),
+    ),
+    columns: {
+      id: true,
+      periodYear: true,
+      periodMonth: true,
+      baNumber: true,
+      finalizedAt: true,
+    },
+    orderBy: [desc(schema.ppkSubmissions.periodYear), desc(schema.ppkSubmissions.periodMonth)],
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    period: periodKey(row.periodYear, row.periodMonth),
+    period_year: row.periodYear,
+    period_month: row.periodMonth,
+    ba_number: row.baNumber,
+    finalized_at: row.finalizedAt,
+  }));
+}
 
 export function toPpkResponse(r: PpkRow) {
   return {

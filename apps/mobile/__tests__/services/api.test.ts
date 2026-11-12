@@ -13,6 +13,7 @@ import {
   tasksService,
   collectionService,
   dashboardService,
+  c1Service,
 } from '../../src/services/api';
 
 describe('API Service (api.ts)', () => {
@@ -71,6 +72,21 @@ describe('API Service (api.ts)', () => {
   });
 
   describe('Auth Services & API Calls', () => {
+    it('meminta daftar seluruh BA PPK yang sudah ditandatangani', async () => {
+      global.fetch = jest.fn().mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({success: true, data: []}),
+      });
+
+      const response = await c1Service.getSignedBaHistory();
+      expect(response.success).toBe(true);
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/mobile/submissions/signed-history'),
+        expect.any(Object),
+      );
+    });
+
     it('calls login endpoint and returns success response', async () => {
       global.fetch = jest.fn().mockResolvedValueOnce({
         ok: true,

@@ -146,14 +146,14 @@ export function collectionRangeLong(start: Date, end: Date): string {
 
 function serahTerimaStatement(
   sub: { periodYear: number; periodMonth: number },
-  total: number,
+  amount: number,
   collectionRange?: BaCollectionRange | null,
 ): string {
   const period = periodLong(sub.periodYear, sub.periodMonth);
   const collectedClause = collectionRange
     ? `tanggal ${collectionRangeLong(collectionRange.start, collectionRange.end)}`
     : `pada ${period}`;
-  return `PIHAK PERTAMA telah menyerahkan uang hasil penghimpunan koin NU periode bulan ${period} kepada PIHAK KEDUA sejumlah ${terbilangRupiah(total)} (${formatRupiah(total)}) yang telah dihimpun ${collectedClause}.`;
+  return `PIHAK PERTAMA telah menyerahkan uang hasil penghimpunan koin NU periode bulan ${period} kepada PIHAK KEDUA sejumlah ${terbilangRupiah(amount)} (${formatRupiah(amount)}) yang telah dihimpun ${collectedClause}.`;
 }
 
 export const DRAFT_WARNING = 'DRAFT — belum sah';
@@ -195,7 +195,8 @@ export function buildPpkBaText(params: {
 }): PpkBaText {
   const { sub, officerName, branchName, aggregateTotal = 0 } = params;
   const draft = sub.status !== 'FINAL';
-  const total = Number(sub.totalAmount);
+  // BA serah-terima mencantumkan uang yang benar-benar diserahkan, setelah bisyaroh PPK.
+  const transferAmount = Number(sub.netAmount);
   const ev = wibParts(params.eventAt ?? new Date());
   const baNumber = params.baNumber ?? null;
   const table = [
@@ -226,7 +227,7 @@ export function buildPpkBaText(params: {
       `Jabatan NU Care Lazisnu : Bendahara Ranting`,
       `Alamat : ${branchName}`,
       `Bertindak sebagai pengurus / manajemen NU Care Lazisnu Ranting ${branchName} yang selanjutnya disebut PIHAK KEDUA`,
-      serahTerimaStatement(sub, total, params.collectionRange),
+      serahTerimaStatement(sub, transferAmount, params.collectionRange),
       'Angka di atas dihitung otomatis oleh sistem dari per kaleng; tidak ada ketik manual.',
     ],
     signatures: {
@@ -279,7 +280,8 @@ export function buildBranchBaText(params: {
 }): BranchBaText {
   const { sub, branchName, districtName, ppkList } = params;
   const draft = sub.status !== 'FINAL' && sub.status !== 'FINAL_NOL';
-  const total = Number(sub.totalAmount);
+  // Untuk ranting → MWC, netAmount sudah setelah bisyaroh PPK dan share MWC.
+  const transferAmount = Number(sub.netAmount);
   const ev = wibParts(params.eventAt ?? new Date());
   return {
     kind: 'branch',
@@ -310,7 +312,7 @@ export function buildBranchBaText(params: {
       `Jabatan NU Care Lazisnu : Bendahara MWC`,
       `Alamat : ${branchName}`,
       `Bertindak sebagai pengurus / manajemen NU Care Lazisnu Ranting ${branchName} yang selanjutnya disebut PIHAK KEDUA`,
-      serahTerimaStatement(sub, total, params.collectionRange),
+      serahTerimaStatement(sub, transferAmount, params.collectionRange),
       'Angka di atas dihitung otomatis oleh sistem dari per kaleng; tidak ada ketik manual.',
     ],
     signatures: {
