@@ -419,7 +419,7 @@ describe('HistoryScreen — modal Koreksi', () => {
     storesMock.useCollectionsStore = makeCollectionsStore;
   });
 
-  it('merender HistoryScreen dengan koleksi dan tombol Koreksi tersedia di kode sumber', async () => {
+  it('menampilkan identitas koleksi di daftar tanpa tombol Koreksi', async () => {
     const storesMock = jest.requireMock('../../src/stores');
     storesMock.useCollectionsStore = Object.assign(
       () => makeCollectionsStore({collections: [collectionWithAddress], total: 1}),
@@ -427,12 +427,14 @@ describe('HistoryScreen — modal Koreksi', () => {
     );
     const tree = await renderAsync(<HistoryScreen />);
     expect(tree.toJSON()).not.toBeNull();
-    expect(findTextInTree(tree, 'Koreksi')).toBe(true);
-    // restore
+    expect(findTextInTree(tree, 'Ayam Kremes')).toBe(true);
+    expect(findTextInTree(tree, 'RT 001 / RW 002')).toBe(true);
+    expect(findTextInTree(tree, 'Koreksi')).toBe(false);
+    // Koreksi tersedia pada halaman detail (diuji di CollectionHistoryDetailScreen.test.tsx).
     storesMock.useCollectionsStore = makeCollectionsStore;
   });
 
-  it('menampilkan fallback "Alamat tidak tersedia" saat koleksi tanpa alamat dirender', async () => {
+  it('menampilkan fallback wilayah saat koleksi tanpa alamat dirender', async () => {
     const collectionWithoutAddress = {
       ...collectionWithAddress,
       can: {
@@ -448,7 +450,7 @@ describe('HistoryScreen — modal Koreksi', () => {
     );
     const tree = await renderAsync(<HistoryScreen />);
     expect(tree.toJSON()).not.toBeNull();
-    expect(findTextInTree(tree, 'Alamat tidak tersedia')).toBe(true);
+    expect(findTextInTree(tree, 'Nama dukuh belum tersedia')).toBe(true);
     // restore
     storesMock.useCollectionsStore = makeCollectionsStore;
   });

@@ -133,11 +133,13 @@ describe('F7 nomor BA org saat FINAL', () => {
     expect(r2.ba_number).toBe('002/BA/X/2026');
   });
 
-  test('teks BA memuat nomor + terbilang', async () => {
+  test('teks BA memuat nomor + terbilang nominal bersih setelah bisyaroh', async () => {
     const ba = await getPpkBeritaAcara(ppk1, sub1Id);
     expect(ba.ba_number).toBe('001/BA/X/2026');
     expect(ba.form_code).toBe('F-NUCARE/PYL-10 Rev. 0');
-    expect(ba.statements.join('\n')).toContain('Seratus Ribu Rupiah (Rp 100.000)');
+    expect(ba.statements.join('\n')).toContain(
+      'Sembilan Puluh Ribu Rupiah (Rp 90.000)',
+    );
   });
 
   test('FINAL ranting → sekuens MWC sendiri (001)', async () => {
