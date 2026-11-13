@@ -8,7 +8,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {c1Service, type PeriodDraftDto, type StafSummaryDto} from '../services/api';
 import {AppButton} from '../components/ui/AppButton';
 import {AppCard} from '../components/ui/AppCard';
@@ -26,7 +25,6 @@ import {usePeriodStore} from '../stores';
  * Staf tak bisa FINAL/kunci/ubah nominal — hanya setuju (server menegakkan).
  */
 export const PersetujuanScreen: React.FC = () => {
-  const insets = useSafeAreaInsets();
   const [summary, setSummary] = useState<StafSummaryDto | null>(null);
   const [drafts, setDrafts] = useState<PeriodDraftDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -93,7 +91,7 @@ export const PersetujuanScreen: React.FC = () => {
       : null;
 
   return (
-    <View style={[styles.container, {paddingTop: insets.top}]}>
+    <View style={styles.container}>
       <AppHeader title="Persetujuan Tugas" variant="main" />
       <ScrollView
         contentContainerStyle={styles.body}

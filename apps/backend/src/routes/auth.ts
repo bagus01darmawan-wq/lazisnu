@@ -4,7 +4,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { db } from '../config/database';
-import { users, officers, userSessions } from '../database/schema';
+import { users, officers, userSessions, branches } from '../database/schema';
 import { eq, or, and, isNull } from 'drizzle-orm';
 import { generateTokens, getRefreshTtlSeconds } from '../middleware/auth';
 import { otpService } from '../services/otp';
@@ -49,6 +49,17 @@ const verifyOTPSchema = z.object({
   device_id: z.string().optional(),
   device_label: z.string().max(100).optional(),
 });
+
+/** Nama ranting/cabang untuk ditampilkan di profil mobile. Null bila cabang tidak ditemukan. */
+async function branchNameById(branchId: string | null | undefined): Promise<string | null> {
+  if (!branchId) return null;
+  const res = await db
+    .select({ name: branches.name })
+    .from(branches)
+    .where(eq(branches.id, branchId))
+    .limit(1);
+  return res[0]?.name ?? null;
+}
 
 export async function authRoutes(fastify: FastifyInstance) {
   // POST /auth/login
@@ -200,6 +211,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
       // Generate tokens
       const officer = userOfficers[0];
+      const loginBranchName = await branchNameById(user.branchId);
       const payload = {
         userId: user.id,
         role: user.role,
@@ -253,6 +265,7 @@ export async function authRoutes(fastify: FastifyInstance) {
           full_name: user.fullName,
           role: user.role,
           branch_id: user.branchId,
+          branch_name: loginBranchName,
           district_id: user.districtId,
         },
       });
@@ -421,6 +434,8 @@ export async function authRoutes(fastify: FastifyInstance) {
         .set({ lastLogin: new Date() })
         .where(eq(users.id, officer.user.id));
 
+      const otpBranchName = await branchNameById(officer.branchId);
+
       // Check if user account is active
       if (!officer.user.isActive) {
         return sendError(reply, 403, 'ACCOUNT_DISABLED', 'Akun Anda tidak aktif');
@@ -475,6 +490,9 @@ export async function authRoutes(fastify: FastifyInstance) {
           id: officer.user.id,
           full_name: officer.fullName,
           role: 'PETUGAS',
+          branch_id: officer.branchId,
+          branch_name: otpBranchName,
+          district_id: officer.districtId,
         },
       });
     } catch (error: unknown) {
@@ -703,6 +721,9 @@ export async function authRoutes(fastify: FastifyInstance) {
         return sendError(reply, 403, 'ACCOUNT_DISABLED', 'Akun tidak aktif');
       }
 
+      // Nama ranting/cabang untuk Informasi akun mobile.
+      const branchName = await branchNameById(user.branchId);
+
       let officerData: any = null;
       if (decoded.officerId) {
         const officerRes = await db.select().from(officers).where(eq(officers.id, decoded.officerId)).limit(1);
@@ -727,6 +748,7 @@ export async function authRoutes(fastify: FastifyInstance) {
           phone: user.phone,
           role: user.role as any,
           branch_id: user.branchId || undefined,
+          branch_name: branchName,
           district_id: user.districtId || undefined,
           is_active: user.isActive,
           last_login: user.lastLogin ? user.lastLogin.toISOString() : undefined,

@@ -1,6 +1,5 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {c1Service, type MwcRecapDto} from '../services/api';
 import {AppCard} from '../components/ui/AppCard';
 import {AppHeader} from '../components/ui/AppHeader';
@@ -16,7 +15,6 @@ import {useAuthStore, usePeriodStore} from '../stores';
  * setoran rantingnya (semua status — beda dengan rekap MWC yang FINAL saja).
  */
 export const RekapScreen: React.FC = () => {
-  const insets = useSafeAreaInsets();
   const role = useAuthStore(state => state.user?.role);
   const [recap, setRecap] = useState<MwcRecapDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -51,7 +49,7 @@ export const RekapScreen: React.FC = () => {
   }, [load, refreshPeriod]);
 
   return (
-    <View style={[styles.container, {paddingTop: insets.top}]}>
+    <View style={styles.container}>
       <AppHeader title="Rekap" variant="main" />
       <ScrollView
         contentContainerStyle={styles.body}

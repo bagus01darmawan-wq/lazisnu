@@ -11,6 +11,9 @@ type BaPreviewSheetProps = {
   ba: BaTextDto | null;
   loading?: boolean;
   error?: string | null;
+  /** Bila diisi, tampil tombol "Tanda tangani" di sebelah Tutup — alur
+   *  baca-dulu-lalu-tanda-tangani seperti dokumen fisik. */
+  onSign?: () => void;
 };
 
 /**
@@ -28,6 +31,7 @@ export const BaPreviewSheet: React.FC<BaPreviewSheetProps> = ({
   ba,
   loading = false,
   error = null,
+  onSign,
 }) => {
   const insets = useSafeAreaInsets();
 
@@ -94,7 +98,10 @@ export const BaPreviewSheet: React.FC<BaPreviewSheetProps> = ({
             ) : null}
           </ScrollView>
           <View style={styles.actions}>
-            <AppButton label="Tutup" onPress={onClose} />
+            {onSign ? (
+              <AppButton label="Tanda tangani" icon={'file-sign'} onPress={onSign} />
+            ) : null}
+            <AppButton label="Tutup" variant={'outline'} onPress={onClose} />
           </View>
         </View>
       </View>

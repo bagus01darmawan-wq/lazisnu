@@ -35,7 +35,7 @@ import {getInitials} from '../utils';
 const roleLabels: Record<string, string> = {
   PETUGAS: 'Petugas Penjemputan',
   STAF_PENGUMPULAN: 'Staf Pengumpulan',
-  STAF_KEUANGAN: 'Bendahara (Keuangan)',
+  STAF_KEUANGAN: 'Staf Keuangan (Bendahara)',
   ADMIN_RANTING: 'Admin Ranting',
   ADMIN_KECAMATAN: 'Admin Kecamatan',
 };
@@ -323,6 +323,11 @@ const ProfileScreen: React.FC = () => {
           icon={'phone-outline'}
           label={'Nomor handphone'}
           value={user?.phone || 'Belum tersedia'}
+        />
+        <InfoRow
+          icon={'map-marker-outline'}
+          label={'Nama ranting'}
+          value={user?.branch_name || 'Belum tersedia'}
         />
         <InfoRow icon={'badge-account-outline'} label={'Peran akun'} value={role} last />
       </AppCard>

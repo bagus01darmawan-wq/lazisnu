@@ -291,6 +291,8 @@ export interface User {
   role: UserRole;
   district_id?: string;
   branch_id?: string;
+  /** Nama ranting/cabang (di-join) dari tabel branches di /auth/me. */
+  branch_name?: string | null;
   is_active: boolean;
   last_login?: string;
   created_at?: string;
@@ -651,6 +653,7 @@ export interface AuthLoginResponse {
     full_name: string;
     role: string;
     branch_id?: string;
+    branch_name?: string | null;
     district_id?: string;
   };
 }
@@ -662,6 +665,8 @@ export interface MeResponse {
   phone: string;
   role: string;
   branch_id?: string;
+  /** Nama ranting/cabang (di-join) dari tabel branches di /auth/me. */
+  branch_name?: string | null;
   district_id?: string;
   is_active: boolean;
   last_login?: string;

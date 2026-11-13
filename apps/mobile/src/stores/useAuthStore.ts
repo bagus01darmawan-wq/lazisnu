@@ -202,7 +202,8 @@ export const useAuthStore = create<AuthState>(set => ({
       const result = await authService.me();
       if (result.success && result.data) {
         // result.data bertipe MeResponse (snake_case) — akses langsung tanpa as any
-        const {id, full_name, email, phone, role, branch_id, district_id, is_active} = result.data;
+        const {id, full_name, email, phone, role, branch_id, branch_name, district_id, is_active} =
+          result.data;
 
         if (!is_active) {
           console.warn('[Auth] initializeAuth: account disabled');
@@ -225,6 +226,7 @@ export const useAuthStore = create<AuthState>(set => ({
             phone: phone || '',
             role: role as User['role'],
             branch_id,
+            branch_name,
             district_id,
             is_active,
           },
@@ -239,6 +241,7 @@ export const useAuthStore = create<AuthState>(set => ({
           phone: phone || '',
           role: role as User['role'],
           branch_id,
+          branch_name,
           district_id,
           is_active,
         });
@@ -329,6 +332,7 @@ export const useAuthStore = create<AuthState>(set => ({
             phone: phone, // dari parameter function, bukan dari respons backend
             role: user.role as User['role'],
             branch_id: user.branch_id,
+            branch_name: user.branch_name,
             district_id: user.district_id,
             is_active: true,
           },
@@ -344,6 +348,7 @@ export const useAuthStore = create<AuthState>(set => ({
           phone,
           role: user.role as User['role'],
           branch_id: user.branch_id,
+          branch_name: user.branch_name,
           district_id: user.district_id,
           is_active: true,
         });
@@ -407,6 +412,7 @@ export const useAuthStore = create<AuthState>(set => ({
             phone: phone, // dari parameter function, bukan dari respons backend
             role: user.role as User['role'],
             branch_id: user.branch_id,
+            branch_name: user.branch_name,
             district_id: user.district_id,
             is_active: true,
           },
@@ -422,6 +428,7 @@ export const useAuthStore = create<AuthState>(set => ({
           phone,
           role: user.role as User['role'],
           branch_id: user.branch_id,
+          branch_name: user.branch_name,
           district_id: user.district_id,
           is_active: true,
         });
@@ -541,7 +548,7 @@ export const useAuthStore = create<AuthState>(set => ({
         // Ambil profil user untuk set state
         const meResult = await authService.me();
         if (meResult.success && meResult.data) {
-          const {id, full_name, email, phone, role, branch_id, district_id, is_active} =
+          const {id, full_name, email, phone, role, branch_id, branch_name, district_id, is_active} =
             meResult.data;
           if (!is_active) {
             await clearToken();
@@ -565,6 +572,7 @@ export const useAuthStore = create<AuthState>(set => ({
               phone: phone || '',
               role: role as User['role'],
               branch_id,
+              branch_name,
               district_id,
               is_active,
             },
@@ -580,6 +588,7 @@ export const useAuthStore = create<AuthState>(set => ({
             phone: phone || '',
             role: role as User['role'],
             branch_id,
+            branch_name,
             district_id,
             is_active,
           });
