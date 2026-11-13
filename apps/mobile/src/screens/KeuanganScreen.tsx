@@ -11,7 +11,6 @@ import {formatCurrency, formatPeriod} from '../utils/format';
 import {getErrorMessage} from '../utils/error';
 import {usePeriodStore} from '../stores';
 
-
 /**
  * Laporan menampilkan antrean tanda tangan BA PPK oleh Bendahara Ranting.
  * Setelah tanda tangan Bendahara, BA PPK berstatus FINAL dan proses periode selesai.
@@ -106,7 +105,6 @@ export const KeuanganScreen: React.FC = () => {
     }
   };
 
-
   return (
     <View style={[styles.container, {paddingTop: insets.top}]}>
       <AppHeader title="Laporan" variant="main" />
@@ -155,9 +153,7 @@ export const KeuanganScreen: React.FC = () => {
             baNumber={baNumber}
             baLoading={baLoading}
             onSubmit={submitSign}
-            onClose={() => setSigning(null)}>
-
-          </SignSheet>
+            onClose={() => setSigning(null)}></SignSheet>
         ) : null}
         {isLoading && items.length === 0 ? <ActivityIndicator size="large" /> : null}
       </ScrollView>
