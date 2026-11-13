@@ -1,8 +1,13 @@
 import React from 'react';
-import {View, Text, StyleSheet, TouchableOpacity} from 'react-native';
+import {Image, View, Text, StyleSheet, TouchableOpacity} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors, ComponentSizes, Spacing, Typography} from '../../theme';
+import {usePeriodStore} from '../../stores';
+
+// Versi crop pas ke konten (tanpa padding transparan bawah bawaan aslinya)
+// supaya mark sejajar optis dengan judul di header.
+const logo = require('../../assets/branding/logo-lazisnu-mark.png');
 
 type AppHeaderVariant = 'auth' | 'main' | 'stack';
 
@@ -15,11 +20,17 @@ type AppHeaderProps = {
 
 export const AppHeader: React.FC<AppHeaderProps> = ({variant, title, onBack, rightAction}) => {
   const insets = useSafeAreaInsets();
+  const isStalePeriod = usePeriodStore(state => state.isStale);
 
   if (variant === 'auth') {
     return (
       <View style={[styles.container, styles.authContainer]}>
-        <Icon name="mosque" size={48} color={Colors.brand.emerald} />
+        <Image
+          source={logo}
+          style={styles.authLogo}
+          resizeMode="contain"
+          accessibilityLabel="Logo LAZISNU"
+        />
         {title && <Text style={styles.authTitle}>{title}</Text>}
       </View>
     );
@@ -27,17 +38,34 @@ export const AppHeader: React.FC<AppHeaderProps> = ({variant, title, onBack, rig
 
   if (variant === 'main') {
     return (
-      <View
-        style={[
-          styles.container,
-          styles.safeContainer,
-          {paddingTop: insets.top, height: ComponentSizes.buttonHeight + insets.top},
-        ]}>
-        <View style={styles.mainLeft}>
-          <Icon name="mosque" size={32} color={Colors.brand.emerald} />
-          {title && <Text style={styles.mainTitle}>{title}</Text>}
+      <View style={[styles.safeContainer, {paddingTop: insets.top}]}>
+        <View style={styles.headerRow}>
+          <View style={styles.mainLeft}>
+            <Image
+              source={logo}
+              style={styles.mainLogo}
+              resizeMode="contain"
+              accessibilityLabel="Logo LAZISNU"
+            />
+            {title && (
+              <Text style={styles.mainTitle} numberOfLines={1}>
+                {title}
+              </Text>
+            )}
+          </View>
+          <View style={styles.rightAction}>{rightAction}</View>
         </View>
-        <View style={styles.rightAction}>{rightAction}</View>
+        {isStalePeriod ? (
+          <View
+            style={styles.staleBar}
+            accessibilityRole="status"
+            accessibilityLabel="Periode dari penyimpanan, sedang menyinkronkan data terbaru">
+            <Icon name="timer-sand" size={13} color={Colors.status.warning} />
+            <Text style={styles.staleBarText}>
+              Periode dari penyimpanan — menyinkronkan…
+            </Text>
+          </View>
+        ) : null}
       </View>
     );
   }
@@ -78,6 +106,28 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border.warm,
   },
+  staleBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    backgroundColor: Colors.surface.warningSoft,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 4,
+  },
+  staleBarText: {
+    fontSize: 11,
+    color: Colors.status.warning,
+    fontWeight: '600',
+  },
+  // Baris konten persis 56px — dipisah dari paddingTop insets.top supaya
+  // logo+judul benar-benar center terhadap header, bukan terhadap (56 + inset).
+  headerRow: {
+    height: ComponentSizes.buttonHeight,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md,
+  },
   authContainer: {
     flexDirection: 'column',
     height: 'auto',
@@ -89,6 +139,15 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
     textAlign: 'center',
   },
+  authLogo: {
+    width: 140,
+    height: 75,
+  },
+  mainLogo: {
+    // rasio mark 512x191 (~2.68)
+    width: 64,
+    height: 24,
+  },
   mainLeft: {
     flex: 1,
     flexDirection: 'row',
@@ -97,6 +156,7 @@ const styles = StyleSheet.create({
   mainTitle: {
     ...Typography.heading2,
     marginLeft: Spacing.sm,
+    flexShrink: 1,
   },
   backButton: {
     marginRight: Spacing.md,

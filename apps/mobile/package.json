@@ -6,7 +6,7 @@
   "scripts": {
     "android": "react-native run-android",
     "ios": "react-native run-ios",
-    "start": "react-native start",
+    "start": "react-native start --reset-cache",
     "start:staging": "node scripts/start-staging.mjs",
     "verify:icon": "node scripts/verify-icon.mjs",
     "preview:icon": "node scripts/icon-preview.mjs",
