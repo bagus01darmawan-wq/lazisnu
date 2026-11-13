@@ -159,7 +159,11 @@ export const KeuanganScreen: React.FC = () => {
           <AppCard>
             <View style={styles.rowBetween}>
               <View style={styles.rekapLeft}>
-                <Icon name={'file-document-multiple-outline'} size={22} color={Colors.brand.deepGreen} />
+                <Icon
+                  name={'file-document-multiple-outline'}
+                  size={22}
+                  color={Colors.brand.deepGreen}
+                />
                 <Text style={styles.cardTitle}>Rekap</Text>
               </View>
               <Text style={styles.meta}>{formatPeriod(period)}</Text>
@@ -190,7 +194,11 @@ export const KeuanganScreen: React.FC = () => {
           </AppCard>
         ) : null}
         {items.map(item => (
-          <DraftBaCard key={`${item.kind}-${item.submission_id}`} item={item} onSign={openPreview} />
+          <DraftBaCard
+            key={`${item.kind}-${item.submission_id}`}
+            item={item}
+            onSign={openPreview}
+          />
         ))}
         {previewItem ? (
           <BaPreviewSheet

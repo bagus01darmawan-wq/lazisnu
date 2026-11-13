@@ -548,8 +548,17 @@ export const useAuthStore = create<AuthState>(set => ({
         // Ambil profil user untuk set state
         const meResult = await authService.me();
         if (meResult.success && meResult.data) {
-          const {id, full_name, email, phone, role, branch_id, branch_name, district_id, is_active} =
-            meResult.data;
+          const {
+            id,
+            full_name,
+            email,
+            phone,
+            role,
+            branch_id,
+            branch_name,
+            district_id,
+            is_active,
+          } = meResult.data;
           if (!is_active) {
             await clearToken();
             await disableBiometric();

@@ -61,9 +61,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({variant, title, onBack, rig
             accessibilityRole="status"
             accessibilityLabel="Periode dari penyimpanan, sedang menyinkronkan data terbaru">
             <Icon name="timer-sand" size={13} color={Colors.status.warning} />
-            <Text style={styles.staleBarText}>
-              Periode dari penyimpanan — menyinkronkan…
-            </Text>
+            <Text style={styles.staleBarText}>Periode dari penyimpanan — menyinkronkan…</Text>
           </View>
         ) : null}
       </View>
