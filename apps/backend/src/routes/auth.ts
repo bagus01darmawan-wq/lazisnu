@@ -56,8 +56,7 @@ async function branchNameById(branchId: string | null | undefined): Promise<stri
   const res = await db
     .select({ name: branches.name })
     .from(branches)
-    .where(eq(branches.id, branchId))
-    .limit(1);
+    .where(eq(branches.id, branchId));
   return res[0]?.name ?? null;
 }
 
