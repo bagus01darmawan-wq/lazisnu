@@ -14,7 +14,7 @@ const TAB_ICONS: Record<string, {active: string; inactive: string}> = {
   Profile: {active: 'account-circle', inactive: 'account-circle-outline'},
   // C1-T9: tab peran (Scan FAB hanya dirender untuk PPK — lihat AppNavigator).
   Persetujuan: {active: 'clipboard-check', inactive: 'clipboard-check-outline'},
-  Keuangan: {active: 'hand-coin', inactive: 'hand-coin-outline'},
+  Laporan: {active: 'file-document', inactive: 'file-document-outline'},
   Rekap: {active: 'chart-box', inactive: 'chart-box-outline'},
 };
 

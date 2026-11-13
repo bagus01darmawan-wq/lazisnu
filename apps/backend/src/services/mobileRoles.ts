@@ -20,8 +20,7 @@ import {
   resolvePeriodStatus,
 } from './periodCalendar';
 import { isEscalated } from './periodDrafts';
-import { calcExpectedShare } from '../utils/c1Math';
-import { ensureBranchSubmission, type SubmissionActor } from './ppkSubmissions';
+import type { SubmissionActor } from './ppkSubmissions';
 
 export interface PeriodInfo {
   period: string;
@@ -209,15 +208,7 @@ export async function getStafSummary(
 }
 
 export interface KeuanganInboxItem {
-  /**
-   * - `ppk` — setoran PPK menunggu **counter-sign Bendahara Ranting**.
-   * - `branch_sign` — BA ranting menunggu **tanda tangan Bendahara Ranting**
-   *   (tahap 1 serah terima ranting → MWC). Koreksi Pion 23 Sep 2026: ini
-   *   BUKAN pekerjaan Admin Ranting.
-   * - `branch` — BA ranting sudah ditandatangani Bendahara Ranting, menunggu
-   *   **counter-sign Bendahara MWC**.
-   */
-  kind: 'ppk' | 'branch_sign' | 'branch';
+  kind: 'ppk';
   submission_id: string;
   branch_id: string;
   branch_name: string;
@@ -226,14 +217,6 @@ export interface KeuanganInboxItem {
   status: string;
   version: number;
   needs_force: boolean;
-  /** Jumlah setoran PPK periode ini yang belum FINAL (hanya untuk `branch_sign`). */
-  ppk_belum_final: number;
-  /** Jumlah setoran PPK periode ini (hanya untuk `branch_sign`). */
-  ppk_total: number;
-  /** Total bisyaroh PPK (hanya untuk `branch_sign`) — bahan hitung ekspektasi share. */
-  bisyaroh_total: number;
-  /** 30% × (total − bisyaroh), dihitung server (hanya untuk `branch_sign`). */
-  expected_share: number;
 }
 
 export interface KeuanganInbox {
@@ -242,14 +225,8 @@ export interface KeuanganInbox {
 }
 
 /**
- * Antrean Bendahara/Sekretaris:
- * - scope **ranting** (`branchId`): (a) `PPK_SIGNED` seranting → counter-sign;
- *   (b) BA ranting `DRAFT` yang belum ditandatangani → **tanda tangan tahap 1**.
- *   Koreksi Pion 23 Sep 2026: tahap 1 ini pekerjaan **Bendahara Ranting**,
- *   bukan Admin Ranting — dan sebelumnya tidak punya UI sama sekali.
- * - scope **distrik** (`districtId`): BA ranting `DRAFT` yang **sudah**
- *   ditandatangani ranting → counter-sign MWC.
- * FINAL tak masuk antrean (selesai). Read-only.
+ * Antrean Bendahara Ranting: hanya BA PPK berstatus PPK_SIGNED yang menunggu
+ * counter-sign. Sesudahnya status FINAL berarti periode selesai.
  */
 export async function getKeuanganInbox(
   actor: SubmissionActor,
@@ -302,105 +279,10 @@ export async function getKeuanganInbox(
         status: s.status,
         version: s.version,
         needs_force: activeLeft > 0,
-        ppk_belum_final: 0,
-        ppk_total: 0,
-        bisyaroh_total: 0,
-        expected_share: 0,
       });
     }
 
-    // Tahap 1 BA ranting (koreksi Pion 23 Sep 2026): Bendahara Ranting
-    // menandatangani BA ranting untuk diserahterimakan ke Bendahara MWC.
-    // Hanya dimunculkan bila ranting ini sudah punya setoran PPK — tanpa PPK
-    // tidak ada yang diserahterimakan, jadi jangan tawarkan tanda tangan kosong.
-    const ppkRows = await db.query.ppkSubmissions.findMany({
-      where: and(
-        eq(schema.ppkSubmissions.branchId, actor.branchId),
-        eq(schema.ppkSubmissions.periodYear, year),
-        eq(schema.ppkSubmissions.periodMonth, month),
-      ),
-      columns: { status: true, totalAmount: true, bisyarohAmount: true },
-    });
-    if (ppkRows.length > 0) {
-      // Baris ranting DRAFT selama ini hanya lahir dari halaman web admin
-      // (`ensureBranchSubmission` di GET /admin/branch-submissions, gerbang
-      // `rantingOnly` = ADMIN_RANTING/ADMIN_KECAMATAN). Bendahara Ranting tak
-      // bisa membuka halaman itu (403) — jadi tanpa panggilan ini antrean tahap 1
-      // kosong sampai ada admin yang kebetulan membuka halaman web lebih dulu,
-      // padahal justru Bendahara Ranting yang harus bertindak. Idempoten:
-      // baris yang sudah ada hanya disegarkan angkanya; keputusan tanda tangan
-      // ranting (share_mwc / variance_reason / linked_periods / rantingSignerId)
-      // tidak ikut ditimpa.
-      await ensureBranchSubmission(actor.branchId, year, month);
-
-      const subs = await db.query.branchSubmissions.findMany({
-        where: and(
-          eq(schema.branchSubmissions.branchId, actor.branchId),
-          eq(schema.branchSubmissions.periodYear, year),
-          eq(schema.branchSubmissions.periodMonth, month),
-          eq(schema.branchSubmissions.status, 'DRAFT'),
-        ),
-        with: { branch: { columns: { name: true } } },
-      });
-      for (const s of subs) {
-        // Sudah ditandatangani ranting → sudah pindah ke antrean MWC.
-        if (s.rantingSignerId) continue;
-
-        // Angka diambil dari setoran PPK (sumber yang sama dengan
-        // `computeBranchFinalValues`) — bukan dari `s.totalAmount`, yang bisa
-        // masih 0 bila baris ranting lahir sebelum PPK punya nominal.
-        const total = ppkRows.reduce((sum, p) => sum + Number(p.totalAmount), 0);
-        const bisyarohTotal = ppkRows.reduce((sum, p) => sum + Number(p.bisyarohAmount), 0);
-
-        items.push({
-          kind: 'branch_sign',
-          submission_id: s.id,
-          branch_id: s.branchId,
-          branch_name: s.branch?.name ?? '',
-          officer_name: null,
-          total,
-          status: s.status,
-          version: s.version,
-          needs_force: false,
-          // Prasyarat server: semua PPK periode itu harus FINAL. Dilaporkan di
-          // sini supaya UI bisa menjelaskan, bukan sekadar menolak saat ditekan.
-          ppk_belum_final: ppkRows.filter((p) => p.status !== 'FINAL').length,
-          ppk_total: ppkRows.length,
-          bisyaroh_total: bisyarohTotal,
-          expected_share: calcExpectedShare(total, bisyarohTotal),
-        });
-      }
-    }
-  } else if (actor.districtId) {
-    // Keuangan MWC: branch DRAFT yang sudah di-sign Admin Ranting, sedistrik.
-    const subs = await db.query.branchSubmissions.findMany({
-      where: and(
-        eq(schema.branchSubmissions.districtId, actor.districtId),
-        eq(schema.branchSubmissions.periodYear, year),
-        eq(schema.branchSubmissions.periodMonth, month),
-        eq(schema.branchSubmissions.status, 'DRAFT'),
-      ),
-      with: { branch: { columns: { name: true } } },
-    });
-    for (const s of subs) {
-      if (!s.rantingSignerId) continue;
-      items.push({
-        kind: 'branch',
-        submission_id: s.id,
-        branch_id: s.branchId,
-        branch_name: s.branch?.name ?? '',
-        officer_name: null,
-        total: Number(s.totalAmount),
-        status: s.status,
-        version: s.version,
-        needs_force: false,
-        ppk_belum_final: 0,
-        ppk_total: 0,
-        bisyaroh_total: 0,
-        expected_share: 0,
-      });
-    }
-  } else {
+  } else if (!actor.districtId) {
     throw Errors.FORBIDDEN_SCOPE('Akun keuangan tanpa scope ranting/distrik');
   }
 

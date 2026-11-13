@@ -7,14 +7,13 @@ import { authorize } from '../../middleware/auth';
 import { assertBranchAccess } from '../../middleware/ownership';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { isAppError } from '../../utils/AppError';
-import { signBranchSchema, reopenBranchSchema } from './schemas';
+import { reopenBranchSchema } from './schemas';
 import { toBranchResponse } from '../../services/ppkSubmissions';
 import {
   deleteBaPdf,
   generateBaPdf,
   getBaDownload,
   getBranchBeritaAcara,
-  signBranchSubmission,
   type RequestContext,
 } from '../../services/cosign';
 import { reopenBranchSubmission } from '../../services/reopen';
@@ -154,35 +153,6 @@ export async function branchSubmissionsRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // POST /v1/admin/branch-submissions/:id/sign — Bendahara Ranting pemilik
-  // menandatangani di sesinya (+ angka T4); status tetap DRAFT menunggu MWC.
-  // signer_id = pemilik sesi (bukan body).
-  // Koreksi Pion 23 Sep 2026: BUKAN Admin Ranting. Bendahara Ranting =
-  // STAF_KEUANGAN bercakupan ranting (sama dengan peng-counter-sign BA PPK).
-  // Prasyarat semua PPK FINAL ditegakkan di service.
-  fastify.post(
-    '/branch-submissions/:id/sign',
-    { preHandler: [authorize('STAF_KEUANGAN')] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      try {
-        const { id } = request.params as { id: string };
-        const body = signBranchSchema.parse(request.body);
-        const result = await signBranchSubmission(actorOf(request), {
-          submissionId: id,
-          signaturePng: body.signature_png,
-          consent: body.consent,
-          expectedVersion: body.expected_version,
-          shareMwc: body.share_mwc,
-          varianceReason: body.variance_reason,
-          linkedPeriods: body.linked_periods,
-          asNol: body.as_nol,
-        }, ctxOf(request));
-        return sendSuccess(reply, result);
-      } catch (error: unknown) {
-        return sendAppError(reply, error, fastify.log);
-      }
-    },
-  );
 
   // POST /v1/admin/branch-submissions/:id/reopen — C1-T7 (§14.8): Admin
   // Ranting pemilik / MWC membuka FINAL/FINAL_NOL → DRAFT + jendela 48 jam.

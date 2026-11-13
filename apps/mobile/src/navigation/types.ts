@@ -22,7 +22,7 @@ export type MainTabParamList = {
   Profile: undefined;
   // C1-T9: tab peran (1 APK, tampil beda per kartu — roles/roleMap.tabsForRole).
   Persetujuan: undefined;
-  Keuangan: undefined;
+  Laporan: undefined;
   Rekap: undefined;
 };
 

@@ -70,7 +70,7 @@ const TAB_COMPONENTS: Record<TabName, React.ComponentType> = {
   History: HistoryScreen,
   Profile: ProfileScreen,
   Persetujuan: PersetujuanScreen,
-  Keuangan: KeuanganScreen,
+  Laporan: KeuanganScreen,
   Rekap: RekapScreen,
 };
 

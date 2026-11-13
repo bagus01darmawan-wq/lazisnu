@@ -19,7 +19,6 @@ import { submitCollection } from '../collectionSubmission';
 import {
   countersignPpkSubmission,
   getBaDownload,
-  signBranchSubmission,
   signPpkSubmission,
 } from '../cosign';
 import { reopenPpkSubmission } from '../reopen';
@@ -128,7 +127,6 @@ describe('C1-T9 peran mobile server (DB, R2 mock)', () => {
   let keuMwcActor: { userId: string; role: string; branchId: null; districtId: string };
   let ppkSubId: string;
   let branchSubId: string;
-  let branchSubId2: string;
   let uAdmR1: string;
 
   async function mkUser(email: string, phone: string, role: 'PETUGAS' | 'STAF_KEUANGAN' | 'STAF_PENGUMPULAN' | 'ADMIN_RANTING' | 'ADMIN_KECAMATAN', branchId: string | null, districtId: string | null) {
@@ -178,8 +176,7 @@ describe('C1-T9 peran mobile server (DB, R2 mock)', () => {
     const ppkActor = { userId: uPpk, role: 'PETUGAS', branchId: bR1, districtId: dt9, officerId: off.id };
     await signPpkSubmission(ppkActor, { submissionId: ppkSubId, signaturePng: TINY_PNG_B64, consent: true }, CTX, T0);
 
-    // Branch R1: DRAFT polos (reopen di test riwayat tak menular ke mana-mana).
-    // Inbox MWC diuji lewat R2 (PPK FINAL + branch sign) di bawah.
+    // Legacy branch report remains only for its read-only PDF history test.
     const sBr = await ensureBranchSubmission(bR1, 2026, 9);
     branchSubId = sBr.id;
 
@@ -189,8 +186,7 @@ describe('C1-T9 peran mobile server (DB, R2 mock)', () => {
       preparedAt: new Date(T0.getTime() - 25 * 3_600_000),
     });
 
-    // R2: PPK FINAL + branch sign (DRAFT bertanda → inbox MWC).
-    // 40000 → bis 4000 → sisa 36000 → ekspektasi 10800 → setor pas.
+    // R2: PPK FINAL; no follow-up BA ranting-to-MWC step.
     const [can2] = await db.insert(schema.cans).values({ branchId: bR2, ownerName: 'Owner T9-2', ownerWhatsapp: '084000000900', qrCode: 'TEST-QR-T9-C2' }).returning();
     const [asg2] = await db.insert(schema.assignments).values({ officerId: off2.id, canId: can2.id, periodYear: 2026, periodMonth: 9, status: 'ACTIVE' }).returning();
     await db.transaction(async (tx) => submitCollection(tx as never, {
@@ -198,18 +194,10 @@ describe('C1-T9 peran mobile server (DB, R2 mock)', () => {
     }, T0));
     const sPpk2 = await ensurePpkSubmission(off2.id, bR2, 2026, 9);
     const uKeu2 = await mkUser('keu2-t9@test.com', '084000000908', 'STAF_KEUANGAN', bR2, null);
-    const uAdm2 = await mkUser('adminr2-t9@test.com', '084000000909', 'ADMIN_RANTING', bR2, null);
     const ppkActor2 = { userId: uPpk2, role: 'PETUGAS', branchId: bR2, districtId: dt9, officerId: off2.id };
     const keuActor2 = { userId: uKeu2, role: 'STAF_KEUANGAN', branchId: bR2, districtId: dt9 };
-    const admActor2 = { userId: uAdm2, role: 'ADMIN_RANTING', branchId: bR2, districtId: dt9 };
-    // Admin Ranting tak lagi menandatangani BA ranting (koreksi Pion 23 Sep
-    // 2026) — penandatangannya Bendahara Ranting, yaitu `keuActor2` di atas.
-    void admActor2;
     await signPpkSubmission(ppkActor2, { submissionId: sPpk2.id, signaturePng: TINY_PNG_B64, consent: true }, CTX, T0);
     await countersignPpkSubmission(keuActor2, { submissionId: sPpk2.id, signaturePng: TINY_PNG_B64, consent: true }, CTX, T0);
-    const sBr2 = await ensureBranchSubmission(bR2, 2026, 9);
-    branchSubId2 = sBr2.id;
-    await signBranchSubmission(keuActor2, { submissionId: sBr2.id, signaturePng: TINY_PNG_B64, consent: true, shareMwc: 10800 }, CTX, T0);
   });
 
   afterAll(async () => {
@@ -289,33 +277,15 @@ describe('C1-T9 peran mobile server (DB, R2 mock)', () => {
     });
   });
 
-  test('keuangan inbox: PPK_SIGNED + tahap-1 BA ranting seranting; branch-signed sedistrik', async () => {
+  test('keuangan inbox hanya memuat BA PPK yang menunggu tanda tangan Bendahara', async () => {
     const ranting = await getKeuanganInbox(keuActor, 2026, 9);
-    // Dua antrean untuk Bendahara Ranting: counter-sign BA PPK, lalu tanda
-    // tangan tahap 1 BA ranting (koreksi Pion 23 Sep 2026 — dulu yang
-    // dianggap menandatangani adalah Admin Ranting).
-    expect(ranting.items.length).toBe(2);
-    expect(ranting.items.find((i) => i.kind === 'ppk')).toMatchObject({
+    expect(ranting.items).toHaveLength(1);
+    expect(ranting.items[0]).toMatchObject({
       kind: 'ppk', submission_id: ppkSubId, needs_force: false,
-    });
-    // Angka tahap 1 diambil dari setoran PPK: 50000 → bisyaroh 5000 →
-    // ekspektasi 30% × 45000 = 13500. ppkSubId masih PPK_SIGNED, jadi
-    // prasyarat "semua PPK FINAL" belum terpenuhi dan UI harus menjelaskan.
-    expect(ranting.items.find((i) => i.kind === 'branch_sign')).toMatchObject({
-      kind: 'branch_sign',
-      submission_id: branchSubId,
-      branch_name: 'Ranting T9-1',
-      total: 50000,
-      bisyaroh_total: 5000,
-      expected_share: 13500,
-      ppk_total: 1,
-      ppk_belum_final: 1,
     });
 
     const mwc = await getKeuanganInbox(keuMwcActor, 2026, 9);
-    const branchItem = mwc.items.find((i) => i.submission_id === branchSubId2);
-    expect(branchItem).toMatchObject({ kind: 'branch' });
-
+    expect(mwc.items).toEqual([]);
     await expect(getKeuanganInbox(stafActor, 2026, 9)).rejects.toMatchObject({ code: ErrorCode.FORBIDDEN });
   });
 
@@ -346,23 +316,22 @@ describe('C1-T9 peran mobile server (DB, R2 mock)', () => {
     expect(branchVersions[branchVersions.length - 1].is_current).toBe(true);
   });
 
-  // Ditaruh paling akhir: ia menghapus baris ranting R1 sehingga `branchSubId`
-  // lama tidak berlaku lagi (tidak dipakai tes lain setelah ini).
-  test('keuangan inbox menghidupkan sendiri baris ranting (tanpa kunjungan web admin)', async () => {
-    // Regresi 23 Sep 2026: baris `branch_submissions` DRAFT hanya lahir dari
-    // `ensureBranchSubmission` di GET /admin/branch-submissions, yang bergerbang
-    // `rantingOnly` (Admin Ranting / Admin Kecamatan). Bendahara Ranting — justru
-    // pihak yang harus menandatangani — tidak bisa membuka halaman itu, sehingga
-    // antrean tanda tangan tahap 1-nya kosong sampai ada admin kebetulan lewat.
+  test('inbox keuangan tidak membuat atau menampilkan BA ranting-ke-MWC', async () => {
     await db.delete(schema.branchSubmissions).where(eq(schema.branchSubmissions.id, branchSubId));
     expect(
       await db.query.branchSubmissions.findFirst({ where: eq(schema.branchSubmissions.id, branchSubId) }),
     ).toBeUndefined();
 
     const inbox = await getKeuanganInbox(keuActor, 2026, 9);
-    const stage1 = inbox.items.find((i) => i.kind === 'branch_sign');
-    expect(stage1).toBeDefined();
-    // Baris lama sudah hilang → id yang muncul pasti hasil materialisasi inbox.
-    expect(stage1!.submission_id).not.toBe(branchSubId);
+    expect(inbox.items).toEqual([]);
+    expect(
+      await db.query.branchSubmissions.findFirst({
+        where: and(
+          eq(schema.branchSubmissions.branchId, bR1),
+          eq(schema.branchSubmissions.periodYear, 2026),
+          eq(schema.branchSubmissions.periodMonth, 9),
+        ),
+      }),
+    ).toBeUndefined();
   });
 });

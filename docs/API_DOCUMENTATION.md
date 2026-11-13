@@ -1030,9 +1030,9 @@ aksi C1 (`PPK_SIGNED`, `*_FINALIZED`, `*_REOPENED`, `KUNCI_PERIODE_*`,
 
 Mobile TTD interaktif: kanvas coretan → raster → PNG grayscale 240×120 via
 encoder murni (blok stored, tanpa dep native) → `signature_png` (kontrak T5:
-PNG ≤ 50KB + consent). `POST /mobile/submissions/:id/sign` (PPK, DRAFT) +
-`countersign` (Keuangan) + `POST /mobile/branch-submissions/:id/countersign`
-(MWC) dipanggil dari HP; penjaga scope di server.
+PNG ≤ 50KB + consent). `POST /mobile/submissions/:id/sign` (PPK) +
+`countersign` (Bendahara Ranting) dipanggil dari HP. Sesudah BA PPK berstatus
+`FINAL`, periode tuntas; tidak ada lagi tanda tangan BA ranting-ke-MWC.
 
 ### 4.18 Notifikasi 7 Event + WA Fallback (C1-T11, §14.15)
 

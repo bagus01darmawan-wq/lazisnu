@@ -40,11 +40,9 @@ export interface StafSummary {
 export type PeriodPendingReason =
   | 'PPK_DRAFT'
   | 'PPK_WAITING_BENDAHARA'
-  | 'BRANCH_DRAFT'
-  | 'BRANCH_WAITING_MWC'
   | 'DISTRICT_UNSETTLED';
 
-export type PeriodWaitingFor = 'PPK' | 'BENDAHARA_RANTING' | 'BENDAHARA_MWC' | 'ADMIN';
+export type PeriodWaitingFor = 'PPK' | 'BENDAHARA_RANTING' | 'ADMIN';
 
 export interface PeriodProgressView {
   year: number;

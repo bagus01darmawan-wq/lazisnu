@@ -889,15 +889,9 @@ export interface PeriodInfoDto {
 }
 
 // Periode berbasis aksi — GET /mobile/period-context.
-export type PeriodPendingReasonDto =
-  | 'PPK_DRAFT'
-  | 'PPK_WAITING_BENDAHARA'
-  | 'BRANCH_DRAFT'
-  | 'BRANCH_WAITING_MWC'
-  | 'DISTRICT_UNSETTLED';
+export type PeriodPendingReasonDto = 'PPK_DRAFT' | 'PPK_WAITING_BENDAHARA' | 'DISTRICT_UNSETTLED';
 
-export type PeriodWaitingForDto = 'PPK' | 'BENDAHARA_RANTING' | 'BENDAHARA_MWC' | 'ADMIN';
-
+export type PeriodWaitingForDto = 'PPK' | 'BENDAHARA_RANTING' | 'ADMIN';
 export interface PeriodProgressDto {
   year: number;
   month: number;
@@ -1026,13 +1020,8 @@ export interface StafSummaryDto {
 }
 
 export interface KeuanganInboxItemDto {
-  /**
-   * - `ppk` — setoran PPK menunggu counter-sign Bendahara Ranting.
-   * - `branch_sign` — BA ranting menunggu **tanda tangan Bendahara Ranting**
-   *   (tahap 1, serah terima ke MWC). Koreksi Pion 23 Sep 2026.
-   * - `branch` — BA ranting menunggu counter-sign Bendahara MWC.
-   */
-  kind: 'ppk' | 'branch_sign' | 'branch';
+  /** BA PPK menunggu counter-sign Bendahara Ranting. */
+  kind: 'ppk';
   submission_id: string;
   branch_id: string;
   branch_name: string;
@@ -1041,14 +1030,6 @@ export interface KeuanganInboxItemDto {
   status: string;
   version: number;
   needs_force: boolean;
-  /** Hanya berarti untuk `branch_sign`: setoran PPK yang belum FINAL. */
-  ppk_belum_final: number;
-  /** Hanya berarti untuk `branch_sign`: jumlah setoran PPK periode ini. */
-  ppk_total: number;
-  /** Hanya berarti untuk `branch_sign`: total bisyaroh PPK. */
-  bisyaroh_total: number;
-  /** Hanya berarti untuk `branch_sign`: 30% × (total − bisyaroh), dari server. */
-  expected_share: number;
 }
 
 export interface MwcRecapDto {
@@ -1165,50 +1146,12 @@ export const c1Service = {
     return apiRequest<StafSummaryDto>(`/mobile/staf/ringkasan${periodQuery(year, month)}`);
   },
 
-  // Keuangan — antrean TTD kedua + unduh BA.
+  // Laporan — antrean BA PPK yang menunggu tanda tangan Bendahara Ranting.
   getKeuanganInbox: async (
     year?: number,
     month?: number,
   ): Promise<ApiResponse<{period: string; items: KeuanganInboxItemDto[]}>> => {
     return apiRequest(`/mobile/keuangan/inbox${periodQuery(year, month)}`);
-  },
-  countersignBranch: async (
-    id: string,
-    data: {signature_png: string; consent: boolean; expected_version?: number},
-  ): Promise<ApiResponse<unknown>> => {
-    return apiRequest(`/mobile/branch-submissions/${id}/countersign`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-  /**
-   * Tahap 1 BA ranting — **Bendahara Ranting** menandatangani (koreksi Pion
-   * 23 Sep 2026). Status tetap DRAFT sampai Bendahara MWC meng-counter-sign.
-   * Server menolak bila masih ada setoran PPK periode itu yang belum FINAL.
-   */
-  signBranch: async (
-    id: string,
-    data: {
-      signature_png: string;
-      consent: boolean;
-      expected_version?: number;
-      share_mwc: number;
-      variance_reason?: string;
-      linked_periods?: string[];
-      as_nol?: boolean;
-    },
-  ): Promise<ApiResponse<unknown>> => {
-    return apiRequest(`/admin/branch-submissions/${id}/sign`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-  /** Teks BA ranting (baca-saja) — dipakai untuk menampilkan isi sebelum TTD. */
-  getBranchBeritaAcara: async (id: string): Promise<ApiResponse<BaTextDto>> => {
-    return apiRequest<BaTextDto>(`/admin/branch-submissions/${id}/berita-acara`);
-  },
-  getBranchPdfVersions: async (id: string): Promise<ApiResponse<BaVersionDto[]>> => {
-    return apiRequest<BaVersionDto[]>(`/admin/branch-submissions/${id}/pdf-versions`);
   },
   /**
    * Daftar setoran ranting dalam cakupan akun (halaman Profil → Berita Acara).

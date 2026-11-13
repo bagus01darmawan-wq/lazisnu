@@ -6,14 +6,13 @@ import { eq } from 'drizzle-orm';
 import { authorize } from '../../middleware/auth';
 import { sendSuccess, sendError, sendInternalError } from '../../utils/response';
 import { isAppError } from '../../utils/AppError';
-import { countersignBranchSchema, forceFinalizePpkSchema, reopenSubmissionSchema, signSubmissionSchema } from './schemas';
+import { forceFinalizePpkSchema, reopenSubmissionSchema, signSubmissionSchema } from './schemas';
 import {
   ensurePpkSubmission,
   listSignedPpkSubmissions,
   toPpkResponse,
 } from '../../services/ppkSubmissions';
 import {
-  countersignBranchSubmission,
   countersignPpkSubmission,
   deleteBaPdf,
   forceFinalizePpkSubmission,
@@ -186,27 +185,6 @@ export async function submissionsRoutes(fastify: FastifyInstance) {
     },
   );
 
-  // POST /mobile/branch-submissions/:id/countersign — Bendahara MWC
-  // (STAF_KEUANGAN sedistrik) → FINAL / FINAL_NOL.
-  fastify.post(
-    '/branch-submissions/:id/countersign',
-    { preHandler: [authorize('STAF_KEUANGAN')] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      try {
-        const { id } = request.params as { id: string };
-        const body = countersignBranchSchema.parse(request.body);
-        const result = await countersignBranchSubmission(actorOf(request), {
-          submissionId: id,
-          signaturePng: body.signature_png,
-          consent: body.consent,
-          expectedVersion: body.expected_version,
-        }, ctxOf(request));
-        return sendSuccess(reply, result);
-      } catch (error: unknown) {
-        return sendAppError(reply, error, fastify.log);
-      }
-    },
-  );
 
   // GET /mobile/submissions/:id/berita-acara — teks readable dari snapshot.
   fastify.get(

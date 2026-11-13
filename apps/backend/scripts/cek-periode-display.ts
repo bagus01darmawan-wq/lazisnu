@@ -56,10 +56,9 @@ interface Sel {
   settled: boolean;
   reason: string | null;
   waitingFor: string | null;
-  sumber: string;
 }
 function sel(): Sel {
-  return { eligible: false, settled: false, reason: null, waitingFor: null, sumber: '—' };
+  return { eligible: false, settled: false, reason: null, waitingFor: null };
 }
 
 interface Args {
@@ -139,13 +138,6 @@ async function branchCells(
        AND (period_year * 12 + period_month) BETWEEN ${lo} AND ${hi}
      GROUP BY period_year, period_month, status`;
 
-  const branchRows = await sql<{ year: number; month: number; status: string; signed: boolean }[]>`
-    SELECT period_year AS year, period_month AS month, status,
-           (ranting_signer_id IS NOT NULL) AS signed
-      FROM branch_submissions
-     WHERE branch_id = ${branchId}
-       AND (period_year * 12 + period_month) BETWEEN ${lo} AND ${hi}`;
-
   const map = new Map<string, Sel>();
   const get = (p: Ref): Sel => {
     const k = periodKey(p);
@@ -175,14 +167,6 @@ async function branchCells(
     detail.push(`ppk_submissions ${k}: ${r.status} ×${Number(r.total)}`);
   }
 
-  for (const r of branchRows) {
-    const s = get({ year: r.year, month: r.month });
-    s.eligible = true;
-    s.settled = r.status === 'FINAL' || r.status === 'FINAL_NOL';
-    s.sumber = 'branch_submissions';
-    if (!s.settled) s.sumber += ` (${r.status}${r.signed ? ', sudah ditandatangani ranting' : ''})`;
-    detail.push(`branch_submission ${periodKey({ year: r.year, month: r.month })}: ${r.status}${r.signed ? ' +ranting_signed' : ''}`);
-  }
 
   for (const [k, aktif] of work) {
     if (aktif <= 0) continue;
@@ -190,10 +174,14 @@ async function branchCells(
     get({ year: y, month: m }).eligible = true;
   }
 
-  // Alasan tunggakan: PPK dulu, baru ranting (cerminan branchCells periodState.ts:326-342)
+  // Branch completion follows PPK FINAL; there is no second BA-to-MWC stage.
   for (const [k, s] of map) {
     if (s.settled) continue;
     const ppk = ppkByPeriod.get(k);
+    if (ppk && ppk.draft === 0 && ppk.signed === 0 && ppk.other > 0) {
+      s.settled = true;
+      continue;
+    }
     if (!ppk || ppk.draft + ppk.signed > 0) {
       if (ppk && ppk.signed > 0) {
         s.reason = 'PPK_WAITING_BENDAHARA';
@@ -202,10 +190,7 @@ async function branchCells(
         s.reason = 'PPK_DRAFT';
         s.waitingFor = 'PPK';
       }
-      continue;
     }
-    s.reason = s.sumber.includes('ranting_signed') ? 'BRANCH_WAITING_MWC' : 'BRANCH_DRAFT';
-    s.waitingFor = s.sumber.includes('ranting_signed') ? 'BENDAHARA_MWC' : 'BENDAHARA_RANTING';
   }
 
   return { map, detail };
@@ -233,12 +218,13 @@ async function districtCells(
        AND (a.period_year * 12 + a.period_month) BETWEEN ${lo} AND ${hi}
      GROUP BY a.period_year, a.period_month, o.branch_id`;
 
-  const branchRows = await sql<{ year: number; month: number; branch_id: string; status: string }[]>`
-    SELECT period_year AS year, period_month AS month, branch_id AS "branchId", status
-      FROM branch_submissions
-     WHERE district_id = ${districtId}
-       AND (period_year * 12 + period_month) BETWEEN ${lo} AND ${hi}`;
-
+  const ppkRows = await sql<{ year: number; month: number; branch_id: string; status: string; total: number }[]>`
+    SELECT p.period_year AS year, p.period_month AS month, p.branch_id, p.status, count(*)::int AS total
+      FROM ppk_submissions p
+      JOIN branches b ON b.id = p.branch_id
+     WHERE b.district_id = ${districtId}
+       AND (p.period_year * 12 + p.period_month) BETWEEN ${lo} AND ${hi}
+     GROUP BY p.period_year, p.period_month, p.branch_id, p.status`;
   const map = new Map<string, Sel>();
   const get = (p: Ref): Sel => {
     const k = periodKey(p);
@@ -261,31 +247,26 @@ async function districtCells(
     get({ year: r.year, month: r.month }).eligible = true;
   }
 
-  const settledBranches = new Map<string, Set<string>>();
-  const subStats = new Map<string, { total: number; settled: number }>();
-  for (const r of branchRows) {
-    const p = { year: r.year, month: r.month };
-    get(p).eligible = true;
-    const k = periodKey(p);
-    const acc = subStats.get(k) ?? { total: 0, settled: 0 };
-    acc.total += 1;
-    if (r.status === 'FINAL' || r.status === 'FINAL_NOL') {
-      acc.settled += 1;
-      const set = settledBranches.get(k) ?? new Set<string>();
-      set.add(r.branch_id);
-      settledBranches.set(k, set);
-    }
-    subStats.set(k, acc);
-    detail.push(`branch_submission ${k}: ${r.status}`);
+  const ppkByPeriodBranch = new Map<string, Map<string, { draft: number; signed: number; final: number }>>();
+  for (const r of ppkRows) {
+    const k = periodKey({ year: r.year, month: r.month });
+    const byBranch = ppkByPeriodBranch.get(k) ?? new Map();
+    const status = byBranch.get(r.branch_id) ?? { draft: 0, signed: 0, final: 0 };
+    if (r.status === 'DRAFT') status.draft += Number(r.total);
+    else if (r.status === 'PPK_SIGNED') status.signed += Number(r.total);
+    else status.final += Number(r.total);
+    byBranch.set(r.branch_id, status);
+    ppkByPeriodBranch.set(k, byBranch);
+    detail.push(`ppk_submissions ${k} ${r.branch_id}: ${r.status} ×${Number(r.total)}`);
   }
 
   for (const [k, s] of map) {
     const needed = branchesWithWork.get(k) ?? new Set<string>();
-    const settled = settledBranches.get(k) ?? new Set<string>();
-    const stats = subStats.get(k) ?? { total: 0, settled: 0 };
-    const everyWorkBranchHasFinal = [...needed].every((b) => settled.has(b));
-    const everySubmissionSettled = stats.total === stats.settled;
-    s.settled = everyWorkBranchHasFinal && everySubmissionSettled;
+    const ppkByBranch = ppkByPeriodBranch.get(k) ?? new Map();
+    s.settled = [...needed].every((branchId) => {
+      const ppk = ppkByBranch.get(branchId);
+      return !!ppk && ppk.draft === 0 && ppk.signed === 0 && ppk.final > 0;
+    });
     if (!s.settled) {
       s.reason = 'DISTRICT_UNSETTLED';
       s.waitingFor = 'ADMIN';
@@ -394,7 +375,7 @@ async function main(): Promise<void> {
           const s = map.get(periodKey(p));
           if (!s) continue;
           console.log(
-            `    ${periodKey(p)}: eligible=${s.eligible} settled=${s.settled} reason=${s.reason ?? '—'} waiting=${s.waitingFor ?? '—'} (${s.sumber})`,
+            `    ${periodKey(p)}: eligible=${s.eligible} settled=${s.settled} reason=${s.reason ?? '—'} waiting=${s.waitingFor ?? '—'}`,
           );
         }
         if (detail.length > 0) {

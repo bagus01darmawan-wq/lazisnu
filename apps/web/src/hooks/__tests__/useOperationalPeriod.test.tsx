@@ -25,9 +25,9 @@ function Harness() {
 const contextAfterInterceptor: PeriodStateView = {
   currentPeriod: { year: 2026, month: 11 },
   displayPeriod: { year: 2026, month: 10 },
-  displayReason: 'BRANCH_DRAFT',
+  displayReason: 'PPK_WAITING_BENDAHARA',
   unsettled: [
-    { year: 2026, month: 10, period: '2026-10', reason: 'BRANCH_DRAFT', waitingFor: 'ADMIN' },
+    { year: 2026, month: 10, period: '2026-10', reason: 'PPK_WAITING_BENDAHARA', waitingFor: 'BENDAHARA_RANTING' },
   ],
 };
 

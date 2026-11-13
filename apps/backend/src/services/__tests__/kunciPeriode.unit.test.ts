@@ -7,7 +7,6 @@ import {
   resolveKunciPeriodePhase,
 } from '../periodCalendar';
 import { signSubmissionSchema } from '../../routes/mobile/schemas';
-import { signBranchSchema } from '../../routes/admin/schemas';
 
 describe('C1-T6 resolveKunciPeriodePhase — September 2026', () => {
   const b = buildPeriodBoundaries(2026, 9);
@@ -47,13 +46,4 @@ describe('C1-T6 F4 — body ber-signer_id harus 400 (.strict())', () => {
     expect(r.success).toBe(false);
   });
 
-  test('sign ranting menolak ranting_signer_id di body', () => {
-    const r = signBranchSchema.safeParse({
-      signature_png: 'x'.repeat(100),
-      consent: true,
-      share_mwc: 0,
-      ranting_signer_id: '00000000-0000-4000-8000-000000000000',
-    });
-    expect(r.success).toBe(false);
-  });
 });

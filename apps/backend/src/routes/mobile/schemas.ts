@@ -71,8 +71,6 @@ export const signSubmissionSchema = z.object({
   expected_version: z.number().int().min(1).optional(),
 }).strict();
 
-/** C1-T5: countersign ranting oleh Bendahara MWC (angka sudah di-sign). */
-export const countersignBranchSchema = signSubmissionSchema;
 
 /** C1-T5: force FINAL Admin Ranting (mensyaratkan PPK_SIGNED + kedua TTD). */
 export const forceFinalizePpkSchema = z.object({

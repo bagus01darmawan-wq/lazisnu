@@ -1,8 +1,8 @@
 /**
  * Status periode berbasis AKSI, bukan kalender.
  *
- * - `tuntas` = status akhir rantai tanda tangan: PPK `FINAL`, ranting
- *   `FINAL`/`FINAL_NOL`.
+ * - `tuntas` = semua BA PPK periode tersebut berstatus `FINAL` (ditandatangani
+ *   PPK dan Bendahara Ranting); tidak ada tahap tanda tangan BA ke MWC.
  * - `display_period` = periode berhak tertua yang belum tuntas untuk cakupan
  *   pengguna; kalau tidak ada → periode operasional berjalan.
  * - `REASSIGNED` netral: tugas sudah lepas ke petugas pengganti, bukan beban
@@ -34,18 +34,9 @@ export interface PeriodRef {
   month: number;
 }
 
-export type PeriodPendingReason =
-  | 'PPK_DRAFT'
-  | 'PPK_WAITING_BENDAHARA'
-  | 'BRANCH_DRAFT'
-  | 'BRANCH_WAITING_MWC'
-  | 'DISTRICT_UNSETTLED';
+export type PeriodPendingReason = 'PPK_DRAFT' | 'PPK_WAITING_BENDAHARA' | 'DISTRICT_UNSETTLED';
 
-export type PeriodWaitingFor =
-  | 'PPK'
-  | 'BENDAHARA_RANTING'
-  | 'BENDAHARA_MWC'
-  | 'ADMIN';
+export type PeriodWaitingFor = 'PPK' | 'BENDAHARA_RANTING' | 'ADMIN';
 
 export interface PeriodProgress extends PeriodRef {
   period: string;
@@ -62,11 +53,7 @@ export interface PeriodState {
    * Dipakai untuk memilih `display_period`.
    */
   unsettled: PeriodProgress[];
-  /**
-   * Periode yang pekerjaannya SUDAH selesai (tidak ada assignment ACTIVE)
-   * tetapi rantai tanda tangan belum FINAL. Hanya daftar ini yang boleh
-   * memunculkan banner "periode belum tuntas" di Beranda.
-   */
+  /** Periode yang tidak punya assignment ACTIVE tetapi BA PPK-nya belum FINAL. */
   awaiting_signature: PeriodProgress[];
 }
 
@@ -82,8 +69,6 @@ interface PeriodCell {
   waitingFor: PeriodWaitingFor | null;
   /** Masih ada assignment ACTIVE — pekerjaan belum selesai. */
   hasActiveWork?: boolean;
-  /** Khusus ranting: sudah ditandatangani bendahara ranting (menunggu MWC). */
-  signed?: boolean;
 }
 
 // ── util periode ────────────────────────────────────────────────────────────
@@ -259,7 +244,7 @@ async function branchCells(branchId: string, periods: PeriodRef[]) {
   const to = periods[periods.length - 1];
   const map = new Map<string, PeriodCell>();
 
-  const [assignmentRows, ppkRows, branchRows] = await Promise.all([
+  const [assignmentRows, ppkRows] = await Promise.all([
     db
       .select({
         year: schema.assignments.periodYear,
@@ -306,25 +291,6 @@ async function branchCells(branchId: string, periods: PeriodRef[]) {
         schema.ppkSubmissions.periodMonth,
         schema.ppkSubmissions.status,
       ),
-    db
-      .select({
-        year: schema.branchSubmissions.periodYear,
-        month: schema.branchSubmissions.periodMonth,
-        status: schema.branchSubmissions.status,
-        signed: sql<boolean>`${schema.branchSubmissions.rantingSignerId} is not null`,
-      })
-      .from(schema.branchSubmissions)
-      .where(
-        and(
-          eq(schema.branchSubmissions.branchId, branchId),
-          rangeCondition(
-            schema.branchSubmissions.periodYear,
-            schema.branchSubmissions.periodMonth,
-            from,
-            to,
-          ),
-        ),
-      ),
   ]);
 
   const work = new Map<string, number>();
@@ -345,17 +311,6 @@ async function branchCells(branchId: string, periods: PeriodRef[]) {
     ppkByPeriod.set(key, acc);
   }
 
-  for (const row of branchRows) {
-    const p = { year: row.year, month: row.month };
-    const cell = cellOf(map, p);
-    cell.eligible = true;
-    cell.settled = row.status === 'FINAL' || row.status === 'FINAL_NOL';
-    cell.hasActiveWork = (hasActive.get(periodKey(p)) ?? false) || !!cell.hasActiveWork;
-    if (!cell.settled) {
-      cell.signed = row.signed;
-    }
-  }
-
   for (const [key, activeWork] of work) {
     if (activeWork <= 0) continue;
     const [year, month] = key.split('-').map(Number);
@@ -364,12 +319,15 @@ async function branchCells(branchId: string, periods: PeriodRef[]) {
     cell.hasActiveWork = (hasActive.get(key) ?? false) || !!cell.hasActiveWork;
   }
 
-  // Alasan tunggakan: PPK dulu, baru ranting.
+  // Periode selesai segera setelah seluruh BA PPK ditandatangani Bendahara.
   for (const [key, cell] of map) {
     if (cell.settled) continue;
     const ppk = ppkByPeriod.get(key);
+    if (ppk && ppk.draft === 0 && ppk.signed === 0 && ppk.other > 0) {
+      cell.settled = true;
+      continue;
+    }
     if (!ppk || ppk.draft + ppk.signed > 0) {
-      // Belum ada submission PPK sama sekali, atau masih ada yang belum FINAL.
       if (ppk && ppk.signed > 0) {
         cell.reason = 'PPK_WAITING_BENDAHARA';
         cell.waitingFor = 'BENDAHARA_RANTING';
@@ -377,10 +335,7 @@ async function branchCells(branchId: string, periods: PeriodRef[]) {
         cell.reason = 'PPK_DRAFT';
         cell.waitingFor = 'PPK';
       }
-      continue;
     }
-    cell.reason = cell.signed ? 'BRANCH_WAITING_MWC' : 'BRANCH_DRAFT';
-    cell.waitingFor = cell.signed ? 'BENDAHARA_MWC' : 'BENDAHARA_RANTING';
   }
 
   return map;
@@ -391,7 +346,7 @@ async function districtCells(districtId: string, periods: PeriodRef[]) {
   const to = periods[periods.length - 1];
   const map = new Map<string, PeriodCell>();
 
-  const [assignmentRows, branchRows] = await Promise.all([
+  const [assignmentRows, ppkRows] = await Promise.all([
     db
       .select({
         year: schema.assignments.periodYear,
@@ -422,22 +377,30 @@ async function districtCells(districtId: string, periods: PeriodRef[]) {
       ),
     db
       .select({
-        year: schema.branchSubmissions.periodYear,
-        month: schema.branchSubmissions.periodMonth,
-        branchId: schema.branchSubmissions.branchId,
-        status: schema.branchSubmissions.status,
+        year: schema.ppkSubmissions.periodYear,
+        month: schema.ppkSubmissions.periodMonth,
+        branchId: schema.ppkSubmissions.branchId,
+        status: schema.ppkSubmissions.status,
+        total: sql<number>`count(*)::int`,
       })
-      .from(schema.branchSubmissions)
+      .from(schema.ppkSubmissions)
+      .innerJoin(schema.branches, eq(schema.ppkSubmissions.branchId, schema.branches.id))
       .where(
         and(
-          eq(schema.branchSubmissions.districtId, districtId),
+          eq(schema.branches.districtId, districtId),
           rangeCondition(
-            schema.branchSubmissions.periodYear,
-            schema.branchSubmissions.periodMonth,
+            schema.ppkSubmissions.periodYear,
+            schema.ppkSubmissions.periodMonth,
             from,
             to,
           ),
         ),
+      )
+      .groupBy(
+        schema.ppkSubmissions.periodYear,
+        schema.ppkSubmissions.periodMonth,
+        schema.ppkSubmissions.branchId,
+        schema.ppkSubmissions.status,
       ),
   ]);
 
@@ -454,30 +417,25 @@ async function districtCells(districtId: string, periods: PeriodRef[]) {
     if (Number(row.active) > 0) cell.hasActiveWork = true;
   }
 
-  const settledBranches = new Map<string, Set<string>>();
-  const subStats = new Map<string, { total: number; settled: number }>();
-  for (const row of branchRows) {
-    const p = { year: row.year, month: row.month };
-    cellOf(map, p).eligible = true;
-    const key = periodKey(p);
-    const acc = subStats.get(key) ?? { total: 0, settled: 0 };
-    acc.total += 1;
-    if (row.status === 'FINAL' || row.status === 'FINAL_NOL') {
-      acc.settled += 1;
-      const set = settledBranches.get(key) ?? new Set<string>();
-      set.add(row.branchId);
-      settledBranches.set(key, set);
-    }
-    subStats.set(key, acc);
+  const ppkByPeriodBranch = new Map<string, Map<string, { draft: number; signed: number; final: number }>>();
+  for (const row of ppkRows) {
+    const key = periodKey({ year: row.year, month: row.month });
+    const byBranch = ppkByPeriodBranch.get(key) ?? new Map();
+    const status = byBranch.get(row.branchId) ?? { draft: 0, signed: 0, final: 0 };
+    if (row.status === 'DRAFT') status.draft += Number(row.total);
+    else if (row.status === 'PPK_SIGNED') status.signed += Number(row.total);
+    else status.final += Number(row.total);
+    byBranch.set(row.branchId, status);
+    ppkByPeriodBranch.set(key, byBranch);
   }
 
   for (const [key, cell] of map) {
-    const needed = branchesWithWork.get(key) ?? new Set<string>();
-    const settled = settledBranches.get(key) ?? new Set<string>();
-    const stats = subStats.get(key) ?? { total: 0, settled: 0 };
-    const everyWorkBranchHasFinal = [...needed].every((branchId) => settled.has(branchId));
-    const everySubmissionSettled = stats.total === stats.settled;
-    cell.settled = everyWorkBranchHasFinal && everySubmissionSettled;
+    const neededBranches = branchesWithWork.get(key) ?? new Set<string>();
+    const ppkByBranch = ppkByPeriodBranch.get(key) ?? new Map();
+    cell.settled = [...neededBranches].every((branchId) => {
+      const ppk = ppkByBranch.get(branchId);
+      return !!ppk && ppk.draft === 0 && ppk.signed === 0 && ppk.final > 0;
+    });
     if (!cell.settled) {
       cell.reason = 'DISTRICT_UNSETTLED';
       cell.waitingFor = 'ADMIN';

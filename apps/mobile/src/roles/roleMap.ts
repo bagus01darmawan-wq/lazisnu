@@ -43,7 +43,7 @@ export type TabName =
   | 'History'
   | 'Profile'
   | 'Persetujuan'
-  | 'Keuangan'
+  | 'Laporan'
   | 'Rekap';
 
 export const TAB_TITLES: Record<TabName, string> = {
@@ -53,7 +53,7 @@ export const TAB_TITLES: Record<TabName, string> = {
   History: 'Riwayat',
   Profile: 'Profil',
   Persetujuan: 'Setujui',
-  Keuangan: 'Keuangan',
+  Laporan: 'Laporan',
   Rekap: 'Rekap',
 };
 
@@ -65,7 +65,7 @@ export function tabsForRole(role: RoleKey): TabName[] {
     case 'STAF_PENGUMPULAN':
       return ['Persetujuan', 'Profile'];
     case 'STAF_KEUANGAN':
-      return ['Keuangan', 'Profile'];
+      return ['Laporan', 'Profile'];
     case 'ADMIN_RANTING':
     case 'ADMIN_KECAMATAN':
       return ['Rekap', 'Profile'];
@@ -139,7 +139,7 @@ export function homeTitle(role: RoleKey): string {
     case 'STAF_PENGUMPULAN':
       return 'Persetujuan Tugas';
     case 'STAF_KEUANGAN':
-      return 'Keuangan & BA';
+      return 'Laporan';
     case 'ADMIN_RANTING':
       return 'Ranting';
     case 'ADMIN_KECAMATAN':

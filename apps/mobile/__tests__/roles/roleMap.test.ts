@@ -40,7 +40,7 @@ describe('C1-T9 roleMap', () => {
   test('tabsForRole: PPK tak berubah; peran lain tanpa Scan/Tasks/History', () => {
     expect(tabsForRole('PETUGAS')).toEqual(['Dashboard', 'Tasks', 'Scan', 'History', 'Profile']);
     expect(tabsForRole('STAF_PENGUMPULAN')).toEqual(['Persetujuan', 'Profile']);
-    expect(tabsForRole('STAF_KEUANGAN')).toEqual(['Keuangan', 'Profile']);
+    expect(tabsForRole('STAF_KEUANGAN')).toEqual(['Laporan', 'Profile']);
     expect(tabsForRole('ADMIN_RANTING')).toEqual(['Rekap', 'Profile']);
     expect(tabsForRole('ADMIN_KECAMATAN')).toEqual(['Rekap', 'Profile']);
     expect(tabsForRole('UNKNOWN')).toEqual(['Profile']);
@@ -143,7 +143,7 @@ describe('C1-T9 roleMap', () => {
   test('homeTitle per peran', () => {
     expect(homeTitle('PETUGAS')).toBe('Penjemputan Koin');
     expect(homeTitle('STAF_PENGUMPULAN')).toBe('Persetujuan Tugas');
-    expect(homeTitle('STAF_KEUANGAN')).toBe('Keuangan & BA');
+    expect(homeTitle('STAF_KEUANGAN')).toBe('Laporan');
     expect(homeTitle('ADMIN_RANTING')).toBe('Ranting');
     expect(homeTitle('ADMIN_KECAMATAN')).toBe('Rekap MWC');
   });

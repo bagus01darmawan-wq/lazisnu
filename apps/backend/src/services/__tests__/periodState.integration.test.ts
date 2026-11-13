@@ -15,6 +15,7 @@ import {
   getPeriodState,
   type PeriodScope,
 } from '../periodState';
+import { ensureBranchSubmission } from '../ppkSubmissions';
 
 const NOV3 = new Date(2026, 10, 3, 10, 0, 0);
 
@@ -95,6 +96,7 @@ describe('periodState — periode berbasis aksi (DB)', () => {
       .delete(schema.activityLogs)
       .where(or(eq(schema.activityLogs.userId, userId), eq(schema.activityLogs.officerId, officerId)));
     await db.delete(schema.ppkSubmissions).where(eq(schema.ppkSubmissions.officerId, officerId));
+    await db.delete(schema.branchSubmissions).where(eq(schema.branchSubmissions.branchId, branchId));
     await db.delete(schema.assignments).where(eq(schema.assignments.officerId, officerId));
     await db.delete(schema.cans).where(eq(schema.cans.id, canId));
     await db.delete(schema.officers).where(eq(schema.officers.id, officerId));
@@ -197,7 +199,8 @@ describe('periodState — periode berbasis aksi (DB)', () => {
     }
   });
 
-  test('setelah BA Oktober FINAL → periode maju ke November', async () => {
+  test('BA PPK FINAL menuntaskan periode ranting tanpa BA ke MWC', async () => {
+    await ensureBranchSubmission(branchId, 2026, 10);
     await db
       .update(schema.ppkSubmissions)
       .set({ status: 'FINAL', finalizedAt: NOV3 })
@@ -207,9 +210,12 @@ describe('periodState — periode berbasis aksi (DB)', () => {
         eq(schema.ppkSubmissions.periodMonth, 10),
       ));
 
-    const state = await getPeriodState(officerScope, NOV3);
+    const state = await getPeriodState({ kind: 'branch', branchId }, NOV3);
     expect(state.display_period).toEqual({ year: 2026, month: 11 });
     expect(state.unsettled).toEqual([]);
+    const districtState = await getPeriodState({ kind: 'district', districtId }, NOV3);
+    expect(districtState.display_period).toEqual({ year: 2026, month: 11 });
+    expect(districtState.unsettled).toEqual([]);
   });
 
   test('DRAFT tanpa assignment tidak menahan periode', async () => {

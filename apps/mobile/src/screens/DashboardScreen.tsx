@@ -39,7 +39,6 @@ const PERIOD_OPTIONS: {label: string; value: PeriodFilter}[] = [
 const PERIOD_WAITING_LABEL: Record<string, string> = {
   PPK: 'tanda tangan PPK',
   BENDAHARA_RANTING: 'tanda tangan Bendahara Ranting',
-  BENDAHARA_MWC: 'tanda tangan Bendahara MWC',
   ADMIN: 'tindakan admin',
 };
 
