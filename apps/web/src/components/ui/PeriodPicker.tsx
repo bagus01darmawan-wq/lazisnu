@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Calendar, ChevronDown, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -76,16 +76,16 @@ export function PeriodPicker({ months, year, onChange, className, extraYears, di
     }
   }, [isOpen]);
 
-  const toggleMonth = useCallback((m: number) => {
+  const toggleMonth = (m: number) => {
     if (isFutureMonth(m)) return;
     if (months.includes(m)) {
       onChange(months.filter(x => x !== m), year);
     } else {
       onChange([...months, m].sort((a, b) => a - b), year);
     }
-  }, [months, year, onChange, isFutureMonth]);
+  };
 
-  const toggleYear = useCallback((y: number) => {
+  const toggleYear = (y: number) => {
     const fullSelection = disableFuture && y === currentYear
       ? Array.from({ length: currentMonth }, (_, i) => i + 1)
       : Array.from({ length: 12 }, (_, i) => i + 1);
@@ -96,12 +96,12 @@ export function PeriodPicker({ months, year, onChange, className, extraYears, di
     } else {
       onChange(fullSelection, y);
     }
-  }, [year, months, onChange, disableFuture, currentYear, currentMonth]);
+  };
 
-  const selectSingleMonth = useCallback((m: number, y: number) => {
+  const selectSingleMonth = (m: number, y: number) => {
     if (disableFuture && (y > currentYear || (y === currentYear && m > currentMonth))) return;
     onChange([m], y);
-  }, [onChange, disableFuture, currentYear, currentMonth]);
+  };
 
   const displayLabel = months.length === 0
     ? `${monthNames[new Date().getMonth()]} ${year}`
