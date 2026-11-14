@@ -3,7 +3,7 @@
 import React from 'react';
 import { MapPin } from 'lucide-react';
 import type { OverviewBranchComparisonItemView } from './overviewView';
-import { formatAveragePerCan, splitRupiah } from './format';
+import { formatAveragePerFilledCan, splitRupiah } from './format';
 import { cleanBranchName } from '@/lib/formatters';
 
 interface BranchComparisonListProps {
@@ -59,8 +59,8 @@ export function BranchComparisonList({ comparison, hidden = false, onPickBranch 
                     </span>
                     <span aria-hidden="true" className="text-[#F4F1EA]/20">|</span>
                     <span>
-                      rata-rata{' '}
-                      <span className="font-black text-[#F4F1EA]">{formatAveragePerCan(row.collectionNominal, row.collectionFilled)}</span>
+                      rata-rata per kaleng berisi{' '}
+                      <span className="font-black text-[#F4F1EA]">{formatAveragePerFilledCan(row.collectionNominal, row.collectionFilled)}</span>
                     </span>
                   </span>
                 </button>

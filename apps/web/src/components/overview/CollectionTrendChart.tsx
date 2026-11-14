@@ -6,7 +6,13 @@ import {
   Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import type { OverviewMonthlyTrendItemView } from './overviewView';
-import { formatMonthKey, formatRupiah, trendTotals } from './format';
+import {
+  averagePerFilledCan,
+  filledCollectionCount,
+  formatMonthKey,
+  formatRupiah,
+  trendTotals,
+} from './format';
 
 interface CollectionTrendChartProps {
   trend: OverviewMonthlyTrendItemView[];
@@ -15,10 +21,10 @@ interface CollectionTrendChartProps {
 
 type TrendMode = 'kunjungan' | 'rata-rata';
 
-/** Rata-rata isi per kaleng yang dijemput bulan itu (Rp, dibulatkan). */
+/** Rata-rata nominal per kaleng berisi bulan itu (Rp, dibulatkan). */
 function monthlyAverage(item: OverviewMonthlyTrendItemView): number {
-  if (!item.collected) return 0;
-  return Math.round(item.nominal / item.collected);
+  const filled = filledCollectionCount(item.collected, item.empty);
+  return averagePerFilledCan(item.nominal, filled);
 }
 
 /**
@@ -31,8 +37,12 @@ function monthlyAverage(item: OverviewMonthlyTrendItemView): number {
  */
 export function CollectionTrendChart({ trend, year }: CollectionTrendChartProps) {
   const [mode, setMode] = React.useState<TrendMode>('kunjungan');
+  const trendData = trend.map((item) => ({
+    ...item,
+    filled: filledCollectionCount(item.collected, item.empty),
+  }));
   const totals = trendTotals(trend);
-  const avgData = trend.map((t) => ({ ...t, average: monthlyAverage(t) }));
+  const avgData = trendData.map((item) => ({ ...item, average: monthlyAverage(item) }));
 
   return (
     <section aria-labelledby="tren-operasional" className="rounded-2xl border border-white/5 bg-[var(--glass)] p-5">
@@ -69,12 +79,12 @@ export function CollectionTrendChart({ trend, year }: CollectionTrendChartProps)
       {mode === 'kunjungan' ? (
         <>
           <p className="mt-1 text-xs text-[#F4F1EA]/55">
-            {trendTotalsLabel(totals.collected, totals.empty, totals.uncollected)} •{' '}
+            {trendTotalsLabel(totals.filled, totals.empty, totals.uncollected)} •{' '}
             {formatRupiah(totals.nominal)} total
           </p>
           <div className="mt-4 h-56 w-full md:h-72" aria-hidden="true">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={trend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <BarChart data={trendData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(244,241,234,0.08)" />
                 <XAxis
                   dataKey="month"
@@ -106,7 +116,7 @@ export function CollectionTrendChart({ trend, year }: CollectionTrendChartProps)
                   formatter={(value, name) => [String(value ?? 0), SERIES_LABEL[String(name)] ?? String(name)]}
                 />
                 <Legend formatter={(value: unknown) => SERIES_LABEL[String(value)] ?? String(value)} />
-                <Bar dataKey="collected" stackId="a" fill="#1F8243" isAnimationActive={false} />
+                <Bar dataKey="filled" stackId="a" fill="#1F8243" isAnimationActive={false} />
                 <Bar dataKey="empty" stackId="a" fill="#EAD19B" isAnimationActive={false} />
                 <Bar dataKey="uncollected" fill="#D97A76" isAnimationActive={false} />
               </BarChart>
@@ -119,17 +129,17 @@ export function CollectionTrendChart({ trend, year }: CollectionTrendChartProps)
             <thead>
               <tr className="text-[#F4F1EA]/50">
                 <th scope="col" className="py-1.5 font-bold">Bulan</th>
-                <th scope="col" className="py-1.5 font-bold">Isi</th>
+                <th scope="col" className="py-1.5 font-bold">Kaleng isi</th>
                 <th scope="col" className="py-1.5 font-bold">Kosong</th>
                 <th scope="col" className="py-1.5 font-bold">Tidak terjemput</th>
                 <th scope="col" className="py-1.5 font-bold">Nominal</th>
               </tr>
             </thead>
             <tbody>
-              {trend.map((item) => (
+              {trendData.map((item) => (
                 <tr key={item.month} className="border-t border-white/5 text-[#F4F1EA]/80">
                   <th scope="row" className="py-1.5 font-semibold">{formatMonthKey(item.month)}</th>
-                  <td className="py-1.5">{item.collected}</td>
+                  <td className="py-1.5">{item.filled}</td>
                   <td className="py-1.5">{item.empty}</td>
                   <td className="py-1.5">{item.uncollected}</td>
                   <td className="py-1.5">{formatRupiah(item.nominal)}</td>
@@ -141,7 +151,7 @@ export function CollectionTrendChart({ trend, year }: CollectionTrendChartProps)
       ) : (
         <>
           <p className="mt-1 text-xs text-[#F4F1EA]/55">
-            Rata-rata isi per kaleng yang dijemput tiap bulan (nominal ÷ dijemput)
+            Rata-rata nominal per kaleng berisi tiap bulan (nominal ÷ kaleng berisi)
           </p>
           <div className="mt-4 h-56 w-full md:h-72" aria-hidden="true">
             <ResponsiveContainer width="100%" height="100%">
@@ -186,7 +196,7 @@ export function CollectionTrendChart({ trend, year }: CollectionTrendChartProps)
             <thead>
               <tr className="text-[#F4F1EA]/50">
                 <th scope="col" className="py-1.5 font-bold">Bulan</th>
-                <th scope="col" className="py-1.5 font-bold">Dijemput</th>
+                <th scope="col" className="py-1.5 font-bold">Kaleng isi</th>
                 <th scope="col" className="py-1.5 font-bold">Nominal</th>
                 <th scope="col" className="py-1.5 font-bold">Rata-rata</th>
               </tr>
@@ -195,7 +205,7 @@ export function CollectionTrendChart({ trend, year }: CollectionTrendChartProps)
               {avgData.map((item) => (
                 <tr key={item.month} className="border-t border-white/5 text-[#F4F1EA]/80">
                   <th scope="row" className="py-1.5 font-semibold">{formatMonthKey(item.month)}</th>
-                  <td className="py-1.5">{item.collected}</td>
+                  <td className="py-1.5">{item.filled}</td>
                   <td className="py-1.5">{formatRupiah(item.nominal)}</td>
                   <td className="py-1.5 font-bold text-[#F4F1EA]">{formatRupiah(item.average)}</td>
                 </tr>
@@ -209,13 +219,13 @@ export function CollectionTrendChart({ trend, year }: CollectionTrendChartProps)
 }
 
 const SERIES_LABEL: Record<string, string> = {
-  collected: 'Berisi',
+  filled: 'Berisi',
   empty: 'Kosong',
   uncollected: 'Tidak terjemput',
 };
 
-function trendTotalsLabel(collected: number, empty: number, uncollected: number): string {
-  return `${collected} berisi • ${empty} kosong • ${uncollected} tidak terjemput`;
+function trendTotalsLabel(filled: number, empty: number, uncollected: number): string {
+  return `${filled} berisi • ${empty} kosong • ${uncollected} tidak terjemput`;
 }
 
 export default CollectionTrendChart;

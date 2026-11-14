@@ -331,8 +331,8 @@ export async function getAssignableCanCount(scope: OverviewScopeInput) {
 /**
  * Tren operasional Januari–Desember tahun periode (12 bucket tetap,
  * mendukung laporan tengah semester Juni & akhir tahun Desember).
- * Dua query agregat: penjemputan (isi/kosong/nominal) dan siklus tugas
- * (ditutup/total/tidak terjemput) — keduanya dipisah karena definisinya berbeda.
+ * Dua query agregat: penjemputan berhasil (semua nominal, termasuk nol; kosong adalah bagiannya)
+ * dan siklus tugas (ditutup/total/tidak terjemput) — keduanya dipisah karena definisinya berbeda.
  */
 export async function getMonthlyOperationalTrend(
   scope: OverviewScopeInput,
@@ -348,8 +348,9 @@ export async function getMonthlyOperationalTrend(
   const firstKey = first.key;
 
   const [collectionRows, assignmentRows] = await Promise.all([
-    // Tren uang juga memakai periode assignment agar sejajar dengan tren tugas
-    // dan tidak memindahkan jemputan toleransi ke bulan kalender berikutnya.
+    // collected menghitung semua penjemputan berhasil; empty adalah subset dengan nominal nol.
+    // Tren uang memakai periode assignment agar sejajar dengan tren tugas dan tidak
+    // memindahkan jemputan toleransi ke bulan kalender berikutnya.
     db.select({
       year: schema.assignments.periodYear,
       month: schema.assignments.periodMonth,

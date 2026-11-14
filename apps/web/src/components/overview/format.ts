@@ -15,7 +15,7 @@ export const MONTH_NAMES_ID = [
 
 /** Label kondisi dalam bahasa Indonesia (bukan nilai bisnis). */
 export const CONDITION_LABEL: Record<CanCondition, string> = {
-  AKTIF: 'Aktif',
+  AKTIF: 'Baik',
   NON_AKTIF: 'Nonaktif',
   RUSAK: 'Rusak',
   HILANG: 'Hilang',
@@ -63,10 +63,18 @@ export function formatPeriodRange(year: number, months: number[]): string {
   return `${clean.length} bulan pilihan ${year}`;
 }
 
-/** Rata-rata isi per kaleng (tampilan): nominal / jumlah dijemput, Rp0 bila nol. */
-export function formatAveragePerCan(nominal: number, collected: number): string {
-  if (!collected) return 'Rp 0';
-  return formatRupiah(Math.round(Number(nominal || 0) / collected));
+export function filledCollectionCount(collected: number, empty: number): number {
+  return Math.max(0, Number(collected || 0) - Number(empty || 0));
+}
+
+export function averagePerFilledCan(nominal: number, filled: number): number {
+  if (filled <= 0) return 0;
+  return Math.round(Number(nominal || 0) / filled);
+}
+
+/** Rata-rata nominal per kaleng berisi, Rp0 bila tidak ada kaleng berisi. */
+export function formatAveragePerFilledCan(nominal: number, filled: number): string {
+  return formatRupiah(averagePerFilledCan(nominal, filled));
 }
 
 /** '2026-05' → 'Mei 2026' */
@@ -114,15 +122,15 @@ export function taskClosedRate(summary: OverviewSummaryView): number {
   return Math.round((summary.taskClosed / summary.taskTotal) * 100);
 }
 
-/** Total penjemputan pada tren (isi + kosong) untuk label seri. */
+/** Jumlah hasil tren yang tidak tumpang-tindih: berisi, kosong, dan tak terjemput. */
 export function trendTotals(trend: OverviewMonthlyTrendItemView[]) {
   return trend.reduce(
     (acc, item) => ({
-      collected: acc.collected + item.collected,
+      filled: acc.filled + filledCollectionCount(item.collected, item.empty),
       empty: acc.empty + item.empty,
       uncollected: acc.uncollected + item.uncollected,
       nominal: acc.nominal + item.nominal,
     }),
-    { collected: 0, empty: 0, uncollected: 0, nominal: 0 },
+    { filled: 0, empty: 0, uncollected: 0, nominal: 0 },
   );
 }

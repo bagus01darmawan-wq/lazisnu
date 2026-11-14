@@ -1,13 +1,11 @@
 'use client';
 
 import React from 'react';
-import { splitRupiah } from './format';
+import { averagePerFilledCan, splitRupiah } from './format';
 
 interface PerolehanHeroProps {
   /** Total nominal penjemputan pada periode (server, realtime per fetch). */
   nominal: number;
-  /** Jumlah seluruh penjemputan berhasil, termasuk yang nominalnya nol. */
-  collected: number;
   /** Jumlah penjemputan yang benar-benar berisi (nominal > 0). */
   filled: number;
 }
@@ -20,9 +18,9 @@ interface PerolehanHeroProps {
  * server (kecamatan / satu ranting). Baris periode/scope/zona tidak
  * ditampilkan di sini — sudah ada di bawah judul halaman.
  */
-export function PerolehanHero({ nominal, collected, filled }: PerolehanHeroProps) {
+export function PerolehanHero({ nominal, filled }: PerolehanHeroProps) {
   const { currency, amount } = splitRupiah(nominal);
-  const avgNominal = collected ? Math.round(Number(nominal || 0) / collected) : 0;
+  const avgNominal = averagePerFilledCan(nominal, filled);
   const { currency: avgCurrency, amount: avgAmount } = splitRupiah(avgNominal);
 
   return (
@@ -54,7 +52,7 @@ export function PerolehanHero({ nominal, collected, filled }: PerolehanHeroProps
             <span>{avgAmount}</span>
           </p>
           <p className="mt-0.5 text-xs font-semibold text-[#F4F1EA]/60">
-            Rata-rata per kaleng
+            Rata-rata per kaleng berisi
           </p>
         </div>
       </div>

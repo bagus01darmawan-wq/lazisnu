@@ -7,7 +7,9 @@ import { describe, expect, it } from 'vitest';
 import type { OverviewSummaryView } from '../overview/overviewView';
 import {
   CONDITION_LABEL,
-  formatAveragePerCan,
+  averagePerFilledCan,
+  filledCollectionCount,
+  formatAveragePerFilledCan,
   formatCaseAge,
   formatMonthKey,
   formatPeriod,
@@ -70,9 +72,10 @@ describe('periode dan bulan', () => {
     expect(formatPeriodRange(2026, [])).toBe('Tahun 2026');
   });
 
-  it('formatAveragePerCan membagi dan aman dari nol', () => {
-    expect(formatAveragePerCan(1250000, 40)).toBe('Rp 31.250');
-    expect(formatAveragePerCan(100000, 0)).toBe('Rp 0');
+  it('rata-rata per kaleng berisi memakai jumlah isi, bukan semua penjemputan', () => {
+    expect(averagePerFilledCan(1_000_000, filledCollectionCount(11, 1))).toBe(100_000);
+    expect(averagePerFilledCan(1_000_000, 0)).toBe(0);
+    expect(formatAveragePerFilledCan(1_250_000, 40)).toBe('Rp 31.250');
   });
 
   it('splitRupiah memisah mata uang dan angka', () => {
@@ -109,21 +112,20 @@ describe('ringkasan tugas', () => {
 });
 
 describe('tren', () => {
-  it('menjumlahkan isi, kosong, tidak terjemput, dan nominal', () => {
+  it('memisahkan kaleng berisi dari jumlah penjemputan yang termasuk kaleng kosong', () => {
     const totals = trendTotals([
-      { month: '2026-08', collected: 30, empty: 10, uncollected: 2, taskClosed: 32, taskTotal: 40, nominal: 500000 },
-      { month: '2026-09', collected: 20, empty: 5, uncollected: 1, taskClosed: 21, taskTotal: 40, nominal: 300000 },
+      { month: '2026-08', collected: 11, empty: 1, uncollected: 2, taskClosed: 13, taskTotal: 15, nominal: 500000 },
     ]);
-    expect(totals.collected).toBe(50);
-    expect(totals.empty).toBe(15);
-    expect(totals.uncollected).toBe(3);
-    expect(totals.nominal).toBe(800000);
+    expect(totals.filled).toBe(10);
+    expect(totals.empty).toBe(1);
+    expect(totals.uncollected).toBe(2);
+    expect(totals.nominal).toBe(500000);
   });
 });
 
 describe('label kondisi', () => {
   it('setiap kondisi punya teks (informasi tidak bergantung warna)', () => {
-    expect(CONDITION_LABEL.AKTIF).toBe('Aktif');
+    expect(CONDITION_LABEL.AKTIF).toBe('Baik');
     expect(CONDITION_LABEL.NON_AKTIF).toBe('Nonaktif');
     expect(CONDITION_LABEL.RUSAK).toBe('Rusak');
     expect(CONDITION_LABEL.HILANG).toBe('Hilang');

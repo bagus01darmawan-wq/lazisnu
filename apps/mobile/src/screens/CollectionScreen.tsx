@@ -17,6 +17,7 @@ import {AppButton, AppCard, AppHeader, AppTextInput, SegmentedControl} from '../
 import {CanCondition} from '@lazisnu/shared-types';
 import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
 import {formatCanAddress, formatCurrency, formatInputCurrency} from '../utils';
+import {GOOD_CAN_CONDITION_LABEL} from './collectionConditionLabels';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Collection'>;
 
@@ -259,7 +260,7 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
           <Text style={styles.label}>Pilih kondisi yang dilihat PPK</Text>
           <SegmentedControl
             options={[
-              {label: 'Aktif', value: CanCondition.AKTIF},
+              {label: GOOD_CAN_CONDITION_LABEL, value: CanCondition.AKTIF},
               {
                 label: 'Rusak',
                 value: CanCondition.RUSAK,

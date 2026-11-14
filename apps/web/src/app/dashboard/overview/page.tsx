@@ -221,7 +221,6 @@ export default function OverviewPage() {
 
       <PerolehanHero
         nominal={data.summary.collectionNominal}
-        collected={data.summary.successfulCollections}
         filled={data.productivity.filled}
       />
 

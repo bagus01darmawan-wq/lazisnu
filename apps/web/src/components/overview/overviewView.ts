@@ -48,7 +48,9 @@ export interface OverviewConditionBreakdownItemView {
 
 export interface OverviewMonthlyTrendItemView {
   month: string;
+  /** Semua penjemputan berhasil, termasuk nominal nol. */
   collected: number;
+  /** Bagian dari collected dengan nominal nol; kaleng berisi = collected - empty. */
   empty: number;
   uncollected: number;
   taskClosed: number;
