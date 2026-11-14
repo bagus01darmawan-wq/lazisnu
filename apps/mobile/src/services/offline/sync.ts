@@ -3,9 +3,18 @@ import {offlineQueue, QueuedCollection} from './queue';
 import {actionQueue, QueuedAction} from './actionQueue';
 import {correctionQueue} from './corrections';
 import {collectionService} from '../api';
-import {BatchCollectionRequestItem, DeviceInfo} from '@lazisnu/shared-types';
+import {BatchCollectionRequestItem, CanCondition, DeviceInfo} from '@lazisnu/shared-types';
 
 function toBatchPayload(item: QueuedCollection): BatchCollectionRequestItem {
+  // Dual-contract: kirim dimensi fisik eksplisit + alias legacy yang konsisten.
+  const physical = item.physical_condition
+    ?? (item.condition === 'RUSAK' || item.condition === 'HILANG' ? item.condition : 'BAIK');
+  const legacy =
+    physical === 'RUSAK'
+      ? CanCondition.RUSAK
+      : physical === 'HILANG'
+        ? CanCondition.HILANG
+        : CanCondition.AKTIF;
   return {
     offline_id: item.offline_id,
     assignment_id: item.assignment_id,
@@ -14,7 +23,8 @@ function toBatchPayload(item: QueuedCollection): BatchCollectionRequestItem {
     collected_at: item.collected_at,
     latitude: item.latitude,
     longitude: item.longitude,
-    condition: item.condition,
+    condition: legacy,
+    physical_condition: physical,
     visit_outcome: item.visit_outcome,
     device_info: item.device_info as DeviceInfo | undefined,
   };

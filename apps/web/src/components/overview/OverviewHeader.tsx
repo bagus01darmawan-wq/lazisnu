@@ -50,7 +50,7 @@ export function OverviewHeader({
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
-        <PeriodPicker months={months} year={year} onChange={onPeriodChange} />
+        <PeriodPicker months={months} year={year} onChange={onPeriodChange} disableFuture />
 
         <button
           type="button"

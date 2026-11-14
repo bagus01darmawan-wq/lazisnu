@@ -1,6 +1,6 @@
 import 'react-native-get-random-values';
 import {getOfflineStorage} from './mmkv';
-import {CanCondition} from '@lazisnu/shared-types';
+import {CanCondition, CanPhysicalConditionValue} from '@lazisnu/shared-types';
 
 /**
  * Menghasilkan ID unik transaksi offline menggunakan generator acak kriptografis.
@@ -31,7 +31,8 @@ export const getOfficerSuffix = (): string => {
 const getQueueKey = () => `collection_queue${getOfficerSuffix()}`;
 const getFailedQueueKey = () => `collection_queue_failed${getOfficerSuffix()}`;
 const getSchemaVersionKey = () => `offline_queue_schema_version${getOfficerSuffix()}`;
-const CURRENT_SCHEMA_VERSION = 2;
+/** v3 (2026-11-13): physical_condition eksplisit + alias legacy condition. */
+const CURRENT_SCHEMA_VERSION = 3;
 
 type QueueChangeListener = () => void;
 const queueChangeListeners = new Set<QueueChangeListener>();
@@ -52,7 +53,9 @@ export interface QueuedCollection {
   period?: string;
   latitude?: number;
   longitude?: number;
-  /** Kondisi kaleng menurut PPK (halaman submit) — ikut tersinkron. */
+  /** Kondisi fisik eksplisit — sumber kebenaran antrean skema v3. */
+  physical_condition: CanPhysicalConditionValue;
+  /** @deprecated Alias legacy; selalu konsisten dengan physical_condition. */
   condition: CanCondition.AKTIF | CanCondition.RUSAK | CanCondition.HILANG;
   /** ISI menandai jalur kunjungan NON_AKTIF, bukan submit ordinary. */
   visit_outcome?: 'ISI';
@@ -66,26 +69,50 @@ export interface QueuedCollection {
   next_retry_at?: string; // Waktu earliest retry untuk exponential backoff
 }
 
-type LegacyQueuedCollection = Omit<QueuedCollection, 'condition'> & {
+type LegacyQueuedCollection = Omit<QueuedCollection, 'condition' | 'physical_condition'> & {
   condition?: string;
+  physical_condition?: string;
   payment_method?: unknown;
   transfer_receipt_url?: unknown;
 };
+
+function normalizePhysicalCondition(
+  physical: string | undefined,
+  legacy: string | undefined,
+): CanPhysicalConditionValue {
+  if (physical === 'BAIK' || physical === 'RUSAK' || physical === 'HILANG') {
+    return physical;
+  }
+  if (legacy === 'RUSAK' || legacy === 'HILANG') {
+    return legacy;
+  }
+  return 'BAIK';
+}
+
+function legacyConditionFor(physical: CanPhysicalConditionValue):
+  | CanCondition.AKTIF
+  | CanCondition.RUSAK
+  | CanCondition.HILANG {
+  if (physical === 'RUSAK') return CanCondition.RUSAK;
+  if (physical === 'HILANG') return CanCondition.HILANG;
+  return CanCondition.AKTIF;
+}
 
 function sanitizeQueue(items: LegacyQueuedCollection[]): QueuedCollection[] {
   return items.map(
     ({
       payment_method: _paymentMethod,
       transfer_receipt_url: _transferReceiptUrl,
-      condition,
+      physical_condition,
       ...item
-    }) => ({
-      ...item,
-      condition:
-        condition === CanCondition.RUSAK || condition === CanCondition.HILANG
-          ? (condition as CanCondition.RUSAK | CanCondition.HILANG)
-          : CanCondition.AKTIF,
-    }),
+    }) => {
+      const normalizedPhysical = normalizePhysicalCondition(physical_condition, item.condition);
+      return {
+        ...item,
+        physical_condition: normalizedPhysical,
+        condition: legacyConditionFor(normalizedPhysical),
+      };
+    },
   );
 }
 
@@ -259,6 +286,21 @@ export const offlineQueue = {
         return;
       }
 
+      // Skema v3: item lama yang hanya punya `condition` dinormalisasi menjadi
+      // physical_condition + alias legacy. Semua metadata (offline_id, retry,
+      // period, visit_outcome) dipertahankan.
+      const migrateStoredQueue = (key: string) => {
+        const raw = storage.getString(key);
+        if (!raw) return;
+        const sanitized = sanitizeQueue(JSON.parse(raw) as LegacyQueuedCollection[]);
+        const next = JSON.stringify(sanitized);
+        if (next !== raw) {
+          storage.set(key, next);
+        }
+      };
+      migrateStoredQueue(getQueueKey());
+      migrateStoredQueue(getFailedQueueKey());
+
       // 1. Baca semua record failedPermanent dari key lama (tanpa suffix)
       const data = storage.getString('collection_queue_failed');
       if (!data) {
@@ -297,9 +339,12 @@ export const offlineQueue = {
             can_id: item.can_id,
             nominal: item.nominal,
             collected_at: item.collected_at,
+            period: item.period,
             latitude: item.latitude,
             longitude: item.longitude,
+            physical_condition: item.physical_condition,
             condition: item.condition,
+            visit_outcome: item.visit_outcome,
             device_info: item.device_info,
             submit_sequence: item.submit_sequence,
             is_latest: item.is_latest,

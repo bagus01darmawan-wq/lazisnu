@@ -7,8 +7,19 @@ import {
   buildPeriodBoundaries,
   periodKey,
 } from './periodCalendar';
-import { isOrdinaryBatchCondition, isTrackedForCondition, isTransitionAllowed, type CanConditionValue } from './conditionRules';
+import { isOrdinaryBatchCondition, isTransitionAllowed, type CanConditionValue } from './conditionRules';
 import { insertActivityLog } from './auditLogService';
+import {
+  CAN_STATE_SOURCE,
+  lockCanRow,
+  recordCanStateChange,
+} from './canStateHistory';
+import {
+  deriveIsActive,
+  deriveLegacyCondition,
+  stateAfterCollection,
+  type CanState,
+} from './canState';
 
 /**
  * C1-T2 (§14.3): toleransi selisih jam HP vs server. `collected_at` adalah
@@ -330,18 +341,22 @@ export async function submitCollection(
   },
   now: Date = new Date(),
 ) {
+  // Kunci baris kaleng sebelum membaca state/transisi. Semua jalur
+  // state-changing memakai lock yang sama dan urutan konsisten.
+  const lockedCan = await lockCanRow(tx, data.canId);
+  const currentState: CanState = {
+    lifecycleStatus: lockedCan.lifecycleStatus,
+    physicalCondition: lockedCan.physicalCondition,
+    physicalConditionSource: lockedCan.physicalConditionSource ?? 'OBSERVED',
+  };
+
   // Validasi kondisi di depan: ngawur ditolak sebelum uang tersentuh.
-  let conditionChange: { from: CanConditionValue; to: CanConditionValue } | null = null;
+  let conditionChange: { from: CanConditionValue; to: CanConditionValue; nextState: CanState } | null = null;
   if (data.condition) {
     if (!isOrdinaryBatchCondition(data.condition)) {
       throw Errors.VALIDATION_ERROR('Batch biasa hanya menerima kondisi AKTIF, RUSAK, atau HILANG');
     }
-    const can = await tx.query.cans.findFirst({
-      where: eq(schema.cans.id, data.canId),
-      columns: { id: true, condition: true },
-    });
-    if (!can) throw Errors.VALIDATION_ERROR('Kaleng tidak ditemukan');
-    const from = can.condition as CanConditionValue;
+    const from = lockedCan.condition as CanConditionValue;
     if (data.visitOutcome && from !== 'NON_AKTIF') {
       throw Errors.VALIDATION_ERROR('Kunjungan ISI hanya dapat dilakukan pada kaleng NON_AKTIF');
     }
@@ -351,7 +366,11 @@ export async function submitCollection(
     if (from !== data.condition && !isTransitionAllowed(from, data.condition)) {
       throw Errors.VALIDATION_ERROR(`Transisi kondisi ${from} → ${data.condition} tidak diizinkan`);
     }
-    conditionChange = { from, to: data.condition };
+    const physicalCondition = data.condition === 'AKTIF' ? 'BAIK' : data.condition;
+    const nextState = stateAfterCollection(currentState, physicalCondition, {
+      restoreLifecycle: data.visitOutcome === 'ISI',
+    });
+    conditionChange = { from, to: data.condition, nextState };
   }
 
   await assertNoExistingFirstSubmit(tx, data.assignmentId, data.canId);
@@ -394,9 +413,15 @@ export async function submitCollection(
   }).where(eq(schema.cans.id, data.canId));
 
   if (conditionChange) {
+    const nextState = conditionChange.nextState;
+    const nextLegacy = deriveLegacyCondition(nextState.lifecycleStatus, nextState.physicalCondition);
+
     await tx.update(schema.cans).set({
-      condition: conditionChange.to,
-      isActive: data.visitOutcome === 'ISI' || isTrackedForCondition(conditionChange.to),
+      lifecycleStatus: nextState.lifecycleStatus,
+      physicalCondition: nextState.physicalCondition,
+      physicalConditionSource: nextState.physicalConditionSource,
+      condition: nextLegacy,
+      isActive: deriveIsActive(nextState.lifecycleStatus),
       updatedAt: new Date(),
     }).where(eq(schema.cans.id, data.canId));
 
@@ -408,6 +433,18 @@ export async function submitCollection(
     if (!auditUserId) {
       throw Errors.VALIDATION_ERROR('Identitas login petugas tidak tersedia untuk audit');
     }
+
+    // Event ledger memakai waktu kejadian (`collected_at`), bukan waktu sync.
+    await recordCanStateChange(tx, {
+      canId: data.canId,
+      before: { ...currentState, branchId: lockedCan.branchId },
+      after: { ...nextState, branchId: lockedCan.branchId },
+      effectiveAt: data.collectedAt,
+      sourceType: CAN_STATE_SOURCE.COLLECTION,
+      sourceId: collection.id,
+      actorId: auditUserId,
+    });
+
     // Audit memakai client transaksi yang sama. Jika insert audit gagal,
     // seluruh submit rollback; tidak ada kondisi bisnis tanpa jejak audit.
     await insertActivityLog({
@@ -452,6 +489,9 @@ export async function resubmitCollection(
   if (!oldCollection) {
     throw Errors.COLLECTION_NOT_FOUND();
   }
+
+  // Aggregate `cans` di bawah lock yang sama dengan penulis state lain.
+  await lockCanRow(tx, oldCollection.canId);
 
   if (input.requiredOfficerId && oldCollection.officerId !== input.requiredOfficerId) {
     throw Errors.COLLECTION_NOT_FOUND();

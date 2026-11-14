@@ -20,8 +20,12 @@ export const createCanSchema = z.object({
 export const updateCanSchema = createCanSchema.partial().extend({
   /** @deprecated Alias lama; dipetakan ke condition (false → DIKEMBALIKAN, true → AKTIF). */
   is_active: z.boolean().optional(),
-  /** Transisi kondisi eksplisit (lihat services/conditionRules.ts). */
+  /** @deprecated Proyeksi lima nilai; request baru boleh memakai pasangan dimensi. */
   condition: z.enum(['AKTIF', 'NON_AKTIF', 'RUSAK', 'HILANG', 'DIKEMBALIKAN']).optional(),
+  /** Dimensi status lifecycle (2026-11-13). */
+  lifecycle_status: z.enum(['AKTIF', 'NON_AKTIF', 'DIKEMBALIKAN']).optional(),
+  /** Dimensi kondisi fisik (2026-11-13). */
+  physical_condition: z.enum(['BAIK', 'RUSAK', 'HILANG']).optional(),
   condition_reason_code: z.string().max(40).optional().nullable(),
 });
 

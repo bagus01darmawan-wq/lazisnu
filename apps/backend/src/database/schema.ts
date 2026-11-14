@@ -64,6 +64,35 @@ export const canConditionEnum = pgEnum('can_condition', [
   'DIKEMBALIKAN',
 ]);
 
+/**
+ * Status operasional (lifecycle) kaleng — dipisahkan dari kondisi fisik.
+ * Satu kaleng dapat berstatus NON_AKTIF dengan kondisi fisik BAIK/RUSAK/HILANG.
+ */
+export const canLifecycleStatusEnum = pgEnum('can_lifecycle_status', [
+  'AKTIF',
+  'NON_AKTIF',
+  'DIKEMBALIKAN',
+]);
+
+/** Kondisi fisik kaleng — independen dari status lifecycle. */
+export const canPhysicalConditionEnum = pgEnum('can_physical_condition', [
+  'BAIK',
+  'RUSAK',
+  'HILANG',
+]);
+
+/**
+ * Provenance kondisi fisik:
+ * - OBSERVED              : tercatat langsung dari aksi/riwayat;
+ * - LEGACY_ASSUMPTION_BAIK: backfill tanpa bukti, diisi BAIK agar dapat ditinjau;
+ * - CUTOVER_BASELINE      : nilai baseline saat cutover ledger.
+ */
+export const canPhysicalConditionSourceEnum = pgEnum('can_physical_condition_source', [
+  'OBSERVED',
+  'LEGACY_ASSUMPTION_BAIK',
+  'CUTOVER_BASELINE',
+]);
+
 // Districts
 export const districts = pgTable('districts', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -168,6 +197,16 @@ export const cans = pgTable('cans', {
    */
   isActive: boolean('is_active').default(true).notNull(),
   condition: canConditionEnum('condition').default('AKTIF').notNull(),
+  /**
+   * Dua dimensi sumber kebenaran baru (2026-11-13). `condition` legacy tetap
+   * dipertahankan sebagai proyeksi kompatibilitas sampai seluruh klien lama
+   * dipensiunkan.
+   */
+  lifecycleStatus: canLifecycleStatusEnum('lifecycle_status').default('AKTIF').notNull(),
+  physicalCondition: canPhysicalConditionEnum('physical_condition').default('BAIK').notNull(),
+  physicalConditionSource: canPhysicalConditionSourceEnum('physical_condition_source'),
+  /** Versi monotonik per kaleng; tie-break urutan event pada effective_at sama. */
+  canVersion: integer('can_version').default(1).notNull(),
   lastCollectedAt: timestamp('last_collected_at'),
   totalCollected: bigint('total_collected', { mode: 'bigint' }).default(sql`0`).notNull(),
   collectionCount: integer('collection_count').default(0).notNull(),
@@ -283,6 +322,45 @@ export const canVisits = pgTable('can_visits', {
 }, (t) => ({
   visitsCanVisitedIdx: index('can_visits_can_visited_idx').on(t.canId, t.visitedAt),
   visitsOfficerPeriodIdx: index('can_visits_officer_period_idx').on(t.officerId, t.periodYear, t.periodMonth),
+}));
+
+// ============================================================================
+// Ledger keadaan kaleng — append-only, patch per dimensi.
+//
+// Setiap baris hanya mengisi dimensi yang BERUBAH. `effective_at` adalah waktu
+// kejadian (collected_at/visited_at, atau waktu transisi admin), sedangkan
+// `recorded_at` adalah waktu server mencatat. Urutan deterministik:
+// (effective_at, can_version). Baris baseline cutover (source_type
+// CUTOVER_BASELINE) menjadi jangkar replay; event sebelum baseline tidak
+// menimpa state terverifikasi saat cutover.
+//
+// FK ON DELETE CASCADE: ledger adalah bagian dari entitas kaleng. Penghapusan
+// permanen kaleng sudah dijaga guard riwayat/draft di canService; setelah lolos,
+// ledger tidak boleh menjadi orphan. Penghapusan baris ledger secara eksplisit
+// juga dilakukan di jalur hapus permanen agar maksudnya terbaca.
+export const canStateHistory = pgTable('can_state_history', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  canId: uuid('can_id').references(() => cans.id, { onDelete: 'cascade' }).notNull(),
+  lifecycleStatus: canLifecycleStatusEnum('lifecycle_status'),
+  physicalCondition: canPhysicalConditionEnum('physical_condition'),
+  physicalConditionSource: canPhysicalConditionSourceEnum('physical_condition_source'),
+  branchId: uuid('branch_id').references(() => branches.id, { onDelete: 'restrict' }),
+  effectiveAt: timestamp('effective_at').notNull(),
+  recordedAt: timestamp('recorded_at').defaultNow().notNull(),
+  canVersion: integer('can_version').notNull(),
+  /** CAN_CREATED | ADMIN_UPDATE | CONDITION_PROPOSAL | AUTO_EMPTY_STREAK | ... */
+  sourceType: varchar('source_type', { length: 40 }).notNull(),
+  /** ID stabil untuk idempotensi (collection id, proposal id, can id baseline, ...). */
+  sourceId: varchar('source_id', { length: 120 }).notNull(),
+  actorId: uuid('actor_id').references(() => users.id),
+  reasonCode: varchar('reason_code', { length: 40 }),
+}, (t) => ({
+  canStateHistoryCanOrderIdx: index('can_state_history_can_order_idx')
+    .on(t.canId, t.effectiveAt, t.canVersion),
+  canStateHistorySourceUnq: uniqueIndex('can_state_history_source_unq')
+    .on(t.sourceType, t.sourceId, t.canId),
+  canStateHistoryBranchEffectiveIdx: index('can_state_history_branch_effective_idx')
+    .on(t.branchId, t.effectiveAt),
 }));
 
 // Notifications
@@ -612,6 +690,13 @@ export const cansRelations = relations(cans, ({ one, many }) => ({
   collections: many(collections),
   conditionProposals: many(canConditionProposals),
   visits: many(canVisits),
+  stateHistory: many(canStateHistory),
+}));
+
+export const canStateHistoryRelations = relations(canStateHistory, ({ one }) => ({
+  can: one(cans, { fields: [canStateHistory.canId], references: [cans.id] }),
+  branch: one(branches, { fields: [canStateHistory.branchId], references: [branches.id] }),
+  actor: one(users, { fields: [canStateHistory.actorId], references: [users.id] }),
 }));
 
 export const canConditionProposalsRelations = relations(canConditionProposals, ({ one }) => ({

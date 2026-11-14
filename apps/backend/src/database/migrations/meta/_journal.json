@@ -141,6 +141,13 @@
       "when": 1794410242168,
       "tag": "0019_can_visit_task_period",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794500000000,
+      "tag": "0020_can_state_history",
+      "breakpoints": true
     }
   ]
 }

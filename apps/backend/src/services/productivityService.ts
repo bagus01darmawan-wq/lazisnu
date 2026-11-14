@@ -42,39 +42,6 @@ export async function getReactivatedCount(
   return Number(row?.count ?? 0);
 }
 
-/** Kaleng baru disebar: created_at masuk periode (arus masuk basis). */
-export async function getNewCansCount(
-  scope: OverviewScopeInput,
-  year: number,
-  months: number[],
-): Promise<number> {
-  const [row] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(schema.cans)
-    .where(and(
-      scopeCondition(scope),
-      inSelectedMonths(schema.cans.createdAt, year, months),
-    ));
-  return Number(row?.count ?? 0);
-}
-
-/** Kaleng ditarik: transisi → DIKEMBALIKAN pada periode (arus keluar basis). */
-export async function getWithdrawnCount(
-  scope: OverviewScopeInput,
-  year: number,
-  months: number[],
-): Promise<number> {
-  const [row] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(schema.cans)
-    .where(and(
-      scopeCondition(scope),
-      eq(schema.cans.condition, 'DIKEMBALIKAN'),
-      inSelectedMonths(schema.cans.updatedAt, year, months),
-    ));
-  return Number(row?.count ?? 0);
-}
-
 /** Hasil jemput agregat: dijemput + kosong (nominal 0) pada periode. */
 export async function getCollectionOutcome(
   scope: OverviewScopeInput,

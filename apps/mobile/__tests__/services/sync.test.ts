@@ -19,6 +19,7 @@ describe('Sync Service (sync.ts)', () => {
     can_id: `can_${id}`,
     nominal,
     condition: CanCondition.AKTIF,
+    physical_condition: 'BAIK',
     collected_at: new Date().toISOString(),
     retry_attempts: retries,
   });

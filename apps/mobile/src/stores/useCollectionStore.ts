@@ -5,7 +5,7 @@ import {correctionQueue} from '../services/offline/corrections';
 import {syncService} from '../services/offline/sync';
 import NetInfo from '@react-native-community/netinfo';
 import {getDeviceInfo} from '../utils/device';
-import {Collection, CanCondition, HistoryItem, SyncStatus} from '@lazisnu/shared-types';
+import {Collection, CanCondition, CanPhysicalConditionValue, HistoryItem, SyncStatus} from '@lazisnu/shared-types';
 import {useTasksStore} from './useTasksStore';
 import {refreshSyncCounts} from './useSyncStore';
 import {useDashboardStore} from './useDashboardStore';
@@ -28,6 +28,7 @@ interface SubmittedCollectionDraft {
   latitude?: number;
   longitude?: number;
   condition: CanCondition.AKTIF | CanCondition.RUSAK | CanCondition.HILANG;
+  physical_condition: CanPhysicalConditionValue;
   offline_id: string;
 }
 
@@ -44,6 +45,8 @@ interface CollectionState {
     latitude?: number;
     longitude?: number;
     condition: CanCondition.AKTIF | CanCondition.RUSAK | CanCondition.HILANG;
+    /** Kondisi fisik eksplisit (kontrak 2026-11-13); default dipetakan dari condition. */
+    physical_condition?: CanPhysicalConditionValue;
     visit_outcome?: 'ISI';
     offline_id?: string;
   }) => Promise<{success: boolean; synced: boolean; error?: string}>;
@@ -78,8 +81,16 @@ export const useCollectionStore = create<CollectionState>(set => ({
     }
 
     const offlineId = data.offline_id || generateOfflineId();
+    const physicalCondition: CanPhysicalConditionValue =
+      data.physical_condition
+      ?? (data.condition === CanCondition.RUSAK
+        ? 'RUSAK'
+        : data.condition === CanCondition.HILANG
+          ? 'HILANG'
+          : 'BAIK');
     const preparedData: SubmittedCollectionDraft = {
       ...data,
+      physical_condition: physicalCondition,
       offline_id: offlineId,
     };
 

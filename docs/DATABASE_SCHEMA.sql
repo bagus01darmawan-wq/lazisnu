@@ -127,6 +127,13 @@ CREATE TABLE cans (
     longitude DECIMAL(11, 8),
     location_notes TEXT,
     is_active BOOLEAN DEFAULT true,
+    -- 2026-11-13: status lifecycle dipisahkan dari kondisi fisik.
+    -- `condition` legacy dipertahankan sebagai proyeksi kompatibilitas.
+    condition VARCHAR(20) NOT NULL DEFAULT 'AKTIF',
+    lifecycle_status VARCHAR(20) NOT NULL DEFAULT 'AKTIF',
+    physical_condition VARCHAR(20) NOT NULL DEFAULT 'BAIK',
+    physical_condition_source VARCHAR(30),
+    can_version INTEGER NOT NULL DEFAULT 1,
     last_collected_at TIMESTAMP,
     total_collected DECIMAL(15, 2) DEFAULT 0,
     collection_count INTEGER DEFAULT 0,
@@ -138,6 +145,35 @@ CREATE INDEX idx_cans_qr ON cans(qr_code);
 CREATE INDEX idx_cans_branch ON cans(branch_id);
 CREATE INDEX idx_cans_owner_phone ON cans(owner_phone);
 CREATE INDEX idx_cans_active ON cans(is_active);
+
+-- Ledger keadaan kaleng (append-only, patch per dimensi).
+-- `effective_at` = waktu kejadian; `recorded_at` = waktu server mencatat;
+-- urutan replay = (effective_at, can_version). Baseline cutover menjadi jangkar.
+CREATE TABLE can_state_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    can_id UUID NOT NULL REFERENCES cans(id) ON DELETE CASCADE,
+    lifecycle_status VARCHAR(20),
+    physical_condition VARCHAR(20),
+    physical_condition_source VARCHAR(30),
+    branch_id UUID REFERENCES branches(id),
+    effective_at TIMESTAMP NOT NULL,
+    recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    can_version INTEGER NOT NULL,
+    source_type VARCHAR(40) NOT NULL,
+    source_id VARCHAR(120) NOT NULL,
+    actor_id UUID REFERENCES users(id),
+    reason_code VARCHAR(40),
+    CONSTRAINT can_state_history_dimension_check CHECK (
+        lifecycle_status IS NOT NULL OR physical_condition IS NOT NULL OR branch_id IS NOT NULL
+    )
+);
+
+CREATE UNIQUE INDEX can_state_history_source_unq
+    ON can_state_history(source_type, source_id, can_id);
+CREATE INDEX can_state_history_can_order_idx
+    ON can_state_history(can_id, effective_at, can_version);
+CREATE INDEX can_state_history_branch_effective_idx
+    ON can_state_history(branch_id, effective_at);
 
 -- ============================================
 -- TABLES: Assignment (Penugasan)

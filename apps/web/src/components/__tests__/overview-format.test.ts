@@ -35,8 +35,6 @@ const summary = (overrides: Partial<OverviewSummaryView> = {}): OverviewSummaryV
   collectionNominal: 1_250_000,
   successfulCollections: 40,
   reactivated: 3,
-  newCans: 5,
-  withdrawn: 1,
   taskActive: 12,
   taskClosed: 28,
   taskCompleted: 20,

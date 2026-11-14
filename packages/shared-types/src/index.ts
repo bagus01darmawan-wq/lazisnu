@@ -89,6 +89,31 @@ export enum CanCondition {
   DIKEMBALIKAN = "DIKEMBALIKAN",
 }
 
+/**
+ * Status operasional kaleng (lifecycle) — dimensi terpisah dari kondisi fisik.
+ * Satu kaleng dapat berstatus NON_AKTIF dengan kondisi fisik BAIK/RUSAK/HILANG.
+ */
+export enum CanLifecycleStatus {
+  AKTIF = "AKTIF",
+  NON_AKTIF = "NON_AKTIF",
+  DIKEMBALIKAN = "DIKEMBALIKAN",
+}
+
+/** Kondisi fisik kaleng — independen dari status lifecycle. */
+export enum CanPhysicalCondition {
+  BAIK = "BAIK",
+  RUSAK = "RUSAK",
+  HILANG = "HILANG",
+}
+
+export type CanPhysicalConditionSource =
+  | "OBSERVED"
+  | "LEGACY_ASSUMPTION_BAIK"
+  | "CUTOVER_BASELINE";
+
+/** Kondisi fisik tiga nilai — kontrak batch/kunjungan (bukan lifecycle). */
+export type CanPhysicalConditionValue = "BAIK" | "RUSAK" | "HILANG";
+
 /** Kondisi yang masuk cakupan penempatan (HILANG punya cakupan sendiri). */
 export const PLACEMENT_CONDITIONS: CanCondition[] = [
   CanCondition.AKTIF,
@@ -342,8 +367,16 @@ export interface Can {
   location_notes?: string;
   /** Masih dilacak sistem atau tidak (true: AKTIF/NON_AKTIF/RUSAK/HILANG, false: DIKEMBALIKAN). */
   is_active: boolean;
-  /** Kondisi bisnis kaleng — pakai kolom ini untuk perilaku, bukan `is_active`. */
+  /** @deprecated Proyeksi kompatibilitas; pakai lifecycle_status + physical_condition. */
   condition: CanCondition;
+  /** Dimensi status operasional (2026-11-13). */
+  lifecycle_status?: CanLifecycleStatus;
+  /** Dimensi kondisi fisik (2026-11-13). */
+  physical_condition?: CanPhysicalCondition;
+  /** Provenance kondisi fisik; LEGACY_ASSUMPTION_BAIK untuk backfill tanpa bukti. */
+  physical_condition_source?: CanPhysicalConditionSource;
+  /** Versi monotonik untuk urutan ledger. */
+  can_version?: number;
   last_collected_at?: string;
   total_collected: number;
   collection_count: number;
@@ -612,7 +645,10 @@ export interface OfflineCollection {
   collected_at: string;
   latitude?: number;
   longitude?: number;
+  /** @deprecated Alias legacy; selalu konsisten dengan physical_condition. */
   condition: Extract<CanCondition, 'AKTIF' | 'RUSAK' | 'HILANG'>;
+  /** Kondisi fisik eksplisit (kontrak 2026-11-13). */
+  physical_condition?: CanPhysicalConditionValue;
   /** ISI berarti kunjungan NON_AKTIF, bukan ordinary batch. */
   visit_outcome?: 'ISI';
   device_info?: DeviceInfo;
@@ -874,7 +910,10 @@ export interface BatchCollectionRequestItem {
   collected_at: string;
   latitude?: number;
   longitude?: number;
+  /** @deprecated Alias legacy; selalu konsisten dengan physical_condition. */
   condition: Extract<CanCondition, 'AKTIF' | 'RUSAK' | 'HILANG'>;
+  /** Kondisi fisik eksplisit (kontrak 2026-11-13). */
+  physical_condition?: CanPhysicalConditionValue;
   /** ISI berarti kunjungan NON_AKTIF, bukan ordinary batch. */
   visit_outcome?: 'ISI';
   device_info?: DeviceInfo;
@@ -960,10 +999,6 @@ export interface OverviewSummary {
   successful_collections: number;
   /** Proposal APPROVED → AKTIF pada periode (jalur cepat tak tercakup). */
   reactivated: number;
-  /** Kaleng created_at masuk periode (arus masuk basis). */
-  new_cans: number;
-  /** Transisi → DIKEMBALIKAN pada periode (arus keluar basis). */
-  withdrawn: number;
   task_active: number;
   task_closed: number;
   task_completed: number;
@@ -974,6 +1009,35 @@ export interface OverviewSummary {
 export interface OverviewConditionBreakdownItem {
   condition: CanCondition;
   count: number;
+}
+
+/**
+ * Snapshot dua kelompok pada akhir periode filter (2026-11-13).
+ * Status dan kondisi fisik TIDAK dijumlahkan sebagai total kaleng.
+ */
+export interface OverviewCanStateSnapshot {
+  /** Cutoff yang dipakai: akhir bulan historis atau `now` bulan berjalan. */
+  cutoff_at: string;
+  /** Awal ledger yang dapat dipercaya; null bila ledger belum ada. */
+  cutover_at: string | null;
+  /** False bila cutoff berada sebelum baseline/ledger lengkap. */
+  history_complete: boolean;
+  status: {
+    AKTIF: number;
+    NON_AKTIF: number;
+    DIKEMBALIKAN: number;
+  };
+  physical_condition: {
+    BAIK: number;
+    RUSAK: number;
+    HILANG: number;
+  };
+  /** Jumlah kondisi BAIK hasil asumsi backfill (bukan observasi). */
+  assumption_baik: number;
+  placement_coverage: number;
+  action_required: number;
+  /** Proyeksi legacy lima nilai untuk klien lama. */
+  legacy_breakdown: OverviewConditionBreakdownItem[];
 }
 
 export interface OverviewMonthlyTrendItem {
@@ -1031,6 +1095,8 @@ export interface OverviewResponse {
   period: OverviewPeriod;
   summary: OverviewSummary;
   condition_breakdown: OverviewConditionBreakdownItem[];
+  /** Dua kelompok independen sesuai posisi pada akhir periode filter. */
+  can_state_snapshot: OverviewCanStateSnapshot;
   monthly_trend: OverviewMonthlyTrendItem[];
   productivity: OverviewProductivityTotals;
   branch_comparison?: OverviewBranchComparisonItem[];

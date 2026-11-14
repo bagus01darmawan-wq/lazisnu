@@ -55,6 +55,7 @@ const makeQueueItem = (
   can_id: canId,
   nominal: 50000,
   condition: CanCondition.AKTIF,
+  physical_condition: 'BAIK',
   collected_at: '2026-07-15T02:00:00.000Z',
 });
 

@@ -85,6 +85,24 @@ export function buildPeriodBoundaries(year: number, month: number): PeriodBounda
 }
 
 /**
+ * Awal bulan operasional (tanggal 1 00:00:00.000) — dipakai batas snapshot
+ * historis. Tetap satu-satunya tempat konstruksi tanggal periode.
+ */
+export function operationalMonthStart(year: number, month: number): Date {
+  assertValidPeriod(year, month);
+  return new Date(year, month - 1, 1, 0, 0, 0, 0);
+}
+
+/**
+ * Batas ATAS eksklusif untuk snapshot historis satu bulan:
+ * `effective_at < awal bulan berikutnya` (setengah terbuka).
+ */
+export function operationalMonthEndExclusive(year: number, month: number): Date {
+  const next = shiftPeriod(year, month, 1);
+  return operationalMonthStart(next.year, next.month);
+}
+
+/**
  * Status periode pada satu titik waktu (perbandingan milidetik murni,
  * independen terhadap TZ server — asal batas & titik waktu dibangun konsisten).
  * - now > toleranceEnd → LOCKED (tgl 10 00:00:00.000 ke atas)

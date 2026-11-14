@@ -11,6 +11,12 @@ interface PeriodPickerProps {
   className?: string;
   /** Tahun tambahan (mis. periode belum tuntas dari konteks aksi). */
   extraYears?: number[];
+  /**
+   * Overview: bulan/tahun masa depan tidak boleh dipilih. Backend menolak
+   * periode masa depan; filter disamakan agar UI tidak menawarkan pilihan
+   * yang pasti gagal.
+   */
+  disableFuture?: boolean;
 }
 
 const monthNames = [
@@ -18,18 +24,25 @@ const monthNames = [
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
 ];
 
-export function PeriodPicker({ months, year, onChange, className, extraYears }: PeriodPickerProps) {
+export function PeriodPicker({ months, year, onChange, className, extraYears, disableFuture = false }: PeriodPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
-  const currentYear = new Date().getFullYear();
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
   // Sertakan tahun terpilih + tahun periode belum tuntas agar periode lama
   // (mis. tunggakan tahun lalu) tetap bisa dipilih.
   const years = Array.from(
     new Set([currentYear - 1, currentYear, currentYear + 1, year, ...(extraYears ?? [])]),
-  ).sort((a, b) => a - b);
+  )
+    .filter((candidate) => !disableFuture || candidate <= currentYear)
+    .sort((a, b) => a - b);
+
+  const isFutureMonth = (month: number): boolean =>
+    disableFuture && (year > currentYear || (year === currentYear && month > currentMonth));
 
   const allMonthsSelected = months.length === 12;
 
@@ -64,24 +77,31 @@ export function PeriodPicker({ months, year, onChange, className, extraYears }: 
   }, [isOpen]);
 
   const toggleMonth = useCallback((m: number) => {
+    if (isFutureMonth(m)) return;
     if (months.includes(m)) {
       onChange(months.filter(x => x !== m), year);
     } else {
       onChange([...months, m].sort((a, b) => a - b), year);
     }
-  }, [months, year, onChange]);
+  }, [months, year, onChange, isFutureMonth]);
 
   const toggleYear = useCallback((y: number) => {
-    if (y === year && allMonthsSelected) {
+    const fullSelection = disableFuture && y === currentYear
+      ? Array.from({ length: currentMonth }, (_, i) => i + 1)
+      : Array.from({ length: 12 }, (_, i) => i + 1);
+    const alreadyAll = months.length === fullSelection.length
+      && fullSelection.every((m) => months.includes(m));
+    if (y === year && alreadyAll) {
       onChange([], y);
     } else {
-      onChange(Array.from({ length: 12 }, (_, i) => i + 1), y);
+      onChange(fullSelection, y);
     }
-  }, [year, allMonthsSelected, onChange]);
+  }, [year, months, onChange, disableFuture, currentYear, currentMonth]);
 
   const selectSingleMonth = useCallback((m: number, y: number) => {
+    if (disableFuture && (y > currentYear || (y === currentYear && m > currentMonth))) return;
     onChange([m], y);
-  }, [onChange]);
+  }, [onChange, disableFuture, currentYear, currentMonth]);
 
   const displayLabel = months.length === 0
     ? `${monthNames[new Date().getMonth()]} ${year}`
@@ -118,26 +138,34 @@ export function PeriodPicker({ months, year, onChange, className, extraYears }: 
                 {monthNames.map((m, i) => {
                   const monthNum = i + 1;
                   const checked = months.includes(monthNum);
+                  const disabled = isFutureMonth(monthNum);
                   return (
                     <div key={m} className="flex items-center gap-2">
                       <button
                         onClick={() => toggleMonth(monthNum)}
+                        disabled={disabled}
+                        aria-disabled={disabled}
+                        aria-label={`Pilih ${m}`}
                         className={cn(
                           "w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-all",
                           checked
                             ? "bg-[#DE6F4A] border-[#DE6F4A]"
-                            : "border-[#F4F1EA]/30 hover:border-[#F4F1EA]/60"
+                            : "border-[#F4F1EA]/30 hover:border-[#F4F1EA]/60",
+                          disabled && "cursor-not-allowed opacity-30",
                         )}
                       >
                         {checked && <Check size={10} className="text-white" strokeWidth={4} />}
                       </button>
                       <button
                         onClick={() => selectSingleMonth(monthNum, year)}
+                        disabled={disabled}
+                        aria-disabled={disabled}
                         className={cn(
                           "flex-1 text-left px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all uppercase tracking-tight",
                           months.length === 1 && checked
                             ? "bg-[#DE6F4A] text-white shadow-lg shadow-[#DE6F4A]/20"
-                            : "text-[#DE6F4A] hover:bg-[#DE6F4A]/10"
+                            : "text-[#DE6F4A] hover:bg-[#DE6F4A]/10",
+                          disabled && "cursor-not-allowed opacity-30 hover:bg-transparent",
                         )}
                       >
                         {m}

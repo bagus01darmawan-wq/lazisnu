@@ -13,6 +13,7 @@
 import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { and, desc, eq, inArray } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 import { AppError } from '../utils/AppError';
 import { Errors } from '../utils/errorCatalog';
 import { getLatestCollectionCondition } from './collectionSubmission';
@@ -22,7 +23,6 @@ import {
   ASSIGNABLE_CONDITIONS,
   EMPTY_STREAK_THRESHOLD,
   countTrailingEmptyCollections,
-  isTrackedForCondition,
   isTransitionAllowed,
   shouldProposeInactive,
   shouldRestoreActive,
@@ -31,6 +31,18 @@ import type { CanConditionValue } from './conditionRules';
 import { scopeCondition } from './overviewService';
 import type { OverviewScopeInput } from './overviewService';
 import { JWTPayload } from '../middleware/auth';
+import {
+  CAN_STATE_SOURCE,
+  lockCanRow,
+  recordCanStateChange,
+} from './canStateHistory';
+import {
+  applyStatusChange,
+  deriveIsActive,
+  deriveLegacyCondition,
+  resolveStateInput,
+  type CanState,
+} from './canState';
 
 export type ProposalTriggerSource = 'EMPTY_THRESHOLD' | 'SKIP_REASON' | 'MANUAL';
 
@@ -117,40 +129,79 @@ export async function approveConditionProposal(
   ctx: ApprovalContext,
   reasonNote?: string | null,
 ) {
-  const proposal = await db.query.canConditionProposals.findFirst({
+  // Baca usulan tanpa lock untuk mengetahui canId; urutan lock seragam:
+  // baris kaleng dulu, baru baris usulan.
+  const proposalRef = await db.query.canConditionProposals.findFirst({
     where: eq(schema.canConditionProposals.id, proposalId),
-    with: { can: { columns: { id: true, branchId: true, condition: true, isActive: true } } },
+    columns: { id: true, canId: true },
   });
-  if (!proposal) throw new AppError('NOT_FOUND', 'Usulan tidak ditemukan', 404);
-  if (proposal.status !== 'PENDING') {
-    throw Errors.VALIDATION_ERROR(`Usulan sudah berstatus ${proposal.status}`);
-  }
-
-  await assertCanAccess(ctx, proposal.can, 'Usulan ini bukan milik ranting/kecamatan Anda');
-
-  const from = proposal.can.condition as CanConditionValue;
-  const to = proposal.toCondition as CanConditionValue;
-
-  // Kondisi kaleng bisa sudah berubah (mis. diubah manual) — jangan menimpa tanpa validasi.
-  if (from !== proposal.fromCondition) {
-    throw new AppError(
-      'CONDITION_CHANGED',
-      `Kondisi kaleng sudah berubah menjadi ${from}; usulan ini tidak lagi relevan`,
-      409,
-    );
-  }
-  if (!isTransitionAllowed(from, to)) {
-    throw Errors.VALIDATION_ERROR(`Transisi kondisi ${from} → ${to} tidak diizinkan`);
-  }
+  if (!proposalRef) throw new AppError('NOT_FOUND', 'Usulan tidak ditemukan', 404);
 
   const now = new Date();
 
-  await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
+    const can = await lockCanRow(tx, proposalRef.canId);
+    await assertCanAccess(ctx, can, 'Usulan ini bukan milik ranting/kecamatan Anda');
+
+    const [proposal] = await tx
+      .select()
+      .from(schema.canConditionProposals)
+      .where(eq(schema.canConditionProposals.id, proposalId))
+      .for('update');
+
+    if (!proposal) throw new AppError('NOT_FOUND', 'Usulan tidak ditemukan', 404);
+    if (proposal.status !== 'PENDING') {
+      throw Errors.VALIDATION_ERROR(`Usulan sudah berstatus ${proposal.status}`);
+    }
+
+    const from = can.condition as CanConditionValue;
+    const to = proposal.toCondition as CanConditionValue;
+
+    // Kondisi kaleng bisa sudah berubah (mis. diubah manual) — jangan menimpa tanpa validasi.
+    if (from !== proposal.fromCondition) {
+      throw new AppError(
+        'CONDITION_CHANGED',
+        `Kondisi kaleng sudah berubah menjadi ${from}; usulan ini tidak lagi relevan`,
+        409,
+      );
+    }
+    if (!isTransitionAllowed(from, to)) {
+      throw Errors.VALIDATION_ERROR(`Transisi kondisi ${from} → ${to} tidak diizinkan`);
+    }
+
+    const currentState: CanState = {
+      lifecycleStatus: can.lifecycleStatus,
+      physicalCondition: can.physicalCondition,
+      physicalConditionSource: can.physicalConditionSource ?? 'OBSERVED',
+    };
+    const resolution = resolveStateInput({ condition: to }, currentState);
+    if (!resolution.ok) throw Errors.VALIDATION_ERROR(resolution.message);
+    const nextState = resolution.state;
+    const nextLegacy = deriveLegacyCondition(nextState.lifecycleStatus, nextState.physicalCondition);
+
     await tx.update(schema.cans)
-      .set({ condition: to, isActive: isTrackedForCondition(to), updatedAt: now })
+      .set({
+        lifecycleStatus: nextState.lifecycleStatus,
+        physicalCondition: nextState.physicalCondition,
+        physicalConditionSource: nextState.physicalConditionSource,
+        condition: nextLegacy,
+        isActive: deriveIsActive(nextState.lifecycleStatus),
+        updatedAt: now,
+      })
       .where(eq(schema.cans.id, proposal.canId));
 
-    await syncActiveAssignmentKindForCan(tx, proposal.canId, to, now);
+    await recordCanStateChange(tx, {
+      canId: proposal.canId,
+      before: { ...currentState, branchId: can.branchId },
+      after: { ...nextState, branchId: can.branchId },
+      effectiveAt: now,
+      sourceType: CAN_STATE_SOURCE.CONDITION_PROPOSAL,
+      sourceId: proposalId,
+      actorId: ctx.userId ?? null,
+      reasonCode: proposal.reasonCode,
+    });
+
+    await syncActiveAssignmentKindForCan(tx, proposal.canId, nextLegacy, now);
 
     await tx.update(schema.canConditionProposals)
       .set({
@@ -173,15 +224,15 @@ export async function approveConditionProposal(
         eq(schema.canConditionProposals.canId, proposal.canId),
         eq(schema.canConditionProposals.status, 'PENDING'),
       ));
-  });
 
-  return {
-    proposal_id: proposalId,
-    can_id: proposal.canId,
-    from_condition: from,
-    to_condition: to,
-    approved_at: now,
-  };
+    return {
+      proposal_id: proposalId,
+      can_id: proposal.canId,
+      from_condition: from,
+      to_condition: to,
+      approved_at: now,
+    };
+  });
 }
 
 /** Tolak usulan. Tidak menyentuh kondisi kaleng. */
@@ -248,7 +299,15 @@ export type EmptyStreakAction = 'NONE' | 'AUTO_NON_AKTIF' | 'RESTORED_ACTIVE';
 export async function evaluateEmptyStreakForCan(canId: string, client: any = db) {
   const can = await client.query.cans.findFirst({
     where: eq(schema.cans.id, canId),
-    columns: { id: true, condition: true, isActive: true },
+    columns: {
+      id: true,
+      condition: true,
+      isActive: true,
+      lifecycleStatus: true,
+      physicalCondition: true,
+      physicalConditionSource: true,
+      branchId: true,
+    },
   });
   if (!can) throw new AppError('NOT_FOUND', 'Kaleng tidak ditemukan', 404);
 
@@ -257,38 +316,88 @@ export async function evaluateEmptyStreakForCan(canId: string, client: any = db)
   const emptyStreak = countTrailingEmptyCollections(nominals);
   const latestNominal = nominals[0] ?? 0;
 
-  if (shouldRestoreActive(condition, latestNominal)) {
-    const now = new Date();
-    const applyRestore = async (tx: any) => {
-      await tx.update(schema.cans)
-        .set({ condition: 'AKTIF', isActive: true, updatedAt: now })
-        .where(eq(schema.cans.id, canId));
-      await syncActiveAssignmentKindForCan(tx, canId, 'AKTIF', now);
-    };
+  const runInTransaction = async (fn: (tx: any) => Promise<void>) => {
     if (typeof client.transaction === 'function') {
-      await client.transaction(applyRestore);
+      await client.transaction(fn);
     } else {
-      await applyRestore(client);
+      await fn(client);
     }
+  };
+
+  const now = new Date();
+
+  if (shouldRestoreActive(condition, latestNominal)) {
+    await runInTransaction(async (tx) => {
+      const locked = await lockCanRow(tx, canId);
+      // Ulangi validasi pada snapshot terkunci (mutasi bersamaan).
+      if (!shouldRestoreActive(locked.condition as CanConditionValue, latestNominal)) return;
+
+      const currentState: CanState = {
+        lifecycleStatus: locked.lifecycleStatus,
+        physicalCondition: locked.physicalCondition,
+        physicalConditionSource: locked.physicalConditionSource ?? 'OBSERVED',
+      };
+      const nextState = applyStatusChange(currentState, 'AKTIF');
+      const nextLegacy = deriveLegacyCondition(nextState.lifecycleStatus, nextState.physicalCondition);
+
+      await tx.update(schema.cans)
+        .set({
+          lifecycleStatus: nextState.lifecycleStatus,
+          physicalCondition: nextState.physicalCondition,
+          physicalConditionSource: nextState.physicalConditionSource,
+          condition: nextLegacy,
+          isActive: true,
+          updatedAt: now,
+        })
+        .where(eq(schema.cans.id, canId));
+
+      await recordCanStateChange(tx, {
+        canId,
+        before: { ...currentState, branchId: locked.branchId },
+        after: { ...nextState, branchId: locked.branchId },
+        effectiveAt: now,
+        sourceType: CAN_STATE_SOURCE.AUTO_RESTORE_ACTIVE,
+        sourceId: randomUUID(),
+        actorId: null,
+        reasonCode: 'EMPTY_STREAK_RESET',
+      });
+
+      await syncActiveAssignmentKindForCan(tx, canId, nextLegacy, now);
+    });
     return { can_id: canId, empty_streak: emptyStreak, action: 'RESTORED_ACTIVE' as EmptyStreakAction };
   }
 
   if (shouldProposeInactive(condition, emptyStreak)) {
     // Ambang 6x kosong adalah toleransinya sendiri — tidak perlu approval admin
-    // (amandemen keputusan 3 & 19, 2026-09-18). Kondisi diterapkan langsung, tapi
-    // jejaknya tetap ditulis sebagai proposal APPROVED supaya audit "kapan dan
-    // kenapa kaleng ini jadi nonaktif" tidak hilang.
-    const now = new Date();
-    const applyAutoNonActive = async (tx: any) => {
+    // (amandemen keputusan 3 & 19, 2026-09-18). Status NON_AKTIF diterapkan
+    // langsung, tetapi kondisi fisik terakhir DIPERTAHANKAN sebagai dimensi
+    // independen. Jejaknya tetap ditulis sebagai proposal APPROVED.
+    await runInTransaction(async (tx) => {
+      const locked = await lockCanRow(tx, canId);
+      if (!shouldProposeInactive(locked.condition as CanConditionValue, emptyStreak)) return;
+
+      const currentState: CanState = {
+        lifecycleStatus: locked.lifecycleStatus,
+        physicalCondition: locked.physicalCondition,
+        physicalConditionSource: locked.physicalConditionSource ?? 'OBSERVED',
+      };
+      const nextState = applyStatusChange(currentState, 'NON_AKTIF');
+      const nextLegacy = deriveLegacyCondition(nextState.lifecycleStatus, nextState.physicalCondition);
+
       await tx.update(schema.cans)
-        .set({ condition: 'NON_AKTIF', isActive: true, updatedAt: now })
+        .set({
+          lifecycleStatus: nextState.lifecycleStatus,
+          physicalCondition: nextState.physicalCondition,
+          physicalConditionSource: nextState.physicalConditionSource,
+          condition: nextLegacy,
+          isActive: true,
+          updatedAt: now,
+        })
         .where(eq(schema.cans.id, canId));
 
-      await syncActiveAssignmentKindForCan(tx, canId, 'NON_AKTIF', now);
-
-      await tx.insert(schema.canConditionProposals).values({
+      const [proposal] = await tx.insert(schema.canConditionProposals).values({
         canId,
-        fromCondition: condition,
+        fromCondition: locked.condition as CanConditionValue,
         toCondition: 'NON_AKTIF',
         triggerSource: 'EMPTY_THRESHOLD',
         reasonCode: 'EMPTY_STREAK',
@@ -297,7 +406,20 @@ export async function evaluateEmptyStreakForCan(canId: string, client: any = db)
         status: 'APPROVED',
         approvedBy: null,
         approvedAt: now,
+      }).returning({ id: schema.canConditionProposals.id });
+
+      await recordCanStateChange(tx, {
+        canId,
+        before: { ...currentState, branchId: locked.branchId },
+        after: { ...nextState, branchId: locked.branchId },
+        effectiveAt: now,
+        sourceType: CAN_STATE_SOURCE.AUTO_EMPTY_STREAK,
+        sourceId: proposal.id,
+        actorId: null,
+        reasonCode: 'EMPTY_STREAK',
       });
+
+      await syncActiveAssignmentKindForCan(tx, canId, nextLegacy, now);
 
       // Usulan pending lain untuk kaleng yang sama tidak lagi relevan.
       await tx.update(schema.canConditionProposals)
@@ -311,12 +433,7 @@ export async function evaluateEmptyStreakForCan(canId: string, client: any = db)
           eq(schema.canConditionProposals.canId, canId),
           eq(schema.canConditionProposals.status, 'PENDING'),
         ));
-    };
-    if (typeof client.transaction === 'function') {
-      await client.transaction(applyAutoNonActive);
-    } else {
-      await applyAutoNonActive(client);
-    }
+    });
     return {
       can_id: canId,
       empty_streak: emptyStreak,

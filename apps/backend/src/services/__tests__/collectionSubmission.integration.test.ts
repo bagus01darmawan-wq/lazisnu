@@ -1,7 +1,7 @@
 import { db, closeDbConnection } from '../../config/database';
 import * as schema from '../../database/schema';
 import { submitCollection, resubmitCollection, validateAssignmentForSubmit } from '../collectionSubmission';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { ErrorCode } from '../../utils/errorCatalog';
 
 /**
@@ -192,7 +192,12 @@ describe('Collection Submission Integration Test', () => {
 
   it('should prevent resubmitting an old sequence (NOT_LATEST)', async () => {
     const colSeq1 = await db.query.collections.findFirst({
-      where: eq(schema.collections.submitSequence, 1)
+      // Scope ke kaleng fixture ini: test DB dipakai bersama lintas suite,
+      // sehingga submit_sequence=1 milik fixture lain bisa terbaca lebih dulu.
+      where: and(
+        eq(schema.collections.canId, canId),
+        eq(schema.collections.submitSequence, 1),
+      ),
     });
     
     expect(colSeq1).toBeDefined();

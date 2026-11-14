@@ -32,8 +32,6 @@ export interface OverviewSummaryView {
   collectionNominal: number;
   successfulCollections: number;
   reactivated: number;
-  newCans: number;
-  withdrawn: number;
   taskActive: number;
   taskClosed: number;
   taskCompleted: number;
@@ -44,6 +42,27 @@ export interface OverviewSummaryView {
 export interface OverviewConditionBreakdownItemView {
   condition: string;
   count: number;
+}
+
+/** Snapshot dua kelompok independen pada akhir periode filter. */
+export interface OverviewCanStateSnapshotView {
+  cutoffAt: string;
+  cutoverAt: string | null;
+  historyComplete: boolean;
+  status: {
+    AKTIF: number;
+    NON_AKTIF: number;
+    DIKEMBALIKAN: number;
+  };
+  physicalCondition: {
+    BAIK: number;
+    RUSAK: number;
+    HILANG: number;
+  };
+  assumptionBaik: number;
+  placementCoverage: number;
+  actionRequired: number;
+  legacyBreakdown: OverviewConditionBreakdownItemView[];
 }
 
 export interface OverviewMonthlyTrendItemView {
@@ -83,6 +102,7 @@ export interface OverviewResponseView {
   period: OverviewPeriodView;
   summary: OverviewSummaryView;
   conditionBreakdown: OverviewConditionBreakdownItemView[];
+  canStateSnapshot: OverviewCanStateSnapshotView;
   monthlyTrend: OverviewMonthlyTrendItemView[];
   productivity: OverviewProductivityTotalsView;
   branchComparison?: OverviewBranchComparisonItemView[];

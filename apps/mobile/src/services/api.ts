@@ -17,6 +17,7 @@ import {
   BatchSyncResponse,
   BatchCollectionRequestItem,
   CanCondition,
+  CanPhysicalConditionValue,
   CanVisitOutcome,
   RangeStatsResponse,
   ProposalStatusResponse,
@@ -659,6 +660,8 @@ export const collectionService = {
     longitude?: number;
     /** Kondisi fisik wajib; untuk NON_AKTIF, visit_outcome menandai jalur khusus. */
     condition: CanCondition.AKTIF | CanCondition.RUSAK | CanCondition.HILANG;
+    /** Dimensi fisik eksplisit (kontrak 2026-11-13); alias `condition` tetap dikirim. */
+    physical_condition?: CanPhysicalConditionValue;
     visit_outcome?: 'ISI';
     device_info?: {
       model: string;

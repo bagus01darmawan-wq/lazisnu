@@ -1,6 +1,65 @@
 import { z } from 'zod';
 
-export const collectionSchema = z.object({
+/**
+ * Kondisi fisik tiga nilai — kontrak baru (2026-11-13).
+ * `condition` lama tetap diterima sebagai alias; pasangan yang bertentangan
+ * ditolak di superRefine, bukan diam-diam dipilih salah satu.
+ */
+const physicalConditionSchema = z.enum(['BAIK', 'RUSAK', 'HILANG']);
+const legacyBatchConditionSchema = z.enum(['AKTIF', 'RUSAK', 'HILANG']);
+
+type ConditionPair = {
+  condition?: 'AKTIF' | 'RUSAK' | 'HILANG';
+  physical_condition?: 'BAIK' | 'RUSAK' | 'HILANG';
+};
+
+const physicalOfLegacy = (
+  condition: 'AKTIF' | 'RUSAK' | 'HILANG',
+): 'BAIK' | 'RUSAK' | 'HILANG' => (condition === 'AKTIF' ? 'BAIK' : condition);
+
+const legacyOfPhysical = (
+  physical: 'BAIK' | 'RUSAK' | 'HILANG',
+): 'AKTIF' | 'RUSAK' | 'HILANG' => (physical === 'BAIK' ? 'AKTIF' : physical);
+
+function refineConditionPair(
+  body: ConditionPair,
+  ctx: z.RefinementCtx,
+  required: boolean,
+): void {
+  if (!body.condition && !body.physical_condition) {
+    if (required) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['physical_condition'],
+        message: 'physical_condition (atau condition legacy) wajib diisi',
+      });
+    }
+    return;
+  }
+  if (body.condition && body.physical_condition) {
+    const projected = physicalOfLegacy(body.condition);
+    if (projected !== body.physical_condition) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['physical_condition'],
+        message: `physical_condition ${body.physical_condition} bertentangan dengan condition ${body.condition} (proyeksi ${projected})`,
+      });
+    }
+  }
+}
+
+function normalizeConditionPair<T extends ConditionPair>(
+  body: T,
+): T & { condition: 'AKTIF' | 'RUSAK' | 'HILANG'; physical_condition: 'BAIK' | 'RUSAK' | 'HILANG' } {
+  const physical = body.physical_condition ?? physicalOfLegacy(body.condition as 'AKTIF' | 'RUSAK' | 'HILANG');
+  return {
+    ...body,
+    physical_condition: physical,
+    condition: body.condition ?? legacyOfPhysical(physical),
+  };
+}
+
+const collectionFields = {
   assignment_id: z.string().uuid(),
   can_id: z.string().uuid(),
   // BR-06: nominal: 0 VALID — hak pemilik kaleng memberi nominal berapapun
@@ -16,32 +75,48 @@ export const collectionSchema = z.object({
     app_version: z.string(),
   }).optional(),
   offline_id: z.string().optional(),
-  /** Kondisi fisik wajib dari PPK; batch biasa tidak menerima status lifecycle. */
-  condition: z.enum(['AKTIF', 'RUSAK', 'HILANG']),
+  /** @deprecated Alias legacy; selalu konsisten dengan physical_condition. */
+  condition: legacyBatchConditionSchema.optional(),
+  /** Kondisi fisik eksplisit; batch biasa tidak menerima status lifecycle. */
+  physical_condition: physicalConditionSchema.optional(),
+  /** Penanda satu-satunya jalur NOMINAL untuk NON_AKTIF. */
+  visit_outcome: z.literal('ISI').optional(),
+} as const;
+
+const collectionBaseSchema = z.object(collectionFields).strict();
+
+export const collectionSchema = collectionBaseSchema
+  .superRefine((body, ctx) => refineConditionPair(body, ctx, true))
+  .transform((body) => normalizeConditionPair(body));
+
+const batchItemBaseSchema = z.object({
+  offline_id: z.string(),
+  assignment_id: z.string().uuid(),
+  can_id: z.string().uuid(),
+  // BR-06: nominal: 0 VALID (lihat collectionSchema.nominal)
+  nominal: z.number().min(0),
+  collected_at: z.string().datetime(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  device_info: z.object({
+    model: z.string(),
+    os_version: z.string(),
+    app_version: z.string(),
+  }).optional(),
+  /** @deprecated Alias legacy; selalu konsisten dengan physical_condition. */
+  condition: legacyBatchConditionSchema.optional(),
+  /** Kondisi fisik eksplisit. */
+  physical_condition: physicalConditionSchema.optional(),
   /** Penanda satu-satunya jalur NOMINAL untuk NON_AKTIF. */
   visit_outcome: z.literal('ISI').optional(),
 }).strict();
 
 export const batchCollectionSchema = z.object({
-  collections: z.array(z.object({
-    offline_id: z.string(),
-    assignment_id: z.string().uuid(),
-    can_id: z.string().uuid(),
-    // BR-06: nominal: 0 VALID (lihat collectionSchema.nominal)
-    nominal: z.number().min(0),
-    collected_at: z.string().datetime(),
-    latitude: z.number().optional(),
-    longitude: z.number().optional(),
-    device_info: z.object({
-      model: z.string(),
-      os_version: z.string(),
-      app_version: z.string(),
-    }).optional(),
-    /** Batch biasa hanya menerima kondisi fisik tiga nilai. */
-    condition: z.enum(['AKTIF', 'RUSAK', 'HILANG']),
-    /** Penanda satu-satunya jalur NOMINAL untuk NON_AKTIF. */
-    visit_outcome: z.literal('ISI').optional(),
-  }).strict()),
+  collections: z.array(
+    batchItemBaseSchema
+      .superRefine((body, ctx) => refineConditionPair(body, ctx, true))
+      .transform((body) => normalizeConditionPair(body)),
+  ),
 }).strict();
 
 export const resubmitSchema = z.object({
@@ -87,40 +162,52 @@ export const reopenSubmissionSchema = z.object({
   expected_version: z.number().int().min(1).optional(),
 }).strict();
 
-export const canVisitSubmitSchema = collectionSchema.extend({
+export const canVisitSubmitSchema = collectionBaseSchema.extend({
   outcome: z.literal('ISI'),
   notes: z.string().max(255).optional(),
-}).strict();
+}).strict()
+  .superRefine((body, ctx) => refineConditionPair(body, ctx, true))
+  .transform((body) => normalizeConditionPair(body));
 
 /** POST /mobile/cans/:canId/visits — tindakan NON_AKTIF tanpa nominal. */
 export const canVisitSchema = z.object({
   outcome: z.enum(['ISI', 'KOSONG', 'DIKEMBALIKAN', 'TIDAK_DIKUNJUNGI']),
-  condition: z.enum(['AKTIF', 'RUSAK', 'HILANG']).optional(),
+  /** @deprecated Alias legacy; selalu konsisten dengan physical_condition. */
+  condition: legacyBatchConditionSchema.optional(),
+  /** Kondisi fisik eksplisit untuk outcome ISI. */
+  physical_condition: physicalConditionSchema.optional(),
   /** Tugas VISIT yang sedang dikerjakan (wajib untuk APK baru). */
   assignment_id: z.string().uuid().optional(),
   visited_at: z.string().datetime().optional(),
   notes: z.string().max(255).optional(),
 }).strict().superRefine((body, ctx) => {
-  if (body.outcome === 'ISI' && !body.condition) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['condition'],
-      message: 'condition wajib diisi untuk Kaleng Isi',
-    });
+  if (body.outcome === 'ISI') {
+    refineConditionPair(body, ctx, true);
+    return;
   }
-  if (body.outcome !== 'ISI' && body.condition) {
+  if (body.condition || body.physical_condition) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['condition'],
       message: 'condition hanya boleh diisi untuk Kaleng Isi',
     });
   }
+}).transform((body) => {
+  if (!body.condition && !body.physical_condition) return body;
+  const normalized = normalizeConditionPair(body);
+  return {
+    ...body,
+    condition: normalized.condition,
+    physical_condition: normalized.physical_condition,
+  };
 });
 
 /** POST /mobile/cans/:canId/visits — form nominal untuk Kaleng Isi. */
 export const canVisitWithNominalSchema = z.object({
   outcome: z.literal('ISI'),
-  condition: z.enum(['AKTIF', 'RUSAK', 'HILANG']),
+  /** @deprecated Alias legacy; selalu konsisten dengan physical_condition. */
+  condition: legacyBatchConditionSchema.optional(),
+  physical_condition: physicalConditionSchema.optional(),
   nominal: z.number().min(0),
   collected_at: z.string().datetime(),
   latitude: z.number().optional(),
@@ -131,7 +218,9 @@ export const canVisitWithNominalSchema = z.object({
     app_version: z.string(),
   }).optional(),
   offline_id: z.string().optional(),
-}).strict();
+}).strict()
+  .superRefine((body, ctx) => refineConditionPair(body, ctx, true))
+  .transform((body) => normalizeConditionPair(body));
 
 /**
  * C1-T9: token perangkat milik sendiri (fondasi push T11). Token milik sesi

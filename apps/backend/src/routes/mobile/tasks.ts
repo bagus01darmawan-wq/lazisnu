@@ -30,6 +30,13 @@ import {
   scanClosedMessage,
   scanWrongPeriodMessage,
 } from '../../services/scanClassification';
+import { CAN_STATE_SOURCE, lockCanRow, recordCanStateChange } from '../../services/canStateHistory';
+import {
+  deriveIsActive,
+  deriveLegacyCondition,
+  stateAfterVisitOutcome,
+  type CanState,
+} from '../../services/canState';
 
 export async function tasksRoutes(fastify: FastifyInstance) {
   // GET /mobile/dashboard
@@ -1235,6 +1242,24 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       }
 
       const [visit] = await db.transaction(async (tx) => {
+        // Kunci baris kaleng: dua tindakan bersamaan tidak boleh saling menimpa.
+        const locked = await lockCanRow(tx, canId);
+        if (locked.condition !== 'NON_AKTIF') {
+          throw new AppError('CAN_NOT_NON_ACTIVE', 'Tindakan khusus hanya tersedia untuk kaleng NON_AKTIF', 409);
+        }
+
+        const currentState: CanState = {
+          lifecycleStatus: locked.lifecycleStatus,
+          physicalCondition: locked.physicalCondition,
+          physicalConditionSource: locked.physicalConditionSource ?? 'OBSERVED',
+        };
+        const nextState = stateAfterVisitOutcome(
+          currentState,
+          body.outcome as 'ISI' | 'KOSONG' | 'DIKEMBALIKAN' | 'TIDAK_DIKUNJUNGI',
+          body.condition as 'BAIK' | 'RUSAK' | 'HILANG' | undefined,
+        );
+        const nextLegacy = deriveLegacyCondition(nextState.lifecycleStatus, nextState.physicalCondition);
+
         const inserted = await tx.insert(schema.canVisits).values({
           canId,
           officerId,
@@ -1248,10 +1273,24 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         }).returning();
 
         await tx.update(schema.cans).set({
-          condition: resolution.condition,
-          isActive: resolution.isActive,
+          lifecycleStatus: nextState.lifecycleStatus,
+          physicalCondition: nextState.physicalCondition,
+          physicalConditionSource: nextState.physicalConditionSource,
+          condition: nextLegacy,
+          isActive: deriveIsActive(nextState.lifecycleStatus),
           updatedAt: new Date(),
         }).where(eq(schema.cans.id, canId));
+
+        await recordCanStateChange(tx, {
+          canId,
+          before: { ...currentState, branchId: locked.branchId },
+          after: { ...nextState, branchId: locked.branchId },
+          effectiveAt: visitedAt,
+          sourceType: CAN_STATE_SOURCE.CAN_VISIT,
+          sourceId: inserted[0].id,
+          actorId: user.userId ?? null,
+          reasonCode: body.outcome,
+        });
 
         if (body.outcome === 'DIKEMBALIKAN') {
           // Kaleng keluar dari sistem: tutup semua tugas ACTIVE untuk kaleng
@@ -1282,7 +1321,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           entityType: 'can',
           entityId: canId,
           oldData: { from: current },
-          newData: { outcome: body.outcome, to: resolution.condition, visited_at: visitedAt.toISOString() },
+          newData: { outcome: body.outcome, to: nextLegacy, visited_at: visitedAt.toISOString() },
           ipAddress: 'can-visit',
           userAgent: null,
         }, tx);

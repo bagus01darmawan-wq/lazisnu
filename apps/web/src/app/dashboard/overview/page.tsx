@@ -248,11 +248,7 @@ export default function OverviewPage() {
           branchId={branchId || undefined}
           scopeLabel={data.scope.branchName ? `Ranting ${data.scope.branchName}` : 'Seluruh ranting kecamatan'}
         />
-        <ConditionBreakdown
-          breakdown={data.conditionBreakdown}
-          newCans={data.summary.newCans}
-          withdrawn={data.summary.withdrawn}
-        />
+        <ConditionBreakdown snapshot={data.canStateSnapshot} />
       </div>
     </div>
   );

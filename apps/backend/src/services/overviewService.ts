@@ -20,7 +20,19 @@ import {
   PLACEMENT_CONDITIONS,
 } from './conditionRules';
 import type { CanConditionValue } from './conditionRules';
-import { OPERATIONAL_TIMEZONE } from '../utils/operationalTimeZone';
+import { OPERATIONAL_TIMEZONE, currentOperationalPeriod } from '../utils/operationalTimeZone';
+import { operationalMonthEndExclusive } from './periodCalendar';
+import { Errors } from '../utils/errorCatalog';
+import {
+  findCanStateEvents,
+  replayCanStateAt,
+  type SnapshotFallback,
+} from './canStateHistory';
+import {
+  deriveLegacyCondition,
+  type CanLifecycleStatus,
+  type CanPhysicalCondition,
+} from './canState';
 
 export interface OverviewScopeInput {
   /** Kecamatan pemilik data — selalu diisi dari token, bukan dari query string. */
@@ -52,15 +64,21 @@ export function effectiveMonths(period: OverviewPeriodInput): number[] {
  * Parse query periode overview (`?year=2026&months=7,8,9`).
  * Null = 400 VALIDATION_ERROR. Tanpa param = bulan berjalan (perilaku lama,
  * kompatibel dengan pemanggil yang belum mengirim periode).
+ *
+ * Bulan/tahun masa depan DITOLAK eksplisit — bukan dibatasi diam-diam.
+ * Bulan berjalan diizinkan (snapshot berhenti pada `now`).
  */
-export function parseOverviewPeriod(yearRaw: unknown, monthsRaw: unknown): OverviewPeriodInput | null {
-  const now = new Date();
-  const currentYear = now.getFullYear();
+export function parseOverviewPeriod(
+  yearRaw: unknown,
+  monthsRaw: unknown,
+  now: Date = new Date(),
+): OverviewPeriodInput | null {
+  const current = currentOperationalPeriod(now);
 
-  let year = currentYear;
+  let year = current.year;
   if (yearRaw !== undefined && yearRaw !== '') {
     const y = Number(yearRaw);
-    if (!Number.isInteger(y) || y < 2000 || y > currentYear + 1) return null;
+    if (!Number.isInteger(y) || y < 2000 || y > current.year) return null;
     year = y;
   }
 
@@ -72,7 +90,11 @@ export function parseOverviewPeriod(yearRaw: unknown, monthsRaw: unknown): Overv
     months = [...new Set(parsed)].sort((a, b) => a - b);
   }
 
-  const eff = months ?? [now.getMonth() + 1];
+  const eff = months ?? [current.month];
+  // Tahun/bulan masa depan (termasuk salah satu bulan dalam daftar) ditolak.
+  if (eff.some((m) => year > current.year || (year === current.year && m > current.month))) {
+    return null;
+  }
   return { year, month: Math.max(...eff), months: eff };
 }
 
@@ -143,6 +165,211 @@ export function monthBounds(period: OverviewPeriodInput) {
 /** Ubah tahun+bulan menjadi kunci "YYYY-MM". */
 export function monthKey(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+export type CanStatusCounts = Record<CanLifecycleStatus, number>;
+export type CanPhysicalCounts = Record<CanPhysicalCondition, number>;
+
+export interface OverviewCanStateSnapshot {
+  /** Waktu cutoff yang dipakai (akhir bulan historis atau `now` bulan berjalan). */
+  cutoff_at: string;
+  /** Awal riwayat ledger yang dapat dipercaya (baseline cutover pertama). */
+  cutover_at: string | null;
+  /** False bila cutoff berada sebelum baseline/ledger lengkap. */
+  history_complete: boolean;
+  status: CanStatusCounts;
+  physical_condition: CanPhysicalCounts;
+  /** Jumlah kondisi BAIK yang berasal dari asumsi backfill. */
+  assumption_baik: number;
+  placement_coverage: number;
+  action_required: number;
+  /** Proyeksi legacy lima nilai untuk klien/kartu lama (lossy). */
+  legacy_breakdown: Array<{ condition: CanConditionValue; count: number }>;
+}
+
+/**
+ * Cutoff snapshot periode:
+ * - bulan berjalan → `now` inklusif (`effective_at <= now`);
+ * - bulan historis → awal bulan berikutnya eksklusif (`effective_at < ...`).
+ * Bulan/tahun masa depan ditolak eksplisit.
+ */
+export function overviewSnapshotCutoff(
+  period: OverviewPeriodInput,
+  now: Date = new Date(),
+): { at: Date; inclusive: boolean } {
+  const months = effectiveMonths(period);
+  const latest = months.length > 0 ? Math.max(...months) : period.month;
+  const current = currentOperationalPeriod(now);
+  if (period.year > current.year || (period.year === current.year && latest > current.month)) {
+    throw Errors.VALIDATION_ERROR(
+      `Periode ${monthKey(period.year, latest)} adalah masa depan dan tidak dapat difilter`,
+    );
+  }
+  if (period.year === current.year && latest === current.month) {
+    return { at: now, inclusive: true };
+  }
+  return { at: operationalMonthEndExclusive(period.year, latest), inclusive: false };
+}
+
+function emptyCanStateSnapshot(cutoff: { at: Date; inclusive: boolean }): OverviewCanStateSnapshot {
+  return {
+    cutoff_at: cutoff.at.toISOString(),
+    cutover_at: null,
+    history_complete: true,
+    status: { AKTIF: 0, NON_AKTIF: 0, DIKEMBALIKAN: 0 },
+    physical_condition: { BAIK: 0, RUSAK: 0, HILANG: 0 },
+    assumption_baik: 0,
+    placement_coverage: 0,
+    action_required: 0,
+    legacy_breakdown: [
+      { condition: 'AKTIF', count: 0 },
+      { condition: 'NON_AKTIF', count: 0 },
+      { condition: 'RUSAK', count: 0 },
+      { condition: 'HILANG', count: 0 },
+      { condition: 'DIKEMBALIKAN', count: 0 },
+    ],
+  };
+}
+
+/**
+ * Snapshot dua kelompok (status lifecycle + kondisi fisik) pada akhir periode.
+ * Setiap dimensi direplay dari ledger secara independen; kaleng dibatasi pada
+ * `created_at < cutoff`, dan scope ranting memakai branch hasil replay (bukan
+ * branch saat ini) agar pindah ranting tidak memindahkan riwayat.
+ */
+export async function getCanStateSnapshot(
+  scope: OverviewScopeInput,
+  period: OverviewPeriodInput,
+  now: Date = new Date(),
+): Promise<OverviewCanStateSnapshot> {
+  const cutoff = overviewSnapshotCutoff(period, now);
+
+  const allowedBranchIds = scope.branchId
+    ? [scope.branchId]
+    : (await db
+      .select({ id: schema.branches.id })
+      .from(schema.branches)
+      .where(eq(schema.branches.districtId, scope.districtId)))
+      .map((row) => row.id);
+
+  if (allowedBranchIds.length === 0) return emptyCanStateSnapshot(cutoff);
+
+  const candidateSelect = {
+    id: schema.cans.id,
+    branchId: schema.cans.branchId,
+    createdAt: schema.cans.createdAt,
+    lifecycleStatus: schema.cans.lifecycleStatus,
+    physicalCondition: schema.cans.physicalCondition,
+    physicalConditionSource: schema.cans.physicalConditionSource,
+  };
+
+  const [districtRows, historyBranchRows] = await Promise.all([
+    db.select(candidateSelect)
+      .from(schema.cans)
+      .innerJoin(schema.branches, eq(schema.cans.branchId, schema.branches.id))
+      .where(and(
+        eq(schema.branches.districtId, scope.districtId),
+        lt(schema.cans.createdAt, cutoff.at),
+      )),
+    db.selectDistinct({ canId: schema.canStateHistory.canId })
+      .from(schema.canStateHistory)
+      .where(and(
+        inArray(schema.canStateHistory.branchId, allowedBranchIds),
+        lt(schema.canStateHistory.effectiveAt, cutoff.at),
+      )),
+  ]);
+
+  const candidateById = new Map(districtRows.map((row) => [row.id, row]));
+  const extraIds = [...new Set(historyBranchRows.map((row) => row.canId))]
+    .filter((id) => !candidateById.has(id));
+  if (extraIds.length > 0) {
+    const extraRows = await db
+      .select(candidateSelect)
+      .from(schema.cans)
+      .where(inArray(schema.cans.id, extraIds));
+    for (const row of extraRows) {
+      candidateById.set(row.id, row);
+    }
+  }
+
+  const candidates = [...candidateById.values()]
+    .filter((row) => row.createdAt.getTime() < cutoff.at.getTime());
+  if (candidates.length === 0) return emptyCanStateSnapshot(cutoff);
+
+  const events = await findCanStateEvents(
+    db,
+    candidates.map((row) => row.id),
+    { at: cutoff.at, inclusive: true },
+  );
+  const eventsByCan = new Map<string, typeof events>();
+  for (const event of events) {
+    const list = eventsByCan.get(event.canId) ?? [];
+    list.push(event);
+    eventsByCan.set(event.canId, list);
+  }
+
+  const status: CanStatusCounts = { AKTIF: 0, NON_AKTIF: 0, DIKEMBALIKAN: 0 };
+  const physical: CanPhysicalCounts = { BAIK: 0, RUSAK: 0, HILANG: 0 };
+  const legacy: CanConditionValue[] = ['AKTIF', 'NON_AKTIF', 'RUSAK', 'HILANG', 'DIKEMBALIKAN'];
+  const legacyCounts = new Map<CanConditionValue, number>(legacy.map((value) => [value, 0]));
+
+  let assumptionBaik = 0;
+  let placement = 0;
+  let actionRequired = 0;
+  let historyComplete = true;
+  let cutoverAt: Date | null = null;
+
+  for (const row of candidates) {
+    const fallback: SnapshotFallback = {
+      state: {
+        lifecycleStatus: row.lifecycleStatus,
+        physicalCondition: row.physicalCondition,
+        physicalConditionSource: row.physicalConditionSource ?? 'OBSERVED',
+      },
+      branchId: row.branchId,
+    };
+    const replay = replayCanStateAt(eventsByCan.get(row.id) ?? [], cutoff, fallback);
+
+    // Scope memakai branch pada cutoff, bukan branch saat ini.
+    if (!replay.branchId || !allowedBranchIds.includes(replay.branchId)) continue;
+    if (!replay.historyComplete) historyComplete = false;
+
+    const { lifecycleStatus, physicalCondition, physicalConditionSource } = replay.state;
+    status[lifecycleStatus] += 1;
+    physical[physicalCondition] += 1;
+
+    if (physicalCondition === 'BAIK' && physicalConditionSource === 'LEGACY_ASSUMPTION_BAIK') {
+      assumptionBaik += 1;
+    }
+
+    const tracked = lifecycleStatus !== 'DIKEMBALIKAN';
+    if (tracked && physicalCondition !== 'HILANG') placement += 1;
+    if (tracked && (lifecycleStatus === 'NON_AKTIF' || physicalCondition !== 'BAIK')) {
+      actionRequired += 1;
+    }
+
+    const legacyCondition = deriveLegacyCondition(lifecycleStatus, physicalCondition);
+    legacyCounts.set(legacyCondition, (legacyCounts.get(legacyCondition) ?? 0) + 1);
+
+    if (replay.anchorAt && (cutoverAt === null || replay.anchorAt < cutoverAt)) {
+      cutoverAt = replay.anchorAt;
+    }
+  }
+
+  return {
+    cutoff_at: cutoff.at.toISOString(),
+    cutover_at: cutoverAt ? cutoverAt.toISOString() : null,
+    history_complete: historyComplete,
+    status,
+    physical_condition: physical,
+    assumption_baik: assumptionBaik,
+    placement_coverage: placement,
+    action_required: actionRequired,
+    legacy_breakdown: legacy.map((condition) => ({
+      condition,
+      count: legacyCounts.get(condition) ?? 0,
+    })),
+  };
 }
 
 /**
@@ -496,10 +723,10 @@ export async function getOverview(
   scope: OverviewScopeInput,
   period: OverviewPeriodInput,
   options: GetOverviewOptions = {},
+  now: Date = new Date(),
 ) {
-  const [breakdown, coverage, officers, collections, returned, tasks] = await Promise.all([
-    getConditionBreakdown(scope),
-    getCoverageCounts(scope),
+  const [snapshot, officers, collections, returned, tasks] = await Promise.all([
+    getCanStateSnapshot(scope, period, now),
     getOfficerCount(scope),
     getCollectionSummary(scope, period),
     getReturnedCounts(scope, period),
@@ -508,11 +735,9 @@ export async function getOverview(
 
   // Arus produktivitas (dipakai section Kondisi + Produktivitas). Diambil
   // terpisah dari productivityService agar fungsi agregasi inti tetap ramping.
-  const { getCollectionOutcome, getNewCansCount, getReactivatedCount, getWithdrawnCount } = await import('./productivityService.js');
-  const [reactivated, newCans, withdrawn, outcome] = await Promise.all([
+  const { getCollectionOutcome, getReactivatedCount } = await import('./productivityService.js');
+  const [reactivated, outcome] = await Promise.all([
     getReactivatedCount(scope, period.year, effectiveMonths(period)),
-    getNewCansCount(scope, period.year, effectiveMonths(period)),
-    getWithdrawnCount(scope, period.year, effectiveMonths(period)),
     getCollectionOutcome(scope, period.year, effectiveMonths(period)),
   ]);
 
@@ -522,9 +747,6 @@ export async function getOverview(
       ? getBranchComparison(scope.districtId, period)
       : Promise.resolve(undefined),
   ]);
-
-  const countOf = (condition: CanConditionValue) =>
-    Number(breakdown.find((b) => b.condition === condition)?.count ?? 0);
 
   // `month` = bulan terpilih paling akhir (kompatibel pemanggil lama);
   // `months` = seluruh bulan terpilih untuk label rentang.
@@ -548,30 +770,31 @@ export async function getOverview(
       generated_at: new Date().toISOString(),
     },
     summary: {
-      // Cakupan penempatan = AKTIF + NON_AKTIF + RUSAK (HILANG punya cakupan sendiri).
-      placement_coverage: coverage.placement,
-      active_cans: countOf('AKTIF'),
-      inactive_cans: countOf('NON_AKTIF'),
-      damaged_cans: countOf('RUSAK'),
-      lost_cans: countOf('HILANG'),
+      // Cakupan penempatan = tracked dengan kondisi fisik bukan HILANG
+      // (setara legacy AKTIF + NON_AKTIF + RUSAK).
+      placement_coverage: snapshot.placement_coverage,
+      active_cans: snapshot.status.AKTIF,
+      inactive_cans: snapshot.status.NON_AKTIF,
+      damaged_cans: snapshot.physical_condition.RUSAK,
+      lost_cans: snapshot.physical_condition.HILANG,
       returned_this_month: returned.this_month,
       returned_total: returned.total,
-      action_required: coverage.actionRequired,
+      action_required: snapshot.action_required,
       total_officers: officers,
       collection_nominal: collections.nominal,
       successful_collections: collections.successful_collections,
-      // Arus periode (section Produktivitas + Kondisi): reaktivasi dihitung
-      // dari proposal APPROVED → AKTIF (batasan: jalur cepat tak tercakup).
+      // Reaktivasi dihitung dari proposal APPROVED → AKTIF (batasan: jalur
+      // cepat tak tercakup).
       reactivated: reactivated,
-      new_cans: newCans,
-      withdrawn: withdrawn,
       task_active: tasks.task_active,
       task_closed: tasks.task_closed,
       task_completed: tasks.task_completed,
       task_uncollected: tasks.task_uncollected,
       task_total: tasks.task_total,
     },
-    condition_breakdown: breakdown,
+    condition_breakdown: snapshot.legacy_breakdown,
+    // Dua kelompok independen sesuai posisi pada akhir periode filter.
+    can_state_snapshot: snapshot,
     monthly_trend: trend,
     // Total hasil kunjungan periode terpilih (eksak, tak tergantung jendela
     // 6 bulan tren): donat produktivitas menutup genap total ditugaskan.

@@ -1,15 +1,30 @@
 import { db } from '../config/database';
 import * as schema from '../database/schema';
-import { eq, and, inArray, desc, or, ilike, sql } from 'drizzle-orm';
+import { eq, and, inArray, desc, or, ilike, sql, type SQL } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 import { AppError } from '../utils/AppError';
 import { Errors } from '../utils/errorCatalog';
 import { getRoleScope } from '../utils/role-scope';
 import { JWTPayload } from '../middleware/auth';
-import { isTransitionAllowed, isTrackedForCondition, ASSIGNABLE_CONDITIONS } from './conditionRules';
+import { isTransitionAllowed, ASSIGNABLE_CONDITIONS } from './conditionRules';
 import type { CanConditionValue } from './conditionRules';
 import { buildDraftLockError, type DraftLockInfo } from './canDraftLock';
 import { syncActiveAssignmentKindForCan } from './assignmentKindService';
 import { currentOperationalPeriod } from '../utils/operationalTimeZone';
+import {
+  CAN_STATE_SOURCE,
+  deleteCanStateHistory,
+  insertCanCreatedEvent,
+  lockCanRow,
+  recordCanStateChange,
+} from './canStateHistory';
+import {
+  applyStatusChange,
+  deriveIsActive,
+  deriveLegacyCondition,
+  resolveStateInput,
+  type CanState,
+} from './canState';
 
 export interface CreateCanInput {
   branch_id?: string | null;
@@ -42,6 +57,10 @@ export interface UpdateCanInput {
    * sehingga tidak mungkin terbentuk `is_active = false` dengan kondisi selain DIKEMBALIKAN.
    */
   condition?: CanConditionValue | null;
+  /** Dimensi status lifecycle baru (2026-11-13). */
+  lifecycle_status?: 'AKTIF' | 'NON_AKTIF' | 'DIKEMBALIKAN' | null;
+  /** Dimensi kondisi fisik baru (2026-11-13). */
+  physical_condition?: 'BAIK' | 'RUSAK' | 'HILANG' | null;
   /** Kode alasan baku untuk transisi kondisi (lihat conditionRules). */
   condition_reason_code?: string | null;
   /** @deprecated Alias lama. `false` dipetakan ke DIKEMBALIKAN, `true` dipetakan ke AKTIF. */
@@ -227,25 +246,42 @@ export async function createCan(body: CreateCanInput, ctx: AccessContext) {
     if (dukuhRecord) dukuhName = dukuhRecord.name;
   }
 
-  const inserted = await db.insert(schema.cans).values({
-    branchId: branchId,
-    dukuhId: (body.dukuh_id && body.dukuh_id !== '') ? body.dukuh_id : null,
-    qrCode: qrCode.substring(0, 50),
-    ownerName: body.owner_name.substring(0, 100),
-    ownerPhone: (body.owner_whatsapp || body.owner_phone || '').substring(0, 20),
-    ownerWhatsapp: (body.owner_whatsapp || body.owner_phone || '0000000000').substring(0, 20),
-    ownerAddress: body.owner_address,
-    rt: (body.rt || '').substring(0, 10),
-    rw: (body.rw || '').substring(0, 10),
-    dukuh: dukuhName || null,
-    latitude: (body.latitude !== undefined && body.latitude !== null) ? body.latitude.toString() : null,
-    longitude: (body.longitude !== undefined && body.longitude !== null) ? body.longitude.toString() : null,
-    // Kaleng baru selalu mulai sebagai AKTIF (tidak ada input yang boleh mengubahnya).
-    condition: 'AKTIF',
-    isActive: true,
-  }).returning();
+  const inserted = await db.transaction(async (tx) => {
+    const [row] = await tx.insert(schema.cans).values({
+      branchId: branchId,
+      dukuhId: (body.dukuh_id && body.dukuh_id !== '') ? body.dukuh_id : null,
+      qrCode: qrCode.substring(0, 50),
+      ownerName: body.owner_name.substring(0, 100),
+      ownerPhone: (body.owner_whatsapp || body.owner_phone || '').substring(0, 20),
+      ownerWhatsapp: (body.owner_whatsapp || body.owner_phone || '0000000000').substring(0, 20),
+      ownerAddress: body.owner_address,
+      rt: (body.rt || '').substring(0, 10),
+      rw: (body.rw || '').substring(0, 10),
+      dukuh: dukuhName || null,
+      latitude: (body.latitude !== undefined && body.latitude !== null) ? body.latitude.toString() : null,
+      longitude: (body.longitude !== undefined && body.longitude !== null) ? body.longitude.toString() : null,
+      // Kaleng baru selalu mulai sebagai AKTIF + BAIK (tidak ada input yang boleh mengubahnya).
+      condition: 'AKTIF',
+      isActive: true,
+      lifecycleStatus: 'AKTIF',
+      physicalCondition: 'BAIK',
+      physicalConditionSource: 'OBSERVED',
+    }).returning();
 
-  return inserted[0];
+    await insertCanCreatedEvent(tx, {
+      id: row.id,
+      branchId: row.branchId,
+      createdAt: row.createdAt,
+      lifecycleStatus: row.lifecycleStatus,
+      physicalCondition: row.physicalCondition,
+      physicalConditionSource: row.physicalConditionSource ?? 'OBSERVED',
+      canVersion: row.canVersion,
+    }, ctx.userId ?? null);
+
+    return row;
+  });
+
+  return inserted;
 }
 
 export async function getCanDetail(canId: string, ctx: AccessContext) {
@@ -281,71 +317,93 @@ export async function getCanDetail(canId: string, ctx: AccessContext) {
 }
 
 export async function updateCan(canId: string, body: UpdateCanInput, ctx: AccessContext) {
-  const existing = await db.query.cans.findFirst({ where: eq(schema.cans.id, canId) });
-  if (!existing) throw Errors.COLLECTION_NOT_FOUND('Kaleng tidak ditemukan');
-
-  await checkAccess(ctx, existing, 'Kaleng bukan milik ranting/kecamatan Anda');
-
-  // Branch move: hanya ADMIN_KECAMATAN yang boleh pindah ranting dalam satu kecamatan.
-  // Nilai '' dari preprocess zod sudah menjadi undefined, null/undefined berarti tidak pindah.
+  // Validasi tujuan pindah ranting (read-only) sebelum transaksi; state kaleng
+  // sendiri baru dibaca setelah lock agar validasi transisi memakai snapshot
+  // yang tidak bisa berubah di tengah jalan.
   const requestedBranchId = (typeof body.branch_id === 'string' && body.branch_id !== '')
     ? body.branch_id
     : undefined;
-  let newBranchId = existing.branchId;
-  const isBranchMove = requestedBranchId !== undefined && requestedBranchId !== existing.branchId;
-  if (isBranchMove) {
+  let targetBranch: { id: string; districtId: string } | null = null;
+  if (requestedBranchId !== undefined) {
     if (ctx.role === 'ADMIN_RANTING') {
       throw Errors.FORBIDDEN('Ranting tidak dapat memindahkan kaleng ke ranting lain');
     }
-    const targetBranch = await db.query.branches.findFirst({ where: eq(schema.branches.id, requestedBranchId as string) });
-    if (!targetBranch) throw new AppError('NOT_FOUND', 'Ranting tujuan tidak ditemukan', 404);
-    if (ctx.role === 'ADMIN_KECAMATAN' && targetBranch.districtId !== ctx.districtId) {
+    const found = await db.query.branches.findFirst({ where: eq(schema.branches.id, requestedBranchId) });
+    if (!found) throw new AppError('NOT_FOUND', 'Ranting tujuan tidak ditemukan', 404);
+    if (ctx.role === 'ADMIN_KECAMATAN' && found.districtId !== ctx.districtId) {
       throw Errors.FORBIDDEN('Ranting tujuan bukan dalam kecamatan Anda');
     }
-    newBranchId = targetBranch.id;
+    targetBranch = found;
   }
 
-  let newDukuhName = existing.dukuh;
-  let newDukuhId = existing.dukuhId;
-  if (body.dukuh_id !== undefined) {
-    if (body.dukuh_id === '' || body.dukuh_id === null) {
+  return db.transaction(async (tx) => {
+    const existing = await lockCanRow(tx, canId);
+    await checkAccess(ctx, existing, 'Kaleng bukan milik ranting/kecamatan Anda');
+
+    const newBranchId = targetBranch && targetBranch.id !== existing.branchId
+      ? targetBranch.id
+      : existing.branchId;
+    const isBranchMove = newBranchId !== existing.branchId;
+
+    let newDukuhName = existing.dukuh;
+    let newDukuhId = existing.dukuhId;
+    if (body.dukuh_id !== undefined) {
+      if (body.dukuh_id === '' || body.dukuh_id === null) {
+        newDukuhId = null;
+        newDukuhName = null;
+      } else {
+        const dukuhRecord = await tx.query.dukuhs.findFirst({
+          where: eq(schema.dukuhs.id, body.dukuh_id as string),
+        });
+        if (!dukuhRecord) throw Errors.VALIDATION_ERROR('Dukuh tidak ditemukan');
+        if (dukuhRecord.branchId !== newBranchId) throw Errors.VALIDATION_ERROR('Dukuh bukan milik ranting tujuan');
+        newDukuhId = dukuhRecord.id;
+        newDukuhName = dukuhRecord.name;
+      }
+    } else if (isBranchMove) {
+      // Pindah ranting tanpa dukuh baru: jangan gantung ke dukuh ranting lama.
       newDukuhId = null;
       newDukuhName = null;
-    } else {
-      const dukuhRecord = await db.query.dukuhs.findFirst({ where: eq(schema.dukuhs.id, body.dukuh_id as string) });
-      if (!dukuhRecord) throw Errors.VALIDATION_ERROR('Dukuh tidak ditemukan');
-      if (dukuhRecord.branchId !== newBranchId) throw Errors.VALIDATION_ERROR('Dukuh bukan milik ranting tujuan');
-      newDukuhId = dukuhRecord.id;
-      newDukuhName = dukuhRecord.name;
     }
-  } else if (isBranchMove) {
-    // Pindah ranting tanpa dukuh baru: jangan gantung ke dukuh ranting lama.
-    newDukuhId = null;
-    newDukuhName = null;
-  }
 
-  // --- Transisi kondisi (menggantikan aksi bisnis berbasis is_active) ---
-  // Alias lama dipetakan, bukan dihapus: `is_active = false` → DIKEMBALIKAN,
-  // `is_active = true` → AKTIF. Tidak ada jalur yang bisa menghasilkan
-  // `is_active = false` dengan kondisi selain DIKEMBALIKAN.
-  const legacyCondition: CanConditionValue | null =
-    body.is_active === undefined || body.is_active === null
-      ? null
-      : (body.is_active ? 'AKTIF' : 'DIKEMBALIKAN');
-  const requestedCondition = (body.condition ?? legacyCondition) as CanConditionValue | null;
+    // --- Transisi dua dimensi (status lifecycle + kondisi fisik) ---
+    // Alias lama dipetakan, bukan dihapus: `is_active = false` → DIKEMBALIKAN,
+    // `is_active = true` → AKTIF. Request campuran yang bertentangan ditolak.
+    const legacyCondition: CanConditionValue | null =
+      body.is_active === undefined || body.is_active === null
+        ? null
+        : (body.is_active ? 'AKTIF' : 'DIKEMBALIKAN');
 
-  let newCondition = existing.condition as CanConditionValue;
-  if (requestedCondition && requestedCondition !== newCondition) {
-    if (!isTransitionAllowed(newCondition, requestedCondition)) {
+    const currentState: CanState = {
+      lifecycleStatus: existing.lifecycleStatus,
+      physicalCondition: existing.physicalCondition,
+      physicalConditionSource: existing.physicalConditionSource ?? 'OBSERVED',
+    };
+    const resolution = resolveStateInput(
+      {
+        condition: body.condition ?? legacyCondition,
+        lifecycleStatus: body.lifecycle_status,
+        physicalCondition: body.physical_condition,
+      },
+      currentState,
+    );
+    if (!resolution.ok) throw Errors.VALIDATION_ERROR(resolution.message);
+
+    const nextState = resolution.state;
+    const currentLegacy = deriveLegacyCondition(currentState.lifecycleStatus, currentState.physicalCondition);
+    const nextLegacy = deriveLegacyCondition(nextState.lifecycleStatus, nextState.physicalCondition);
+
+    // State machine lama tetap mengikat status/legacy projection. Perubahan
+    // kondisi fisik yang tidak mengubah proyeksi legacy (mis. NON_AKTIF
+    // BAIK→RUSAK) tetap diizinkan karena dua dimensi memang independen.
+    if (nextLegacy !== currentLegacy && !isTransitionAllowed(currentLegacy, nextLegacy)) {
       throw Errors.VALIDATION_ERROR(
-        `Transisi kondisi ${newCondition} → ${requestedCondition} tidak diizinkan`
+        `Transisi kondisi ${currentLegacy} → ${nextLegacy} tidak diizinkan`,
       );
     }
-    newCondition = requestedCondition;
-  }
 
-  const updated = await db.transaction(async (tx) => {
-    const rows = await tx.update(schema.cans).set({
+    const now = new Date();
+    const [updated] = await tx.update(schema.cans).set({
       branchId: newBranchId,
       ownerName: body.owner_name ?? existing.ownerName,
       ownerPhone: body.owner_whatsapp || body.owner_phone || existing.ownerPhone,
@@ -358,19 +416,31 @@ export async function updateCan(canId: string, body: UpdateCanInput, ctx: Access
       latitude: body.latitude !== undefined ? (body.latitude ? String(body.latitude) : null) : existing.latitude,
       longitude: body.longitude !== undefined ? (body.longitude ? String(body.longitude) : null) : existing.longitude,
       locationNotes: body.location_notes !== undefined ? body.location_notes : existing.locationNotes,
-      condition: newCondition,
-      isActive: isTrackedForCondition(newCondition),
-      updatedAt: new Date(),
+      lifecycleStatus: nextState.lifecycleStatus,
+      physicalCondition: nextState.physicalCondition,
+      physicalConditionSource: nextState.physicalConditionSource,
+      condition: nextLegacy,
+      isActive: deriveIsActive(nextState.lifecycleStatus),
+      updatedAt: now,
     }).where(eq(schema.cans.id, canId)).returning();
 
-    if (newCondition !== existing.condition) {
-      await syncActiveAssignmentKindForCan(tx, canId, newCondition);
+    await recordCanStateChange(tx, {
+      canId,
+      before: { ...currentState, branchId: existing.branchId },
+      after: { ...nextState, branchId: newBranchId },
+      effectiveAt: now,
+      sourceType: CAN_STATE_SOURCE.ADMIN_UPDATE,
+      sourceId: randomUUID(),
+      actorId: ctx.userId ?? null,
+      reasonCode: body.condition_reason_code ?? null,
+    });
+
+    if (nextLegacy !== currentLegacy) {
+      await syncActiveAssignmentKindForCan(tx, canId, nextLegacy, now);
     }
 
-    return rows;
+    return { can: updated[0], oldData: existing };
   });
-
-  return { can: updated[0], oldData: existing };
 }
 
 /**
@@ -398,46 +468,73 @@ async function findDraftLocks(canIds: string[]): Promise<DraftLockInfo[]> {
 }
 
 export async function deleteCan(canId: string, permanent: boolean, ctx: AccessContext) {
-  const existing = await db.query.cans.findFirst({ where: eq(schema.cans.id, canId) });
-  if (!existing) throw Errors.COLLECTION_NOT_FOUND('Kaleng tidak ditemukan');
+  return db.transaction(async (tx) => {
+    const existing = await lockCanRow(tx, canId);
+    await checkAccess(ctx, existing, 'Kaleng bukan milik ranting/kecamatan Anda');
 
-  await checkAccess(ctx, existing, 'Kaleng bukan milik ranting/kecamatan Anda');
-
-  if (permanent) {
-    // Sumber kebenaran = baris `collections`, BUKAN kolom cache
-    // `cans.collection_count`. Cache itu hanya bertambah di jalur submit
-    // tertentu, jadi bisa meleset; salah hitung di sini berarti menghapus
-    // riwayat uang yang sebenarnya ada.
-    const hasCollectionHistory = await db
-      .select({ id: schema.collections.id })
-      .from(schema.collections)
-      .where(eq(schema.collections.canId, canId))
-      .limit(1);
-    if (hasCollectionHistory.length > 0) {
-      throw new AppError('HAS_COLLECTION_HISTORY', 'Kaleng dengan riwayat penjemputan tidak dapat dihapus permanen. Gunakan penandaan dikembalikan.', 409);
+    if (permanent) {
+      // Sumber kebenaran = baris `collections`, BUKAN kolom cache
+      // `cans.collection_count`. Cache itu hanya bertambah di jalur submit
+      // tertentu, jadi bisa meleset; salah hitung di sini berarti menghapus
+      // riwayat uang yang sebenarnya ada.
+      const hasCollectionHistory = await tx
+        .select({ id: schema.collections.id })
+        .from(schema.collections)
+        .where(eq(schema.collections.canId, canId))
+        .limit(1);
+      if (hasCollectionHistory.length > 0) {
+        throw new AppError('HAS_COLLECTION_HISTORY', 'Kaleng dengan riwayat penjemputan tidak dapat dihapus permanen. Gunakan penandaan dikembalikan.', 409);
+      }
+      // Guard draft: tanpa ini Postgres tetap menolak (FK `period_draft_items`),
+      // tetapi pesannya tidak bisa menyebut periode maupun membedakan draft yang
+      // masih boleh diedit dari yang sudah disetujui.
+      const draftError = buildDraftLockError(await findDraftLocks([canId]));
+      if (draftError) throw draftError;
+      // Keputusan eksplisit: ledger ikut dihapus hanya untuk penghapusan
+      // permanen yang sudah lolos guard (FK RESTRICT mencegah orphan diam-diam).
+      await deleteCanStateHistory(tx, [canId]);
+      await tx.delete(schema.cans).where(eq(schema.cans.id, canId));
+      return { deleted: true, oldData: existing };
     }
-    // Guard draft: tanpa ini Postgres tetap menolak (FK `period_draft_items`),
-    // tetapi pesannya tidak bisa menyebut periode maupun membedakan draft yang
-    // masih boleh diedit dari yang sudah disetujui.
-    const draftError = buildDraftLockError(await findDraftLocks([canId]));
-    if (draftError) throw draftError;
-    await db.delete(schema.cans).where(eq(schema.cans.id, canId));
-    return { deleted: true, oldData: existing };
-  }
 
-  // Soft delete = penarikan kaleng. Harus menjadi transisi eksplisit menuju
-  // DIKEMBALIKAN, bukan sekadar `is_active = false` tanpa kondisi.
-  await db.transaction(async (tx) => {
+    // Soft delete = penarikan kaleng. Status menjadi DIKEMBALIKAN; kondisi fisik
+    // terakhir dipertahankan sebagai dimensi independen.
+    const now = new Date();
+    const currentState: CanState = {
+      lifecycleStatus: existing.lifecycleStatus,
+      physicalCondition: existing.physicalCondition,
+      physicalConditionSource: existing.physicalConditionSource ?? 'OBSERVED',
+    };
+    const nextState = applyStatusChange(currentState, 'DIKEMBALIKAN');
+
     await tx.update(schema.cans)
-      .set({ isActive: false, condition: 'DIKEMBALIKAN', updatedAt: new Date() })
+      .set({
+        isActive: false,
+        condition: 'DIKEMBALIKAN',
+        lifecycleStatus: nextState.lifecycleStatus,
+        physicalCondition: nextState.physicalCondition,
+        physicalConditionSource: nextState.physicalConditionSource,
+        updatedAt: now,
+      })
       .where(eq(schema.cans.id, canId));
-    await syncActiveAssignmentKindForCan(tx, canId, 'DIKEMBALIKAN');
+
+    await recordCanStateChange(tx, {
+      canId,
+      before: { ...currentState, branchId: existing.branchId },
+      after: { ...nextState, branchId: existing.branchId },
+      effectiveAt: now,
+      sourceType: CAN_STATE_SOURCE.ADMIN_DELETE,
+      sourceId: randomUUID(),
+      actorId: ctx.userId ?? null,
+    });
+
+    await syncActiveAssignmentKindForCan(tx, canId, 'DIKEMBALIKAN', now);
+    return {
+      deleted: false,
+      oldData: existing,
+      newData: { ...existing, isActive: false, condition: 'DIKEMBALIKAN' as CanConditionValue },
+    };
   });
-  return {
-    deleted: false,
-    oldData: existing,
-    newData: { ...existing, isActive: false, condition: 'DIKEMBALIKAN' as CanConditionValue },
-  };
 }
 
 export async function createBulkCans(branch_id: string, items: any[], ctx: AccessContext) {
@@ -480,7 +577,21 @@ export async function createBulkCans(branch_id: string, items: any[], ctx: Acces
     };
   });
 
-  const inserted = await db.insert(schema.cans).values(toInsert).returning();
+  const inserted = await db.transaction(async (tx) => {
+    const rows = await tx.insert(schema.cans).values(toInsert).returning();
+    for (const row of rows) {
+      await insertCanCreatedEvent(tx, {
+        id: row.id,
+        branchId: row.branchId,
+        createdAt: row.createdAt,
+        lifecycleStatus: row.lifecycleStatus,
+        physicalCondition: row.physicalCondition,
+        physicalConditionSource: row.physicalConditionSource ?? 'OBSERVED',
+        canVersion: row.canVersion,
+      }, ctx.userId ?? null);
+    }
+    return rows;
+  });
   return inserted;
 }
 
@@ -505,42 +616,71 @@ export async function deleteBulkCans(ids: string[], permanent: boolean, ctx: Acc
     if (draftError) throw draftError;
   }
 
-  if (ctx.role === 'ADMIN_RANTING' && ctx.branchId) {
-    if (permanent) {
-      await db.delete(schema.cans)
-        .where(and(inArray(schema.cans.id, ids), eq(schema.cans.branchId, ctx.branchId)));
-    } else {
-      await db.update(schema.cans)
-        .set({ isActive: false, condition: 'DIKEMBALIKAN', updatedAt: new Date() })
-        .where(and(inArray(schema.cans.id, ids), eq(schema.cans.branchId, ctx.branchId)));
-    }
-  } else if (ctx.role === 'ADMIN_KECAMATAN' && ctx.districtId) {
-    const branchIds = (await db.select({ id: schema.branches.id })
-      .from(schema.branches)
-      .where(eq(schema.branches.districtId, ctx.districtId)))
-      .map(b => b.id);
+  return db.transaction(async (tx) => {
+    let scope: SQL | undefined;
 
-    if (branchIds.length > 0) {
-      if (permanent) {
-        await db.delete(schema.cans)
-          .where(and(inArray(schema.cans.id, ids), inArray(schema.cans.branchId, branchIds)));
-      } else {
-        await db.update(schema.cans)
-          .set({ isActive: false, condition: 'DIKEMBALIKAN', updatedAt: new Date() })
-          .where(and(inArray(schema.cans.id, ids), inArray(schema.cans.branchId, branchIds)));
-      }
+    if (ctx.role === 'ADMIN_RANTING' && ctx.branchId) {
+      scope = eq(schema.cans.branchId, ctx.branchId);
+    } else if (ctx.role === 'ADMIN_KECAMATAN' && ctx.districtId) {
+      const branchIds = (await tx.select({ id: schema.branches.id })
+        .from(schema.branches)
+        .where(eq(schema.branches.districtId, ctx.districtId)))
+        .map((b) => b.id);
+      if (branchIds.length === 0) return { deleted: ids.length };
+      scope = inArray(schema.cans.branchId, branchIds);
+    } else if (ctx.role === 'ADMIN_KECAMATAN' || ctx.role === 'ADMIN_RANTING') {
+      throw Errors.FORBIDDEN('Tidak memiliki akses untuk menghapus data ini');
     }
-  } else if (ctx.role === 'ADMIN_KECAMATAN' || ctx.role === 'ADMIN_RANTING') {
-    throw Errors.FORBIDDEN('Tidak memiliki akses untuk menghapus data ini');
-  } else {
-    if (permanent) {
-      await db.delete(schema.cans).where(inArray(schema.cans.id, ids));
-    } else {
-      await db.update(schema.cans)
-        .set({ isActive: false, condition: 'DIKEMBALIKAN', updatedAt: new Date() })
-        .where(inArray(schema.cans.id, ids));
-    }
-  }
 
-  return { deleted: ids.length };
+    const rows = await tx.select()
+      .from(schema.cans)
+      .where(and(inArray(schema.cans.id, ids), scope))
+      .for('update');
+    if (rows.length === 0) return { deleted: ids.length };
+
+    const allowedIds = rows.map((row) => row.id);
+
+    if (permanent) {
+      // Ledger ikut dihapus eksplisit setelah guard lolos (FK CASCADE juga
+      // menjamin tidak ada baris orphan).
+      await deleteCanStateHistory(tx, allowedIds);
+      await tx.delete(schema.cans).where(inArray(schema.cans.id, allowedIds));
+      return { deleted: ids.length };
+    }
+
+    const now = new Date();
+    for (const row of rows) {
+      const currentState: CanState = {
+        lifecycleStatus: row.lifecycleStatus,
+        physicalCondition: row.physicalCondition,
+        physicalConditionSource: row.physicalConditionSource ?? 'OBSERVED',
+      };
+      const nextState = applyStatusChange(currentState, 'DIKEMBALIKAN');
+
+      await tx.update(schema.cans)
+        .set({
+          isActive: false,
+          condition: 'DIKEMBALIKAN',
+          lifecycleStatus: nextState.lifecycleStatus,
+          physicalCondition: nextState.physicalCondition,
+          physicalConditionSource: nextState.physicalConditionSource,
+          updatedAt: now,
+        })
+        .where(eq(schema.cans.id, row.id));
+
+      await recordCanStateChange(tx, {
+        canId: row.id,
+        before: { ...currentState, branchId: row.branchId },
+        after: { ...nextState, branchId: row.branchId },
+        effectiveAt: now,
+        sourceType: CAN_STATE_SOURCE.ADMIN_DELETE,
+        sourceId: randomUUID(),
+        actorId: ctx.userId ?? null,
+      });
+
+      await syncActiveAssignmentKindForCan(tx, row.id, 'DIKEMBALIKAN', now);
+    }
+
+    return { deleted: ids.length };
+  });
 }

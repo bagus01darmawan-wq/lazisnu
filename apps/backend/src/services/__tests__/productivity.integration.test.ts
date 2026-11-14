@@ -4,21 +4,19 @@
  * Mengunci definisi metrik produktivitas PPK:
  * - Tabel per-PPK: assigned (tugas periode), collected (COMPLETED terbaru),
  *   filled (nominal > 0), uncollected. Petugas tanpa tugas tidak tampil.
- * - Arus: new_cans (created_at periode), withdrawn (→ DIKEMBALIKAN periode),
- *   reactivated (proposal APPROVED → AKTIF periode).
+ * - Reaktivasi: proposal APPROVED → AKTIF periode.
+ *   (Arus "baru disebar"/"ditarik" dihapus 2026-11-13 — bukan bagian kartu.)
  *
  * Tanggal fixture eksplisit (Agu/Sep 2026) agar tidak tergantung tanggal
- * jalan test, kecuali yang memang dihitung sebagai "baru".
+ * jalan test.
  */
 import { eq } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { db } from '../../config/database';
 import * as schema from '../../database/schema';
 import {
-  getNewCansCount,
   getOfficerProductivity,
   getReactivatedCount,
-  getWithdrawnCount,
 } from '../productivityService';
 
 const TAG = randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase();
@@ -157,16 +155,11 @@ describe('productivityService', () => {
     });
   });
 
-  test('arus: baru=1, ditarik=1, aktif-kembali=1', async () => {
-    await expect(getNewCansCount(SCOPE, 2026, [9])).resolves.toBe(1);
-    await expect(getWithdrawnCount(SCOPE, 2026, [9])).resolves.toBe(1);
+  test('reaktivasi: proposal APPROVED → AKTIF pada periode', async () => {
     await expect(getReactivatedCount(SCOPE, 2026, [9])).resolves.toBe(1);
   });
 
   test('periode lain tidak ikut terhitung', async () => {
-    // Empat kaleng fixture dibuat Agustus → hanya mereka di bulan 8.
-    await expect(getNewCansCount(SCOPE, 2026, [8])).resolves.toBe(4);
-    await expect(getWithdrawnCount(SCOPE, 2026, [10])).resolves.toBe(0);
     const rows = await getOfficerProductivity(SCOPE, 2026, [8]);
     expect(rows).toHaveLength(0);
   });

@@ -102,6 +102,12 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
       nominal: numericNominal,
       collected_at: new Date().toISOString(),
       condition,
+      physical_condition:
+        condition === CanCondition.RUSAK
+          ? 'RUSAK'
+          : condition === CanCondition.HILANG
+            ? 'HILANG'
+            : 'BAIK',
       visit_outcome: task.condition === CanCondition.NON_AKTIF ? 'ISI' : undefined,
     });
 

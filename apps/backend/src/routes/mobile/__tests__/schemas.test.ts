@@ -1,4 +1,9 @@
-import { collectionSchema, resubmitSchema, batchCollectionSchema } from '../schemas';
+import {
+  batchCollectionSchema,
+  canVisitSchema,
+  collectionSchema,
+  resubmitSchema,
+} from '../schemas';
 
 describe('collectionSchema', () => {
   const validBody = {
@@ -65,6 +70,83 @@ describe('collectionSchema', () => {
   it('menolak jika assignment_id hilang', () => {
     const { assignment_id, ...rest } = validBody;
     const result = collectionSchema.safeParse(rest);
+    expect(result.success).toBe(false);
+  });
+
+  it('menerima physical_condition saja dan menormalkan alias legacy', () => {
+    const { condition: _condition, ...withoutLegacy } = validBody;
+    const result = collectionSchema.safeParse({
+      ...withoutLegacy,
+      physical_condition: 'RUSAK',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.physical_condition).toBe('RUSAK');
+      expect(result.data.condition).toBe('RUSAK');
+    }
+  });
+
+  it('menolak pasangan condition + physical_condition yang bertentangan', () => {
+    const result = collectionSchema.safeParse({
+      ...validBody,
+      condition: 'AKTIF',
+      physical_condition: 'RUSAK',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('menolak request tanpa condition maupun physical_condition', () => {
+    const { condition: _condition, ...withoutCondition } = validBody;
+    const result = collectionSchema.safeParse(withoutCondition);
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('kondisi fisik baru — batch dan kunjungan', () => {
+  const item = {
+    offline_id: 'loc-fisik-1',
+    assignment_id: '00000000-0000-4000-8000-000000000001',
+    can_id: '00000000-0000-4000-8000-000000000002',
+    nominal: 10000,
+    collected_at: '2026-05-17T10:00:00.000Z',
+  };
+
+  it('batch menerima physical_condition saja', () => {
+    const result = batchCollectionSchema.safeParse({
+      collections: [{ ...item, physical_condition: 'HILANG' }],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.collections[0]).toMatchObject({
+        physical_condition: 'HILANG',
+        condition: 'HILANG',
+      });
+    }
+  });
+
+  it('batch menolak pasangan yang bertentangan', () => {
+    const result = batchCollectionSchema.safeParse({
+      collections: [{ ...item, condition: 'RUSAK', physical_condition: 'BAIK' }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('kunjungan ISI menerima physical_condition saja', () => {
+    const result = canVisitSchema.safeParse({
+      outcome: 'ISI',
+      physical_condition: 'BAIK',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.condition).toBe('AKTIF');
+    }
+  });
+
+  it('kunjungan KOSONG menolak physical_condition', () => {
+    const result = canVisitSchema.safeParse({
+      outcome: 'KOSONG',
+      physical_condition: 'RUSAK',
+    });
     expect(result.success).toBe(false);
   });
 });

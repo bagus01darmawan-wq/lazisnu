@@ -33,6 +33,7 @@ describe('B2 — visit-task assignment resolution (sync.ts)', () => {
     can_id: CAN_ID,
     nominal: 50000,
     condition: CanCondition.AKTIF,
+    physical_condition: 'BAIK',
     collected_at: new Date().toISOString(),
     retry_attempts: 0,
   });
