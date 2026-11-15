@@ -89,10 +89,9 @@ function normalizePhysicalCondition(
   return 'BAIK';
 }
 
-function legacyConditionFor(physical: CanPhysicalConditionValue):
-  | CanCondition.AKTIF
-  | CanCondition.RUSAK
-  | CanCondition.HILANG {
+function legacyConditionFor(
+  physical: CanPhysicalConditionValue,
+): CanCondition.AKTIF | CanCondition.RUSAK | CanCondition.HILANG {
   if (physical === 'RUSAK') return CanCondition.RUSAK;
   if (physical === 'HILANG') return CanCondition.HILANG;
   return CanCondition.AKTIF;
