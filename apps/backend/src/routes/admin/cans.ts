@@ -114,9 +114,19 @@ export async function cansRoutes(fastify: FastifyInstance) {
     try {
       const { id } = request.params as { id: string };
       const user = request.currentUser!;
-      const { permanent } = request.query as { permanent?: string };
+      const { permanent, period_year, period_month } = request.query as {
+        permanent?: string;
+        period_year?: string;
+        period_month?: string;
+      };
+      const attribution = canService.normalizeTaskPeriodAttribution(period_year, period_month);
 
-      const { deleted, oldData, newData } = await canService.deleteCan(id, permanent === 'true', user);
+      const { deleted, oldData, newData } = await canService.deleteCan(
+        id,
+        permanent === 'true',
+        user,
+        attribution,
+      );
 
       request.auditContext = {
         oldData,
@@ -182,13 +192,19 @@ export async function cansRoutes(fastify: FastifyInstance) {
   fastify.post('/cans/bulk-delete', rantingOrKec, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const user = request.currentUser!;
-      const { ids, permanent } = request.body as { ids: string[], permanent?: boolean };
+      const { ids, permanent, period_year, period_month } = request.body as {
+        ids: string[];
+        permanent?: boolean;
+        period_year?: number;
+        period_month?: number;
+      };
 
       if (!ids || !Array.isArray(ids) || ids.length === 0) {
         return sendError(reply, 400, 'INVALID_IDS', 'Daftar ID tidak boleh kosong');
       }
 
-      const result = await canService.deleteBulkCans(ids, permanent || false, user);
+      const attribution = canService.normalizeTaskPeriodAttribution(period_year, period_month);
+      const result = await canService.deleteBulkCans(ids, permanent || false, user, attribution);
 
       return sendSuccess(reply, result);
     } catch (error) {

@@ -1040,6 +1040,46 @@ export interface OverviewCanStateSnapshot {
   legacy_breakdown: OverviewConditionBreakdownItem[];
 }
 
+/** Kelengkapan rekap perubahan per periode tugas. */
+export type OverviewCanChangeCompleteness =
+  | "complete"
+  | "partial"
+  | "unavailable"
+  | "provisional";
+
+export interface OverviewCanChangeDimensionCounts<TCategory extends string = string> {
+  /** Jumlah kaleng unik yang berubah pada dimensi ini. */
+  total: number;
+  /** Kaleng unik per nilai terakhir yang dicapai pada periode terkait. */
+  by_category: Record<TCategory, number>;
+}
+
+export interface OverviewCanChangeTaskPeriod {
+  /** Format "YYYY-MM" periode tugas. */
+  period: string;
+  task_period: { year: number; month: number };
+  completeness: OverviewCanChangeCompleteness;
+  lifecycle: OverviewCanChangeDimensionCounts<string>;
+  physical_condition: OverviewCanChangeDimensionCounts<string>;
+}
+
+/**
+ * Rekap kaleng unik yang mengalami perubahan terkait periode tugas.
+ * Status dan kondisi fisik adalah dua kelompok independen; angkanya tidak
+ * dijumlahkan sebagai total kaleng. Rentang multi-bulan menjumlahkan hasil
+ * tiap periode tugas (kaleng yang sama dapat terhitung di dua bulan).
+ */
+export interface OverviewCanChangesByTaskPeriod {
+  /** Awal cakupan ledger yang dapat dibuktikan pada scope (anchor pertama). */
+  coverage_start: string | null;
+  completeness: OverviewCanChangeCompleteness;
+  /** Perubahan tanpa atribusi periode; tidak ditebak dari tanggal tindakan. */
+  unattributed_events: number;
+  periods: OverviewCanChangeTaskPeriod[];
+  lifecycle: OverviewCanChangeDimensionCounts<string>;
+  physical_condition: OverviewCanChangeDimensionCounts<string>;
+}
+
 export interface OverviewMonthlyTrendItem {
   /** Format "YYYY-MM". */
   month: string;
@@ -1097,6 +1137,8 @@ export interface OverviewResponse {
   condition_breakdown: OverviewConditionBreakdownItem[];
   /** Dua kelompok independen sesuai posisi pada akhir periode filter. */
   can_state_snapshot: OverviewCanStateSnapshot;
+  /** Rekap kaleng unik yang berubah, diatribusikan ke periode tugas. */
+  can_state_changes_by_task_period: OverviewCanChangesByTaskPeriod;
   monthly_trend: OverviewMonthlyTrendItem[];
   productivity: OverviewProductivityTotals;
   branch_comparison?: OverviewBranchComparisonItem[];

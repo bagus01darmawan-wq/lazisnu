@@ -16,6 +16,7 @@ import {
   evaluateEmptyStreakForScope,
   rejectConditionProposal,
 } from '../../services/conditionProposalService';
+import { normalizeTaskPeriodAttribution } from '../../services/canService';
 
 const rantingOrKec = { preHandler: [authorize('ADMIN_RANTING', 'ADMIN_KECAMATAN')] };
 
@@ -148,10 +149,20 @@ export async function canProposalsRoutes(fastify: FastifyInstance) {
     try {
       const user = request.currentUser!;
       const { id } = request.params as { id: string };
-      const body = z.object({ reason_note: z.string().max(500).optional().nullable() })
-        .parse(request.body ?? {});
+      const body = z.object({
+        reason_note: z.string().max(500).optional().nullable(),
+        /** Periode tugas eksplisit; tanpa ini perubahan tidak ikut rekap. */
+        period_year: z.number().int().min(2020).max(2100).optional().nullable(),
+        period_month: z.number().int().min(1).max(12).optional().nullable(),
+      }).parse(request.body ?? {});
 
-      const result = await approveConditionProposal(id, user, body.reason_note ?? null);
+      const attribution = normalizeTaskPeriodAttribution(body.period_year, body.period_month);
+      const result = await approveConditionProposal(
+        id,
+        user,
+        body.reason_note ?? null,
+        attribution,
+      );
 
       request.auditContext = {
         oldData: { proposal_id: id, condition: result.from_condition },

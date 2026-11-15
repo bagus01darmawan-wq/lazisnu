@@ -65,6 +65,35 @@ export interface OverviewCanStateSnapshotView {
   legacyBreakdown: OverviewConditionBreakdownItemView[];
 }
 
+export type OverviewCanChangeCompletenessView =
+  | 'complete'
+  | 'partial'
+  | 'unavailable'
+  | 'provisional';
+
+export interface OverviewCanChangeDimensionCountsView {
+  total: number;
+  byCategory: Record<string, number>;
+}
+
+export interface OverviewCanChangeTaskPeriodView {
+  period: string;
+  taskPeriod: { year: number; month: number };
+  completeness: OverviewCanChangeCompletenessView;
+  lifecycle: OverviewCanChangeDimensionCountsView;
+  physicalCondition: OverviewCanChangeDimensionCountsView;
+}
+
+/** Rekap kaleng unik yang berubah, diatribusikan ke periode tugas. */
+export interface OverviewCanChangesByTaskPeriodView {
+  coverageStart: string | null;
+  completeness: OverviewCanChangeCompletenessView;
+  unattributedEvents: number;
+  periods: OverviewCanChangeTaskPeriodView[];
+  lifecycle: OverviewCanChangeDimensionCountsView;
+  physicalCondition: OverviewCanChangeDimensionCountsView;
+}
+
 export interface OverviewMonthlyTrendItemView {
   month: string;
   /** Semua penjemputan berhasil, termasuk nominal nol. */
@@ -103,6 +132,7 @@ export interface OverviewResponseView {
   summary: OverviewSummaryView;
   conditionBreakdown: OverviewConditionBreakdownItemView[];
   canStateSnapshot: OverviewCanStateSnapshotView;
+  canStateChangesByTaskPeriod: OverviewCanChangesByTaskPeriodView;
   monthlyTrend: OverviewMonthlyTrendItemView[];
   productivity: OverviewProductivityTotalsView;
   branchComparison?: OverviewBranchComparisonItemView[];

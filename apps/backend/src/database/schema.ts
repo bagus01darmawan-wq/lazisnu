@@ -354,6 +354,18 @@ export const canStateHistory = pgTable('can_state_history', {
   sourceId: varchar('source_id', { length: 120 }).notNull(),
   actorId: uuid('actor_id').references(() => users.id),
   reasonCode: varchar('reason_code', { length: 40 }),
+  /**
+   * Atribusi periode tugas untuk rekap perubahan. Diisi eksplisit oleh setiap
+   * jalur penulis; periode bukan bulan kalender tindakan. NULL = tidak
+   * teratribusi dan tidak boleh ditebak dari `effective_at`.
+   */
+  periodYear: integer('period_year'),
+  periodMonth: integer('period_month'),
+  /** Relasi stabil ke koleksi/assignment pemicu (otomatisasi & task). */
+  triggerCollectionId: uuid('trigger_collection_id')
+    .references(() => collections.id, { onDelete: 'set null' }),
+  triggerAssignmentId: uuid('trigger_assignment_id')
+    .references(() => assignments.id, { onDelete: 'set null' }),
 }, (t) => ({
   canStateHistoryCanOrderIdx: index('can_state_history_can_order_idx')
     .on(t.canId, t.effectiveAt, t.canVersion),
@@ -361,6 +373,8 @@ export const canStateHistory = pgTable('can_state_history', {
     .on(t.sourceType, t.sourceId, t.canId),
   canStateHistoryBranchEffectiveIdx: index('can_state_history_branch_effective_idx')
     .on(t.branchId, t.effectiveAt),
+  canStateHistoryPeriodIdx: index('can_state_history_period_idx')
+    .on(t.periodYear, t.periodMonth, t.canId),
 }));
 
 // Notifications

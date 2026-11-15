@@ -5,7 +5,13 @@ import {correctionQueue} from '../services/offline/corrections';
 import {syncService} from '../services/offline/sync';
 import NetInfo from '@react-native-community/netinfo';
 import {getDeviceInfo} from '../utils/device';
-import {Collection, CanCondition, CanPhysicalConditionValue, HistoryItem, SyncStatus} from '@lazisnu/shared-types';
+import {
+  Collection,
+  CanCondition,
+  CanPhysicalConditionValue,
+  HistoryItem,
+  SyncStatus,
+} from '@lazisnu/shared-types';
 import {useTasksStore} from './useTasksStore';
 import {refreshSyncCounts} from './useSyncStore';
 import {useDashboardStore} from './useDashboardStore';
@@ -82,8 +88,8 @@ export const useCollectionStore = create<CollectionState>(set => ({
 
     const offlineId = data.offline_id || generateOfflineId();
     const physicalCondition: CanPhysicalConditionValue =
-      data.physical_condition
-      ?? (data.condition === CanCondition.RUSAK
+      data.physical_condition ??
+      (data.condition === CanCondition.RUSAK
         ? 'RUSAK'
         : data.condition === CanCondition.HILANG
           ? 'HILANG'

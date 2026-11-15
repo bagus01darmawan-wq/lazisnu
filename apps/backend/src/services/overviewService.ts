@@ -33,6 +33,7 @@ import {
   type CanLifecycleStatus,
   type CanPhysicalCondition,
 } from './canState';
+import { getCanChangeSummary } from './overviewCanChangeSummary';
 
 export interface OverviewScopeInput {
   /** Kecamatan pemilik data — selalu diisi dari token, bukan dari query string. */
@@ -725,12 +726,13 @@ export async function getOverview(
   options: GetOverviewOptions = {},
   now: Date = new Date(),
 ) {
-  const [snapshot, officers, collections, returned, tasks] = await Promise.all([
+  const [snapshot, officers, collections, returned, tasks, canChanges] = await Promise.all([
     getCanStateSnapshot(scope, period, now),
     getOfficerCount(scope),
     getCollectionSummary(scope, period),
     getReturnedCounts(scope, period),
     getTaskSummary(scope, period),
+    getCanChangeSummary(scope, period, now),
   ]);
 
   // Arus produktivitas (dipakai section Kondisi + Produktivitas). Diambil
@@ -794,7 +796,10 @@ export async function getOverview(
     },
     condition_breakdown: snapshot.legacy_breakdown,
     // Dua kelompok independen sesuai posisi pada akhir periode filter.
+    // Dipertahankan untuk metrik ringkasan berbasis snapshot.
     can_state_snapshot: snapshot,
+    // Rekap kaleng unik yang berubah, diatribusikan ke periode tugas.
+    can_state_changes_by_task_period: canChanges,
     monthly_trend: trend,
     // Total hasil kunjungan periode terpilih (eksak, tak tergantung jendela
     // 6 bulan tren): donat produktivitas menutup genap total ditugaskan.

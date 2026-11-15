@@ -2,78 +2,146 @@ import React from 'react';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ConditionBreakdown } from './ConditionBreakdown';
-import type { OverviewCanStateSnapshotView } from './overviewView';
+import type { OverviewCanChangesByTaskPeriodView } from './overviewView';
 
 afterEach(cleanup);
 
-const snapshot = (overrides: Partial<OverviewCanStateSnapshotView> = {}): OverviewCanStateSnapshotView => ({
-  cutoffAt: '2026-10-31T17:00:00.000Z',
-  cutoverAt: '2026-11-13T00:00:00.000Z',
-  historyComplete: true,
-  status: { AKTIF: 10, NON_AKTIF: 3, DIKEMBALIKAN: 1 },
-  physicalCondition: { BAIK: 9, RUSAK: 4, HILANG: 1 },
-  assumptionBaik: 0,
-  placementCoverage: 13,
-  actionRequired: 8,
-  legacyBreakdown: [],
+const changes = (
+  overrides: Partial<OverviewCanChangesByTaskPeriodView> = {},
+): OverviewCanChangesByTaskPeriodView => ({
+  coverageStart: '2026-09-15T00:00:00.000Z',
+  completeness: 'complete',
+  unattributedEvents: 0,
+  periods: [
+    {
+      period: '2026-10',
+      taskPeriod: { year: 2026, month: 10 },
+      completeness: 'complete',
+      lifecycle: { total: 4, byCategory: { AKTIF: 2, NON_AKTIF: 1, DIKEMBALIKAN: 1 } },
+      physicalCondition: { total: 4, byCategory: { BAIK: 2, RUSAK: 1, HILANG: 1 } },
+    },
+  ],
+  lifecycle: { total: 4, byCategory: { AKTIF: 2, NON_AKTIF: 1, DIKEMBALIKAN: 1 } },
+  physicalCondition: { total: 4, byCategory: { BAIK: 2, RUSAK: 1, HILANG: 1 } },
   ...overrides,
 });
 
-describe('ConditionBreakdown — dua kelompok Status & Kondisi', () => {
+describe('ConditionBreakdown — rekap perubahan per periode tugas', () => {
   it('menampilkan judul kartu dan kedua kelompok bernama', () => {
-    render(<ConditionBreakdown snapshot={snapshot()} />);
+    render(<ConditionBreakdown changes={changes()} />);
 
     expect(screen.getByRole('heading', { name: 'Status & Kondisi Kaleng' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Status Kaleng' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Kondisi Kaleng' })).toBeTruthy();
   });
 
+  it('menjelaskan kaleng yang berubah, bukan posisi akhir periode', () => {
+    render(<ConditionBreakdown changes={changes()} />);
+
+    expect(screen.getByText(/mengalami perubahan terkait periode tugas terpilih/i)).toBeTruthy();
+    expect(screen.getByText(/perubahan manual yang periode tugasnya ditetapkan eksplisit/i)).toBeTruthy();
+    expect(screen.queryByText(/Posisi pada akhir periode filter/i)).toBeNull();
+  });
+
   it('menampilkan angka dan persentase di dalam kelompok masing-masing', () => {
-    render(<ConditionBreakdown snapshot={snapshot()} />);
+    render(<ConditionBreakdown changes={changes()} />);
 
-    // Status 10/14, 3/14, 1/14.
-    expect(screen.getByText('10 (71%)')).toBeTruthy();
-    expect(screen.getByText('3 (21%)')).toBeTruthy();
-    // '1 (7%)' muncul sekali di masing-masing kelompok (Dikembalikan & Hilang).
-    expect(screen.getAllByText('1 (7%)')).toHaveLength(2);
-    // Kondisi fisik 9/14, 4/14, 1/14 (denominator kelompok sendiri).
-    expect(screen.getByText('9 (64%)')).toBeTruthy();
-    expect(screen.getByText('4 (29%)')).toBeTruthy();
+    // Status 2/4, 1/4, 1/4 — angka 2/4 juga muncul di kelompok kondisi.
+    expect(screen.getAllByText('2 (50%)')).toHaveLength(2);
+    expect(screen.getAllByText('1 (25%)')).toHaveLength(4);
   });
 
-  it('tidak lagi menampilkan arus baru disebar/ditarik', () => {
-    render(<ConditionBreakdown snapshot={snapshot()} />);
+  it('menampilkan status lengkap tanpa peringatan', () => {
+    render(<ConditionBreakdown changes={changes()} />);
 
-    expect(screen.queryByText(/Baru disebar/i)).toBeNull();
-    expect(screen.queryByText(/Ditarik/i)).toBeNull();
+    expect(screen.getByText('Lengkap')).toBeTruthy();
+    expect(screen.queryByRole('status')).toBeNull();
   });
 
-  it('menandai jumlah kondisi Baik hasil asumsi backfill', () => {
-    render(<ConditionBreakdown snapshot={snapshot({ assumptionBaik: 2 })} />);
+  it('menampilkan status sementara untuk periode berjalan', () => {
+    render(<ConditionBreakdown changes={changes({ completeness: 'provisional' })} />);
 
-    expect(screen.getByText(/2 kondisi Baik berasal dari asumsi backfill/i)).toBeTruthy();
+    expect(screen.getByText('Sementara')).toBeTruthy();
+    expect(screen.getByText(/Periode berjalan belum tuntas/i)).toBeTruthy();
   });
 
-  it('menampilkan peringatan bila riwayat status belum lengkap', () => {
-    render(<ConditionBreakdown snapshot={snapshot({ historyComplete: false })} />);
+  it('menandai data parsial dan jumlah event tanpa atribusi', () => {
+    render(<ConditionBreakdown changes={changes({ completeness: 'partial', unattributedEvents: 3 })} />);
 
-    expect(screen.getByText(/Riwayat status belum lengkap/i)).toBeTruthy();
+    expect(screen.getByText('Parsial')).toBeTruthy();
+    expect(screen.getByText(/3 event/)).toBeTruthy();
+    expect(screen.getByText(/belum memiliki atribusi periode tugas/)).toBeTruthy();
   });
 
-  it('tidak menampilkan peringatan kelengkapan saat riwayat lengkap', () => {
-    render(<ConditionBreakdown snapshot={snapshot()} />);
+  it('tidak menampilkan nol sebagai lengkap saat riwayat tidak tersedia', () => {
+    render(
+      <ConditionBreakdown
+        changes={changes({
+          completeness: 'unavailable',
+          lifecycle: { total: 0, byCategory: { AKTIF: 0, NON_AKTIF: 0, DIKEMBALIKAN: 0 } },
+          physicalCondition: { total: 0, byCategory: { BAIK: 0, RUSAK: 0, HILANG: 0 } },
+        })}
+      />,
+    );
 
-    expect(screen.queryByText(/Riwayat status belum lengkap/i)).toBeNull();
+    expect(screen.getByText(/Riwayat perubahan periode ini tidak tersedia/i)).toBeTruthy();
+    expect(screen.getAllByText(/Belum ada perubahan teratribusi/i)).toHaveLength(2);
+    expect(screen.queryByText('Tidak ada kaleng yang berubah pada periode ini')).toBeNull();
+  });
+
+  it('menampilkan nol terverifikasi hanya saat kelengkapan lengkap', () => {
+    render(
+      <ConditionBreakdown
+        changes={changes({
+          completeness: 'complete',
+          lifecycle: { total: 0, byCategory: { AKTIF: 0, NON_AKTIF: 0, DIKEMBALIKAN: 0 } },
+          physicalCondition: { total: 0, byCategory: { BAIK: 0, RUSAK: 0, HILANG: 0 } },
+        })}
+      />,
+    );
+
+    expect(screen.getAllByText(/Tidak ada kaleng yang berubah pada periode ini/i)).toHaveLength(2);
+  });
+
+  it('menampilkan rincian per periode untuk rentang multi-bulan', () => {
+    render(
+      <ConditionBreakdown
+        changes={changes({
+          periods: [
+            {
+              period: '2026-09',
+              taskPeriod: { year: 2026, month: 9 },
+              completeness: 'partial',
+              lifecycle: { total: 1, byCategory: { AKTIF: 0, NON_AKTIF: 1, DIKEMBALIKAN: 0 } },
+              physicalCondition: { total: 0, byCategory: { BAIK: 0, RUSAK: 0, HILANG: 0 } },
+            },
+            {
+              period: '2026-11',
+              taskPeriod: { year: 2026, month: 11 },
+              completeness: 'provisional',
+              lifecycle: { total: 1, byCategory: { AKTIF: 0, NON_AKTIF: 1, DIKEMBALIKAN: 0 } },
+              physicalCondition: { total: 1, byCategory: { BAIK: 0, RUSAK: 0, HILANG: 1 } },
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Rincian per periode tugas')).toBeTruthy();
+    expect(screen.getByText(/September 2026/)).toBeTruthy();
+    expect(screen.getByText(/November 2026/)).toBeTruthy();
+    expect(screen.getByText(/Status 1 · Kondisi 0/)).toBeTruthy();
+    expect(screen.getByText(/Status 1 · Kondisi 1/)).toBeTruthy();
   });
 
   it('menyediakan accessible name yang memuat kategori dan angka', () => {
-    render(<ConditionBreakdown snapshot={snapshot()} />);
+    render(<ConditionBreakdown changes={changes()} />);
 
     expect(
-      screen.getByRole('img', { name: 'Status Kaleng: Aktif 10, Nonaktif 3, Dikembalikan 1' }),
+      screen.getByRole('img', { name: 'Status Kaleng: Aktif 2, Nonaktif 1, Dikembalikan 1' }),
     ).toBeTruthy();
     expect(
-      screen.getByRole('img', { name: 'Kondisi Kaleng: Baik 9, Rusak 4, Hilang 1' }),
+      screen.getByRole('img', { name: 'Kondisi Kaleng: Baik 2, Rusak 1, Hilang 1' }),
     ).toBeTruthy();
   });
 });

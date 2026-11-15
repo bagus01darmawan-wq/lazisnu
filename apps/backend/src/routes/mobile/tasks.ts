@@ -1290,6 +1290,9 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           sourceId: inserted[0].id,
           actorId: user.userId ?? null,
           reasonCode: body.outcome,
+          periodYear: visitPeriod.year,
+          periodMonth: visitPeriod.month,
+          triggerAssignmentId: targetAssignment?.id ?? null,
         });
 
         if (body.outcome === 'DIKEMBALIKAN') {

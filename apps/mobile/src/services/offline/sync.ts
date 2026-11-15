@@ -7,8 +7,9 @@ import {BatchCollectionRequestItem, CanCondition, DeviceInfo} from '@lazisnu/sha
 
 function toBatchPayload(item: QueuedCollection): BatchCollectionRequestItem {
   // Dual-contract: kirim dimensi fisik eksplisit + alias legacy yang konsisten.
-  const physical = item.physical_condition
-    ?? (item.condition === 'RUSAK' || item.condition === 'HILANG' ? item.condition : 'BAIK');
+  const physical =
+    item.physical_condition ??
+    (item.condition === 'RUSAK' || item.condition === 'HILANG' ? item.condition : 'BAIK');
   const legacy =
     physical === 'RUSAK'
       ? CanCondition.RUSAK

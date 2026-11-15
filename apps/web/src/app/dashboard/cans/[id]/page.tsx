@@ -42,6 +42,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { DropdownFilter } from '@/components/ui/DropdownFilter';
 import { GlassSelect } from '@/components/ui/GlassSelect';
+import { PeriodPicker } from '@/components/ui/PeriodPicker';
 import { Card } from '@/components/ui/Card';
 import { ApiResponse, PaginatedResponse } from '@lazisnu/shared-types';
 
@@ -171,6 +172,22 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
   const [editingCan, setEditingCan] = useState<CanExtended | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [dukuhs, setDukuhs] = useState<Dukuh[]>([]);
+
+  /**
+   * Aksi manual yang mengubah status/kondisi wajib memilih periode tugas
+   * secara eksplisit. Periode tidak diambil diam-diam dari tanggal tindakan
+   * atau filter halaman; pilihan di dialog inilah yang disimpan ke rekap.
+   */
+  type PeriodActionKind = 'nonactive' | 'active' | 'reactivate' | 'delete' | 'bulk-delete';
+  const [periodAction, setPeriodAction] = useState<{
+    kind: PeriodActionKind;
+    canId?: string;
+  } | null>(null);
+  const [taskPeriod, setTaskPeriod] = useState<{ year: number; months: number[] }>(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), months: [now.getMonth() + 1] };
+  });
+  const [periodSubmitting, setPeriodSubmitting] = useState(false);
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -369,6 +386,13 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
     // yang paling mungkin kembali aktif justru yang paling mudah dihapus.
     const isPermanent = isPermanentRow === true;
 
+    if (!isPermanent) {
+      // Status berubah menjadi DIKEMBALIKAN: periode tugas wajib dipilih
+      // agar kontribusinya ke rekap Overview eksplisit.
+      setPeriodAction({ kind: 'delete', canId: id });
+      return;
+    }
+
     toast.custom((t: string | number) => (
       <ConfirmToast
         id={t}
@@ -400,6 +424,11 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
     // Massal: permanen hanya bila SELURUH pilihan sudah DIKEMBALIKAN. Pilihan
     // campuran diperlakukan sebagai penandaan dikembalikan — aman, bisa dibatalkan.
     const isPermanentBulk = isBulkPermanentSelection();
+
+    if (!isPermanentBulk) {
+      setPeriodAction({ kind: 'bulk-delete' });
+      return;
+    }
 
     toast.custom((t: string | number) => (
       <ConfirmToast
@@ -567,79 +596,69 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
     reader.readAsText(importFile);
   };
 
-  const handleSetNonActive = async (id: string) => {
-    toast.custom((t: string | number) => (
-      <ConfirmToast
-        id={t}
-        title="Jadikan Non-Aktif?"
-        description="Kaleng tidak lagi masuk tugas penjemputan. Bulan berikutnya ia masuk tugas kunjungan untuk diverifikasi."
-        confirmLabel="Ya, Non-Aktifkan"
-        onConfirm={() => {
-          toast.promise(
-            api.put(`/admin/cans/${id}`, { condition: 'NON_AKTIF' }).then((res) => {
-              void fetchData();
-              return res;
-            }),
-            {
-              loading: 'Memproses...',
-              success: 'Kaleng ditandai non-aktif',
-              error: (err: ApiError) => err.error?.message || err.message || 'Gagal menandai non-aktif',
-            }
-          )
-        }}
-        variant="warning"
-      />
-    ), { duration: 4000 });
+  const handleSetNonActive = (id: string) => {
+    setPeriodAction({ kind: 'nonactive', canId: id });
   };
 
-  const handleSetActive = async (id: string) => {
-    toast.custom((t: string | number) => (
-      <ConfirmToast
-        id={t}
-        title="Aktifkan Kaleng?"
-        description="Kaleng kembali masuk daftar penjemputan dan tugas kunjungan bulan ini dihentikan."
-        confirmLabel="Ya, Aktifkan"
-        onConfirm={() => {
-          toast.promise(
-            api.put(`/admin/cans/${id}`, { condition: 'AKTIF' }).then((res) => {
-              void fetchData();
-              return res;
-            }),
-            {
-              loading: 'Mengaktifkan...',
-              success: 'Kaleng kembali aktif',
-              error: (err: ApiError) => err.error?.message || err.message || 'Gagal mengaktifkan kaleng',
-            }
-          )
-        }}
-        variant="info"
-      />
-    ), { duration: 3000 });
+  const handleSetActive = (id: string) => {
+    setPeriodAction({ kind: 'active', canId: id });
   };
 
-  const handleReactivate = async (id: string) => {
-    toast.custom((t: string | number) => (
-      <ConfirmToast
-        id={t}
-        title="Aktifkan Kembali?"
-        description="Kaleng ini akan kembali muncul dalam daftar penjemputan aktif."
-        confirmLabel="Ya, Aktifkan"
-        onConfirm={() => {
-          toast.promise(
-            api.put(`/admin/cans/${id}`, { is_active: true }).then((res) => {
-              void fetchData();
-              return res;
-            }),
-            {
-              loading: 'Mengaktifkan...',
-              success: 'Data kaleng berhasil diaktifkan kembali',
-              error: (err: ApiError) => err.error?.message || err.message || 'Gagal mengaktifkan data',
-            }
-          )
-        }}
-        variant="info"
-      />
-    ), { duration: 3000 });
+  const handleReactivate = (id: string) => {
+    setPeriodAction({ kind: 'reactivate', canId: id });
+  };
+
+  const executePeriodAction = async () => {
+    if (!periodAction) return;
+    if (taskPeriod.months.length !== 1) {
+      toast.error('Pilih tepat satu periode tugas');
+      return;
+    }
+    const month = taskPeriod.months[0];
+
+    setPeriodSubmitting(true);
+    try {
+      const attribution = { period_year: taskPeriod.year, period_month: month };
+      if (periodAction.kind === 'nonactive') {
+        await api.put(`/admin/cans/${periodAction.canId}`, {
+          condition: 'NON_AKTIF',
+          ...attribution,
+        });
+        toast.success('Kaleng ditandai non-aktif');
+      } else if (periodAction.kind === 'active') {
+        await api.put(`/admin/cans/${periodAction.canId}`, {
+          condition: 'AKTIF',
+          ...attribution,
+        });
+        toast.success('Kaleng kembali aktif');
+      } else if (periodAction.kind === 'reactivate') {
+        await api.put(`/admin/cans/${periodAction.canId}`, {
+          is_active: true,
+          ...attribution,
+        });
+        toast.success('Data kaleng berhasil diaktifkan kembali');
+      } else if (periodAction.kind === 'delete') {
+        await api.delete(`/admin/cans/${periodAction.canId}`, {
+          params: attribution,
+        });
+        toast.success('Kaleng ditandai dikembalikan');
+      } else if (periodAction.kind === 'bulk-delete') {
+        await api.post('/admin/cans/bulk-delete', {
+          ids: selectedIds,
+          permanent: false,
+          ...attribution,
+        });
+        setSelectedIds([]);
+        toast.success(`Berhasil menandai ${selectedIds.length} kaleng sebagai dikembalikan`);
+      }
+      setPeriodAction(null);
+      await fetchData();
+    } catch (error) {
+      const err = error as ApiError;
+      toast.error(err.error?.message || err.message || 'Gagal memproses perubahan');
+    } finally {
+      setPeriodSubmitting(false);
+    }
   };
 
   const columns: ColumnDef<CanExtended>[] = [
@@ -1255,6 +1274,68 @@ export default function CansDetailPage({ params, searchParams }: { params: Promi
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal Periode Tugas — aksi manual wajib memilih periode eksplisit */}
+      <Modal
+        isOpen={periodAction !== null}
+        onClose={() => {
+          if (!periodSubmitting) setPeriodAction(null);
+        }}
+        title="Pilih Periode Tugas"
+        variant="glass"
+        dismissible={!periodSubmitting}
+      >
+        <div className="space-y-4">
+          <p className="rounded-xl border border-[#6B9E9F]/20 bg-[#6B9E9F]/10 p-3 text-[11px] leading-relaxed text-[#F4F1EA]/70">
+            Perubahan manual ini akan masuk rekap Overview pada periode tugas yang
+            dipilih. Periode tidak diisi otomatis dari tanggal tindakan atau filter
+            halaman; tanpa pilihan eksplisit, perubahan tetap tersimpan di riwayat
+            tetapi tidak ikut rekap.
+          </p>
+
+          <div className="space-y-1.5">
+            <p className="text-xs font-semibold text-[#F4F1EA]/60">Periode tugas</p>
+            <PeriodPicker
+              months={taskPeriod.months}
+              year={taskPeriod.year}
+              onChange={(months, year) => setTaskPeriod({ year, months })}
+              disableFuture
+            />
+            <p className="text-[11px] text-[#F4F1EA]/40">
+              Pilih satu bulan. Klik nama bulan untuk memilih satu periode.
+            </p>
+          </div>
+
+          <p className="text-xs font-bold text-[#EAD19B]">
+            {periodAction?.kind === 'nonactive' && 'Status kaleng → Nonaktif'}
+            {periodAction?.kind === 'active' && 'Status kaleng → Aktif'}
+            {periodAction?.kind === 'reactivate' && 'Kaleng → Aktif kembali'}
+            {periodAction?.kind === 'delete' && 'Kaleng → Dikembalikan'}
+            {periodAction?.kind === 'bulk-delete' && `${selectedIds.length} kaleng → Dikembalikan`}
+          </p>
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              type="button"
+              variant="secondary"
+              className="flex-1 rounded-xl h-12 font-bold border-white/10 bg-white/5 text-[#F4F1EA]/60 hover:bg-white/10 hover:text-[#F4F1EA]"
+              onClick={() => setPeriodAction(null)}
+              disabled={periodSubmitting}
+            >
+              Batal
+            </Button>
+            <Button
+              type="button"
+              className="flex-1 bg-[#EAD19B] hover:bg-[#EAD19B]/90 text-[#2C473E] rounded-xl h-12 font-bold shadow-lg shadow-[#EAD19B]/20"
+              onClick={executePeriodAction}
+              isLoading={periodSubmitting}
+              disabled={periodSubmitting || taskPeriod.months.length === 0}
+            >
+              Simpan Perubahan
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       {/* Modal Cetak QR */}

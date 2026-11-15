@@ -18,18 +18,23 @@ describe('migrasi skema antrean offline v3', () => {
   });
 
   it('mengisi physical_condition dari condition tanpa menghilangkan metadata', () => {
-    getOfflineStorage().set('collection_queue', JSON.stringify([{
-      offline_id: 'offline-lama-1',
-      assignment_id: 'asg-1',
-      can_id: 'can-1',
-      nominal: 25000,
-      collected_at: '2026-10-05T03:00:00.000Z',
-      condition: CanCondition.RUSAK,
-      period: '2026-10',
-      visit_outcome: 'ISI',
-      retry_attempts: 2,
-      next_retry_at: '2026-10-06T03:00:00.000Z',
-    }]));
+    getOfflineStorage().set(
+      'collection_queue',
+      JSON.stringify([
+        {
+          offline_id: 'offline-lama-1',
+          assignment_id: 'asg-1',
+          can_id: 'can-1',
+          nominal: 25000,
+          collected_at: '2026-10-05T03:00:00.000Z',
+          condition: CanCondition.RUSAK,
+          period: '2026-10',
+          visit_outcome: 'ISI',
+          retry_attempts: 2,
+          next_retry_at: '2026-10-06T03:00:00.000Z',
+        },
+      ]),
+    );
     getOfflineStorage().set('offline_queue_schema_version', 2);
 
     offlineQueue.runMigration();
@@ -50,14 +55,19 @@ describe('migrasi skema antrean offline v3', () => {
   });
 
   it('memetakan AKTIF legacy menjadi BAIK dan mempertahankan id', () => {
-    getOfflineStorage().set('collection_queue', JSON.stringify([{
-      offline_id: 'offline-lama-2',
-      assignment_id: 'asg-2',
-      can_id: 'can-2',
-      nominal: 0,
-      collected_at: '2026-10-05T03:00:00.000Z',
-      condition: CanCondition.AKTIF,
-    }]));
+    getOfflineStorage().set(
+      'collection_queue',
+      JSON.stringify([
+        {
+          offline_id: 'offline-lama-2',
+          assignment_id: 'asg-2',
+          can_id: 'can-2',
+          nominal: 0,
+          collected_at: '2026-10-05T03:00:00.000Z',
+          condition: CanCondition.AKTIF,
+        },
+      ]),
+    );
 
     offlineQueue.runMigration();
 

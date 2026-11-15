@@ -27,6 +27,9 @@ export const updateCanSchema = createCanSchema.partial().extend({
   /** Dimensi kondisi fisik (2026-11-13). */
   physical_condition: z.enum(['BAIK', 'RUSAK', 'HILANG']).optional(),
   condition_reason_code: z.string().max(40).optional().nullable(),
+  /** Periode tugas eksplisit untuk rekap perubahan manual. */
+  period_year: z.number().int().min(2020).max(2100).optional().nullable(),
+  period_month: z.number().int().min(1).max(12).optional().nullable(),
 });
 
 export const createOfficerSchema = z.object({

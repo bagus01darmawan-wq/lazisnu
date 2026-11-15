@@ -128,6 +128,7 @@ export async function approveConditionProposal(
   proposalId: string,
   ctx: ApprovalContext,
   reasonNote?: string | null,
+  attribution?: { periodYear?: number | null; periodMonth?: number | null } | null,
 ) {
   // Baca usulan tanpa lock untuk mengetahui canId; urutan lock seragam:
   // baris kaleng dulu, baru baris usulan.
@@ -199,6 +200,8 @@ export async function approveConditionProposal(
       sourceId: proposalId,
       actorId: ctx.userId ?? null,
       reasonCode: proposal.reasonCode,
+      periodYear: attribution?.periodYear ?? null,
+      periodMonth: attribution?.periodMonth ?? null,
     });
 
     await syncActiveAssignmentKindForCan(tx, proposal.canId, nextLegacy, now);
@@ -270,11 +273,20 @@ export async function rejectConditionProposal(
  * Riwayat penjemputan VALID satu kaleng, terbaru → terlama.
  * Hanya baris `sync_status = COMPLETED` versi submit terbaru (`getLatestCollectionCondition`),
  * sehingga resubmit tidak dihitung dua kali dan kunjungan verifikasi tidak ikut terhitung.
+ * Periode tugas ikut dibaca agar otomatisasi dapat diatribusikan ke collection pemicu.
  */
-export async function getValidCollectionNominals(canId: string, limit = 24, client: any = db) {
+export async function getValidCollectionRows(canId: string, limit = 24, client: any = db) {
   const rows = await client
-    .select({ nominal: schema.collections.nominal, collectedAt: schema.collections.collectedAt })
+    .select({
+      id: schema.collections.id,
+      nominal: schema.collections.nominal,
+      collectedAt: schema.collections.collectedAt,
+      assignmentId: schema.collections.assignmentId,
+      periodYear: schema.assignments.periodYear,
+      periodMonth: schema.assignments.periodMonth,
+    })
     .from(schema.collections)
+    .innerJoin(schema.assignments, eq(schema.collections.assignmentId, schema.assignments.id))
     .where(and(
       eq(schema.collections.canId, canId),
       eq(schema.collections.syncStatus, 'COMPLETED'),
@@ -283,6 +295,11 @@ export async function getValidCollectionNominals(canId: string, limit = 24, clie
     .orderBy(desc(schema.collections.collectedAt))
     .limit(limit);
 
+  return rows;
+}
+
+export async function getValidCollectionNominals(canId: string, limit = 24, client: any = db) {
+  const rows = await getValidCollectionRows(canId, limit, client);
   return rows.map((r) => Number(r.nominal));
 }
 
@@ -312,7 +329,11 @@ export async function evaluateEmptyStreakForCan(canId: string, client: any = db)
   if (!can) throw new AppError('NOT_FOUND', 'Kaleng tidak ditemukan', 404);
 
   const condition = can.condition as CanConditionValue;
-  const nominals = await getValidCollectionNominals(canId, 24, client);
+  const collectionRows = await getValidCollectionRows(canId, 24, client);
+  const nominals = collectionRows.map((row) => Number(row.nominal));
+  // Pemicu otomatisasi = koleksi valid terbaru. Periode mengikuti tugas
+  // koleksi itu (assignment), bukan tanggal evaluasi otomatis.
+  const trigger = collectionRows[0] ?? null;
   const emptyStreak = countTrailingEmptyCollections(nominals);
   const latestNominal = nominals[0] ?? 0;
 
@@ -357,9 +378,13 @@ export async function evaluateEmptyStreakForCan(canId: string, client: any = db)
         after: { ...nextState, branchId: locked.branchId },
         effectiveAt: now,
         sourceType: CAN_STATE_SOURCE.AUTO_RESTORE_ACTIVE,
-        sourceId: randomUUID(),
+        sourceId: trigger?.id ?? randomUUID(),
         actorId: null,
         reasonCode: 'EMPTY_STREAK_RESET',
+        periodYear: trigger?.periodYear ?? null,
+        periodMonth: trigger?.periodMonth ?? null,
+        triggerCollectionId: trigger?.id ?? null,
+        triggerAssignmentId: trigger?.assignmentId ?? null,
       });
 
       await syncActiveAssignmentKindForCan(tx, canId, nextLegacy, now);
@@ -417,6 +442,10 @@ export async function evaluateEmptyStreakForCan(canId: string, client: any = db)
         sourceId: proposal.id,
         actorId: null,
         reasonCode: 'EMPTY_STREAK',
+        periodYear: trigger?.periodYear ?? null,
+        periodMonth: trigger?.periodMonth ?? null,
+        triggerCollectionId: trigger?.id ?? null,
+        triggerAssignmentId: trigger?.assignmentId ?? null,
       });
 
       await syncActiveAssignmentKindForCan(tx, canId, nextLegacy, now);
