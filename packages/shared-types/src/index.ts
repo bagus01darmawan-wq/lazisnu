@@ -1057,7 +1057,10 @@ export interface OverviewCanChangeDimensionCounts<TCategory extends string = str
 export interface OverviewCanChangeTaskPeriod {
   /** Format "YYYY-MM" periode tugas. */
   period: string;
-  task_period: { year: number; month: number };
+  /** Tahun periode tugas (dipakai UI untuk label, bukan tanggal tindakan). */
+  year: number;
+  /** Bulan periode tugas 1–12. */
+  month: number;
   completeness: OverviewCanChangeCompleteness;
   lifecycle: OverviewCanChangeDimensionCounts<string>;
   physical_condition: OverviewCanChangeDimensionCounts<string>;

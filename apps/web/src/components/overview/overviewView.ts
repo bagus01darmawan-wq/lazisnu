@@ -78,7 +78,8 @@ export interface OverviewCanChangeDimensionCountsView {
 
 export interface OverviewCanChangeTaskPeriodView {
   period: string;
-  taskPeriod: { year: number; month: number };
+  year: number;
+  month: number;
   completeness: OverviewCanChangeCompletenessView;
   lifecycle: OverviewCanChangeDimensionCountsView;
   physicalCondition: OverviewCanChangeDimensionCountsView;

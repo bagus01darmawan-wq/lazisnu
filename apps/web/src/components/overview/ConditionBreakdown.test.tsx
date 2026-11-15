@@ -15,7 +15,8 @@ const changes = (
   periods: [
     {
       period: '2026-10',
-      taskPeriod: { year: 2026, month: 10 },
+      year: 2026,
+      month: 10,
       completeness: 'complete',
       lifecycle: { total: 4, byCategory: { AKTIF: 2, NON_AKTIF: 1, DIKEMBALIKAN: 1 } },
       physicalCondition: { total: 4, byCategory: { BAIK: 2, RUSAK: 1, HILANG: 1 } },
@@ -103,6 +104,49 @@ describe('ConditionBreakdown — rekap perubahan per periode tugas', () => {
     expect(screen.getAllByText(/Tidak ada kaleng yang berubah pada periode ini/i)).toHaveLength(2);
   });
 
+  it('menampilkan rentang 3 bulan tanpa error dan menghitung status terburuk', () => {
+    render(
+      <ConditionBreakdown
+        changes={changes({
+          completeness: 'unavailable',
+          lifecycle: { total: 0, byCategory: { AKTIF: 0, NON_AKTIF: 0, DIKEMBALIKAN: 0 } },
+          physicalCondition: { total: 0, byCategory: { BAIK: 0, RUSAK: 0, HILANG: 0 } },
+          periods: [
+            {
+              period: '2026-09',
+              year: 2026,
+              month: 9,
+              completeness: 'unavailable',
+              lifecycle: { total: 0, byCategory: { AKTIF: 0, NON_AKTIF: 0, DIKEMBALIKAN: 0 } },
+              physicalCondition: { total: 0, byCategory: { BAIK: 0, RUSAK: 0, HILANG: 0 } },
+            },
+            {
+              period: '2026-10',
+              year: 2026,
+              month: 10,
+              completeness: 'unavailable',
+              lifecycle: { total: 0, byCategory: { AKTIF: 0, NON_AKTIF: 0, DIKEMBALIKAN: 0 } },
+              physicalCondition: { total: 0, byCategory: { BAIK: 0, RUSAK: 0, HILANG: 0 } },
+            },
+            {
+              period: '2026-11',
+              year: 2026,
+              month: 11,
+              completeness: 'partial',
+              lifecycle: { total: 0, byCategory: { AKTIF: 0, NON_AKTIF: 0, DIKEMBALIKAN: 0 } },
+              physicalCondition: { total: 0, byCategory: { BAIK: 0, RUSAK: 0, HILANG: 0 } },
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Riwayat tidak tersedia')).toBeTruthy();
+    expect(screen.getByText('September 2026')).toBeTruthy();
+    expect(screen.getByText('Oktober 2026')).toBeTruthy();
+    expect(screen.getByText('November 2026')).toBeTruthy();
+  });
+
   it('menampilkan rincian per periode untuk rentang multi-bulan', () => {
     render(
       <ConditionBreakdown
@@ -110,14 +154,16 @@ describe('ConditionBreakdown — rekap perubahan per periode tugas', () => {
           periods: [
             {
               period: '2026-09',
-              taskPeriod: { year: 2026, month: 9 },
+              year: 2026,
+              month: 9,
               completeness: 'partial',
               lifecycle: { total: 1, byCategory: { AKTIF: 0, NON_AKTIF: 1, DIKEMBALIKAN: 0 } },
               physicalCondition: { total: 0, byCategory: { BAIK: 0, RUSAK: 0, HILANG: 0 } },
             },
             {
               period: '2026-11',
-              taskPeriod: { year: 2026, month: 11 },
+              year: 2026,
+              month: 11,
               completeness: 'provisional',
               lifecycle: { total: 1, byCategory: { AKTIF: 0, NON_AKTIF: 1, DIKEMBALIKAN: 0 } },
               physicalCondition: { total: 1, byCategory: { BAIK: 0, RUSAK: 0, HILANG: 1 } },

@@ -236,7 +236,7 @@ export function ConditionBreakdown({ changes }: ConditionBreakdownProps) {
             {changes.periods.map((period) => (
               <li key={period.period} className="flex items-center justify-between gap-3 text-[11px]">
                 <span className="font-bold text-[#F4F1EA]/70">
-                  {formatPeriodLabel(period.taskPeriod)}
+                  {formatPeriodLabel(period)}
                 </span>
                 <span className="text-[#F4F1EA]/60">
                   Status {period.lifecycle.total} · Kondisi {period.physicalCondition.total}
