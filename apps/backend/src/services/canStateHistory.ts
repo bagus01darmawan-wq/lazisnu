@@ -62,6 +62,12 @@ export interface CanStateEventInput {
   sourceId: string;
   actorId?: string | null;
   reasonCode?: string | null;
+  /** Periode tugas eksplisit; tidak boleh diturunkan dari `effectiveAt`. */
+  periodYear?: number | null;
+  periodMonth?: number | null;
+  /** Relasi stabil ke koleksi/assignment pemicu, bila ada. */
+  triggerCollectionId?: string | null;
+  triggerAssignmentId?: string | null;
 }
 
 export interface CanStateEventRow {
@@ -298,6 +304,10 @@ export async function appendCanStateEvent(
     sourceId: input.sourceId,
     actorId: input.actorId ?? null,
     reasonCode: input.reasonCode ?? null,
+    periodYear: input.periodYear ?? null,
+    periodMonth: input.periodMonth ?? null,
+    triggerCollectionId: input.triggerCollectionId ?? null,
+    triggerAssignmentId: input.triggerAssignmentId ?? null,
   }).onConflictDoNothing().returning({ id: schema.canStateHistory.id });
 
   if (inserted) {
@@ -356,6 +366,10 @@ export interface RecordCanStateChangeInput {
   sourceId: string;
   actorId?: string | null;
   reasonCode?: string | null;
+  periodYear?: number | null;
+  periodMonth?: number | null;
+  triggerCollectionId?: string | null;
+  triggerAssignmentId?: string | null;
 }
 
 /**
@@ -393,6 +407,10 @@ export async function recordCanStateChange(
     sourceId: input.sourceId,
     actorId: input.actorId,
     reasonCode: input.reasonCode,
+    periodYear: input.periodYear,
+    periodMonth: input.periodMonth,
+    triggerCollectionId: input.triggerCollectionId,
+    triggerAssignmentId: input.triggerAssignmentId,
   });
   return true;
 }

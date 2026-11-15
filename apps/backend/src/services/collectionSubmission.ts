@@ -435,6 +435,7 @@ export async function submitCollection(
     }
 
     // Event ledger memakai waktu kejadian (`collected_at`), bukan waktu sync.
+    // Periode rekap berasal dari assignment asal, bukan bulan collected_at.
     await recordCanStateChange(tx, {
       canId: data.canId,
       before: { ...currentState, branchId: lockedCan.branchId },
@@ -443,6 +444,10 @@ export async function submitCollection(
       sourceType: CAN_STATE_SOURCE.COLLECTION,
       sourceId: collection.id,
       actorId: auditUserId,
+      periodYear: target?.periodYear ?? null,
+      periodMonth: target?.periodMonth ?? null,
+      triggerCollectionId: collection.id,
+      triggerAssignmentId: data.assignmentId,
     });
 
     // Audit memakai client transaksi yang sama. Jika insert audit gagal,

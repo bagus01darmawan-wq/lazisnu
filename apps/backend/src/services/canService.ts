@@ -63,6 +63,9 @@ export interface UpdateCanInput {
   physical_condition?: 'BAIK' | 'RUSAK' | 'HILANG' | null;
   /** Kode alasan baku untuk transisi kondisi (lihat conditionRules). */
   condition_reason_code?: string | null;
+  /** Periode tugas eksplisit untuk rekap perubahan (bukan bulan tindakan). */
+  period_year?: number | null;
+  period_month?: number | null;
   /** @deprecated Alias lama. `false` dipetakan ke DIKEMBALIKAN, `true` dipetakan ke AKTIF. */
   is_active?: boolean | null;
 }
@@ -317,6 +320,19 @@ export async function getCanDetail(canId: string, ctx: AccessContext) {
 }
 
 export async function updateCan(canId: string, body: UpdateCanInput, ctx: AccessContext) {
+  const hasPeriodYear = body.period_year !== undefined && body.period_year !== null;
+  const hasPeriodMonth = body.period_month !== undefined && body.period_month !== null;
+  if (hasPeriodYear !== hasPeriodMonth) {
+    throw Errors.VALIDATION_ERROR('period_year dan period_month harus diisi bersamaan');
+  }
+  if (hasPeriodYear && hasPeriodMonth) {
+    if (!Number.isInteger(body.period_year) || !Number.isInteger(body.period_month)
+      || (body.period_year as number) < 2020 || (body.period_year as number) > 2100
+      || (body.period_month as number) < 1 || (body.period_month as number) > 12) {
+      throw Errors.VALIDATION_ERROR('Periode tugas tidak valid');
+    }
+  }
+
   // Validasi tujuan pindah ranting (read-only) sebelum transaksi; state kaleng
   // sendiri baru dibaca setelah lock agar validasi transisi memakai snapshot
   // yang tidak bisa berubah di tengah jalan.
@@ -433,6 +449,8 @@ export async function updateCan(canId: string, body: UpdateCanInput, ctx: Access
       sourceId: randomUUID(),
       actorId: ctx.userId ?? null,
       reasonCode: body.condition_reason_code ?? null,
+      periodYear: hasPeriodYear ? body.period_year : null,
+      periodMonth: hasPeriodMonth ? body.period_month : null,
     });
 
     if (nextLegacy !== currentLegacy) {
@@ -467,7 +485,39 @@ async function findDraftLocks(canIds: string[]): Promise<DraftLockInfo[]> {
   return rows;
 }
 
-export async function deleteCan(canId: string, permanent: boolean, ctx: AccessContext) {
+export interface TaskPeriodAttribution {
+  periodYear: number | null;
+  periodMonth: number | null;
+}
+
+/**
+ * Normalisasi atribusi periode tugas dari input HTTP. Tidak ada periode yang
+ * disimpulkan dari tanggal tindakan — kosong berarti tidak teratribusi.
+ */
+export function normalizeTaskPeriodAttribution(
+  yearRaw: unknown,
+  monthRaw: unknown,
+): TaskPeriodAttribution | null {
+  const empty = (v: unknown) => v === undefined || v === null || v === '';
+  if (empty(yearRaw) && empty(monthRaw)) return null;
+  if (empty(yearRaw) || empty(monthRaw)) {
+    throw Errors.VALIDATION_ERROR('period_year dan period_month harus diisi bersamaan');
+  }
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  if (!Number.isInteger(year) || year < 2020 || year > 2100
+    || !Number.isInteger(month) || month < 1 || month > 12) {
+    throw Errors.VALIDATION_ERROR('Periode tugas tidak valid');
+  }
+  return { periodYear: year, periodMonth: month };
+}
+
+export async function deleteCan(
+  canId: string,
+  permanent: boolean,
+  ctx: AccessContext,
+  attribution: TaskPeriodAttribution | null = null,
+) {
   return db.transaction(async (tx) => {
     const existing = await lockCanRow(tx, canId);
     await checkAccess(ctx, existing, 'Kaleng bukan milik ranting/kecamatan Anda');
@@ -526,6 +576,8 @@ export async function deleteCan(canId: string, permanent: boolean, ctx: AccessCo
       sourceType: CAN_STATE_SOURCE.ADMIN_DELETE,
       sourceId: randomUUID(),
       actorId: ctx.userId ?? null,
+      periodYear: attribution?.periodYear ?? null,
+      periodMonth: attribution?.periodMonth ?? null,
     });
 
     await syncActiveAssignmentKindForCan(tx, canId, 'DIKEMBALIKAN', now);
@@ -595,7 +647,12 @@ export async function createBulkCans(branch_id: string, items: any[], ctx: Acces
   return inserted;
 }
 
-export async function deleteBulkCans(ids: string[], permanent: boolean, ctx: AccessContext) {
+export async function deleteBulkCans(
+  ids: string[],
+  permanent: boolean,
+  ctx: AccessContext,
+  attribution: TaskPeriodAttribution | null = null,
+) {
   if (permanent) {
     // Sama seperti hapus tunggal: hitung baris `collections` yang benar-benar
     // ada, jangan percaya kolom cache `collection_count`.
@@ -676,6 +733,8 @@ export async function deleteBulkCans(ids: string[], permanent: boolean, ctx: Acc
         sourceType: CAN_STATE_SOURCE.ADMIN_DELETE,
         sourceId: randomUUID(),
         actorId: ctx.userId ?? null,
+        periodYear: attribution?.periodYear ?? null,
+        periodMonth: attribution?.periodMonth ?? null,
       });
 
       await syncActiveAssignmentKindForCan(tx, row.id, 'DIKEMBALIKAN', now);
