@@ -1,9 +1,10 @@
 /**
  * Test integrasi productivityService.
  *
- * Mengunci definisi metrik produktivitas PPK:
- * - Tabel per-PPK: assigned (tugas periode), collected (COMPLETED terbaru),
- *   filled (nominal > 0), uncollected. Petugas tanpa tugas tidak tampil.
+ * Mengunci definisi metrik produktivitas PPK per jenis tugas:
+ * - Penjemputan memakai tugas PICKUP dan setoran terbaru saja.
+ * - Kunjungan memakai tugas VISIT dan hasil verifikasi terbaru per kaleng-periode.
+ * - Setoran VISIT ISI tidak tercampur ke angka penjemputan.
  * - Reaktivasi: proposal APPROVED → AKTIF periode.
  *   (Arus "baru disebar"/"ditarik" dihapus 2026-11-13 — bukan bagian kartu.)
  *
@@ -32,11 +33,27 @@ const IDS = {
   canMissed: randomUUID(),
   canWithdrawn: randomUUID(),
   canNew: randomUUID(),
+  canVisitIsi: randomUUID(),
+  canVisitEmpty: randomUUID(),
+  canVisitReturned: randomUUID(),
+  canVisitFailed: randomUUID(),
+  canVisitOnly: randomUUID(),
   asg1: randomUUID(),
   asg2: randomUUID(),
   asg3: randomUUID(),
+  asgVisitIsi: randomUUID(),
+  asgVisitEmpty: randomUUID(),
+  asgVisitReturned: randomUUID(),
+  asgVisitFailed: randomUUID(),
+  asgVisitOnly: randomUUID(),
   col1: randomUUID(),
   col2: randomUUID(),
+  colVisitIsi: randomUUID(),
+  visitIsi: randomUUID(),
+  visitEmpty: randomUUID(),
+  visitReturned: randomUUID(),
+  visitFailed: randomUUID(),
+  visitOnly: randomUUID(),
   proposal: randomUUID(),
 };
 
@@ -66,7 +83,7 @@ describe('productivityService', () => {
       },
       {
         id: IDS.user2, email: `fp2.${TAG}@example.test`, passwordHash: 'x',
-        fullName: 'PPK Tanpa Tugas', phone: `6281302${TAG}`, role: 'PETUGAS',
+        fullName: 'PPK Kunjungan Saja', phone: `6281302${TAG}`, role: 'PETUGAS',
         districtId: IDS.district, branchId: IDS.branch,
       },
     ]);
@@ -78,7 +95,7 @@ describe('productivityService', () => {
       },
       {
         id: IDS.officer2, userId: IDS.user2, employeeCode: `FP2${TAG}`,
-        fullName: 'PPK Tanpa Tugas', phone: `6281302${TAG}`,
+        fullName: 'PPK Kunjungan Saja', phone: `6281302${TAG}`,
         districtId: IDS.district, branchId: IDS.branch, isActive: true,
       },
     ]);
@@ -108,11 +125,41 @@ describe('productivityService', () => {
         ownerWhatsapp: `6282305${TAG}`, condition: 'AKTIF', isActive: true,
         createdAt: SEP(10), updatedAt: SEP(10),
       },
+      {
+        id: IDS.canVisitIsi, branchId: IDS.branch, ownerName: 'Warga Kunjungan Isi',
+        ownerWhatsapp: `6282306${TAG}`, condition: 'NON_AKTIF', isActive: false,
+        createdAt: AUG(8), updatedAt: SEP(11),
+      },
+      {
+        id: IDS.canVisitEmpty, branchId: IDS.branch, ownerName: 'Warga Kunjungan Kosong',
+        ownerWhatsapp: `6282307${TAG}`, condition: 'NON_AKTIF', isActive: false,
+        createdAt: AUG(9), updatedAt: SEP(11),
+      },
+      {
+        id: IDS.canVisitReturned, branchId: IDS.branch, ownerName: 'Warga Kunjungan Kembali',
+        ownerWhatsapp: `6282308${TAG}`, condition: 'NON_AKTIF', isActive: false,
+        createdAt: AUG(10), updatedAt: SEP(11),
+      },
+      {
+        id: IDS.canVisitFailed, branchId: IDS.branch, ownerName: 'Warga Tak Terkunjungi',
+        ownerWhatsapp: `6282309${TAG}`, condition: 'NON_AKTIF', isActive: false,
+        createdAt: AUG(11), updatedAt: SEP(11),
+      },
+      {
+        id: IDS.canVisitOnly, branchId: IDS.branch, ownerName: 'Warga Kunjungan Saja',
+        ownerWhatsapp: `6282310${TAG}`, condition: 'NON_AKTIF', isActive: false,
+        createdAt: AUG(12), updatedAt: SEP(11),
+      },
     ]);
     await db.insert(schema.assignments).values([
-      { id: IDS.asg1, canId: IDS.canFilled, officerId: IDS.officer1, periodYear: 2026, periodMonth: 9, status: 'COMPLETED' },
-      { id: IDS.asg2, canId: IDS.canEmpty, officerId: IDS.officer1, periodYear: 2026, periodMonth: 9, status: 'COMPLETED' },
-      { id: IDS.asg3, canId: IDS.canMissed, officerId: IDS.officer1, periodYear: 2026, periodMonth: 9, status: 'UNCOLLECTED' },
+      { id: IDS.asg1, canId: IDS.canFilled, officerId: IDS.officer1, periodYear: 2026, periodMonth: 9, kind: 'PICKUP', status: 'COMPLETED' },
+      { id: IDS.asg2, canId: IDS.canEmpty, officerId: IDS.officer1, periodYear: 2026, periodMonth: 9, kind: 'PICKUP', status: 'COMPLETED' },
+      { id: IDS.asg3, canId: IDS.canMissed, officerId: IDS.officer1, periodYear: 2026, periodMonth: 9, kind: 'PICKUP', status: 'UNCOLLECTED' },
+      { id: IDS.asgVisitIsi, canId: IDS.canVisitIsi, officerId: IDS.officer1, periodYear: 2026, periodMonth: 9, kind: 'VISIT', status: 'COMPLETED' },
+      { id: IDS.asgVisitEmpty, canId: IDS.canVisitEmpty, officerId: IDS.officer1, periodYear: 2026, periodMonth: 9, kind: 'VISIT', status: 'COMPLETED' },
+      { id: IDS.asgVisitReturned, canId: IDS.canVisitReturned, officerId: IDS.officer1, periodYear: 2026, periodMonth: 9, kind: 'VISIT', status: 'COMPLETED' },
+      { id: IDS.asgVisitFailed, canId: IDS.canVisitFailed, officerId: IDS.officer1, periodYear: 2026, periodMonth: 9, kind: 'VISIT', status: 'UNCOLLECTED' },
+      { id: IDS.asgVisitOnly, canId: IDS.canVisitOnly, officerId: IDS.officer2, periodYear: 2026, periodMonth: 9, kind: 'VISIT', status: 'COMPLETED' },
     ]);
     await db.insert(schema.collections).values([
       {
@@ -122,6 +169,32 @@ describe('productivityService', () => {
       {
         id: IDS.col2, assignmentId: IDS.asg2, canId: IDS.canEmpty, officerId: IDS.officer1,
         nominal: BigInt(0), collectedAt: SEP(11), syncStatus: 'COMPLETED', submitSequence: 1,
+      },
+      {
+        id: IDS.colVisitIsi, assignmentId: IDS.asgVisitIsi, canId: IDS.canVisitIsi, officerId: IDS.officer1,
+        nominal: BigInt(75000), collectedAt: SEP(11), syncStatus: 'COMPLETED', submitSequence: 1,
+      },
+    ]);
+    await db.insert(schema.canVisits).values([
+      {
+        id: IDS.visitIsi, canId: IDS.canVisitIsi, officerId: IDS.officer1,
+        periodYear: 2026, periodMonth: 9, purpose: 'VERIFIKASI', outcome: 'ISI', visitedAt: SEP(11),
+      },
+      {
+        id: IDS.visitEmpty, canId: IDS.canVisitEmpty, officerId: IDS.officer1,
+        periodYear: 2026, periodMonth: 9, purpose: 'VERIFIKASI', outcome: 'KOSONG', visitedAt: SEP(11),
+      },
+      {
+        id: IDS.visitReturned, canId: IDS.canVisitReturned, officerId: IDS.officer1,
+        periodYear: 2026, periodMonth: 9, purpose: 'VERIFIKASI', outcome: 'DIKEMBALIKAN', visitedAt: SEP(11),
+      },
+      {
+        id: IDS.visitFailed, canId: IDS.canVisitFailed, officerId: IDS.officer1,
+        periodYear: 2026, periodMonth: 9, purpose: 'VERIFIKASI', outcome: 'TIDAK_DIKUNJUNGI', visitedAt: SEP(11),
+      },
+      {
+        id: IDS.visitOnly, canId: IDS.canVisitOnly, officerId: IDS.officer2,
+        periodYear: 2026, periodMonth: 9, purpose: 'VERIFIKASI', outcome: 'KOSONG', visitedAt: SEP(11),
       },
     ]);
     await db.insert(schema.canConditionProposals).values({
@@ -142,16 +215,18 @@ describe('productivityService', () => {
     await db.delete(schema.canConditionProposals).where(eq(schema.canConditionProposals.id, IDS.proposal));
   });
 
-  test('tabel per-PPK: angka O1 benar, O2 tanpa tugas tidak tampil', async () => {
+  test('tabel per-PPK memisahkan Penjemputan dan Kunjungan termasuk PPK tanpa penjemputan', async () => {
     const rows = await getOfficerProductivity(SCOPE, 2026, [9]);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({
-      officer_id: IDS.officer1,
+    expect(rows).toHaveLength(2);
+    expect(rows.find((row) => row.officer_id === IDS.officer1)).toMatchObject({
       full_name: 'PPK Rajin',
-      assigned: 3,
-      collected: 2,
-      filled: 1,
-      uncollected: 1,
+      pickup: { assigned: 3, collected: 2, filled: 1, empty: 1, failed: 1 },
+      visit: { assigned: 4, visited: 3, isi: 1, empty: 1, returned: 1, failed: 1 },
+    });
+    expect(rows.find((row) => row.officer_id === IDS.officer2)).toMatchObject({
+      full_name: 'PPK Kunjungan Saja',
+      pickup: { assigned: 0, collected: 0, filled: 0, empty: 0, failed: 0 },
+      visit: { assigned: 1, visited: 1, isi: 0, empty: 1, returned: 0, failed: 0 },
     });
   });
 

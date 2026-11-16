@@ -18,9 +18,10 @@ interface TableProps<TData> {
   className?: string;
   loading?: boolean;
   variant?: 'default' | 'glass';
+  getCellRowSpan?: (row: TData, columnId: string) => number | undefined;
 }
 
-const Table = <TData,>({ columns, data, className, loading, variant = 'default' }: TableProps<TData>) => {
+const Table = <TData,>({ columns, data, className, loading, variant = 'default', getCellRowSpan }: TableProps<TData>) => {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -57,12 +58,13 @@ const Table = <TData,>({ columns, data, className, loading, variant = 'default' 
                   <th
                     key={header.id}
                     className={cn(
-                      "px-3 py-3 md:px-6 md:py-4 font-bold uppercase tracking-tight text-[10px] cursor-pointer transition-colors group",
-                      variant === 'glass' 
-                        ? "text-[var(--glass-ink)]/60 hover:bg-[var(--hover)]" 
+                      "px-3 py-3 md:px-6 md:py-4 font-bold uppercase tracking-tight text-[10px] transition-colors group",
+                      header.column.getCanSort() ? 'cursor-pointer' : 'cursor-default',
+                      variant === 'glass'
+                        ? "text-[var(--glass-ink)]/60 hover:bg-[var(--hover)]"
                         : "text-[var(--surface-ink)]/70 hover:bg-[var(--hover)]"
                     )}
-                    onClick={header.column.getToggleSortingHandler()}
+                    onClick={header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
                   >
                     <div className="flex items-center gap-2">
                       {flexRender(header.column.columnDef.header, header.getContext())}
@@ -97,14 +99,19 @@ const Table = <TData,>({ columns, data, className, loading, variant = 'default' 
                   'transition-colors duration-300',
                   variant === 'glass' ? 'hover:bg-[var(--hover)]' : 'hover:bg-[var(--hover)]'
                 )}>
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className={cn(
-                      "px-3 py-3 md:px-6 md:py-4 font-medium",
-                      variant === 'glass' ? "text-[var(--glass-ink)]" : "text-[var(--surface-ink)]"
-                    )}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
+                  {row.getVisibleCells().map((cell) => {
+                    const rowSpan = getCellRowSpan?.(row.original, cell.column.id);
+                    if (rowSpan === 0) return null;
+
+                    return (
+                      <td key={cell.id} rowSpan={rowSpan ?? 1} className={cn(
+                        "px-3 py-3 md:px-6 md:py-4 font-medium",
+                        variant === 'glass' ? "text-[var(--glass-ink)]" : "text-[var(--surface-ink)]"
+                      )}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))
             )}

@@ -188,9 +188,8 @@ describe('Atribusi periode overview (assignment, bukan collected_at)', () => {
 
     const productivity = await getOfficerProductivity(scope(), 2026, [10]);
     expect(productivity.find((o) => o.officer_id === officerId)).toMatchObject({
-      assigned: 1,
-      collected: 1,
-      filled: 1,
+      pickup: { assigned: 1, collected: 1, filled: 1, empty: 0, failed: 0 },
+      visit: { assigned: 0, visited: 0, isi: 0, empty: 0, returned: 0, failed: 0 },
     });
   });
 
