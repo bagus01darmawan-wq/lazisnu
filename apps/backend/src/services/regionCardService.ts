@@ -55,6 +55,10 @@ export interface RegionSummary {
   assignedAssignableCans: number;
   /** Kaleng assignable yang belum punya penugasan pada periode ini. */
   unassignedAssignableCans: number;
+  /** Kaleng NON_AKTIF yang memenuhi syarat tugas VISIT. */
+  visitableCans: number;
+  /** Kaleng visitable dengan tugas VISIT pada periode ini. */
+  assignedVisitableCans: number;
   /** Kaleng NON_AKTIF + DIKEMBALIKAN yang tidak ikut penugasan. */
   nonAssignableCans: number;
   breakdown: Record<string, number>;
@@ -158,6 +162,8 @@ function emptyRegion(over: Partial<RegionSummary>): RegionSummary {
     assignableCans: 0,
     assignedAssignableCans: 0,
     unassignedAssignableCans: 0,
+    visitableCans: 0,
+    assignedVisitableCans: 0,
     nonAssignableCans: 0,
     breakdown: emptyBreakdown(),
     nonActive: 0,
@@ -191,12 +197,14 @@ async function aggregate(
     ASSIGNABLE_CONDITIONS.map((condition) => sql`${condition}`),
     sql`, `
   )})`;
+  const visitableFilter = sql`${schema.cans.isActive} = true AND ${schema.cans.condition} = 'NON_AKTIF'`;
 
   const canRows = await db
     .select({
       regionId: schema.cans[regionColumn],
       total: sql<number>`count(*)`,
       assignable: sql<number>`count(*) FILTER (WHERE ${assignableFilter})`,
+      visitable: sql<number>`count(*) FILTER (WHERE ${visitableFilter})`,
       aktif: sql<number>`count(*) FILTER (WHERE ${schema.cans.condition} = 'AKTIF')`,
       rusak: sql<number>`count(*) FILTER (WHERE ${schema.cans.condition} = 'RUSAK')`,
       hilang: sql<number>`count(*) FILTER (WHERE ${schema.cans.condition} = 'HILANG')`,
@@ -207,12 +215,9 @@ async function aggregate(
     .where(regionFilter)
     .groupBy(schema.cans[regionColumn]);
 
-  // Metrik assignment di kartu adalah metrik PICKUP. Tugas VISIT dihitung
-  // terpisah (nonActive/visit queue), bukan sebagai penugasan penjemputan.
-  const assignmentConds: any[] = [
-    regionFilter,
-    eq(schema.assignments.kind, 'PICKUP'),
-  ];
+  // Agregat PICKUP dan VISIT dipisah dengan FILTER agar cakupan gabungan
+  // bisa dihitung tanpa mengubah metrik pickup pada halaman Penugasan.
+  const assignmentConds: any[] = [regionFilter];
   if (period) {
     assignmentConds.push(eq(schema.assignments.periodYear, period.year));
     assignmentConds.push(eq(schema.assignments.periodMonth, period.month));
@@ -220,13 +225,13 @@ async function aggregate(
   const assignmentRows = await db
     .select({
       regionId: schema.cans[regionColumn],
-      // `count(*)` di sini adalah JUMLAH PENUGASAN pada periode ini, bukan
-      // "jumlah yang sudah ditugaskan". Rasio alokasi terhadap kaleng
-      // dihitung di service dari dua aggregate terpisah, bukan dari sini.
-      assignmentTotal: sql<number>`count(*)`,
-      assignedAssignable: sql<number>`count(DISTINCT ${schema.cans.id}) FILTER (WHERE ${assignableFilter})`,
-      completed: sql<number>`count(*) FILTER (WHERE ${schema.assignments.status} = 'COMPLETED')`,
-      uncollected: sql<number>`count(*) FILTER (WHERE ${schema.assignments.status} = 'UNCOLLECTED')`,
+      // `assignmentTotal` tetap menghitung baris PICKUP untuk konsumen lama;
+      // cakupan tiap jenis memakai kaleng unik agar tidak terhitung ganda.
+      assignmentTotal: sql<number>`count(*) FILTER (WHERE ${schema.assignments.kind} = 'PICKUP')`,
+      assignedAssignable: sql<number>`count(DISTINCT ${schema.cans.id}) FILTER (WHERE ${schema.assignments.kind} = 'PICKUP' AND ${assignableFilter})`,
+      assignedVisitable: sql<number>`count(DISTINCT ${schema.cans.id}) FILTER (WHERE ${schema.assignments.kind} = 'VISIT' AND ${visitableFilter})`,
+      completed: sql<number>`count(*) FILTER (WHERE ${schema.assignments.kind} = 'PICKUP' AND ${schema.assignments.status} = 'COMPLETED')`,
+      uncollected: sql<number>`count(*) FILTER (WHERE ${schema.assignments.kind} = 'PICKUP' AND ${schema.assignments.status} = 'UNCOLLECTED')`,
     })
     .from(schema.assignments)
     .innerJoin(schema.cans, eq(schema.cans.id, schema.assignments.canId))
@@ -314,6 +319,11 @@ async function buildBranchCards(
         a ? Number(a.assignedAssignable) : 0,
         assignableCans
       );
+      const visitableCans = c ? Number(c.visitable) : 0;
+      const assignedVisitableCans = Math.min(
+        a ? Number(a.assignedVisitable) : 0,
+        visitableCans
+      );
       const completed = a ? Number(a.completed) : 0;
       return emptyRegion({
         kind: 'branch',
@@ -328,6 +338,8 @@ async function buildBranchCards(
         assignableCans,
         assignedAssignableCans,
         unassignedAssignableCans: Math.max(assignableCans - assignedAssignableCans, 0),
+        visitableCans,
+        assignedVisitableCans,
         nonAssignableCans: Math.max(total - assignableCans, 0),
         breakdown,
         nonActive: breakdown.NON_AKTIF,
@@ -412,6 +424,11 @@ async function buildDukuhCards(
       a ? Number(a.assignedAssignable) : 0,
       assignableCans
     );
+    const visitableCans = c ? Number(c.visitable) : 0;
+    const assignedVisitableCans = Math.min(
+      a ? Number(a.assignedVisitable) : 0,
+      visitableCans
+    );
     return emptyRegion({
       kind: 'dukuh',
       isFallback: false,
@@ -425,6 +442,8 @@ async function buildDukuhCards(
       assignableCans,
       assignedAssignableCans,
       unassignedAssignableCans: Math.max(assignableCans - assignedAssignableCans, 0),
+      visitableCans,
+      assignedVisitableCans,
       nonAssignableCans: Math.max(total - assignableCans, 0),
       breakdown,
       nonActive: breakdown.NON_AKTIF,

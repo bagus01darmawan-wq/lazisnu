@@ -30,6 +30,7 @@ const IDS = {
   canNonAktif: randomUUID(),
   canInBranchNoDukuh: randomUUID(),
   assignment: randomUUID(),
+  visitAssignment: randomUUID(),
 };
 
 // Prefix unik supaya tidak bentrok dengan sisa data test lain di DB ini.
@@ -194,23 +195,34 @@ describe('regionCardService', () => {
       },
     ]);
 
-    // Hanya SATU dari dua kaleng di dukuh A yang punya penugasan. Ini yang
-    // membuat `assignmentTotal` (1) harusnya berbeda dari `total` (2), dan
-    // mengunci agar keduanya tidak diam-diam menimpa satu sama lain.
-    await db.insert(schema.assignments).values({
-      id: IDS.assignment,
-      canId: IDS.canInDukuh,
-      officerId: IDS.officerMapped,
-      periodYear: 2026,
-      periodMonth: 9,
-      status: 'ACTIVE',
-    });
+    // Satu kaleng assignable mendapat PICKUP dan satu kaleng NON_AKTIF mendapat
+    // VISIT. `assignmentTotal` tetap menghitung baris PICKUP saja.
+    await db.insert(schema.assignments).values([
+      {
+        id: IDS.assignment,
+        canId: IDS.canInDukuh,
+        officerId: IDS.officerMapped,
+        periodYear: 2026,
+        periodMonth: 9,
+        kind: 'PICKUP',
+        status: 'ACTIVE',
+      },
+      {
+        id: IDS.visitAssignment,
+        canId: IDS.canNonAktif,
+        officerId: IDS.officerMapped,
+        periodYear: 2026,
+        periodMonth: 9,
+        kind: 'VISIT',
+        status: 'ACTIVE',
+      },
+    ]);
   });
 
   afterAll(async () => {
     await db
       .delete(schema.assignments)
-      .where(inArray(schema.assignments.id, [IDS.assignment]));
+      .where(inArray(schema.assignments.id, [IDS.assignment, IDS.visitAssignment]));
     await db
       .delete(schema.cans)
       .where(
@@ -257,6 +269,9 @@ describe('regionCardService', () => {
     // Angka assignable: yang bisa ditugaskan hanya kaleng aktif berkondisi
     // AKTIF/RUSAK/HILANG — NON_AKTIF masuk nonAssignable, bukan "belum".
     expect(withDukuh.assignableCans).toBe(2);
+    expect(withDukuh.assignedAssignableCans).toBe(1);
+    expect(withDukuh.visitableCans).toBe(1);
+    expect(withDukuh.assignedVisitableCans).toBe(1);
     expect(withDukuh.unassignedAssignableCans).toBe(1);
     expect(withDukuh.nonAssignableCans).toBe(1);
     // Scope branch: semua petugas sudah tercakup filter ranting.
@@ -273,10 +288,11 @@ describe('regionCardService', () => {
       month: '9',
     });
 
-    // Tiga kaleng (satu NON_AKTIF), hanya satu yang punya penugasan. Kalau
-    // kedua angka ini ditimpa diam-diam, test inilah yang pertama gagal.
+    // Tiga kaleng: satu PICKUP dan satu VISIT. `assignmentTotal` tetap satu
+    // karena metrik lama tetap hanya menghitung baris PICKUP.
     expect(cans.regions[0].total).toBe(3);
     expect(cans.regions[0].assignmentTotal).toBe(1);
+    expect(cans.regions[0].assignedVisitableCans).toBe(1);
     expect(assignments.regions[0].total).toBe(3);
     expect(assignments.regions[0].assignmentTotal).toBe(1);
 
@@ -319,6 +335,8 @@ describe('regionCardService', () => {
     expect(card.total).toBe(3);
     expect(card.assignmentTotal).toBe(1);
     expect(card.assignableCans).toBe(2);
+    expect(card.visitableCans).toBe(1);
+    expect(card.assignedVisitableCans).toBe(1);
     expect(card.unassignedAssignableCans).toBe(1);
     expect(card.isFallback).toBe(false);
   });

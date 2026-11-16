@@ -36,6 +36,10 @@ export interface RegionSummary {
   assignedAssignableCans: number;
   /** Kaleng assignable yang belum punya penugasan. */
   unassignedAssignableCans: number;
+  /** Kaleng NON_AKTIF yang memenuhi syarat tugas VISIT. */
+  visitableCans?: number;
+  /** Kaleng visitable dengan tugas VISIT pada periode ini. */
+  assignedVisitableCans?: number;
   /** Kaleng NON_AKTIF + DIKEMBALIKAN. */
   nonAssignableCans: number;
   breakdown: Record<string, number>;
@@ -214,9 +218,8 @@ function RegionCard({
   showOfficers: boolean;
   onSelect: (r: RegionSummary) => void;
 }) {
-  // Angka utama mengikuti halaman: penugasan di Assignments, kaleng di Kaleng.
-  // Bar progres ikut halaman yang sama supaya tidak ada dua angka "64" yang
-  // berarti berbeda dalam satu kartu.
+  // Kartu Penugasan tetap memakai cakupan PICKUP. Kartu Kelola Kaleng
+  // menggabungkan cakupan PICKUP dan VISIT dalam hitungan kaleng unik.
   const isAssignments = page === 'assignments';
   // Halaman Assignments menjawab "apa yang belum ditugaskan", jadi angka
   // utama dan progresnya memakai kaleng assignable — aturan yang sama dengan
@@ -224,18 +227,20 @@ function RegionCard({
   const assignable = region.assignableCans ?? region.total;
   const assignedAssignable = region.assignedAssignableCans ?? region.assigned;
   const unassignedAssignable = region.unassignedAssignableCans ?? region.unassigned;
-  const headline = isAssignments ? unassignedAssignable : region.total;
-  const barPct = isAssignments
-    ? assignable === 0
-      ? 0
-      : Math.round((assignedAssignable / assignable) * 100)
-    : region.total === 0
-      ? 0
-      : Math.round((region.assigned / region.total) * 100);
-  const barLabel = isAssignments ? 'coverage penugasan' : 'ditugaskan';
+  const headline = unassignedAssignable;
+  const visitable = region.visitableCans ?? region.breakdown?.NON_AKTIF ?? 0;
+  const assignedVisitable = region.assignedVisitableCans ?? 0;
+  const taskableCans = assignable + visitable;
+  const assignedTaskableCans = assignedAssignable + assignedVisitable;
+  const coveredCans = isAssignments ? assignedAssignable : assignedTaskableCans;
+  const coverageDenominator = isAssignments ? assignable : taskableCans;
+  const barPct = coverageDenominator === 0
+    ? 0
+    : Math.round((coveredCans / coverageDenominator) * 100);
+  const barLabel = isAssignments ? 'coverage penugasan' : 'cakupan tugas';
   const barValue = isAssignments
     ? `${assignedAssignable}/${assignable}`
-    : `${region.assigned}/${region.total}`;
+    : `${assignedTaskableCans}/${taskableCans}`;
 
   return (
     <button
@@ -265,9 +270,11 @@ function RegionCard({
           </p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <div className="px-2.5 h-7 flex items-center bg-[#EAD19B]/10 rounded-lg">
-            <span className="text-[11px] font-black text-[#EAD19B]">{headline}</span>
-          </div>
+          {isAssignments && (
+            <div className="px-2.5 h-7 flex items-center bg-[#EAD19B]/10 rounded-lg">
+              <span className="text-[11px] font-black text-[#EAD19B]">{headline}</span>
+            </div>
+          )}
           <ChevronRight
             size={16}
             className={`text-[#F4F1EA]/30 transition-transform ${active ? 'rotate-90' : ''}`}
@@ -289,26 +296,27 @@ function RegionCard({
       </div>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-bold uppercase tracking-tight">
-        <span className="text-[#F4F1EA]/40">
-          {isAssignments ? 'dapat ditugaskan' : 'penugasan'}{' '}
-          <span className="text-[#F4F1EA]/80">
-            {isAssignments ? assignable : region.assignmentTotal}
-          </span>
-        </span>
-        <span className="text-[#F4F1EA]/40">
-          belum{' '}
-          <span className="text-[#F4F1EA]/80">
-            {isAssignments ? unassignedAssignable : region.unassigned}
-          </span>
-        </span>
+        {isAssignments && (
+          <>
+            <span className="text-[#F4F1EA]/40">
+              dapat ditugaskan{' '}
+              <span className="text-[#F4F1EA]/80">{assignable}</span>
+            </span>
+            <span className="text-[#F4F1EA]/40">
+              belum{' '}
+              <span className="text-[#F4F1EA]/80">{unassignedAssignable}</span>
+            </span>
+          </>
+        )}
         {isAssignments && (region.nonAssignableCans ?? 0) > 0 && (
           <span className="text-[#F4F1EA]/40">
             non-aktif <span className="text-[#DE6F4A]">{region.nonAssignableCans}</span>
           </span>
         )}
-        {!isAssignments && region.nonActive > 0 && (
+        {!isAssignments && (region.breakdown?.DIKEMBALIKAN ?? 0) > 0 && (
           <span className="text-[#F4F1EA]/40">
-            non-aktif <span className="text-[#DE6F4A]">{region.nonActive}</span>
+            Dikembalikan{' '}
+            <span className="text-[#EAD19B]">{region.breakdown.DIKEMBALIKAN}</span>
           </span>
         )}
         {region.uncollected > 0 && (
