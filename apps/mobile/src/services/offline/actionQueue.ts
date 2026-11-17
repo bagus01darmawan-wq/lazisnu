@@ -156,12 +156,17 @@ export const actionQueue = {
   },
 
   acknowledgeVisit: (offlineId: string): boolean => {
-    const item = actionQueue.getQueue().find(
-      (action): action is QueuedVisitAction => action.kind === 'VISIT' && action.offline_id === offlineId,
-    );
+    const item = actionQueue
+      .getQueue()
+      .find(
+        (action): action is QueuedVisitAction =>
+          action.kind === 'VISIT' && action.offline_id === offlineId,
+      );
     if (!item) return false;
     const acknowledged = actionQueue.getAcknowledgedVisits();
-    const merged = Array.from(new Map([...acknowledged, item].map(visit => [visit.offline_id, visit])).values());
+    const merged = Array.from(
+      new Map([...acknowledged, item].map(visit => [visit.offline_id, visit])).values(),
+    );
     // Persist before removing the pending item; a write failure leaves it retryable.
     getOfflineStorage().set(getAcknowledgedKey(), JSON.stringify(merged));
     actionQueue.dequeue([offlineId]);

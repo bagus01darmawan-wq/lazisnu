@@ -98,9 +98,12 @@ describe('correctionQueue (corrections.ts)', () => {
     it('tidak menimpa koreksi yang sudah mulai dikirim', () => {
       const initial = correctionQueue.enqueue(makeCorrection('server-1'));
       expect(correctionQueue.markSending(initial.correction_id)).toBe(true);
-      const second = correctionQueue.enqueue(makeCorrection('server-1', {
-        correction_id: 'corr-second', nominal_baru: 80000,
-      }));
+      const second = correctionQueue.enqueue(
+        makeCorrection('server-1', {
+          correction_id: 'corr-second',
+          nominal_baru: 80000,
+        }),
+      );
       expect(second.queued).toBe(false);
       expect(first(correctionQueue.getQueue()).correction_id).toBe(initial.correction_id);
       expect(first(correctionQueue.getQueue()).nominal_baru).toBe(75000);
@@ -392,8 +395,12 @@ describe('integrasi koreksi offline dengan store riwayat', () => {
   it('respons online hilang menyimpan ID operasi yang sama untuk percobaan ulang', async () => {
     (NetInfo.fetch as jest.Mock).mockResolvedValue({isConnected: true, isInternetReachable: true});
     collectionsCache.set([makeServerCollection()]);
-    const resubmit = jest.spyOn(collectionService, 'resubmitCollection')
-      .mockResolvedValueOnce({success: false, error: {code: 'NETWORK_ERROR', message: 'timeout'}} as any)
+    const resubmit = jest
+      .spyOn(collectionService, 'resubmitCollection')
+      .mockResolvedValueOnce({
+        success: false,
+        error: {code: 'NETWORK_ERROR', message: 'timeout'},
+      } as any)
       .mockResolvedValueOnce({success: true, data: {id: 'new-row'}} as any);
     const result = await useCollectionsStore.getState().resubmitCollection('server-1', {
       nominal: 75000,
