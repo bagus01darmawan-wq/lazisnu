@@ -43,8 +43,12 @@ const TasksScreen: React.FC = () => {
     triggerSync,
   } = useSyncStore();
   const totalSyncIssues =
-    pendingCount + permanentFailedCount + pendingCorrectionsCount + failedCorrectionsCount +
-    pendingActionsCount + failedActionsCount;
+    pendingCount +
+    permanentFailedCount +
+    pendingCorrectionsCount +
+    failedCorrectionsCount +
+    pendingActionsCount +
+    failedActionsCount;
   const {
     tasks,
     fetchTasks,
