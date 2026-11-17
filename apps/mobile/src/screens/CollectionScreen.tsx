@@ -81,10 +81,14 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
       setShowConditionConfirmation(true);
     };
     if (numericNominal === 0) {
-      Alert.alert('Konfirmasi Kaleng Kosong', 'Nominal yang dimasukkan adalah Rp0. Apakah kaleng benar-benar kosong?', [
-        {text: 'Tidak', style: 'cancel'},
-        {text: 'Ya, Lanjutkan', onPress: openConditionConfirmation},
-      ]);
+      Alert.alert(
+        'Konfirmasi Kaleng Kosong',
+        'Nominal yang dimasukkan adalah Rp0. Apakah kaleng benar-benar kosong?',
+        [
+          {text: 'Tidak', style: 'cancel'},
+          {text: 'Ya, Lanjutkan', onPress: openConditionConfirmation},
+        ],
+      );
       return;
     }
     openConditionConfirmation();

@@ -105,53 +105,57 @@ const makeCollectionsStore = (overrides = {}) => ({
   ...overrides,
 });
 
-jest.mock('../../src/stores', () => ({
-  useAuthStore: (selector?: (s: any) => unknown) => {
-    const state = {
-      user: {
-        id: 'u1',
-        full_name: 'Ahmad Bagus',
-        phone: '082134536151',
-        role: 'PETUGAS',
-        is_active: true,
-      },
-      logout: jest.fn(),
-    };
-    return selector ? selector(state) : state;
-  },
-  useDashboardStore: () => ({
-    todayStats: {collected: 0, remaining: 0, total_nominal: 0},
-    pendingTasks: [],
-    fetchDashboard: jest.fn(),
-    isLoading: false,
-    error: null,
-  }),
-  useSyncStore: () => ({
-    pendingCount: 0,
-    permanentFailedCount: 0,
-    checkStatus: jest.fn(),
-    clearFailed: jest.fn(),
-  }),
-  useTasksStore: () => ({
-    tasks: [],
-    fetchTasks: jest.fn(),
-    loadMore: jest.fn(),
-    isLoading: false,
-    error: null,
-    page: 1,
-    totalPages: 1,
-  }),
-  // HistoryScreen membaca usePeriodStore (periode aksi) dan
-  // useCollectionsStore.getState() di cabang offline.
-  usePeriodStore: Object.assign(
-    (selector?: (s: any) => unknown) => (selector ? selector(mockPeriodState) : mockPeriodState),
-    {getState: () => mockPeriodState},
-  ),
-  useCollectionsStore: Object.assign(makeCollectionsStore, {
-    getState: () => makeCollectionsStore(),
-  }),
-  useCollectionStore: () => makeCollectionStore(),
-}));
+jest.mock('../../src/stores', () => {
+  const authState = {
+    user: {
+      id: 'u1',
+      full_name: 'Ahmad Bagus',
+      phone: '082134536151',
+      role: 'PETUGAS',
+      is_active: true,
+    },
+    logout: jest.fn(),
+  };
+  const useAuthStore = (selector?: (s: typeof authState) => unknown) =>
+    selector ? selector(authState) : authState;
+  useAuthStore.getState = () => authState;
+
+  return {
+    useAuthStore,
+    useDashboardStore: () => ({
+      todayStats: {collected: 0, remaining: 0, total_nominal: 0},
+      pendingTasks: [],
+      fetchDashboard: jest.fn(),
+      isLoading: false,
+      error: null,
+    }),
+    useSyncStore: () => ({
+      pendingCount: 0,
+      permanentFailedCount: 0,
+      checkStatus: jest.fn(),
+      clearFailed: jest.fn(),
+    }),
+    useTasksStore: () => ({
+      tasks: [],
+      fetchTasks: jest.fn(),
+      loadMore: jest.fn(),
+      isLoading: false,
+      error: null,
+      page: 1,
+      totalPages: 1,
+    }),
+    // HistoryScreen membaca usePeriodStore (periode aksi) dan
+    // useCollectionsStore.getState() di cabang offline.
+    usePeriodStore: Object.assign(
+      (selector?: (s: any) => unknown) => (selector ? selector(mockPeriodState) : mockPeriodState),
+      {getState: () => mockPeriodState},
+    ),
+    useCollectionsStore: Object.assign(makeCollectionsStore, {
+      getState: () => makeCollectionsStore(),
+    }),
+    useCollectionStore: () => makeCollectionStore(),
+  };
+});
 
 jest.mock('../../src/services/api', () => ({
   __esModule: true,
@@ -166,6 +170,7 @@ jest.mock('../../src/services/api', () => ({
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import CollectionScreen from '../../src/screens/CollectionScreen';
 import HistoryScreen from '../../src/screens/HistoryScreen';
+import {getOfflineStorage, initializeOfflineStorage} from '../../src/services/offline/mmkv';
 
 const makeNav = () => ({navigate: mockNavigate, goBack: mockGoBack}) as any;
 
@@ -204,6 +209,13 @@ const renderAsync = async (element: React.ReactElement) => {
   mountedTrees.add(tree);
   return tree;
 };
+
+beforeEach(() => {
+  // HistoryScreen membaca actionQueue saat render; antrean itu membutuhkan
+  // MMKV yang di aplikasi diinisialisasi oleh secureStorage.
+  initializeOfflineStorage('visual-state-audit-key');
+  getOfflineStorage().clearAll();
+});
 
 afterEach(() => {
   act(() => {
@@ -343,6 +355,17 @@ describe('CollectionScreen — state sukses', () => {
 
     await act(async () => {
       await submitButton!.props.onPress();
+    });
+
+    // Sejak perbaikan offline, submit membuka modal konfirmasi kondisi fisik
+    // lebih dulu; penyimpanan baru berjalan setelah "Konfirmasi & Simpan".
+    const confirmButton = tree.root
+      .findAll(n => typeof n.props?.onPress === 'function')
+      .find(n => collectText(n).includes('Konfirmasi & Simpan'));
+    expect(confirmButton).toBeDefined();
+
+    await act(async () => {
+      await confirmButton!.props.onPress();
     });
 
     expect(mockSubmitCollection).toHaveBeenCalledWith(

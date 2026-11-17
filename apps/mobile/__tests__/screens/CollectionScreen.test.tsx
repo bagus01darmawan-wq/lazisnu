@@ -99,9 +99,11 @@ describe('CollectionScreen konfirmasi kondisi', () => {
 
     await enterNominal(view, '25000');
     expect(
-      view.root.findAllByType(Text).some(node =>
-        String(node.props.children).includes('Kondisi fisik terakhir tercatat: Rusak'),
-      ),
+      view.root
+        .findAllByType(Text)
+        .some(node =>
+          String(node.props.children).includes('Kondisi fisik terakhir tercatat: Rusak'),
+        ),
     ).toBe(true);
   });
 
@@ -122,7 +124,11 @@ describe('CollectionScreen konfirmasi kondisi', () => {
   it('penjemputan biasa tetap meminta konfirmasi kosong untuk Rp0 sebelum kondisi', async () => {
     const view = await renderScreen();
     await enterNominal(view, '0');
-    expect(alertSpy).toHaveBeenCalledWith('Konfirmasi Kaleng Kosong', expect.any(String), expect.any(Array));
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Konfirmasi Kaleng Kosong',
+      expect.any(String),
+      expect.any(Array),
+    );
     expect(view.root.findByType(Modal).props.visible).toBe(false);
     const buttons = alertSpy.mock.calls[0]?.[2] as {text: string; onPress?: () => void}[];
     await act(async () => buttons.find(button => button.text === 'Ya, Lanjutkan')?.onPress?.());

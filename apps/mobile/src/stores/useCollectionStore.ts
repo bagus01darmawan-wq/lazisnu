@@ -546,7 +546,9 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
     // antrean MMKV — UI sudah menampilkan nominal optimistis via merge overlay,
     // server menerima saat flush online. Collapse otomatis di correctionQueue
     // menjaga satu koreksi terbaru per collection_id.
-    const queueOffline = (deliveryStarted = false): {success: boolean; queued: boolean; error?: string} => {
+    const queueOffline = (
+      deliveryStarted = false,
+    ): {success: boolean; queued: boolean; error?: string} => {
       const existing = correctionQueue.getLatestByCollectionId(id);
       const nominalLama = existing ? existing.nominal_lama : payload.nominal_lama;
       if (typeof nominalLama !== 'number' || isNaN(nominalLama) || nominalLama < 0) {
@@ -561,7 +563,12 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
         alasan_resubmit: payload.alasan_resubmit.trim(),
       });
       if (!result.queued) {
-        return {success: false, queued: false, error: 'Koreksi sebelumnya sedang diproses. Tunggu sinkronisasi selesai sebelum mengoreksi lagi.'};
+        return {
+          success: false,
+          queued: false,
+          error:
+            'Koreksi sebelumnya sedang diproses. Tunggu sinkronisasi selesai sebelum mengoreksi lagi.',
+        };
       }
       const cached = collectionsCache.get();
       const merged = mergeCollectionsWithQueues(cached);
