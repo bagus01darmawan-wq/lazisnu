@@ -108,7 +108,7 @@ export const useSyncStore = create<SyncState>(set => ({
         return {success: 0, failed: 0};
       }
 
-      if (result.synced > 0 || result.corrections_synced) {
+      if (result.synced > 0 || result.corrections_synced || result.actions_synced) {
         // ACK sudah aman, tetapi status sync UI baru selesai setelah semua store
         // melihat snapshot server terbaru. allSettled mencegah satu layar gagal
         // membatalkan keberhasilan transaksi yang sudah committed.

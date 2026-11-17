@@ -540,24 +540,28 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
       return {success: false, error: 'Jelaskan alasan koreksi minimal 5 karakter.'};
     }
 
+    const operationId = generateOfflineId();
+
     // Offline (atau koneksi putus di tengah request): simpan niat koreksi di
     // antrean MMKV — UI sudah menampilkan nominal optimistis via merge overlay,
     // server menerima saat flush online. Collapse otomatis di correctionQueue
     // menjaga satu koreksi terbaru per collection_id.
-    const queueOffline = (): {success: boolean; queued: boolean} => {
+    const queueOffline = (deliveryStarted = false): {success: boolean; queued: boolean; error?: string} => {
       const existing = correctionQueue.getLatestByCollectionId(id);
       const nominalLama = existing ? existing.nominal_lama : payload.nominal_lama;
       if (typeof nominalLama !== 'number' || isNaN(nominalLama) || nominalLama < 0) {
         return {success: false, queued: false};
       }
       const result = correctionQueue.enqueue({
+        correction_id: operationId,
+        delivery_started: deliveryStarted,
         collection_id: id,
         nominal_lama: nominalLama,
         nominal_baru: payload.nominal,
         alasan_resubmit: payload.alasan_resubmit.trim(),
       });
       if (!result.queued) {
-        return {success: false, queued: false};
+        return {success: false, queued: false, error: 'Koreksi sebelumnya sedang diproses. Tunggu sinkronisasi selesai sebelum mengoreksi lagi.'};
       }
       const cached = collectionsCache.get();
       const merged = mergeCollectionsWithQueues(cached);
@@ -565,6 +569,10 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
       refreshSyncCounts();
       return {success: true, queued: true};
     };
+
+    if (correctionQueue.getLatestByCollectionId(id)) {
+      return queueOffline();
+    }
 
     const netInfo = await NetInfo.fetch();
     if (!(netInfo.isConnected && netInfo.isInternetReachable)) {
@@ -575,6 +583,7 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
       const response = await collectionService.resubmitCollection(id, {
         nominal: payload.nominal,
         alasan_resubmit: payload.alasan_resubmit.trim(),
+        operation_id: operationId,
       });
 
       if (response.success) {
@@ -582,7 +591,7 @@ export const useCollectionsStore = create<CollectionsHistoryState>((set, get) =>
         return {success: true};
       }
       if (response.error?.code === 'NETWORK_ERROR') {
-        return queueOffline();
+        return queueOffline(true);
       }
       return {success: false, error: response.error?.message || 'Data belum dapat dikoreksi.'};
     } catch (error) {

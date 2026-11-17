@@ -1,6 +1,7 @@
 import {
   batchCollectionSchema,
   canVisitSchema,
+  canVisitSubmitSchema,
   collectionSchema,
   resubmitSchema,
 } from '../schemas';
@@ -35,6 +36,11 @@ describe('collectionSchema', () => {
   it('menerima nominal 0 (BR-06: hak pemilik kaleng memberi nominal berapapun)', () => {
     const result = collectionSchema.safeParse({ ...validBody, nominal: 0 });
     expect(result.success).toBe(true);
+  });
+
+  it('menolak nominal Rp0 hanya bila request menandai kunjungan ISI', () => {
+    const result = collectionSchema.safeParse({...validBody, nominal: 0, visit_outcome: 'ISI'});
+    expect(result.success).toBe(false);
   });
 
   it('menolak nominal negatif (donasi tidak mungkin negatif)', () => {
@@ -146,6 +152,50 @@ describe('kondisi fisik baru — batch dan kunjungan', () => {
     const result = canVisitSchema.safeParse({
       outcome: 'KOSONG',
       physical_condition: 'RUSAK',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('kunjungan ISI menolak nominal Rp0', () => {
+    const result = canVisitSubmitSchema.safeParse({
+      outcome: 'ISI',
+      assignment_id: '00000000-0000-4000-8000-000000000001',
+      can_id: '00000000-0000-4000-8000-000000000002',
+      nominal: 0,
+      collected_at: '2026-11-17T06:30:00.000Z',
+      physical_condition: 'BAIK',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('batch menolak Rp0 khusus untuk jalur kunjungan ISI', () => {
+    const result = batchCollectionSchema.safeParse({
+      collections: [{...item, nominal: 0, physical_condition: 'BAIK', visit_outcome: 'ISI'}],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('batch tetap menerima Rp0 untuk penjemputan biasa', () => {
+    const result = batchCollectionSchema.safeParse({
+      collections: [{...item, nominal: 0, condition: 'AKTIF'}],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('kunjungan offline menerima identitas operasi, assignment, dan waktu kejadian', () => {
+    const result = canVisitSchema.safeParse({
+      outcome: 'KOSONG',
+      offline_id: 'local-offline-visit-1',
+      assignment_id: '00000000-0000-4000-8000-000000000001',
+      visited_at: '2026-11-17T06:30:00.000Z',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('menolak identitas operasi kunjungan yang terlalu panjang', () => {
+    const result = canVisitSchema.safeParse({
+      outcome: 'KOSONG',
+      offline_id: 'x'.repeat(101),
     });
     expect(result.success).toBe(false);
   });

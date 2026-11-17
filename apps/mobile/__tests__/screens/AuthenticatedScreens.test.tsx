@@ -60,19 +60,22 @@ jest.mock('react-native-linear-gradient', () => {
 // fallback, lengkap untuk RNGH GestureDetector + draggable-flatlist).
 
 jest.mock('../../src/stores', () => ({
-  useAuthStore: (selector?: (state: any) => unknown) => {
-    const state = {
-      user: {
-        id: 'user-1',
-        full_name: 'Ahmad Petugas',
-        phone: '081234567892',
-        role: 'PETUGAS',
-        is_active: true,
-      },
-      logout: jest.fn(),
-    };
-    return selector ? selector(state) : state;
-  },
+  useAuthStore: Object.assign(
+    (selector?: (state: any) => unknown) => {
+      const state = {
+        user: {
+          id: 'user-1',
+          full_name: 'Ahmad Petugas',
+          phone: '081234567892',
+          role: 'PETUGAS',
+          is_active: true,
+        },
+        logout: jest.fn(),
+      };
+      return selector ? selector(state) : state;
+    },
+    {getState: () => ({user: {id: 'user-1'}})},
+  ),
   useDashboardStore: () => ({
     todayStats: {collected: 4, remaining: 6, total_nominal: 450000},
     pendingTasks: [mockTask],
@@ -83,6 +86,10 @@ jest.mock('../../src/stores', () => ({
   useSyncStore: () => ({
     pendingCount: 0,
     permanentFailedCount: 0,
+    pendingCorrectionsCount: 0,
+    failedCorrectionsCount: 0,
+    pendingActionsCount: 0,
+    failedActionsCount: 0,
     checkStatus: mockCheckStatus,
     clearFailed: jest.fn(),
   }),
@@ -184,6 +191,7 @@ import TasksScreen from '../../src/screens/TasksScreen';
 import HistoryScreen from '../../src/screens/HistoryScreen';
 import ProfileScreen from '../../src/screens/ProfileScreen';
 import CollectionScreen from '../../src/screens/CollectionScreen';
+import {initializeOfflineStorage, getOfflineStorage} from '../../src/services/offline/mmkv';
 
 const mountedTrees = new Set<renderer.ReactTestRenderer>();
 
@@ -206,6 +214,8 @@ const render = async (element: React.ReactElement) => {
 describe('authenticated screen render smoke tests', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    initializeOfflineStorage('authenticated-screen-test-key');
+    getOfflineStorage().clearAll();
   });
 
   afterEach(() => {

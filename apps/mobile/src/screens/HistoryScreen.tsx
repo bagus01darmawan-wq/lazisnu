@@ -1,4 +1,4 @@
-import React, {useCallback, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -18,9 +18,16 @@ import type {Collection} from '@lazisnu/shared-types';
 import type {CanVisitHistoryItem, Task} from '@lazisnu/shared-types';
 import {collectionService, tasksService} from '../services/api';
 import {correctionQueue, QueuedCorrection} from '../services/offline/corrections';
-import {actionQueue} from '../services/offline/actionQueue';
+import {actionQueue, QueuedVisitAction} from '../services/offline/actionQueue';
+import {visitHistoryCache} from '../services/offline/cache';
 import {composeUncollectedOffline} from '../services/offline/uncollected';
-import {useCollectionsStore, usePeriodStore, useSyncStore, useTasksStore} from '../stores';
+import {
+  useAuthStore,
+  useCollectionsStore,
+  usePeriodStore,
+  useSyncStore,
+  useTasksStore,
+} from '../stores';
 import {useFocusEffect} from '@react-navigation/native';
 import {Colors, ComponentSizes, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
 import {formatPeriod, periodKeyOf} from '../utils/format';
@@ -37,6 +44,41 @@ import {
 import {CollectionHistoryDetailScreen} from './history/CollectionHistoryDetailScreen';
 
 type HistoryFilter = 'terjemput' | 'tidak' | 'kunjungan';
+
+type VisitDisplayItem = {
+  id: string;
+  offline_id?: string | null;
+  can_id: string;
+  qr_code: string;
+  owner_name: string;
+  outcome: CanVisitHistoryItem['outcome'];
+  visited_at: string;
+  purpose?: CanVisitHistoryItem['purpose'];
+  period?: string;
+  localStatus?: 'MENUNGGU DIKIRIM' | 'PERLU DIPERIKSA' | 'TERKIRIM';
+  error_message?: string;
+};
+
+const visitCacheKey = (period: string | null) => period ?? 'semua';
+
+function mapQueuedVisit(action: QueuedVisitAction, failed: boolean): VisitDisplayItem {
+  const needsReview = failed || !action.period || !action.assignment_id;
+  return {
+    id: action.offline_id,
+    can_id: action.can_id,
+    qr_code: action.qr_code || 'QR tidak tersedia',
+    owner_name: action.owner_name || 'Nama tidak tersedia',
+    outcome: action.outcome,
+    visited_at: action.created_at,
+    period: action.period,
+    localStatus: needsReview ? 'PERLU DIPERIKSA' : 'MENUNGGU DIKIRIM',
+    error_message:
+      action.error_message ??
+      (needsReview
+        ? 'Periode atau tugas asal tidak tersedia; periksa sebelum mengirim ulang.'
+        : undefined),
+  };
+}
 
 const HISTORY_FILTERS_HEIGHT = 54;
 
@@ -91,11 +133,16 @@ const HistoryScreen: React.FC = () => {
     return collections.filter(c => c.period === displayKey);
   }, [collections, displayKey]);
   const {checkStatus, failedCorrectionsCount} = useSyncStore();
-  const [visits, setVisits] = useState<CanVisitHistoryItem[]>([]);
+  const currentUserId = useAuthStore(state => state.user?.id);
+  const [visits, setVisits] = useState<VisitDisplayItem[]>([]);
+  const [visitCacheFetchedAt, setVisitCacheFetchedAt] = useState<string | null>(null);
+  const [visitCacheComplete, setVisitCacheComplete] = useState(false);
+  const [, setActionQueueVersion] = useState(0);
   const [visitCount, setVisitCount] = useState(0);
   const [visitsPeriodKey, setVisitsPeriodKey] = useState<string | null | undefined>(undefined);
   const [visitsLoading, setVisitsLoading] = useState(false);
   const [visitsError, setVisitsError] = useState<string | null>(null);
+  const visitRequestSequence = useRef(0);
   // Masing-masing tab menampung satu jenis aktivitas: koleksi, tidak dijemput,
   // atau catatan kunjungan tanpa pengambilan.
   const [historyTab, setHistoryTab] = useState<HistoryFilter>('terjemput');
@@ -128,8 +175,32 @@ const HistoryScreen: React.FC = () => {
   const [failedCorrectionItems, setFailedCorrectionItems] = useState<QueuedCorrection[]>([]);
   const visitsLoadedForDisplayPeriod =
     visitsPeriodKey !== undefined && visitsPeriodKey === displayKey;
-  const visitsThisPeriod = visitsLoadedForDisplayPeriod ? visits : [];
-  const visitCountThisPeriod = visitsLoadedForDisplayPeriod ? visitCount : null;
+  const queuedVisits = actionQueue
+    .getQueue()
+    .filter((item): item is QueuedVisitAction => item.kind === 'VISIT');
+  const failedVisits = actionQueue
+    .getFailedPermanent()
+    .filter((item): item is QueuedVisitAction => item.kind === 'VISIT');
+  const localVisitItems: VisitDisplayItem[] = [
+    ...queuedVisits.map(item => mapQueuedVisit(item, false)),
+    ...failedVisits.map(item => mapQueuedVisit(item, true)),
+    ...actionQueue.getAcknowledgedVisits().map(item => ({
+      ...mapQueuedVisit(item, false),
+      localStatus: 'TERKIRIM' as const,
+      error_message: undefined,
+    })),
+  ].filter(item => !item.period || !displayKey || item.period === displayKey);
+  const pendingVisitItems = visitsLoadedForDisplayPeriod
+    ? localVisitItems.filter(local => !visits.some(server => server.offline_id === local.id))
+    : localVisitItems;
+  const visitsThisPeriod = visitsLoadedForDisplayPeriod
+    ? [...visits, ...pendingVisitItems]
+    : localVisitItems;
+  const visitCountThisPeriod = visitsLoadedForDisplayPeriod
+    ? visitCount + pendingVisitItems.length
+    : localVisitItems.length > 0
+      ? localVisitItems.length
+      : null;
   const collectionCountThisPeriod = collectionsThisMonth.length;
   const listBottomPadding =
     ComponentSizes.bottomTabHeight + Math.max(insets.bottom, Spacing.md) + Spacing.md;
@@ -180,29 +251,80 @@ const HistoryScreen: React.FC = () => {
     }
   }, [displayKey, displayMonth, displayYear]);
 
+  const restoreCachedVisits = useCallback((): boolean => {
+    if (useAuthStore.getState().user?.id !== currentUserId) return false;
+    const cached = visitHistoryCache.get(visitCacheKey(displayKey));
+    if (!cached) return false;
+    setVisits(
+      cached.items.map(item => ({...item, period: item.period ?? displayKey ?? undefined})),
+    );
+    setVisitCount(cached.total);
+    setVisitsPeriodKey(displayKey);
+    setVisitCacheFetchedAt(cached.fetchedAt);
+    setVisitCacheComplete(cached.complete);
+    setVisitsError(
+      cached.complete
+        ? null
+        : 'Cache riwayat kunjungan belum lengkap; sebagian riwayat lama mungkin tidak tersedia offline.',
+    );
+    return true;
+  }, [currentUserId, displayKey]);
+
   const fetchVisits = useCallback(async () => {
+    const requestedUserId = currentUserId;
+    const requestId = ++visitRequestSequence.current;
+    const isLatestRequest = () =>
+      requestId === visitRequestSequence.current &&
+      useAuthStore.getState().user?.id === requestedUserId;
     setVisitsLoading(true);
     setVisitsError(null);
+    const key = visitCacheKey(displayKey);
     try {
+      const netInfo = await NetInfo.fetch();
+      if (!isLatestRequest()) return;
+      if (!netInfo.isConnected || !netInfo.isInternetReachable) {
+        if (!restoreCachedVisits()) {
+          setVisits([]);
+          setVisitCount(0);
+          setVisitsPeriodKey(displayKey);
+          setVisitCacheFetchedAt(null);
+          setVisitCacheComplete(false);
+          setVisitsError('Riwayat lama belum tersedia offline.');
+        }
+        return;
+      }
       const response = await collectionService.getVisits({
         limit: 500,
         ...(displayYear && displayMonth ? {year: displayYear, month: displayMonth} : {}),
         excludeCollected: true,
       });
+      if (!isLatestRequest()) return;
       if (response.success && response.data) {
-        setVisits(response.data.items || []);
-        setVisitCount(response.data.pagination?.total ?? response.data.items?.length ?? 0);
+        const items = response.data.items || [];
+        const total = response.data.pagination?.total ?? items.length;
+        const fetchedAt = new Date().toISOString();
+        const complete = items.length >= total;
+        setVisits(items.map(item => ({...item, period: item.period ?? displayKey ?? undefined})));
+        setVisitCount(total);
         setVisitsPeriodKey(displayKey);
-      } else {
+        setVisitCacheFetchedAt(fetchedAt);
+        setVisitCacheComplete(complete);
+        visitHistoryCache.set(key, {items, total, fetchedAt, complete});
+      } else if (!restoreCachedVisits()) {
         setVisitsError(response.error?.message || 'Riwayat kunjungan gagal dimuat. Coba lagi.');
       }
     } catch {
-      // Pertahankan data terakhir, tetapi jangan menyamarkan kegagalan sebagai nol.
-      setVisitsError('Koneksi gagal. Riwayat kunjungan belum dapat diperbarui.');
+      if (!isLatestRequest()) return;
+      if (!restoreCachedVisits()) {
+        // Jangan menyamarkan kegagalan jaringan sebagai daftar riwayat yang lengkap.
+        setVisitsError('Koneksi gagal dan riwayat kunjungan belum tersedia offline.');
+      }
     } finally {
-      setVisitsLoading(false);
+      if (isLatestRequest()) setVisitsLoading(false);
     }
-  }, [displayKey, displayMonth, displayYear]);
+  }, [currentUserId, displayKey, displayMonth, displayYear, restoreCachedVisits]);
+
+  useEffect(() => actionQueue.subscribe(() => setActionQueueVersion(version => version + 1)), []);
 
   // Refetch setiap kali tab kembali fokus: layar tab tidak pernah di-unmount,
   // dan aksi di Scan (tandai tidak dijemput) atau penjemputan baru mengubah
@@ -378,7 +500,7 @@ const HistoryScreen: React.FC = () => {
     [openFailureDetail],
   );
 
-  const renderVisitItem = useCallback(({item}: {item: CanVisitHistoryItem}) => {
+  const renderVisitItem = useCallback(({item}: {item: VisitDisplayItem}) => {
     const visitedDate = new Date(item.visited_at).toLocaleDateString('id-ID', {
       day: 'numeric',
       month: 'short',
@@ -397,11 +519,20 @@ const HistoryScreen: React.FC = () => {
             </Text>
           </View>
           <Text style={styles.visitDescription} numberOfLines={1}>
-            Kaleng non-aktif · {VISIT_PURPOSE_LABELS[item.purpose]}
+            {item.localStatus
+              ? `Periode ${item.period || 'tidak tersedia'} · ${item.localStatus}`
+              : `Kaleng non-aktif · ${item.purpose ? VISIT_PURPOSE_LABELS[item.purpose] : 'Kunjungan'}`}
           </Text>
+          {item.error_message ? (
+            <Text style={styles.visitDescription} numberOfLines={2}>
+              {item.error_message}
+            </Text>
+          ) : null}
           <View style={styles.visitFooter}>
             <Text style={styles.visitSub}>{visitedDate}</Text>
-            <Text style={styles.visitNoAmount}>Tanpa nominal</Text>
+            <Text style={styles.visitNoAmount}>
+              {item.localStatus || (item.outcome === 'ISI' ? 'Nominal tercatat' : 'Tanpa nominal')}
+            </Text>
           </View>
         </View>
       </View>
@@ -474,7 +605,7 @@ const HistoryScreen: React.FC = () => {
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel="Coba muat ulang riwayat kunjungan"
-            onPress={() => void fetchVisits()}
+            onPress={fetchVisits}
             style={styles.retryAction}>
             <Text style={styles.retryText}>Coba lagi</Text>
           </TouchableOpacity>
@@ -629,7 +760,11 @@ const HistoryScreen: React.FC = () => {
               ListHeaderComponent={
                 <View style={styles.visitListHeader}>
                   <Text style={styles.visitListTitle}>Daftar kunjungan</Text>
-                  <Text style={styles.visitListSubtitle}>Catatan kunjungan tanpa penjemputan</Text>
+                  <Text style={styles.visitListSubtitle}>
+                    {visitsLoadedForDisplayPeriod && visitCacheFetchedAt
+                      ? `Riwayat tersimpan · diperbarui ${new Date(visitCacheFetchedAt).toLocaleString('id-ID')} · ${visitCacheComplete ? 'lengkap' : 'belum lengkap'}`
+                      : 'Catatan kunjungan tanpa penjemputan'}
+                  </Text>
                 </View>
               }
               ListEmptyComponent={

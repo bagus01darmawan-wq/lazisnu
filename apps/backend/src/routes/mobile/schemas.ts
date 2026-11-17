@@ -86,7 +86,16 @@ const collectionFields = {
 const collectionBaseSchema = z.object(collectionFields).strict();
 
 export const collectionSchema = collectionBaseSchema
-  .superRefine((body, ctx) => refineConditionPair(body, ctx, true))
+  .superRefine((body, ctx) => {
+    refineConditionPair(body, ctx, true);
+    if (body.visit_outcome === 'ISI' && body.nominal <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['nominal'],
+        message: 'Nominal kunjungan ISI harus lebih dari Rp0',
+      });
+    }
+  })
   .transform((body) => normalizeConditionPair(body));
 
 const batchItemBaseSchema = z.object({
@@ -114,7 +123,16 @@ const batchItemBaseSchema = z.object({
 export const batchCollectionSchema = z.object({
   collections: z.array(
     batchItemBaseSchema
-      .superRefine((body, ctx) => refineConditionPair(body, ctx, true))
+      .superRefine((body, ctx) => {
+        refineConditionPair(body, ctx, true);
+        if (body.visit_outcome === 'ISI' && body.nominal <= 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['nominal'],
+            message: 'Nominal kunjungan ISI harus lebih dari Rp0',
+          });
+        }
+      })
       .transform((body) => normalizeConditionPair(body)),
   ),
 }).strict();
@@ -123,6 +141,7 @@ export const resubmitSchema = z.object({
   // BR-06: nominal: 0 VALID (lihat collectionSchema.nominal)
   nominal: z.number().min(0),
   alasan_resubmit: z.string().min(5, "Alasan resubmit minimal 5 karakter"),
+  operation_id: z.string().min(1).max(100).optional(),
 }).strict();
 
 export const skipAssignmentSchema = z.object({
@@ -166,7 +185,16 @@ export const canVisitSubmitSchema = collectionBaseSchema.extend({
   outcome: z.literal('ISI'),
   notes: z.string().max(255).optional(),
 }).strict()
-  .superRefine((body, ctx) => refineConditionPair(body, ctx, true))
+  .superRefine((body, ctx) => {
+    refineConditionPair(body, ctx, true);
+    if (body.nominal <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['nominal'],
+        message: 'Nominal kunjungan ISI harus lebih dari Rp0',
+      });
+    }
+  })
   .transform((body) => normalizeConditionPair(body));
 
 /** POST /mobile/cans/:canId/visits — tindakan NON_AKTIF tanpa nominal. */
@@ -178,6 +206,7 @@ export const canVisitSchema = z.object({
   physical_condition: physicalConditionSchema.optional(),
   /** Tugas VISIT yang sedang dikerjakan (wajib untuk APK baru). */
   assignment_id: z.string().uuid().optional(),
+  offline_id: z.string().min(1).max(100).optional(),
   visited_at: z.string().datetime().optional(),
   notes: z.string().max(255).optional(),
 }).strict().superRefine((body, ctx) => {

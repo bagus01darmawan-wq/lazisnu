@@ -127,18 +127,30 @@ const TaskDetailScreen: React.FC = () => {
     try {
       const netInfo = await NetInfo.fetch();
       const isOnline = !!(netInfo.isConnected && netInfo.isInternetReachable);
+      const createdAt = new Date().toISOString();
+      const assignmentId = task.id.startsWith('visit-') ? undefined : task.id;
+      const queued = actionQueue.enqueueVisit({
+        can_id: task.can_id,
+        qr_code: task.qr_code,
+        owner_name: task.owner_name,
+        outcome,
+        assignment_id: assignmentId,
+        period: task.period,
+        created_at: createdAt,
+      });
+      if (queued.status !== 'queued') {
+        Alert.alert(
+          queued.status === 'conflict' ? 'Tindakan Perlu Diperiksa' : 'Sudah Menunggu',
+          queued.status === 'conflict'
+            ? `Tindakan ${queued.existing.outcome} untuk tugas ini masih tersimpan. Selesaikan tindakan tersebut sebelum memilih hasil lain.`
+            : `Tindakan ${queued.existing.outcome} untuk tugas ini sudah tersimpan di perangkat.`,
+        );
+        return;
+      }
       if (!isOnline) {
-        actionQueue.enqueue({
-          kind: 'VISIT',
-          can_id: task.can_id,
-          qr_code: task.qr_code,
-          outcome,
-          assignment_id: task.id.startsWith('visit-') ? undefined : task.id,
-          created_at: new Date().toISOString(),
-        });
         Alert.alert(
           'Tersimpan di Perangkat',
-          'Tindakan kunjungan tercatat offline dan terkirim otomatis saat internet tersedia.',
+          'Tindakan kunjungan tersimpan di perangkat dan menunggu dikirim saat internet tersedia.',
           [{text: 'OK', onPress: () => navigation.goBack()}],
         );
         return;
@@ -147,14 +159,45 @@ const TaskDetailScreen: React.FC = () => {
         task.can_id,
         outcome,
         undefined,
-        task.id.startsWith('visit-') ? undefined : task.id,
+        assignmentId,
+        {
+          offline_id: queued.offline_id,
+          visited_at: createdAt,
+        },
       );
-      if (!res.success) {
-        Alert.alert('Gagal Mencatat', res.error?.message || 'Gagal menyimpan tindakan kaleng.');
+      if (res.success && res.data?.offline_id === queued.offline_id) {
+        actionQueue.acknowledgeVisit(queued.offline_id);
+        const message = res.data.message || 'Tindakan kaleng tersimpan.';
+        Alert.alert('Tindakan Tercatat', message, [
+          {text: 'OK', onPress: () => navigation.goBack()},
+        ]);
         return;
       }
-      const message = res.data?.message || 'Tindakan kaleng tersimpan.';
-      Alert.alert('Tindakan Tercatat', message, [{text: 'OK', onPress: () => navigation.goBack()}]);
+      const stored = actionQueue.getQueue().find(item => item.offline_id === queued.offline_id);
+      const permanentCodes = new Set([
+        'ASSIGNMENT_INVALID',
+        'CAN_NOT_NON_ACTIVE',
+        'CAN_NOT_FOUND',
+        'FORBIDDEN',
+        'QR_ALREADY_SUBMITTED',
+        'VALIDATION_ERROR',
+        'NOT_FOUND',
+        'CONFLICT',
+      ]);
+      const errorCode = res.error?.code || '';
+      if (!res.success && permanentCodes.has(errorCode) && stored) {
+        actionQueue.moveToFailedPermanent([
+          {...stored, error_message: res.error?.message || 'Tindakan ditolak server.'},
+        ]);
+        Alert.alert('Perlu Diperiksa', res.error?.message || 'Tindakan ditolak server.');
+        return;
+      }
+      Alert.alert(
+        'Menunggu Konfirmasi Server',
+        res.error?.message ||
+          'Tindakan masih tersimpan di perangkat. Akan dikirim ulang dengan identitas yang sama.',
+        [{text: 'OK', onPress: () => navigation.goBack()}],
+      );
     } catch (error) {
       Alert.alert(
         'Gagal Mencatat',
@@ -257,7 +300,7 @@ const TaskDetailScreen: React.FC = () => {
                     label="Kosong"
                     accessibilityLabel="Kaleng Kosong"
                     variant="outline"
-                    onPress={() => void submitVisitOutcome('KOSONG')}
+                    onPress={() => submitVisitOutcome('KOSONG')}
                     fullWidth
                     disabled={visiting}
                   />
@@ -267,7 +310,7 @@ const TaskDetailScreen: React.FC = () => {
                     label="Dikembalikan"
                     accessibilityLabel="Kaleng Dikembalikan"
                     variant="outline"
-                    onPress={() => void submitVisitOutcome('DIKEMBALIKAN')}
+                    onPress={() => submitVisitOutcome('DIKEMBALIKAN')}
                     fullWidth
                     disabled={visiting}
                   />

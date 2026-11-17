@@ -24,6 +24,7 @@ export interface CorrectionInput {
   alasanResubmit: string;
   requiredOfficerId?: string;
   requiredBranchId?: string;
+  operationId?: string;
 }
 
 export interface CorrectionContext {
@@ -36,6 +37,7 @@ export interface CorrectionContext {
 export interface CorrectionResult {
   oldCollection: Collection & { can: Can | null };
   newCollection: Collection;
+  replayed: boolean;
 }
 
 /**
@@ -48,14 +50,15 @@ export async function correctCollection(
   ctx: CorrectionContext,
 ): Promise<CorrectionResult> {
   return db.transaction(async (tx) => {
-    const { oldCollection, newCollection } = await resubmitCollection(tx, {
+    const { oldCollection, newCollection, replayed } = await resubmitCollection(tx, {
       collectionId: input.collectionId,
       nominal: input.nominal,
       alasanResubmit: input.alasanResubmit,
       requiredOfficerId: input.requiredOfficerId,
       requiredBranchId: input.requiredBranchId,
+      operationId: input.operationId,
     });
 
-    return { oldCollection, newCollection };
+    return { oldCollection, newCollection, replayed };
   });
 }

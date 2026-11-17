@@ -75,20 +75,18 @@ const PERMANENT_CORRECTION_ERROR_CODES = new Set([
   'VALIDATION_ERROR',
 ]);
 
-// Aksi (skip/kunjungan): server menolak dengan kode ini berarti keadaan sudah
-// berubah dan aksi TIDAK akan pernah relevan lagi (assignment bukan lagi
-// ACTIVE milik petugas / kaleng bukan lagi NON_AKTIF / kaleng hilang) —
-// buang dari antrean sebagai selesai, jangan zombi.
-const DROP_ACTION_ERROR_CODES = new Set([
+// Penolakan nyata memerlukan pemeriksaan petugas/admin. Tidak ada kode penolakan
+// yang boleh dianggap ACK; hanya response.success yang mengonfirmasi terkirim.
+const PERMANENT_ACTION_ERROR_CODES = new Set([
   'ASSIGNMENT_INVALID',
   'CAN_NOT_NON_ACTIVE',
   'CAN_NOT_FOUND',
   'FORBIDDEN',
+  'QR_ALREADY_SUBMITTED',
+  'VALIDATION_ERROR',
+  'NOT_FOUND',
+  'CONFLICT',
 ]);
-
-// Aksi yang ditolak aturan bisnis (mis. periode sudah FINAL) tetap muncul di
-// gagal permanen — petugas/admin yang memutuskan, bukan hilang diam-diam.
-const PERMANENT_ACTION_ERROR_CODES = new Set(['QR_ALREADY_SUBMITTED', 'VALIDATION_ERROR']);
 
 /**
  * Kirim semua koreksi offline yang layak retry, satu per satu.
@@ -116,17 +114,16 @@ const flushCorrectionsInternal = async (): Promise<{synced: number; failed: numb
 
   const retryable = correctionQueue.getRetryableCorrections();
   for (const item of retryable) {
+    if (!correctionQueue.markSending(item.correction_id)) continue;
     try {
       const response = await collectionService.resubmitCollection(item.collection_id, {
         nominal: item.nominal_baru,
         alasan_resubmit: item.alasan_resubmit,
+        operation_id: item.correction_id,
       });
 
       if (response.success) {
-        // Batasan v1 (idempotensi): bila request SEBENARNYA commit di server tapi
-        // responsnya hilang (timeout), retry menyisipkan baris koreksi kedua dengan
-        // nominal sama. Agregasi hanya menghitung record terbaru sehingga total
-        // tidak korup — dampaknya hanya jejak audit ganda.
+        // ACK hanya menghapus operasi yang dikirim, bukan koreksi baru.
         correctionQueue.dequeue([item.correction_id]);
         syncedCount++;
         continue;
@@ -195,22 +192,28 @@ export const syncService = {
                 action.outcome,
                 action.notes,
                 action.assignment_id,
+                {offline_id: action.offline_id, visited_at: action.created_at},
               );
 
         if (response.success) {
-          actionQueue.dequeue([action.offline_id]);
+          const acknowledgedOperationId =
+            action.kind === 'VISIT' && response.data && 'offline_id' in response.data
+              ? response.data.offline_id
+              : undefined;
+          if (action.kind === 'VISIT' && acknowledgedOperationId !== action.offline_id) {
+            actionQueue.incrementRetryAttempts([action.offline_id]);
+            return;
+          }
+          if (action.kind === 'VISIT') {
+            if (!actionQueue.acknowledgeVisit(action.offline_id)) return;
+          } else {
+            actionQueue.dequeue([action.offline_id]);
+          }
           syncedCount++;
           return;
         }
 
         const errorCode = response.error?.code || '';
-        if (DROP_ACTION_ERROR_CODES.has(errorCode)) {
-          // Sudah diproses di server (replay ganda / diubah jalur lain) — selesai.
-          actionQueue.dequeue([action.offline_id]);
-          syncedCount++;
-          devLog(`[Sync] Aksi ${action.kind} dibuang (${errorCode}) — sudah diproses server.`);
-          return;
-        }
         if (PERMANENT_ACTION_ERROR_CODES.has(errorCode)) {
           actionQueue.moveToFailedPermanent([
             {
@@ -406,7 +409,7 @@ export const syncService = {
           offlineQueue.incrementRetryAttempts(remaining);
           devLog(`[Sync] Batch gagal, retry_attempts di-increment untuk ${remaining.length} item.`);
         }
-      } catch (error) {
+      } catch {
         // Network error (5xx, timeout, dll)
         // P2: Increment retry_attempts pada semua item di batch.
         offlineQueue.incrementRetryAttempts(remaining);
@@ -438,19 +441,19 @@ export const syncService = {
       };
     }
 
-    const netInfo = await NetInfo.fetch();
-    if (!netInfo.isConnected || !netInfo.isInternetReachable) {
-      return {
-        success: false,
-        synced: 0,
-        failed: 0,
-        remaining: offlineQueue.getRetryableQueue().length,
-        error: 'NO_NETWORK',
-      };
-    }
-
     syncInProgress = true;
     try {
+      const netInfo = await NetInfo.fetch();
+      if (!netInfo.isConnected || !netInfo.isInternetReachable) {
+        return {
+          success: false,
+          synced: 0,
+          failed: 0,
+          remaining: offlineQueue.getRetryableQueue().length,
+          error: 'NO_NETWORK',
+        };
+      }
+
       const collectionsResult = await syncService.autoSyncCollections();
       const correctionsResult = await flushCorrectionsInternal();
       const actionsResult = await syncService.autoSyncActions();
@@ -472,12 +475,12 @@ export const syncService = {
     if (syncInProgress) {
       return {synced: 0, failed: 0};
     }
-    const netInfo = await NetInfo.fetch();
-    if (!netInfo.isConnected || !netInfo.isInternetReachable) {
-      return {synced: 0, failed: 0};
-    }
     syncInProgress = true;
     try {
+      const netInfo = await NetInfo.fetch();
+      if (!netInfo.isConnected || !netInfo.isInternetReachable) {
+        return {synced: 0, failed: 0};
+      }
       return await flushCorrectionsInternal();
     } finally {
       syncInProgress = false;

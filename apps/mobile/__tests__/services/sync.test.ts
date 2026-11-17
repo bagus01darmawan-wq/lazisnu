@@ -212,7 +212,7 @@ describe('Sync Service (sync.ts)', () => {
       expect(actionQueue.getQueueCount()).toBe(0);
     });
 
-    it('membuang SKIP yang dijawab ASSIGNMENT_INVALID (sudah diproses server)', async () => {
+    it('mempertahankan SKIP yang ditolak ASSIGNMENT_INVALID untuk diperiksa', async () => {
       actionQueue.enqueue(skipAction('skip_stale'));
       jest.spyOn(collectionService, 'skipAssignment').mockResolvedValueOnce({
         success: false,
@@ -221,9 +221,12 @@ describe('Sync Service (sync.ts)', () => {
 
       const result = await syncService.autoSyncActions();
 
-      expect(result.synced).toBe(1);
+      expect(result.synced).toBe(0);
+      expect(result.failed).toBe(1);
       expect(actionQueue.getQueueCount()).toBe(0);
-      expect(actionQueue.getFailedPermanentCount()).toBe(0);
+      expect(actionQueue.getFailedPermanent()).toEqual([
+        expect.objectContaining({kind: 'SKIP', error_message: 'Assignment tidak valid'}),
+      ]);
     });
 
     it('memindahkan SKIP yang ditolak periode FINAL ke gagal permanen', async () => {
@@ -261,11 +264,13 @@ describe('Sync Service (sync.ts)', () => {
     it('mereplay VISIT yang sukses ke endpoint kunjungan', async () => {
       actionQueue.enqueue({
         kind: 'VISIT',
+        offline_id: 'offline-visit-id',
         can_id: 'can_visit_1',
         qr_code: 'QR-V1',
         assignment_id: '11111111-1111-4111-8111-111111111111',
+        period: '2026-07',
         outcome: 'DIKEMBALIKAN',
-        created_at: new Date().toISOString(),
+        created_at: '2026-07-15T02:00:00.000Z',
       });
       const visitSpy = jest.spyOn(collectionService, 'recordCanVisit').mockResolvedValueOnce({
         success: true,
@@ -274,6 +279,7 @@ describe('Sync Service (sync.ts)', () => {
           can_id: 'can_visit_1',
           outcome: 'DIKEMBALIKAN',
           condition: 'AKTIF',
+          offline_id: 'offline-visit-id',
           message: 'Tindakan kaleng tersimpan.',
         },
       });
@@ -286,11 +292,39 @@ describe('Sync Service (sync.ts)', () => {
         'DIKEMBALIKAN',
         undefined,
         '11111111-1111-4111-8111-111111111111',
+        {offline_id: 'offline-visit-id', visited_at: '2026-07-15T02:00:00.000Z'},
       );
       expect(actionQueue.getQueueCount()).toBe(0);
     });
 
-    it('membuang VISIT yang dijawab CAN_NOT_NON_ACTIVE (sudah diproses server)', async () => {
+    it('tidak menghapus VISIT bila ACK tidak membuktikan identitas operasi yang dikirim', async () => {
+      actionQueue.enqueue({
+        kind: 'VISIT',
+        offline_id: 'offline-visit-ack-mismatch',
+        can_id: 'can-ack-mismatch',
+        outcome: 'KOSONG',
+        created_at: '2026-07-15T02:00:00.000Z',
+      });
+      jest.spyOn(collectionService, 'recordCanVisit').mockResolvedValueOnce({
+        success: true,
+        data: {
+          id: 'visit-wrong-id',
+          can_id: 'can-ack-mismatch',
+          outcome: 'KOSONG',
+          condition: 'NON_AKTIF',
+          offline_id: 'different-operation-id',
+          message: 'Tindakan tersimpan',
+        },
+      } as any);
+
+      const result = await syncService.autoSyncActions();
+      expect(result.synced).toBe(0);
+      expect(actionQueue.getQueue()).toEqual([
+        expect.objectContaining({offline_id: 'offline-visit-ack-mismatch', retry_attempts: 1}),
+      ]);
+    });
+
+    it('mempertahankan VISIT yang ditolak CAN_NOT_NON_ACTIVE untuk diperiksa', async () => {
       actionQueue.enqueue({
         kind: 'VISIT',
         can_id: 'can_visit_2',
@@ -304,9 +338,16 @@ describe('Sync Service (sync.ts)', () => {
 
       const result = await syncService.autoSyncActions();
 
-      expect(result.synced).toBe(1);
+      expect(result.synced).toBe(0);
+      expect(result.failed).toBe(1);
       expect(actionQueue.getQueueCount()).toBe(0);
-      expect(actionQueue.getFailedPermanentCount()).toBe(0);
+      expect(actionQueue.getFailedPermanent()).toEqual([
+        expect.objectContaining({
+          kind: 'VISIT',
+          outcome: 'KOSONG',
+          error_message: 'Tindakan khusus hanya untuk NON_AKTIF',
+        }),
+      ]);
     });
 
     it('autoSync menjalankan aksi setelah antrean koleksi (badgenya ikut turun)', async () => {

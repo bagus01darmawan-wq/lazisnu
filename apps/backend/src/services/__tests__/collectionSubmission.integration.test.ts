@@ -3,6 +3,8 @@ import * as schema from '../../database/schema';
 import { submitCollection, resubmitCollection, validateAssignmentForSubmit } from '../collectionSubmission';
 import { and, eq, sql } from 'drizzle-orm';
 import { ErrorCode } from '../../utils/errorCatalog';
+import Fastify from 'fastify';
+import { collectionsRoutes } from '../../routes/mobile/collections';
 
 /**
  * RULE immutable koleksi (migration 0004) memblokir DELETE/UPDATE pada collections.
@@ -188,6 +190,71 @@ describe('Collection Submission Integration Test', () => {
     // Check DB effects (Total should be 75000)
     const can = await db.query.cans.findFirst({ where: eq(schema.cans.id, canId) });
     expect(can?.totalCollected).toBe(BigInt(75000));
+  });
+
+  it('mengakui ulang operasi koreksi yang sama tanpa menambah versi atau nominal', async () => {
+    const source = await db.query.collections.findFirst({
+      where: and(eq(schema.collections.canId, canId), eq(schema.collections.submitSequence, 2)),
+    });
+    expect(source).toBeDefined();
+    const input = {
+      collectionId: source!.id,
+      nominal: 76000,
+      alasanResubmit: 'Uji koreksi idempoten',
+      requiredOfficerId: officerId,
+      operationId: 'test-operation-sync-unique',
+    };
+    const [first, replay] = await Promise.all([
+      db.transaction(tx => resubmitCollection(tx as any, input)),
+      db.transaction(tx => resubmitCollection(tx as any, input)),
+    ]);
+    expect(first.newCollection.id).toBe(replay.newCollection.id);
+    const rows = await db.query.collections.findMany({where: eq(schema.collections.canId, canId)});
+    expect(rows.filter(row => row.submitSequence === 3)).toHaveLength(1);
+    expect((await db.query.cans.findFirst({where: eq(schema.cans.id, canId)}))?.totalCollected).toBe(BigInt(76000));
+    await expect(db.transaction(tx => resubmitCollection(tx as any, {...input, nominal: 77000})))
+      .rejects.toMatchObject({code: ErrorCode.CONFLICT});
+    await expect(db.transaction(tx => resubmitCollection(tx as any, {...input, requiredOfficerId: userId})))
+      .rejects.toMatchObject({code: ErrorCode.COLLECTION_NOT_FOUND});
+
+    const newer = await db.transaction(tx => resubmitCollection(tx as any, {
+      collectionId: first.newCollection.id,
+      nominal: 78000,
+      alasanResubmit: 'Koreksi lanjutan',
+      requiredOfficerId: officerId,
+      operationId: 'test-operation-sync-second',
+    }));
+    const retried = await db.transaction(tx => resubmitCollection(tx as any, input));
+    expect(retried.newCollection.id).toBe(first.newCollection.id);
+    expect(newer.newCollection.submitSequence).toBe(4);
+    expect((await db.query.cans.findFirst({where: eq(schema.cans.id, canId)}))?.totalCollected).toBe(BigInt(78000));
+  });
+
+  it('HTTP mengakui operasi koreksi yang sama dan menolak penggunaan ulang payload berbeda', async () => {
+    const source = await db.query.collections.findFirst({
+      where: and(eq(schema.collections.canId, canId), eq(schema.collections.submitSequence, 4)),
+    });
+    expect(source).toBeDefined();
+    const app = Fastify();
+    app.addHook('onRequest', async request => {
+      request.currentUser = {userId, officerId, role: 'PETUGAS'} as typeof request.currentUser;
+    });
+    await app.register(collectionsRoutes);
+    await app.ready();
+    try {
+      const payload = {nominal: 0, alasan_resubmit: 'Uji respons ulang', operation_id: 'http-operation-test'};
+      const url = `/collections/${source!.id}/resubmit`;
+      const first = await app.inject({method: 'POST', url, payload});
+      const replay = await app.inject({method: 'POST', url, payload});
+      expect(first.statusCode).toBe(200);
+      expect(replay.statusCode).toBe(200);
+      expect(replay.json().data.id).toBe(first.json().data.id);
+      const conflict = await app.inject({method: 'POST', url, payload: {...payload, nominal: 1}});
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json().error.code).toBe(ErrorCode.CONFLICT);
+    } finally {
+      await app.close();
+    }
   });
 
   it('should prevent resubmitting an old sequence (NOT_LATEST)', async () => {

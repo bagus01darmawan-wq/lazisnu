@@ -100,11 +100,13 @@ const DashboardScreen: React.FC = () => {
     permanentFailedCount,
     pendingCorrectionsCount,
     failedCorrectionsCount,
+    pendingActionsCount,
+    failedActionsCount,
     checkStatus,
     triggerSync,
   } = useSyncStore();
-  const totalWaiting = pendingCount + pendingCorrectionsCount;
-  const totalReview = permanentFailedCount + failedCorrectionsCount;
+  const totalWaiting = pendingCount + pendingCorrectionsCount + pendingActionsCount;
+  const totalReview = permanentFailedCount + failedCorrectionsCount + failedActionsCount;
   const totalSyncIssues = totalWaiting + totalReview;
   const [issuesVisible, setIssuesVisible] = useState(false);
   const [period, setPeriod] = useState<PeriodFilter>('today');
@@ -179,12 +181,12 @@ const DashboardScreen: React.FC = () => {
       return;
     }
     Alert.alert(
-      'Data Belum Terkirim',
-      'Penjemputan dan koreksi tetap aman tersimpan di perangkat. Aplikasi akan mencoba mengirim kembali secara otomatis.',
+      'Status Sinkronisasi',
+      `${totalWaiting} menunggu dikirim · ${totalReview} perlu diperiksa. Catatan yang perlu diperiksa tidak dikirim ulang secara otomatis.`,
       [
         {text: 'Nanti', style: 'cancel'},
         {text: 'Lihat Detail', onPress: () => setIssuesVisible(true)},
-        {text: 'Coba Kirim Lagi', onPress: () => triggerSync()},
+        ...(totalWaiting > 0 ? [{text: 'Coba Kirim Lagi', onPress: () => triggerSync()}] : []),
       ],
     );
   };
@@ -222,9 +224,9 @@ const DashboardScreen: React.FC = () => {
                 style={styles.iconButton}>
                 <Icon
                   name={
-                    permanentFailedCount || failedCorrectionsCount
+                    permanentFailedCount || failedCorrectionsCount || failedActionsCount
                       ? 'cloud-alert'
-                      : pendingCount || pendingCorrectionsCount
+                      : pendingCount || pendingCorrectionsCount || pendingActionsCount
                         ? 'cloud-sync-outline'
                         : 'cloud-check-outline'
                   }

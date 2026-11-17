@@ -74,3 +74,6 @@ apps/mobile/android/**/.cxx/
 # Local taste notes; do not commit.
 .commandcode/taste/taste.md
 .commandcode/taste/taste/taste.md
+
+# MCP local config berisi token 21st — jangan di-commit
+.mcp.json

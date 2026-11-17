@@ -10,10 +10,17 @@ import { AppError, isAppError } from '../../utils/AppError';
 import { Errors } from '../../utils/errorCatalog';
 import { correctCollection } from '../../services/collectionCorrectionService';
 
-import { validateAssignmentForSubmit, submitCollection, getLatestCollectionCondition, assertCollectedAtInWindow } from '../../services/collectionSubmission';
+import {
+  validateAssignmentForSubmit,
+  submitCollection,
+  getLatestCollectionCondition,
+  assertCollectedAtInWindow,
+  hashCollectionOperationPayload,
+} from '../../services/collectionSubmission';
 import { getPostgresError } from '../../utils/error-guards';
 import { evaluateEmptyStreakForCan } from '../../services/conditionProposalService';
 import { insertActivityLog } from '../../services/auditLogService';
+import { assertCanAccess } from '../../services/canService';
 
 type MobileHistoryCollection = {
   id: string;
@@ -71,6 +78,15 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
       const body = collectionSchema.parse(request.body);
       const user = request.currentUser!;
       const officerId = user.officerId;
+      const offlinePayloadHash = hashCollectionOperationPayload({
+        assignmentId: body.assignment_id,
+        canId: body.can_id,
+        nominal: body.nominal,
+        collectedAt: body.collected_at,
+        condition: body.condition,
+        physicalCondition: body.physical_condition,
+        visitOutcome: body.visit_outcome,
+      });
 
       if (!officerId) return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
 
@@ -79,8 +95,38 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
           where: eq(schema.collections.offlineId, body.offline_id),
         });
         if (existing) {
+          const [can, existingVisit] = await Promise.all([
+            db.query.cans.findFirst({
+              where: eq(schema.cans.id, existing.canId),
+              with: {branch: {columns: {districtId: true}}},
+              columns: {id: true, branchId: true},
+            }),
+            db.query.canVisits.findFirst({
+              where: eq(schema.canVisits.offlineId, body.offline_id),
+            }),
+          ]);
+          if (!can) return sendError(reply, 404, 'CAN_NOT_FOUND', 'Kaleng tidak ditemukan');
+          await assertCanAccess(user, can, 'Kaleng ini bukan wilayah Anda');
+          const identical =
+            existing.officerId === officerId &&
+            existing.assignmentId === body.assignment_id &&
+            existing.canId === body.can_id &&
+            Number(existing.nominal) === body.nominal &&
+            existing.offlinePayloadHash === offlinePayloadHash &&
+            existing.collectedAt.getTime() === new Date(body.collected_at).getTime() &&
+            (body.visit_outcome === 'ISI'
+              ? existingVisit?.canId === body.can_id &&
+                existingVisit.officerId === officerId &&
+                existingVisit.assignmentId === body.assignment_id &&
+                existingVisit.outcome === 'ISI' &&
+                existingVisit.visitedAt.getTime() === new Date(body.collected_at).getTime()
+              : existingVisit == null);
+          if (!identical) {
+            return sendError(reply, 409, 'OPERATION_ID_CONFLICT', 'ID operasi sudah digunakan untuk transaksi berbeda');
+          }
           return sendSuccess(reply, {
             id: existing.id,
+            offline_id: existing.offlineId,
             sync_status: 'ALREADY_SYNCED',
             message: 'Data sudah pernah di-submit',
           });
@@ -134,6 +180,7 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
           latitude: body.latitude?.toString(),
           longitude: body.longitude?.toString(),
           offlineId: body.offline_id,
+          offlinePayloadHash,
           deviceInfo: body.device_info as any,
           condition: body.condition,
           allowNonActiveRestore: body.visit_outcome === 'ISI',
@@ -143,6 +190,8 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
           await tx.insert(schema.canVisits).values({
             canId: body.can_id,
             officerId,
+            assignmentId: assignment.id,
+            offlineId: body.offline_id ?? null,
             periodYear: assignment.periodYear,
             periodMonth: assignment.periodMonth,
             purpose: 'VERIFIKASI',
@@ -297,11 +346,12 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
 
       if (!officerId) return sendError(reply, 403, 'FORBIDDEN', 'Bukan akun petugas');
 
-      const { oldCollection, newCollection } = await correctCollection(
+      const { oldCollection, newCollection, replayed } = await correctCollection(
         {
           collectionId: id,
           nominal: body.nominal,
           alasanResubmit: body.alasan_resubmit,
+          operationId: body.operation_id,
           requiredOfficerId: officerId,
         },
         {
@@ -319,7 +369,7 @@ export async function collectionsRoutes(fastify: FastifyInstance) {
 
       let whatsappStatus = 'SKIPPED';
       // Koreksi ke nominal Rp 0 juga tidak memicu WA — cukup dicatat sistem.
-      if (oldCollection.can?.ownerWhatsapp && body.nominal > 0) {
+      if (!replayed && oldCollection.can?.ownerWhatsapp && body.nominal > 0) {
         try {
           const officer = await db.query.officers.findFirst({ where: eq(schema.officers.id, officerId) });
           await sendWhatsAppNotification(

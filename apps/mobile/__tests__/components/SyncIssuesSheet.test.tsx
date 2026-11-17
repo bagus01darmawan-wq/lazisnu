@@ -216,16 +216,32 @@ describe('SyncIssuesSheet — Detail Sinkronisasi', () => {
     expect(mockRetryFailed).toHaveBeenCalledWith('o2');
   });
 
-  it('Buang Catatan pada koreksi gagal → removeFromFailedPermanent dipanggil', async () => {
+  it('meminta konfirmasi sebelum membuang catatan koreksi lokal', async () => {
+    const alertSpy = jest.spyOn(require('react-native').Alert, 'alert');
     const tree = renderSheet();
-    const btn = findText(tree, 'Buang Catatan');
-    const pressable = findPressable(btn);
+    const pressable = findPressable(findText(tree, 'Buang Catatan'));
 
     await act(async () => {
       pressable?.props?.onPress?.();
     });
 
+    expect(mockRemoveFailedCorr).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Buang Catatan?',
+      expect.stringContaining('server'),
+      expect.any(Array),
+    );
+    const buttons = alertSpy.mock.calls[0]?.[2] as {text: string; onPress?: () => void}[];
+    await act(async () => buttons.find(button => button.text === 'Ya, Buang')?.onPress?.());
     expect(mockRemoveFailedCorr).toHaveBeenCalledWith(['x1']);
+    alertSpy.mockRestore();
+  });
+
+  it('tidak menawarkan kirim semua ketika hanya ada catatan gagal', () => {
+    mockCollectionQueue.mockReturnValue([]);
+    const tree = renderSheet();
+    expect(findText(tree, 'Kirim Semua Sekarang')).toBeUndefined();
+    expect(allText(tree)).toContain('Gagal — Perlu Tindakan');
   });
 
   it('Kirim Semua Sekarang → triggerSync dipanggil', async () => {

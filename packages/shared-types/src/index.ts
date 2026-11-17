@@ -520,6 +520,8 @@ export interface Task {
   longitude?: number;
   /** Kondisi kaleng (B2): menentukan perlakuan — NON_AKTIF butuh kunjungan, bukan penjemputan. */
   condition?: CanCondition;
+  physical_condition?: CanPhysicalCondition;
+  physical_condition_source?: CanPhysicalConditionSource;
   is_active?: boolean;
   status: AssignmentStatus;
   /** PICKUP = penjemputan; VISIT = kunjungan kaleng NON_AKTIF. */
@@ -565,6 +567,8 @@ export interface VisitTask {
   latitude?: number;
   longitude?: number;
   condition: CanCondition;
+  physical_condition?: CanPhysicalCondition;
+  physical_condition_source?: CanPhysicalConditionSource;
   /** Status pelacakan aktual; jangan diasumsikan true hanya dari label NON_AKTIF. */
   is_active?: boolean;
   /**
@@ -859,6 +863,11 @@ export interface ResubmitTrackerItem {
 // Kunjungan bukan collection: tanpa nominal, tidak memengaruhi angka infak.
 export interface CanVisitHistoryItem {
   id: string;
+  /** Identitas replay offline; null pada catatan dari APK lama. */
+  offline_id?: string | null;
+  assignment_id?: string | null;
+  /** Periode assignment yang tercatat di server. */
+  period?: string;
   can_id: string;
   qr_code: string;
   owner_name: string;

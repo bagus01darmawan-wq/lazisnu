@@ -15,7 +15,9 @@ import {
   DashboardTaskItem,
   RecentCollectionSummary,
   Collection,
+  CanVisitHistoryItem,
 } from '@lazisnu/shared-types';
+import {getOfficerSuffix} from './queue';
 
 // --- Key Prefix --------------------------------------------------------------
 const KEY_DASHBOARD_TODAY_STATS = 'cache:dashboard:todayStats';
@@ -33,6 +35,14 @@ const KEY_TASKS_TOTAL_COUNT = 'cache:tasks:totalCount';
 const KEY_TASKS_STATS_PERIOD = 'cache:tasks:statsPeriod';
 const KEY_COLLECTIONS = 'cache:collections:list';
 const KEY_PERIOD_CONTEXT = 'cache:period:context';
+const getVisitHistoryKey = (period: string) => `cache:visit-history:${period}${getOfficerSuffix()}`;
+
+export interface VisitHistorySnapshot {
+  items: CanVisitHistoryItem[];
+  total: number;
+  fetchedAt: string;
+  complete: boolean;
+}
 
 // --- Helpers -----------------------------------------------------------------
 function safeGet<T>(key: string): T | null {
@@ -201,6 +211,27 @@ export const collectionsCache = {
   clear: (): void => safeDelete(KEY_COLLECTIONS),
 };
 
+// --- Visit History Cache ------------------------------------------------------
+export const visitHistoryCache = {
+  get: (period: string): VisitHistorySnapshot | null =>
+    safeGet<VisitHistorySnapshot>(getVisitHistoryKey(period)),
+
+  set: (period: string, snapshot: VisitHistorySnapshot): void =>
+    safeSet(getVisitHistoryKey(period), snapshot),
+
+  clear: (period: string): void => safeDelete(getVisitHistoryKey(period)),
+
+  clearAll: (): void => {
+    try {
+      for (const key of getOfflineStorage().getAllKeys()) {
+        if (key.startsWith('cache:visit-history:')) safeDelete(key);
+      }
+    } catch {
+      // Storage belum siap.
+    }
+  },
+};
+
 // --- Period Context Cache -----------------------------------------------------
 export const periodContextCache = {
   get: <T>(): T | null => safeGet<T>(KEY_PERIOD_CONTEXT),
@@ -213,5 +244,6 @@ export function clearAllCache(): void {
   dashboardCache.clear();
   tasksStatsCache.clear();
   collectionsCache.clear();
+  visitHistoryCache.clearAll();
   periodContextCache.clear();
 }

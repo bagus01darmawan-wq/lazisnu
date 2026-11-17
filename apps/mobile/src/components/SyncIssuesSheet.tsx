@@ -183,8 +183,21 @@ export const SyncIssuesSheet: React.FC<SyncIssuesSheetProps> = ({visible, onClos
             label: 'Buang Catatan',
             danger: true,
             onPress: () => {
-              correctionQueue.removeFromFailedPermanent([corr.correction_id]);
-              setRefreshKey(k => k + 1);
+              Alert.alert(
+                'Buang Catatan?',
+                'Periksa nominal terakhir di riwayat terlebih dahulu. Catatan ini hanya dihapus dari perangkat dan tidak mengubah data server.',
+                [
+                  {text: 'Batal', style: 'cancel'},
+                  {
+                    text: 'Ya, Buang',
+                    style: 'destructive',
+                    onPress: () => {
+                      correctionQueue.removeFromFailedPermanent([corr.correction_id]);
+                      setRefreshKey(k => k + 1);
+                    },
+                  },
+                ],
+              );
             },
           },
         ],
@@ -386,7 +399,7 @@ export const SyncIssuesSheet: React.FC<SyncIssuesSheetProps> = ({visible, onClos
             </View>
           )}
 
-          {total > 0 && (
+          {issues.pending.length > 0 && (
             <View style={styles.footer}>
               <AppButton
                 label={'Kirim Semua Sekarang'}

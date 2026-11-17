@@ -18,6 +18,20 @@ let latestStatsRequestId = 0;
 const dedupeTasksById = (tasks: Task[]): Task[] =>
   Array.from(new Map(tasks.map(task => [task.id, task])).values());
 
+function hasQueuedVisitForTask(task: Task): boolean {
+  if (task.status !== AssignmentStatus.ACTIVE) return false;
+  const actions = [...actionQueue.getQueue(), ...actionQueue.getFailedPermanent()];
+  return actions.some(action => {
+    if (action.kind !== 'VISIT') return false;
+    if (action.assignment_id && !action.assignment_id.startsWith('visit-')) {
+      return action.assignment_id === task.id && (!action.period || action.period === task.period);
+    }
+    // ID tugas tak tersedia: hanya cocokkan bila periode terbukti sama; jangan
+    // menyembunyikan tugas periode lain berdasarkan kaleng/QR yang sama.
+    return !!action.period && action.period === task.period && action.can_id === task.can_id;
+  });
+}
+
 export const reconcileTasks = (serverTasks: Task[], status: 'ACTIVE' | 'COMPLETED'): Task[] => {
   serverTasks = dedupeTasksById(serverTasks);
   const activeQueue = offlineQueue.getQueue();
@@ -29,7 +43,10 @@ export const reconcileTasks = (serverTasks: Task[], status: 'ACTIVE' | 'COMPLETE
 
   if (status === 'ACTIVE') {
     return serverTasks.filter(
-      task => task.status === AssignmentStatus.ACTIVE && !queuedIds.has(task.id),
+      task =>
+        task.status === AssignmentStatus.ACTIVE &&
+        !queuedIds.has(task.id) &&
+        !hasQueuedVisitForTask(task),
     );
   } else {
     const allCacheTasks = [...taskCache.getTasks('ACTIVE'), ...taskCache.getTasks('COMPLETED')];

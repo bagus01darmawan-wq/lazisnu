@@ -13,6 +13,7 @@ import {CanVisitOutcome} from '@lazisnu/shared-types';
 
 const getQueueKey = () => `action_queue${getOfficerSuffix()}`;
 const getFailedQueueKey = () => `action_queue_failed${getOfficerSuffix()}`;
+const getAcknowledgedKey = () => `action_queue_acknowledged_visits${getOfficerSuffix()}`;
 
 type QueueChangeListener = () => void;
 const actionChangeListeners = new Set<QueueChangeListener>();
@@ -31,6 +32,9 @@ export interface QueuedVisitAction {
   qr_code?: string;
   /** Tugas VISIT yang dikerjakan; opsional untuk data lama. */
   assignment_id?: string;
+  /** Periode assignment yang diketahui dari tugas, bukan dari waktu sinkronisasi. */
+  period?: string;
+  owner_name?: string;
   outcome: Exclude<CanVisitOutcome, 'ISI'>;
   notes?: string;
   created_at: string;
@@ -66,6 +70,16 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K>
 export type NewQueuedAction = DistributiveOmit<QueuedAction, 'offline_id'> & {
   offline_id?: string;
 };
+
+export type EnqueueVisitResult =
+  | {status: 'queued'; offline_id: string}
+  | {status: 'already-pending' | 'conflict'; existing: QueuedVisitAction};
+
+function sameVisitTask(a: QueuedVisitAction, b: QueuedVisitAction): boolean {
+  if (a.period && b.period && a.period !== b.period) return false;
+  if (a.assignment_id && b.assignment_id) return a.assignment_id === b.assignment_id;
+  return a.can_id === b.can_id;
+}
 
 function sanitizeActions(items: QueuedAction[]): QueuedAction[] {
   return items.filter(
@@ -104,6 +118,54 @@ export const actionQueue = {
     queue.push({...item, offline_id} as QueuedAction);
     getOfflineStorage().set(getQueueKey(), JSON.stringify(queue));
     notifyActionChanged();
+  },
+
+  /** Menyimpan kunjungan secara idempoten, termasuk konflik yang sudah perlu diperiksa. */
+  enqueueVisit: (item: Omit<QueuedVisitAction, 'kind' | 'offline_id'>): EnqueueVisitResult => {
+    const candidate: QueuedVisitAction = {
+      ...item,
+      kind: 'VISIT',
+      offline_id: generateOfflineId(),
+    };
+    const existing = [...actionQueue.getQueue(), ...actionQueue.getFailedPermanent()]
+      .filter((action): action is QueuedVisitAction => action.kind === 'VISIT')
+      .find(action => sameVisitTask(action, candidate));
+    if (existing) {
+      return {
+        status: existing.outcome === candidate.outcome ? 'already-pending' : 'conflict',
+        existing,
+      };
+    }
+    actionQueue.enqueue(candidate);
+    return {status: 'queued', offline_id: candidate.offline_id};
+  },
+
+  getAcknowledgedVisits: (): QueuedVisitAction[] => {
+    const data = getOfflineStorage().getString(getAcknowledgedKey());
+    if (!data) return [];
+    try {
+      const items: unknown = JSON.parse(data);
+      return Array.isArray(items)
+        ? sanitizeActions(items as QueuedAction[]).filter(
+            (item): item is QueuedVisitAction => item.kind === 'VISIT',
+          )
+        : [];
+    } catch {
+      return [];
+    }
+  },
+
+  acknowledgeVisit: (offlineId: string): boolean => {
+    const item = actionQueue.getQueue().find(
+      (action): action is QueuedVisitAction => action.kind === 'VISIT' && action.offline_id === offlineId,
+    );
+    if (!item) return false;
+    const acknowledged = actionQueue.getAcknowledgedVisits();
+    const merged = Array.from(new Map([...acknowledged, item].map(visit => [visit.offline_id, visit])).values());
+    // Persist before removing the pending item; a write failure leaves it retryable.
+    getOfflineStorage().set(getAcknowledgedKey(), JSON.stringify(merged));
+    actionQueue.dequeue([offlineId]);
+    return true;
   },
 
   dequeue: (offline_ids: string[]): void => {

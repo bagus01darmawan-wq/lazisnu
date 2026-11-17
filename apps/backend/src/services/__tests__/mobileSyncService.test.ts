@@ -1,7 +1,7 @@
 import { syncCollectionsBatch } from '../mobileSyncService';
 import { AppError } from '../../utils/AppError';
 import { db } from '../../config/database';
-import { submitCollection, validateAssignmentForSubmit } from '../collectionSubmission';
+import { submitCollection, validateAssignmentForSubmit, hashCollectionOperationPayload } from '../collectionSubmission';
 
 jest.mock('../periodState', () => ({
   resolveDisplayPeriod: jest.fn(),
@@ -19,6 +19,8 @@ jest.mock('../../config/database', () => ({
       },
       cans: { findFirst: jest.fn() },
       officers: { findFirst: jest.fn() },
+      canVisits: { findFirst: jest.fn() },
+      canStateHistory: { findFirst: jest.fn() },
     },
     transaction: jest.fn(),
   },
@@ -29,6 +31,7 @@ jest.mock('../collectionSubmission', () => ({
   submitCollection: jest.fn(),
   // C1-T2: mobileSyncService kini memanggil assertCollectedAtInWindow.
   assertCollectedAtInWindow: jest.fn(),
+  hashCollectionOperationPayload: jest.requireActual('../collectionSubmission').hashCollectionOperationPayload,
 }));
 
 const { assertCollectedAtInWindow } = jest.requireMock('../collectionSubmission') as {
@@ -231,8 +234,27 @@ describe('mobileSyncService syncCollectionsBatch', () => {
     );
   });
 
-  it('mengembalian status ALREADY_SYNCED jika offline_id sudah ada di DB', async () => {
-    (db.query.collections.findFirst as jest.Mock).mockResolvedValue({ id: 'srv-1' });
+  it('mengembalikan ALREADY_SYNCED hanya bila ID dan seluruh payload cocok', async () => {
+    (db.query.collections.findFirst as jest.Mock).mockResolvedValue({
+      id: 'srv-1',
+      officerId,
+      assignmentId: validItem.assignment_id,
+      canId: validItem.can_id,
+      nominal: '50000',
+      offlinePayloadHash: hashCollectionOperationPayload({
+        assignmentId: validItem.assignment_id,
+        canId: validItem.can_id,
+        nominal: validItem.nominal,
+        collectedAt: validItem.collected_at,
+        condition: validItem.condition,
+        physicalCondition: 'BAIK',
+      }),
+      collectedAt: new Date(validItem.collected_at),
+    });
+    (db.query.cans.findFirst as jest.Mock).mockResolvedValue({branchId: 'branch-1'});
+    (db.query.officers.findFirst as jest.Mock).mockResolvedValue({branchId: 'branch-1'});
+    (db.query.canVisits.findFirst as jest.Mock).mockResolvedValue(undefined);
+    (db.query.canStateHistory.findFirst as jest.Mock).mockResolvedValue({physicalCondition: 'BAIK'});
 
     const result = await syncCollectionsBatch([validItem], officerId, 'user-123');
 
@@ -243,6 +265,37 @@ describe('mobileSyncService syncCollectionsBatch', () => {
       offline_id: 'loc-1',
       server_id: 'srv-1',
       status: 'ALREADY_SYNCED',
+    });
+  });
+
+  it('menolak pemakaian ulang offline_id dengan payload berbeda untuk diperiksa', async () => {
+    (db.query.collections.findFirst as jest.Mock).mockResolvedValue({
+      id: 'srv-1',
+      officerId,
+      assignmentId: validItem.assignment_id,
+      canId: validItem.can_id,
+      nominal: '50000',
+      offlinePayloadHash: hashCollectionOperationPayload({
+        assignmentId: validItem.assignment_id,
+        canId: validItem.can_id,
+        nominal: validItem.nominal,
+        collectedAt: validItem.collected_at,
+        condition: validItem.condition,
+        physicalCondition: 'BAIK',
+      }),
+      collectedAt: new Date(validItem.collected_at),
+    });
+    (db.query.cans.findFirst as jest.Mock).mockResolvedValue({branchId: 'branch-1'});
+    (db.query.officers.findFirst as jest.Mock).mockResolvedValue({branchId: 'branch-1'});
+    (db.query.canVisits.findFirst as jest.Mock).mockResolvedValue(null);
+    (db.query.canStateHistory.findFirst as jest.Mock).mockResolvedValue({physicalCondition: 'BAIK'});
+
+    const result = await syncCollectionsBatch([{...validItem, nominal: 60000}], officerId, 'user-123');
+    expect(result.succeeded).toBe(0);
+    expect(result.results[0]).toMatchObject({
+      status: 'FAILED',
+      error_code: 'OPERATION_ID_CONFLICT',
+      can_retry: false,
     });
   });
 

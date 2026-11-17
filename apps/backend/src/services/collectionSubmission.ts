@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { db } from '../config/database';
 import * as schema from '../database/schema';
 import { eq, and, or, inArray, sql, ExtractTablesWithRelations } from 'drizzle-orm';
@@ -184,6 +185,7 @@ type ResubmitCollectionInput = {
   alasanResubmit: string;
   requiredOfficerId?: string;
   requiredBranchId?: string;
+  operationId?: string;
 };
 
 /**
@@ -313,6 +315,27 @@ async function assertNoExistingFirstSubmit(
  * memakai fungsi ini; gunakan resubmitCollection() agar sequence dan audit nominal
  * tetap konsisten.
  */
+export function hashCollectionOperationPayload(payload: {
+  assignmentId: string;
+  canId: string;
+  nominal: number;
+  collectedAt: Date | string;
+  condition: CanConditionValue;
+  physicalCondition: 'BAIK' | 'RUSAK' | 'HILANG';
+  visitOutcome?: 'ISI';
+}): string {
+  const canonical = JSON.stringify([
+    payload.assignmentId,
+    payload.canId,
+    payload.nominal,
+    new Date(payload.collectedAt).toISOString(),
+    payload.condition,
+    payload.physicalCondition,
+    payload.visitOutcome ?? null,
+  ]);
+  return createHash('sha256').update(canonical).digest('hex');
+}
+
 export async function submitCollection(
   tx: Transaction,
   data: {
@@ -329,6 +352,7 @@ export async function submitCollection(
     latitude?: string | null;
     longitude?: string | null;
     offlineId?: string | null;
+    offlinePayloadHash?: string | null;
     deviceInfo?: any;
     /**
      * Kondisi kaleng menurut PPK saat menjemput (halaman submit:
@@ -399,6 +423,7 @@ export async function submitCollection(
     latitude: data.latitude,
     longitude: data.longitude,
     offlineId: data.offlineId,
+    offlinePayloadHash: data.offlinePayloadHash,
     submitSequence: 1,
   }).returning();
 
@@ -495,15 +520,33 @@ export async function resubmitCollection(
     throw Errors.COLLECTION_NOT_FOUND();
   }
 
-  // Aggregate `cans` di bawah lock yang sama dengan penulis state lain.
-  await lockCanRow(tx, oldCollection.canId);
-
   if (input.requiredOfficerId && oldCollection.officerId !== input.requiredOfficerId) {
     throw Errors.COLLECTION_NOT_FOUND();
   }
 
   if (input.requiredBranchId && oldCollection.can?.branchId !== input.requiredBranchId) {
     throw Errors.FORBIDDEN();
+  }
+
+  // Serialize the operation key across cans as well as across processes.
+  if (input.operationId) {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${input.operationId}, 0))`);
+  }
+  await lockCanRow(tx, oldCollection.canId);
+
+  if (input.operationId) {
+    const previous = await tx.query.collections.findFirst({
+      where: eq(schema.collections.correctionOperationId, input.operationId),
+    });
+    if (previous) {
+      if (previous.correctionSourceId !== oldCollection.id ||
+          previous.officerId !== oldCollection.officerId ||
+          previous.nominal !== BigInt(input.nominal) ||
+          previous.alasanResubmit !== input.alasanResubmit) {
+        throw Errors.CONFLICT('Identitas koreksi sudah digunakan untuk data lain');
+      }
+      return { oldCollection, newCollection: previous, replayed: true };
+    }
   }
 
   const [latestRecord] = await tx.select({ maxSeq: sql<number>`max(${schema.collections.submitSequence})` })
@@ -542,6 +585,8 @@ export async function resubmitCollection(
     serverTimestamp: new Date(),
     submitSequence: nextSequence,
     alasanResubmit: input.alasanResubmit,
+    correctionOperationId: input.operationId ?? null,
+    correctionSourceId: input.operationId ? oldCollection.id : null,
     deviceInfo: oldCollection.deviceInfo,
     latitude: oldCollection.latitude,
     longitude: oldCollection.longitude,
@@ -554,5 +599,5 @@ export async function resubmitCollection(
     updatedAt: new Date()
   }).where(eq(schema.cans.id, oldCollection.canId));
 
-  return { oldCollection, newCollection };
+  return { oldCollection, newCollection, replayed: false };
 }

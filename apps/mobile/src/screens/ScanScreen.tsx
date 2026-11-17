@@ -172,19 +172,30 @@ const ScanScreen: React.FC = () => {
       // direplay syncService saat internet kembali (pola sama dengan skip).
       const netInfo = await NetInfo.fetch();
       const isOnline = !!(netInfo.isConnected && netInfo.isInternetReachable);
+      const createdAt = new Date().toISOString();
+      const assignmentId = scannedData.id.startsWith('visit-') ? undefined : scannedData.id;
+      const queued = actionQueue.enqueueVisit({
+        can_id: scannedData.can_id,
+        qr_code: scannedData.qr_code,
+        owner_name: scannedData.owner_name,
+        assignment_id: assignmentId,
+        period: scannedData.period,
+        outcome,
+        created_at: createdAt,
+      });
+      if (queued.status !== 'queued') {
+        Alert.alert(
+          queued.status === 'conflict' ? 'Tindakan Perlu Diperiksa' : 'Sudah Menunggu',
+          queued.status === 'conflict'
+            ? `Tindakan ${queued.existing.outcome} untuk tugas ini masih tersimpan. Selesaikan tindakan tersebut sebelum memilih hasil lain.`
+            : `Tindakan ${queued.existing.outcome} untuk tugas ini sudah tersimpan di perangkat.`,
+        );
+        return;
+      }
       if (!isOnline) {
-        actionQueue.enqueue({
-          kind: 'VISIT',
-          can_id: scannedData.can_id,
-          qr_code: scannedData.qr_code,
-          assignment_id: scannedData.id,
-          outcome,
-          created_at: new Date().toISOString(),
-        });
-        setVisiting(false);
         Alert.alert(
           'Tersimpan di Perangkat',
-          'Tindakan kaleng tercatat offline dan terkirim otomatis saat internet tersedia.',
+          'Tindakan kunjungan tersimpan di perangkat dan menunggu dikirim saat internet tersedia.',
           [{text: 'OK', onPress: handleReset}],
         );
         return;
@@ -193,15 +204,44 @@ const ScanScreen: React.FC = () => {
         scannedData.can_id,
         outcome,
         undefined,
-        scannedData.id,
+        assignmentId,
+        {
+          offline_id: queued.offline_id,
+          visited_at: createdAt,
+        },
       );
-      if (!result.success) {
-        Alert.alert('Gagal Mencatat', result.error?.message || 'Gagal menyimpan tindakan kaleng.');
+      if (result.success && result.data?.offline_id === queued.offline_id) {
+        actionQueue.acknowledgeVisit(queued.offline_id);
+        Alert.alert('Tindakan Tercatat', result.data.message || 'Tindakan kaleng tersimpan.', [
+          {text: 'OK', onPress: handleReset},
+        ]);
         return;
       }
-      Alert.alert('Tindakan Tercatat', result.data?.message || 'Tindakan kaleng tersimpan.', [
-        {text: 'OK', onPress: handleReset},
+      const stored = actionQueue.getQueue().find(item => item.offline_id === queued.offline_id);
+      const permanentCodes = new Set([
+        'ASSIGNMENT_INVALID',
+        'CAN_NOT_NON_ACTIVE',
+        'CAN_NOT_FOUND',
+        'FORBIDDEN',
+        'QR_ALREADY_SUBMITTED',
+        'VALIDATION_ERROR',
+        'NOT_FOUND',
+        'CONFLICT',
       ]);
+      const errorCode = result.error?.code || '';
+      if (!result.success && permanentCodes.has(errorCode) && stored) {
+        actionQueue.moveToFailedPermanent([
+          {...stored, error_message: result.error?.message || 'Tindakan ditolak server.'},
+        ]);
+        Alert.alert('Perlu Diperiksa', result.error?.message || 'Tindakan ditolak server.');
+        return;
+      }
+      Alert.alert(
+        'Menunggu Konfirmasi Server',
+        result.error?.message ||
+          'Tindakan masih tersimpan di perangkat. Akan dikirim ulang dengan identitas yang sama.',
+        [{text: 'OK', onPress: handleReset}],
+      );
     } catch (error) {
       Alert.alert(
         'Gagal Mencatat',
@@ -368,7 +408,7 @@ const ScanScreen: React.FC = () => {
           task={scannedData}
           onSkip={handleSkip}
           onContinue={task => navigation.navigate('Collection', {task})}
-          onVisitOutcome={outcome => void submitVisitOutcome(outcome)}
+          onVisitOutcome={outcome => submitVisitOutcome(outcome)}
           visiting={visiting}
         />
       )}

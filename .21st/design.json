@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "project": {
+    "name": "lazisnu-monorepo",
+    "productType": "nonprofit/charity management dashboard (LAZISNU)",
+    "stack": ["next@16", "react@19", "typescript", "tailwindcss@4", "pnpm-workspaces"]
+  },
+  "sources": {
+    "tokens": [
+      "apps/web/src/styles/themes.css"
+    ],
+    "components": [
+      "apps/web/src/components/ui"
+    ],
+    "assets": [
+      "assets",
+      "apps/web/public"
+    ],
+    "instructions": [
+      "apps/web/AGENTS.md",
+      "apps/web/CLAUDE.md",
+      "nopeAGENTS.md"
+    ]
+  },
+  "design": {
+    "colorMode": "dual (light surface & dark glass), 15 themes via [data-theme] on <html>",
+    "colors": {
+      "note": "Token-only palette; see apps/web/src/styles/themes.css. Canonical tokens: --canvas, --surface, --surface-ink, --glass, --glass-ink, --primary, --primary-ink, --text, --muted, --border, --danger, --accent, --hover"
+    },
+    "typography": {},
+    "spacing": {},
+    "radius": {},
+    "shadows": {},
+    "motion": {},
+    "density": "unknown"
+  },
+  "components": {
+    "installed": [
+      "Badge",
+      "Button",
+      "Card",
+      "ConfirmToast",
+      "DropdownFilter",
+      "EmptyState",
+      "FilterPills",
+      "GlassDatePicker",
+      "GlassSelect",
+      "Input",
+      "Modal",
+      "PeriodPicker",
+      "Skeleton",
+      "Table"
+    ],
+    "preferredPrimitives": [
+      "apps/web/src/components/ui (custom, token-driven; not shadcn)"
+    ],
+    "patterns": []
+  },
+  "constraints": {
+    "must": [
+      "Use theme tokens from apps/web/src/styles/themes.css (var(--token)) instead of hardcoded hex colors",
+      "Support all 15 data-theme values; never assume a single light or dark palette"
+    ],
+    "avoid": [
+      "Hardcoded hex/rgb colors in component classNames",
+      "transition-all (animate explicit properties)",
+      "outline-none without a focus-visible replacement"
+    ]
+  },
+  "decisions": [],
+  "evidence": [
+    "apps/web/src/styles/themes.css defines the token set and 15 themes",
+    "apps/web/package.json: next 16.4.1, react 19.2.4, tailwindcss 4",
+    "apps/web/src/components/ui/*.tsx are the installed primitives"
+  ],
+  "generatedAt": "2026-11-16T10:18:38.804Z"
+}

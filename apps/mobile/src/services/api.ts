@@ -715,7 +715,7 @@ export const collectionService = {
 
   resubmitCollection: async (
     id: string,
-    data: {nominal: number; alasan_resubmit: string},
+    data: {nominal: number; alasan_resubmit: string; operation_id?: string},
   ): Promise<
     ApiResponse<{id: string; submit_sequence: number; whatsapp_status: string; message: string}>
   > => {
@@ -766,12 +766,14 @@ export const collectionService = {
     outcome: CanVisitOutcome,
     notes?: string,
     assignmentId?: string,
+    operation?: {offline_id: string; visited_at: string},
   ): Promise<
     ApiResponse<{
       id: string;
       can_id: string;
       outcome: CanVisitOutcome;
       condition: string;
+      offline_id?: string | null;
       message: string;
     }>
   > => {
@@ -781,6 +783,7 @@ export const collectionService = {
         outcome,
         ...(notes ? {notes} : {}),
         ...(assignmentId ? {assignment_id: assignmentId} : {}),
+        ...(operation ? {offline_id: operation.offline_id, visited_at: operation.visited_at} : {}),
       }),
     });
   },

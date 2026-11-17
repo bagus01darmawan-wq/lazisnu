@@ -27,6 +27,8 @@ const IDS = {
   canKosong: randomUUID(),
   canReturned: randomUUID(),
   canOther: randomUUID(),
+  canOperation: randomUUID(),
+  assignmentOperation: randomUUID(),
   assignmentKosong: randomUUID(),
   assignmentReturned: randomUUID(),
   assignmentOther: randomUUID(),
@@ -135,6 +137,17 @@ describe('POST /mobile/cans/:canId/visits — tugas VISIT', () => {
         condition: 'NON_AKTIF',
         isActive: true,
       },
+      {
+        id: IDS.canOperation,
+        branchId: IDS.branch,
+        dukuhId: IDS.dukuh,
+        ownerName: 'Warga Idempoten',
+        ownerWhatsapp: `6289904${TAG}`,
+        rt: '001',
+        rw: '001',
+        condition: 'NON_AKTIF',
+        isActive: true,
+      },
     ]);
     await db.insert(schema.assignments).values([
       {
@@ -164,6 +177,15 @@ describe('POST /mobile/cans/:canId/visits — tugas VISIT', () => {
         kind: 'VISIT',
         status: 'ACTIVE',
       },
+      {
+        id: IDS.assignmentOperation,
+        canId: IDS.canOperation,
+        officerId: IDS.officer,
+        periodYear: OP.year,
+        periodMonth: OP.month,
+        kind: 'VISIT',
+        status: 'ACTIVE',
+      },
     ]);
 
     token = app.jwt.sign({
@@ -180,17 +202,18 @@ describe('POST /mobile/cans/:canId/visits — tugas VISIT', () => {
       inArray(schema.activityLogs.officerId, [IDS.officer, IDS.officerOther]),
     );
     await db.delete(schema.canVisits).where(
-      inArray(schema.canVisits.canId, [IDS.canKosong, IDS.canReturned, IDS.canOther]),
+      inArray(schema.canVisits.canId, [IDS.canKosong, IDS.canReturned, IDS.canOther, IDS.canOperation]),
     );
     await db.delete(schema.assignments).where(
       inArray(schema.assignments.id, [
         IDS.assignmentKosong,
         IDS.assignmentReturned,
         IDS.assignmentOther,
+        IDS.assignmentOperation,
       ]),
     );
     await db.delete(schema.cans).where(
-      inArray(schema.cans.id, [IDS.canKosong, IDS.canReturned, IDS.canOther]),
+      inArray(schema.cans.id, [IDS.canKosong, IDS.canReturned, IDS.canOther, IDS.canOperation]),
     );
     await db.delete(schema.officers).where(
       inArray(schema.officers.id, [IDS.officer, IDS.officerOther]),
@@ -253,6 +276,40 @@ describe('POST /mobile/cans/:canId/visits — tugas VISIT', () => {
     expect(can?.condition).toBe('DIKEMBALIKAN');
     expect(can?.isActive).toBe(false);
     expect(assignment?.status).toBe('COMPLETED');
+  });
+
+  it('replay bersamaan dengan ID sama hanya mencatat satu kunjungan dan memberi ACK identitas yang sama', async () => {
+    const app = await getApp();
+    const payload = {
+      outcome: 'KOSONG',
+      assignment_id: IDS.assignmentOperation,
+      offline_id: `visit-${TAG}-operation-1`,
+      visited_at: '2026-11-17T06:30:00.000Z',
+    };
+    const request = () => app.inject({
+      method: 'POST',
+      url: `/v1/mobile/cans/${IDS.canOperation}/visits`,
+      headers: { authorization: `Bearer ${token}` },
+      payload,
+    });
+
+    const responses = await Promise.all([request(), request()]);
+    expect(responses.map(response => response.statusCode).sort()).toEqual([200, 201]);
+    for (const response of responses) {
+      expect(response.json().data.offline_id).toBe(payload.offline_id);
+    }
+    const visits = await db.select().from(schema.canVisits).where(eq(schema.canVisits.canId, IDS.canOperation));
+    expect(visits).toHaveLength(1);
+
+    const conflict = await app.inject({
+      method: 'POST',
+      url: `/v1/mobile/cans/${IDS.canOperation}/visits`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {...payload, outcome: 'DIKEMBALIKAN'},
+    });
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json().error.code).toBe('OPERATION_ID_CONFLICT');
+    expect(await db.select().from(schema.canVisits).where(eq(schema.canVisits.canId, IDS.canOperation))).toHaveLength(1);
   });
 
   it('menolak assignment_id milik petugas lain', async () => {

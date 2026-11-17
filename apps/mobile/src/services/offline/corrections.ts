@@ -9,10 +9,8 @@ import {generateOfflineId, getOfficerSuffix} from './queue';
  * pada record synced memerlukan audit trail di server (alasan_resubmit), sehingga
  * saat offline niat koreksi disimpan lokal dan dibuang ke server saat online.
  *
- * Batasan v1 (dokumentasi standar Bab offline-first): endpoint resubmit server
- * tidak idempoten — jika request terkirim tapi respons timeout, retry manual
- * berpotensi menghasilkan dua baris koreksi. Flush hanya auto-retry pada
- * kegagalan jaringan yang pasti; lihat sync.ts flushCorrections().
+ * correction_id adalah identitas operasi yang stabil pada setiap retry.
+ * Server yang sudah mendukung operation_id dapat mengenali pengiriman ulang.
  */
 
 export interface QueuedCorrection {
@@ -24,6 +22,7 @@ export interface QueuedCorrection {
   alasan_resubmit: string;
   created_at: string;
   retry_attempts?: number;
+  delivery_started?: boolean;
   next_retry_at?: string;
   error_type?: 'VALIDATION' | 'SERVER' | 'NOT_LATEST';
   can_retry?: boolean;
@@ -103,6 +102,10 @@ export const correctionQueue = {
     const queue = correctionQueue.getQueue();
     const existingIdx = queue.findIndex(entry => entry.collection_id === full.collection_id);
     const collapsed = existingIdx !== -1;
+    const existing = queue[existingIdx];
+    if (existing && (existing.delivery_started || (existing.retry_attempts || 0) > 0)) {
+      return {queued: false, collapsed: false, correction_id: full.correction_id};
+    }
     if (collapsed) {
       queue.splice(existingIdx, 1, full);
     } else {
@@ -129,6 +132,16 @@ export const correctionQueue = {
   },
 
   getQueueCount: (): number => correctionQueue.getQueue().length,
+
+  markSending: (correctionId: string): boolean => {
+    const queue = correctionQueue.getQueue();
+    const item = queue.find(entry => entry.correction_id === correctionId);
+    if (!item) return false;
+    item.delivery_started = true;
+    getOfflineStorage().set(getCorrectionQueueKey(), JSON.stringify(queue));
+    notifyCorrectionsChanged();
+    return true;
+  },
 
   getRetryableCorrections: (): QueuedCorrection[] => {
     const now = Date.now();

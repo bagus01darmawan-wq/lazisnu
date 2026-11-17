@@ -95,6 +95,17 @@ describe('correctionQueue (corrections.ts)', () => {
       expect(correctionQueue.getQueueCount()).toBe(0);
     });
 
+    it('tidak menimpa koreksi yang sudah mulai dikirim', () => {
+      const initial = correctionQueue.enqueue(makeCorrection('server-1'));
+      expect(correctionQueue.markSending(initial.correction_id)).toBe(true);
+      const second = correctionQueue.enqueue(makeCorrection('server-1', {
+        correction_id: 'corr-second', nominal_baru: 80000,
+      }));
+      expect(second.queued).toBe(false);
+      expect(first(correctionQueue.getQueue()).correction_id).toBe(initial.correction_id);
+      expect(first(correctionQueue.getQueue()).nominal_baru).toBe(75000);
+    });
+
     it('collapse: koreksi kedua untuk collection_id sama menimpa yang lama', () => {
       correctionQueue.enqueue({
         collection_id: 'server-1',
@@ -194,6 +205,90 @@ describe('flush koreksi (sync.ts)', () => {
     });
   });
 
+  it('dua sinkronisasi bersamaan hanya mengirim satu koreksi', async () => {
+    correctionQueue.enqueue(makeCorrection('server-1'));
+    let releaseNetwork!: (value: {isConnected: boolean; isInternetReachable: boolean}) => void;
+    const network = new Promise<{isConnected: boolean; isInternetReachable: boolean}>(resolve => {
+      releaseNetwork = resolve;
+    });
+    (NetInfo.fetch as jest.Mock).mockReturnValue(network);
+    const resubmitSpy = jest
+      .spyOn(collectionService, 'resubmitCollection')
+      .mockResolvedValue({success: true, data: {id: 'new-row'}} as any);
+
+    const firstSync = syncService.autoSync();
+    const secondSync = syncService.autoSync();
+    releaseNetwork({isConnected: true, isInternetReachable: true});
+    await Promise.all([firstSync, secondSync]);
+
+    expect(resubmitSpy).toHaveBeenCalledTimes(1);
+    expect(correctionQueue.getQueueCount()).toBe(0);
+    expect(correctionQueue.getFailedPermanentCount()).toBe(0);
+  });
+
+  it('autoSync dan flushCorrections berbagi kunci sebelum memeriksa jaringan', async () => {
+    correctionQueue.enqueue(makeCorrection('server-1'));
+    let releaseNetwork!: (value: {isConnected: boolean; isInternetReachable: boolean}) => void;
+    (NetInfo.fetch as jest.Mock).mockReturnValue(
+      new Promise(resolve => {
+        releaseNetwork = resolve;
+      }),
+    );
+    const resubmitSpy = jest
+      .spyOn(collectionService, 'resubmitCollection')
+      .mockResolvedValue({success: true, data: {id: 'new-row'}} as any);
+    const auto = syncService.autoSync();
+    const flush = syncService.flushCorrections();
+    releaseNetwork({isConnected: true, isInternetReachable: true});
+    await Promise.all([auto, flush]);
+    expect(resubmitSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('dua flush koreksi bersamaan hanya mengirim satu koreksi', async () => {
+    correctionQueue.enqueue(makeCorrection('server-1'));
+    let releaseNetwork!: (value: {isConnected: boolean; isInternetReachable: boolean}) => void;
+    (NetInfo.fetch as jest.Mock).mockReturnValue(
+      new Promise(resolve => {
+        releaseNetwork = resolve;
+      }),
+    );
+    const resubmitSpy = jest
+      .spyOn(collectionService, 'resubmitCollection')
+      .mockResolvedValue({success: true, data: {id: 'new-row'}} as any);
+    const firstFlush = syncService.flushCorrections();
+    const secondFlush = syncService.flushCorrections();
+    releaseNetwork({isConnected: true, isInternetReachable: true});
+    await Promise.all([firstFlush, secondFlush]);
+    expect(resubmitSpy).toHaveBeenCalledTimes(1);
+    expect(correctionQueue.getFailedPermanentCount()).toBe(0);
+  });
+
+  it('melepaskan kunci setelah pemeriksaan menunjukkan perangkat offline', async () => {
+    (NetInfo.fetch as jest.Mock).mockResolvedValueOnce({
+      isConnected: false,
+      isInternetReachable: false,
+    });
+    const offline = await syncService.autoSync();
+    expect(offline.error).toBe('NO_NETWORK');
+    (NetInfo.fetch as jest.Mock).mockResolvedValueOnce({
+      isConnected: true,
+      isInternetReachable: true,
+    });
+    const online = await syncService.autoSync();
+    expect(online.error).not.toBe('SYNC_IN_PROGRESS');
+  });
+
+  it('melepaskan kunci setelah pemeriksaan jaringan gagal', async () => {
+    (NetInfo.fetch as jest.Mock).mockRejectedValueOnce(new Error('network unavailable'));
+    await expect(syncService.autoSync()).rejects.toThrow('network unavailable');
+    (NetInfo.fetch as jest.Mock).mockResolvedValueOnce({
+      isConnected: true,
+      isInternetReachable: true,
+    });
+    const result = await syncService.autoSync();
+    expect(result.error).not.toBe('SYNC_IN_PROGRESS');
+  });
+
   it('koreksi sukses didequeue dan dilaporkan di corrections_synced', async () => {
     correctionQueue.enqueue(makeCorrection('server-1'));
     const resubmitSpy = jest
@@ -205,6 +300,7 @@ describe('flush koreksi (sync.ts)', () => {
     expect(resubmitSpy).toHaveBeenCalledWith('server-1', {
       nominal: 75000,
       alasan_resubmit: 'salah input nominal sebelumnya',
+      operation_id: 'corr-server-1',
     });
     expect(result.corrections_synced).toBe(1);
     expect(correctionQueue.getQueueCount()).toBe(0);
@@ -291,6 +387,26 @@ describe('integrasi koreksi offline dengan store riwayat', () => {
     const item = useCollectionsStore.getState().collections.find(c => c.id === 'server-1');
     expect(item?.nominal).toBe(75000);
     expect(item?.pending_correction).toBe(true);
+  });
+
+  it('respons online hilang menyimpan ID operasi yang sama untuk percobaan ulang', async () => {
+    (NetInfo.fetch as jest.Mock).mockResolvedValue({isConnected: true, isInternetReachable: true});
+    collectionsCache.set([makeServerCollection()]);
+    const resubmit = jest.spyOn(collectionService, 'resubmitCollection')
+      .mockResolvedValueOnce({success: false, error: {code: 'NETWORK_ERROR', message: 'timeout'}} as any)
+      .mockResolvedValueOnce({success: true, data: {id: 'new-row'}} as any);
+    const result = await useCollectionsStore.getState().resubmitCollection('server-1', {
+      nominal: 75000,
+      alasan_resubmit: 'salah input nominal sebelumnya',
+      nominal_lama: 50000,
+    });
+    expect(result.queued).toBe(true);
+    const sentId = resubmit.mock.calls[0]?.[1].operation_id;
+    expect(sentId).toBeTruthy();
+    expect(first(correctionQueue.getQueue()).correction_id).toBe(sentId);
+    await syncService.autoSync();
+    expect(resubmit.mock.calls[1]?.[1].operation_id).toBe(sentId);
+    expect(correctionQueue.getQueueCount()).toBe(0);
   });
 
   it('koreksi beruntun offline mempertahankan nominal_lama server asli', async () => {

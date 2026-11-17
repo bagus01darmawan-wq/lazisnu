@@ -37,11 +37,14 @@ const TasksScreen: React.FC = () => {
     permanentFailedCount,
     pendingCorrectionsCount,
     failedCorrectionsCount,
+    pendingActionsCount,
+    failedActionsCount,
     checkStatus,
     triggerSync,
   } = useSyncStore();
   const totalSyncIssues =
-    pendingCount + permanentFailedCount + pendingCorrectionsCount + failedCorrectionsCount;
+    pendingCount + permanentFailedCount + pendingCorrectionsCount + failedCorrectionsCount +
+    pendingActionsCount + failedActionsCount;
   const {
     tasks,
     fetchTasks,
@@ -209,22 +212,24 @@ const TasksScreen: React.FC = () => {
             disabled={!totalSyncIssues}
             activeOpacity={totalSyncIssues ? 0.8 : 1}
             onPress={() => {
+              const waiting = pendingCount + pendingCorrectionsCount + pendingActionsCount;
+              const review = permanentFailedCount + failedCorrectionsCount + failedActionsCount;
               Alert.alert(
-                'Data Belum Terkirim',
-                'Penjemputan dan koreksi tetap aman tersimpan di perangkat. Aplikasi akan mencoba mengirim kembali secara otomatis.',
+                'Status Sinkronisasi',
+                `${waiting} menunggu dikirim · ${review} perlu diperiksa. Catatan yang perlu diperiksa tidak dikirim ulang secara otomatis.`,
                 [
                   {text: 'Nanti', style: 'cancel'},
                   {text: 'Lihat Detail', onPress: () => setIssuesVisible(true)},
-                  {text: 'Coba Kirim Lagi', onPress: () => triggerSync()},
+                  ...(waiting > 0 ? [{text: 'Coba Kirim Lagi', onPress: () => triggerSync()}] : []),
                 ],
               );
             }}
             style={styles.iconButton}>
             <Icon
               name={
-                permanentFailedCount || failedCorrectionsCount
+                permanentFailedCount || failedCorrectionsCount || failedActionsCount
                   ? 'cloud-alert'
-                  : pendingCount || pendingCorrectionsCount
+                  : pendingCount || pendingCorrectionsCount || pendingActionsCount
                     ? 'cloud-sync-outline'
                     : 'cloud-check-outline'
               }

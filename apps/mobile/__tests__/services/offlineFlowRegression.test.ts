@@ -2,14 +2,17 @@ import NetInfo from '@react-native-community/netinfo';
 import {AssignmentStatus, CanCondition, Collection, SyncStatus, Task} from '@lazisnu/shared-types';
 import {getOfflineStorage, initializeOfflineStorage} from '../../src/services/offline/mmkv';
 import {offlineQueue, QueuedCollection} from '../../src/services/offline/queue';
+import {correctionQueue} from '../../src/services/offline/corrections';
 import {taskCache} from '../../src/services/offline/tasks';
-import {dashboardCache} from '../../src/services/offline/cache';
+import {actionQueue} from '../../src/services/offline/actionQueue';
+import {dashboardCache, visitHistoryCache} from '../../src/services/offline/cache';
 import {collectionService, dashboardService, tasksService} from '../../src/services/api';
 import {syncService} from '../../src/services/offline/sync';
 import {useSyncStore, getTotalSyncIssueCount} from '../../src/stores/useSyncStore';
 import {mergeCollectionsWithQueues, useCollectionsStore} from '../../src/stores/useCollectionStore';
-import {useTasksStore} from '../../src/stores/useTasksStore';
+import {reconcileTasks, useTasksStore} from '../../src/stores/useTasksStore';
 import {useDashboardStore} from '../../src/stores/useDashboardStore';
+import {useAuthStore} from '../../src/stores/useAuthStore';
 import {updatePendingCollectionNominal} from '../../src/screens/HistoryScreen';
 import api from '../../src/services/api';
 
@@ -124,6 +127,39 @@ describe('offline collection regression', () => {
     });
   });
 
+  it('Rp9 dikoreksi Rp8 sebelum sync lalu Rp7 sesudah sync tanpa gagal palsu', async () => {
+    const item = {...makeQueueItem('offline-repro', 'assignment-repro'), nominal: 9};
+    offlineQueue.enqueue(item);
+    expect(updatePendingCollectionNominal(item.offline_id, 8)).toBe(true);
+    const batch = jest.spyOn(collectionService, 'batchSubmit').mockResolvedValueOnce({
+      success: true,
+      data: {results: [{offline_id: item.offline_id, status: 'COMPLETED'}]},
+    } as any);
+    await syncService.autoSync();
+    expect(batch).toHaveBeenCalledWith([expect.objectContaining({nominal: 8})]);
+    expect(offlineQueue.getQueueCount()).toBe(0);
+
+    correctionQueue.enqueue({
+      collection_id: 'server-rp8',
+      nominal_lama: 8,
+      nominal_baru: 7,
+      alasan_resubmit: 'salah nominal',
+    });
+    const resubmit = jest.spyOn(collectionService, 'resubmitCollection').mockResolvedValue({
+      success: true,
+      data: {id: 'server-rp7'},
+    } as any);
+    await Promise.all([syncService.autoSync(), syncService.autoSync()]);
+    expect(resubmit).toHaveBeenCalledTimes(1);
+    expect(resubmit).toHaveBeenCalledWith('server-rp8', {
+      nominal: 7,
+      alasan_resubmit: 'salah nominal',
+      operation_id: expect.any(String),
+    });
+    expect(correctionQueue.getQueueCount()).toBe(0);
+    expect(correctionQueue.getFailedPermanentCount()).toBe(0);
+  });
+
   it('memisahkan cache ACTIVE/COMPLETED dan memindahkan task secara lokal', () => {
     const activeTasks = Array.from({length: 30}, (_, index) => makeTask(`assignment-${index + 1}`));
     const completed = makeTask('completed-1', AssignmentStatus.COMPLETED);
@@ -138,6 +174,25 @@ describe('offline collection regression', () => {
     expect(taskCache.getTasks('COMPLETED').map(task => task.id)).toEqual(
       expect.arrayContaining(['assignment-1', 'completed-1']),
     );
+  });
+
+  it('menyembunyikan tugas VISIT pending hanya untuk assignment dan periode yang sama', () => {
+    const samePeriod = makeTask('11111111-1111-4111-8111-111111111111');
+    const otherPeriod = {...samePeriod, id: 'other-period', period: '2026-08'};
+    const otherCanAssignment = {...samePeriod, id: 'same-can-other-assignment'};
+    actionQueue.enqueueVisit({
+      can_id: samePeriod.can_id,
+      qr_code: samePeriod.qr_code,
+      owner_name: samePeriod.owner_name,
+      assignment_id: samePeriod.id,
+      period: samePeriod.period,
+      outcome: 'KOSONG',
+      created_at: '2026-07-15T02:00:00.000Z',
+    });
+
+    expect(
+      reconcileTasks([samePeriod, otherPeriod, otherCanAssignment], 'ACTIVE').map(t => t.id),
+    ).toEqual(['other-period', 'same-can-other-assignment']);
   });
 
   it('fetch online menyimpan semua task dan mempertahankan task queue dari overwrite', async () => {
@@ -248,19 +303,35 @@ describe('offline collection regression', () => {
 
     offlineQueue.enqueue(first);
     offlineQueue.enqueue(second);
+    const visit = actionQueue.enqueueVisit({
+      can_id: 'can-visit-badge',
+      outcome: 'KOSONG',
+      period: '2026-07',
+      created_at: '2026-07-15T02:00:00.000Z',
+    });
     expect(useSyncStore.getState().pendingCount).toBe(2);
+    expect(useSyncStore.getState().pendingActionsCount).toBe(1);
+    expect(getTotalSyncIssueCount()).toBe(3);
 
     offlineQueue.moveToFailedPermanent([second]);
     expect(useSyncStore.getState().pendingCount).toBe(1);
     expect(useSyncStore.getState().permanentFailedCount).toBe(1);
-    expect(getTotalSyncIssueCount()).toBe(2);
+    expect(getTotalSyncIssueCount()).toBe(3);
 
     offlineQueue.dequeue([first.offline_id]);
     expect(useSyncStore.getState().pendingCount).toBe(0);
-    expect(getTotalSyncIssueCount()).toBe(1);
+    expect(getTotalSyncIssueCount()).toBe(2);
+
+    if (visit.status !== 'queued') throw new Error('Aksi kunjungan tidak tersimpan');
+    actionQueue.moveToFailedPermanent([actionQueue.getQueue()[0]!]);
+    expect(useSyncStore.getState().pendingActionsCount).toBe(0);
+    expect(useSyncStore.getState().failedActionsCount).toBe(1);
+    expect(getTotalSyncIssueCount()).toBe(2);
 
     offlineQueue.removeFromFailedPermanent([second.offline_id]);
     expect(useSyncStore.getState().permanentFailedCount).toBe(0);
+    actionQueue.removeFromFailedPermanent([visit.offline_id]);
+    expect(useSyncStore.getState().failedActionsCount).toBe(0);
     expect(getTotalSyncIssueCount()).toBe(0);
   });
 
@@ -315,6 +386,48 @@ describe('offline collection regression', () => {
     useDashboardStore.setState({todayStats: null});
     await useDashboardStore.getState().fetchDashboard();
     expect(useDashboardStore.getState().todayStats?.collected).toBe(2);
+  });
+
+  it('menyimpan snapshot riwayat kunjungan terpisah per periode beserta kelengkapannya', () => {
+    const snapshot = {
+      items: [
+        {
+          id: 'visit-history-1',
+          can_id: 'can-1',
+          qr_code: 'QR-1',
+          owner_name: 'Donatur 1',
+          purpose: 'VERIFIKASI' as const,
+          outcome: 'KOSONG' as const,
+          condition: CanCondition.NON_AKTIF,
+          visited_at: '2026-07-15T02:00:00.000Z',
+        },
+      ],
+      total: 3,
+      fetchedAt: '2026-07-15T03:00:00.000Z',
+      complete: false,
+    };
+    visitHistoryCache.set('2026-07', snapshot);
+
+    expect(visitHistoryCache.get('2026-07')).toEqual(snapshot);
+    expect(visitHistoryCache.get('2026-08')).toBeNull();
+    expect(visitHistoryCache.get('2026-07')?.complete).toBe(false);
+  });
+
+  it('memisahkan cache riwayat kunjungan per akun', () => {
+    const originalUser = useAuthStore.getState().user;
+    const snapshot = {
+      items: [],
+      total: 0,
+      fetchedAt: '2026-07-15T03:00:00.000Z',
+      complete: true,
+    };
+    useAuthStore.setState({user: {id: 'officer-cache-a'} as any});
+    visitHistoryCache.set('2026-07', snapshot);
+    useAuthStore.setState({user: {id: 'officer-cache-b'} as any});
+    expect(visitHistoryCache.get('2026-07')).toBeNull();
+    useAuthStore.setState({user: {id: 'officer-cache-a'} as any});
+    expect(visitHistoryCache.get('2026-07')).toEqual(snapshot);
+    useAuthStore.setState({user: originalUser});
   });
 
   it('mengabaikan cache dashboard lama yang mungkin sudah tercampur queue', async () => {

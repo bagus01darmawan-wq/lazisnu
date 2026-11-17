@@ -320,6 +320,8 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           latitude: c.latitude,
           longitude: c.longitude,
           condition: c.condition,
+          physical_condition: c.physicalCondition,
+          physical_condition_source: c.physicalConditionSource,
           is_active: c.isActive,
           assignment_id: assignment?.id ?? null,
           assignment_status: assignment?.status ?? null,
@@ -519,7 +521,7 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           where: whereClause,
           with: {
             can: {
-              columns: { id: true, qrCode: true, ownerName: true, ownerPhone: true, ownerAddress: true, dukuh: true, rt: true, rw: true, latitude: true, longitude: true, condition: true, isActive: true },
+              columns: { id: true, qrCode: true, ownerName: true, ownerPhone: true, ownerAddress: true, dukuh: true, rt: true, rw: true, latitude: true, longitude: true, condition: true, physicalCondition: true, physicalConditionSource: true, isActive: true },
               with: {
                 visits: {
                   columns: { id: true, purpose: true, outcome: true, condition: true, receivedAt: true, visitedAt: true },
@@ -578,6 +580,8 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         longitude: a.can.longitude,
         kind: a.kind,
         condition: a.can.condition,
+        physical_condition: a.can.physicalCondition,
+        physical_condition_source: a.can.physicalConditionSource,
         is_active: a.can.isActive,
         last_visit: a.can.visits[0]?.visitedAt ?? null,
         last_visit_purpose: a.can.visits[0]?.purpose ?? null,
@@ -847,6 +851,8 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         status: activeAssignment.status,
         kind: activeAssignment.kind,
         condition: can.condition,
+        physical_condition: can.physicalCondition,
+        physical_condition_source: can.physicalConditionSource,
         assigned_at: activeAssignment.assignedAt,
         period: verdict.period,
         // C1-T2: badge Toleransi (chip periode di HP pada T9) + countdown.
@@ -1150,6 +1156,9 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       return sendSuccess(reply, {
         items: rows.map((v) => ({
           id: v.id,
+          offline_id: v.offlineId,
+          assignment_id: v.assignmentId,
+          period: `${v.periodYear}-${String(v.periodMonth).padStart(2, '0')}`,
           can_id: v.canId,
           qr_code: v.can?.qrCode ?? '',
           owner_name: v.can?.ownerName ?? '',
@@ -1196,12 +1205,41 @@ export async function tasksRoutes(fastify: FastifyInstance) {
       if (!can) return sendError(reply, 404, 'CAN_NOT_FOUND', 'Kaleng tidak ditemukan');
       await assertCanAccess(user, can, 'Kaleng ini bukan wilayah Anda');
 
+      const visitedAt = body.visited_at ? new Date(body.visited_at) : new Date();
+      const replayOperation = (existing: typeof schema.canVisits.$inferSelect) => {
+        const identical =
+          existing.canId === canId &&
+          existing.officerId === officerId &&
+          (!body.assignment_id || existing.assignmentId === body.assignment_id) &&
+          existing.outcome === body.outcome &&
+          existing.condition === (body.condition ?? null) &&
+          existing.notes === (body.notes ?? null) &&
+          existing.visitedAt.getTime() === visitedAt.getTime();
+        if (!identical) {
+          return sendError(reply, 409, 'OPERATION_ID_CONFLICT', 'ID tindakan sudah digunakan untuk isi yang berbeda');
+        }
+        return sendSuccess(reply, {
+          id: existing.id,
+          can_id: canId,
+          outcome: existing.outcome,
+          visited_at: existing.visitedAt,
+          condition: existing.condition ?? can.condition,
+          offline_id: existing.offlineId,
+          message: 'Tindakan yang sama sudah diterima server',
+        }, 200);
+      };
+      if (body.offline_id) {
+        const existing = await db.query.canVisits.findFirst({
+          where: eq(schema.canVisits.offlineId, body.offline_id),
+        });
+        if (existing) return replayOperation(existing);
+      }
+
       const current = can.condition as CanConditionValue;
       if (current !== 'NON_AKTIF') {
         return sendError(reply, 409, 'CAN_NOT_NON_ACTIVE', 'Tindakan khusus hanya tersedia untuk kaleng NON_AKTIF');
       }
       const resolution = resolveNonActiveVisit(body.outcome, body.condition);
-      const visitedAt = body.visited_at ? new Date(body.visited_at) : new Date();
 
       // Tugas VISIT milik petugas ini. APK baru mengirim assignment_id;
       // APK lama tidak, jadi fallback ke VISIT ACTIVE pada display_period.
@@ -1220,6 +1258,12 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         });
         targetAssignment = found ?? null;
         if (!targetAssignment) {
+          if (body.offline_id) {
+            const committed = await db.query.canVisits.findFirst({
+              where: eq(schema.canVisits.offlineId, body.offline_id),
+            });
+            if (committed) return replayOperation(committed);
+          }
           return sendError(reply, 403, 'ASSIGNMENT_INVALID', 'Tugas kunjungan tidak valid atau bukan milik Anda');
         }
         visitPeriod = { year: targetAssignment.periodYear, month: targetAssignment.periodMonth };
@@ -1241,9 +1285,15 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         }
       }
 
-      const [visit] = await db.transaction(async (tx) => {
+      const transactionResult = await db.transaction(async (tx) => {
         // Kunci baris kaleng: dua tindakan bersamaan tidak boleh saling menimpa.
         const locked = await lockCanRow(tx, canId);
+        if (body.offline_id) {
+          const existing = await tx.query.canVisits.findFirst({
+            where: eq(schema.canVisits.offlineId, body.offline_id),
+          });
+          if (existing) return {visit: existing, replayed: true};
+        }
         if (locked.condition !== 'NON_AKTIF') {
           throw new AppError('CAN_NOT_NON_ACTIVE', 'Tindakan khusus hanya tersedia untuk kaleng NON_AKTIF', 409);
         }
@@ -1263,6 +1313,8 @@ export async function tasksRoutes(fastify: FastifyInstance) {
         const inserted = await tx.insert(schema.canVisits).values({
           canId,
           officerId,
+          assignmentId: targetAssignment?.id ?? null,
+          offlineId: body.offline_id ?? null,
           periodYear: visitPeriod.year,
           periodMonth: visitPeriod.month,
           purpose: 'VERIFIKASI',
@@ -1328,15 +1380,18 @@ export async function tasksRoutes(fastify: FastifyInstance) {
           ipAddress: 'can-visit',
           userAgent: null,
         }, tx);
-        return inserted;
+        return {visit: inserted[0]!, replayed: false};
       });
 
+      if (transactionResult.replayed) return replayOperation(transactionResult.visit);
+      const visit = transactionResult.visit;
       return sendSuccess(reply, {
         id: visit.id,
         can_id: canId,
         outcome: body.outcome,
         visited_at: visit.visitedAt,
         condition: resolution.condition,
+        offline_id: visit.offlineId,
         message: resolution.condition === 'DIKEMBALIKAN'
           ? 'Kaleng dikembalikan dan menunggu penerimaan admin'
           : 'Tindakan NON_AKTIF berhasil dicatat',

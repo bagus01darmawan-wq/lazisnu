@@ -155,6 +155,27 @@
       "when": 1794700800000,
       "tag": "0021_can_state_history_task_period",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1794900000000,
+      "tag": "0022_correction_operation_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1795000000000,
+      "tag": "0023_can_visit_operation_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1795100000000,
+      "tag": "0024_collection_offline_payload_hash",
+      "breakpoints": true
     }
   ]
 }

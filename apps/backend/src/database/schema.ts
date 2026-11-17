@@ -260,10 +260,14 @@ export const collections = pgTable('collections', {
   // specific logic from GEMINI.md
   submitSequence: integer('submit_sequence').default(1).notNull(),
   alasanResubmit: text('alasan_resubmit'),
+  correctionOperationId: varchar('correction_operation_id', { length: 100 }),
+  correctionSourceId: uuid('correction_source_id'),
+  offlinePayloadHash: varchar('offline_payload_hash', { length: 64 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => ({
   collectionVersionUnq: uniqueIndex('collection_assignment_can_sequence_unq').on(t.assignmentId, t.canId, t.submitSequence),
+  correctionOperationUnq: uniqueIndex('collections_correction_operation_unq').on(t.correctionOperationId),
   collectionsOfficerStatusCollectedIdx: index('collections_officer_status_collected_idx').on(t.officerId, t.syncStatus, t.collectedAt),
 }));
 
@@ -304,6 +308,9 @@ export const canVisits = pgTable('can_visits', {
   id: uuid('id').primaryKey().defaultRandom(),
   canId: uuid('can_id').references(() => cans.id, { onDelete: 'cascade' }).notNull(),
   officerId: uuid('officer_id').references(() => officers.id).notNull(),
+  assignmentId: uuid('assignment_id').references(() => assignments.id, { onDelete: 'set null' }),
+  /** Identitas operasi offline untuk ACK idempoten; NULL untuk APK lama. */
+  offlineId: varchar('offline_id', { length: 100 }),
   // Periode tugas, bukan bulan kalender saat kunjungan disinkronkan.
   // Diisi dari periode assignment, atau display period untuk kunjungan tanpa tugas.
   periodYear: integer('period_year').notNull(),
@@ -322,6 +329,7 @@ export const canVisits = pgTable('can_visits', {
 }, (t) => ({
   visitsCanVisitedIdx: index('can_visits_can_visited_idx').on(t.canId, t.visitedAt),
   visitsOfficerPeriodIdx: index('can_visits_officer_period_idx').on(t.officerId, t.periodYear, t.periodMonth),
+  visitsOfflineIdUnq: uniqueIndex('can_visits_offline_id_unq').on(t.offlineId),
 }));
 
 // ============================================================================

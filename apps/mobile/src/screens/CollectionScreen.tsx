@@ -1,7 +1,8 @@
-import React, {useState} from 'react';
+import React, {useRef, useState} from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -25,14 +26,32 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
   const {task} = route.params;
   const {submitCollection, isSubmitting, reset} = useCollectionStore();
   const [nominal, setNominal] = useState('');
+  const lastConditionIsTrusted =
+    task.physical_condition_source === 'OBSERVED' && task.physical_condition !== undefined;
+  const initialCondition = lastConditionIsTrusted
+    ? task.physical_condition === 'RUSAK'
+      ? CanCondition.RUSAK
+      : task.physical_condition === 'HILANG'
+        ? CanCondition.HILANG
+        : CanCondition.AKTIF
+    : CanCondition.AKTIF;
+  const lastConditionLabel =
+    task.physical_condition === 'RUSAK'
+      ? 'Rusak'
+      : task.physical_condition === 'HILANG'
+        ? 'Hilang'
+        : GOOD_CAN_CONDITION_LABEL;
   const [condition, setCondition] = useState<
     CanCondition.AKTIF | CanCondition.RUSAK | CanCondition.HILANG
-  >(
-    task.condition === CanCondition.RUSAK || task.condition === CanCondition.HILANG
-      ? task.condition
-      : CanCondition.AKTIF,
-  );
+  >(initialCondition);
+  const [showConditionConfirmation, setShowConditionConfirmation] = useState(false);
+  const [pendingNominal, setPendingNominal] = useState<number | null>(null);
+  const confirmationSubmitted = useRef(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const isVisitCollection =
+    task.kind === 'VISIT' ||
+    task.is_visit_task === true ||
+    task.condition === CanCondition.NON_AKTIF;
 
   const handleSubmit = async () => {
     const numericNominal = Number(nominal);
@@ -47,25 +66,28 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
       );
       return;
     }
-    if (numericNominal === 0) {
-      return new Promise<void>(resolve => {
-        Alert.alert(
-          'Konfirmasi Kaleng Kosong',
-          'Nominal yang dimasukkan adalah Rp0. Apakah kaleng benar-benar kosong?',
-          [
-            {text: 'Tidak', style: 'cancel', onPress: () => resolve()},
-            {
-              text: 'Ya, Lanjutkan',
-              onPress: () => {
-                resolve(doSubmit(numericNominal));
-              },
-            },
-          ],
-        );
-      });
+    if (isVisitCollection && numericNominal === 0) {
+      Alert.alert(
+        'Nominal Belum Valid',
+        'Untuk mencatat kunjungan Isi, nominal harus lebih dari Rp0. Jika kaleng kosong, kembali dan pilih tombol Kosong.',
+        [{text: 'Kembali ke Kunjungan', onPress: () => navigation.goBack()}],
+      );
+      return;
     }
 
-    await doSubmit(numericNominal);
+    const openConditionConfirmation = () => {
+      confirmationSubmitted.current = false;
+      setPendingNominal(numericNominal);
+      setShowConditionConfirmation(true);
+    };
+    if (numericNominal === 0) {
+      Alert.alert('Konfirmasi Kaleng Kosong', 'Nominal yang dimasukkan adalah Rp0. Apakah kaleng benar-benar kosong?', [
+        {text: 'Tidak', style: 'cancel'},
+        {text: 'Ya, Lanjutkan', onPress: openConditionConfirmation},
+      ]);
+      return;
+    }
+    openConditionConfirmation();
   };
 
   const doSubmit = async (numericNominal: number) => {
@@ -76,7 +98,7 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
     // (bukan UUID → 400). Buat assignment on-demand dulu; jika offline, antri
     // dan sync.ts akan melengkapinya saat mengirim.
     let assignmentId = task.id;
-    if (task.is_visit_task && task.id.startsWith('visit-')) {
+    if (isVisitCollection && task.id.startsWith('visit-')) {
       const res = await collectionService.ensureAssignment(task.can_id);
       if (res.success && res.data?.assignment_id) {
         assignmentId = res.data.assignment_id;
@@ -108,7 +130,7 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
           : condition === CanCondition.HILANG
             ? 'HILANG'
             : 'BAIK',
-      visit_outcome: task.condition === CanCondition.NON_AKTIF ? 'ISI' : undefined,
+      visit_outcome: isVisitCollection ? 'ISI' : undefined,
     });
 
     if (!result.success) {
@@ -296,6 +318,61 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
           fullWidth
         />
       </View>
+      <Modal
+        visible={showConditionConfirmation}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowConditionConfirmation(false)}>
+        <View style={styles.confirmationBackdrop}>
+          <View style={styles.confirmationCard} accessibilityViewIsModal>
+            <Text style={styles.confirmationTitle}>Konfirmasi Penjemputan</Text>
+            <Text style={styles.confirmationText}>
+              Nominal: {formatCurrency(pendingNominal ?? 0)}.{' '}
+              {lastConditionIsTrusted
+                ? `Kondisi fisik terakhir tercatat: ${lastConditionLabel}. Periksa kondisi yang Anda lihat sebelum mengirim.`
+                : 'Kondisi terakhir yang dapat dipercaya tidak tersedia; Baik dipilih sebagai asumsi awal. Periksa kondisi fisik yang Anda lihat sebelum mengirim.'}
+            </Text>
+            <SegmentedControl
+              options={[
+                {label: GOOD_CAN_CONDITION_LABEL, value: CanCondition.AKTIF},
+                {
+                  label: 'Rusak',
+                  value: CanCondition.RUSAK,
+                  activeColor: Colors.status.warning,
+                  activeBackgroundColor: Colors.surface.warningSoft,
+                },
+                {
+                  label: 'Hilang',
+                  value: CanCondition.HILANG,
+                  activeColor: Colors.status.error,
+                  activeBackgroundColor: Colors.surface.errorSoft,
+                },
+              ]}
+              value={condition}
+              onChange={setCondition}
+            />
+            <View style={styles.confirmationActions}>
+              <AppButton
+                label="Batal"
+                variant="secondary"
+                onPress={() => setShowConditionConfirmation(false)}
+                fullWidth
+              />
+              <AppButton
+                label="Konfirmasi & Simpan"
+                onPress={async () => {
+                  if (confirmationSubmitted.current || pendingNominal === null) return;
+                  confirmationSubmitted.current = true;
+                  setShowConditionConfirmation(false);
+                  await doSubmit(pendingNominal);
+                }}
+                loading={isSubmitting}
+                fullWidth
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
@@ -377,6 +454,21 @@ const styles = StyleSheet.create({
   },
   nominalInput: {fontSize: 22, fontWeight: '700', color: Colors.brand.deepGreen},
   helperText: {...Typography.caption, color: Colors.text.muted, marginTop: -Spacing.sm},
+  confirmationBackdrop: {
+    flex: 1,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.48)',
+    padding: Layout.screenPadding,
+  },
+  confirmationCard: {
+    backgroundColor: Colors.surface.card,
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+  },
+  confirmationTitle: {...Typography.heading2, color: Colors.brand.deepGreen},
+  confirmationText: {...Typography.bodySmall, color: Colors.text.secondary},
+  confirmationActions: {gap: Spacing.sm},
   submitContainer: {
     padding: Spacing.md,
     // Sisi bawah lebih tinggi: tombol terangkat dari gesture bar (edge-to-edge).

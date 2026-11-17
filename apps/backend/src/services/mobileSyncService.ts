@@ -10,7 +10,12 @@ import * as schema from '../database/schema';
 import { and, eq } from 'drizzle-orm';
 import { type ExtractTablesWithRelations } from 'drizzle-orm';
 import { type PgTransaction } from 'drizzle-orm/pg-core';
-import { validateAssignmentForSubmit, submitCollection, assertCollectedAtInWindow } from './collectionSubmission';
+import {
+  validateAssignmentForSubmit,
+  submitCollection,
+  assertCollectedAtInWindow,
+  hashCollectionOperationPayload,
+} from './collectionSubmission';
 import { isOrdinaryBatchCondition, type CanConditionValue } from './conditionRules';
 import { evaluateEmptyStreakForCan } from './conditionProposalService';
 import { getErrorMessage } from '../utils/error-guards';
@@ -31,6 +36,7 @@ export interface BatchCollectionItem {
   latitude?: number;
   longitude?: number;
   condition: Extract<CanConditionValue, 'AKTIF' | 'RUSAK' | 'HILANG'>;
+  physical_condition?: 'BAIK' | 'RUSAK' | 'HILANG';
   visit_outcome?: 'ISI';
   device_info?: {
     model: string;
@@ -203,12 +209,63 @@ async function processSyncItem(
   actorUserId: string,
   visitPeriod: PeriodRef,
 ): Promise<BatchItemResult> {
+  const physicalCondition =
+    item.physical_condition ??
+    (item.condition === 'RUSAK' || item.condition === 'HILANG' ? item.condition : 'BAIK');
+  const offlinePayloadHash = hashCollectionOperationPayload({
+    assignmentId: item.assignment_id,
+    canId: item.can_id,
+    nominal: item.nominal,
+    collectedAt: item.collected_at,
+    condition: item.condition,
+    physicalCondition,
+    visitOutcome: item.visit_outcome,
+  });
+
   // Duplicate check: offline_id sudah ada di DB
   const existing = await db.query.collections.findFirst({
     where: eq(schema.collections.offlineId, item.offline_id),
   });
 
   if (existing) {
+    const [can, officer, visit] = await Promise.all([
+      db.query.cans.findFirst({
+        where: eq(schema.cans.id, existing.canId),
+        columns: {branchId: true},
+      }),
+      db.query.officers.findFirst({
+        where: eq(schema.officers.id, officerId),
+        columns: {branchId: true},
+      }),
+      db.query.canVisits.findFirst({
+        where: eq(schema.canVisits.offlineId, item.offline_id),
+      }),
+    ]);
+    if (!can || !officer?.branchId || can.branchId !== officer.branchId) {
+      throw Errors.FORBIDDEN('Data transaksi ini tidak dapat diakses oleh petugas ini');
+    }
+    const identical =
+      existing.officerId === officerId &&
+      existing.assignmentId === item.assignment_id &&
+      existing.canId === item.can_id &&
+      Number(existing.nominal) === item.nominal &&
+      existing.offlinePayloadHash === offlinePayloadHash &&
+      existing.collectedAt.getTime() === new Date(item.collected_at).getTime() &&
+      (item.visit_outcome === 'ISI'
+        ? visit?.canId === item.can_id &&
+          visit.officerId === officerId &&
+          visit.assignmentId === existing.assignmentId &&
+          visit.outcome === 'ISI' &&
+          visit.visitedAt.getTime() === new Date(item.collected_at).getTime()
+        : visit == null);
+    if (!identical) {
+      throw new AppError(
+        'OPERATION_ID_CONFLICT',
+        'ID operasi sudah pernah dipakai untuk transaksi yang berbeda',
+        409,
+        false,
+      );
+    }
     return {
       offline_id: item.offline_id,
       server_id: existing.id,
@@ -268,6 +325,7 @@ async function processSyncItem(
       latitude: item.latitude?.toString(),
       longitude: item.longitude?.toString(),
       offlineId: item.offline_id,
+      offlinePayloadHash,
       deviceInfo: item.device_info,
       condition: item.condition,
       allowNonActiveRestore: item.visit_outcome === 'ISI',
@@ -280,6 +338,8 @@ async function processSyncItem(
         periodYear: assignment.periodYear,
         periodMonth: assignment.periodMonth,
         purpose: 'VERIFIKASI',
+        offlineId: item.offline_id,
+        assignmentId: assignment.id,
         outcome: item.visit_outcome,
         condition: item.condition,
         visitedAt: new Date(item.collected_at),
