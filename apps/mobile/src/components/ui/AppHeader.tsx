@@ -58,7 +58,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({variant, title, onBack, rig
         {isStalePeriod ? (
           <View
             style={styles.staleBar}
-            accessibilityRole="status"
+            accessibilityLiveRegion="polite"
             accessibilityLabel="Periode dari penyimpanan, sedang menyinkronkan data terbaru">
             <Icon name="timer-sand" size={13} color={Colors.status.warning} />
             <Text style={styles.staleBarText}>Periode dari penyimpanan — menyinkronkan…</Text>
