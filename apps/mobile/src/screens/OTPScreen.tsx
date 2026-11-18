@@ -121,68 +121,68 @@ const OTPScreen: React.FC = () => {
           <Text style={styles.phone}>{phone}</Text>
 
           <View ref={otpFieldRef} collapsable={false}>
-          <AppCard variant={'elevated'} style={styles.otpCard}>
-            <View style={styles.otpRow}>
-              {digits.map((digit, index) => (
-                <TextInput
-                  key={index}
-                  ref={reference => {
-                    inputs.current[index] = reference;
-                  }}
-                  style={[styles.otpInput, !!digit && styles.otpInputFilled]}
-                  value={digit}
-                  onChangeText={value => updateDigit(value, index)}
-                  onKeyPress={event => {
-                    if (event.nativeEvent.key === 'Backspace' && !digit && index > 0) {
-                      inputs.current[index - 1]?.focus();
-                    }
-                  }}
-                  keyboardType={'number-pad'}
-                  maxLength={index === 0 ? 6 : 1}
-                  textAlign={'center'}
-                  autoFocus={index === 0}
-                  selectTextOnFocus
-                  onFocus={() => reveal(otpFieldRef)}
-                  accessibilityLabel={`Digit OTP ${index + 1}`}
-                />
-              ))}
-            </View>
-
-            {!!error && (
-              <View style={styles.errorBanner}>
-                <Icon name={'alert-circle-outline'} size={18} color={Colors.status.error} />
-                <Text style={styles.errorText}>{error}</Text>
+            <AppCard variant={'elevated'} style={styles.otpCard}>
+              <View style={styles.otpRow}>
+                {digits.map((digit, index) => (
+                  <TextInput
+                    key={index}
+                    ref={reference => {
+                      inputs.current[index] = reference;
+                    }}
+                    style={[styles.otpInput, !!digit && styles.otpInputFilled]}
+                    value={digit}
+                    onChangeText={value => updateDigit(value, index)}
+                    onKeyPress={event => {
+                      if (event.nativeEvent.key === 'Backspace' && !digit && index > 0) {
+                        inputs.current[index - 1]?.focus();
+                      }
+                    }}
+                    keyboardType={'number-pad'}
+                    maxLength={index === 0 ? 6 : 1}
+                    textAlign={'center'}
+                    autoFocus={index === 0}
+                    selectTextOnFocus
+                    onFocus={() => reveal(otpFieldRef)}
+                    accessibilityLabel={`Digit OTP ${index + 1}`}
+                  />
+                ))}
               </View>
-            )}
 
-            <View style={styles.timerRow}>
-              <Icon name={'clock-outline'} size={18} color={Colors.text.secondary} />
-              <Text style={styles.timerText}>
-                {countdown ? `Kode berlaku ${minutes}:${seconds}` : 'Kode telah kedaluwarsa'}
-              </Text>
-            </View>
+              {!!error && (
+                <View style={styles.errorBanner}>
+                  <Icon name={'alert-circle-outline'} size={18} color={Colors.status.error} />
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              )}
 
-            <AppButton
-              label={'Verifikasi'}
-              icon={'shield-check-outline'}
-              onPress={() => verifyCode(digits.join(''))}
-              loading={isLoading}
-              disabled={digits.join('').length !== 6}
-              fullWidth
-            />
-
-            {!countdown && (
-              <View style={styles.resendButton}>
-                <AppButton
-                  label={'Kirim Ulang OTP'}
-                  variant={'outline'}
-                  onPress={resendOTP}
-                  loading={isLoading}
-                  fullWidth
-                />
+              <View style={styles.timerRow}>
+                <Icon name={'clock-outline'} size={18} color={Colors.text.secondary} />
+                <Text style={styles.timerText}>
+                  {countdown ? `Kode berlaku ${minutes}:${seconds}` : 'Kode telah kedaluwarsa'}
+                </Text>
               </View>
-            )}
-          </AppCard>
+
+              <AppButton
+                label={'Verifikasi'}
+                icon={'shield-check-outline'}
+                onPress={() => verifyCode(digits.join(''))}
+                loading={isLoading}
+                disabled={digits.join('').length !== 6}
+                fullWidth
+              />
+
+              {!countdown && (
+                <View style={styles.resendButton}>
+                  <AppButton
+                    label={'Kirim Ulang OTP'}
+                    variant={'outline'}
+                    onPress={resendOTP}
+                    loading={isLoading}
+                    fullWidth
+                  />
+                </View>
+              )}
+            </AppCard>
           </View>
 
           <Text style={styles.helpText}>Jangan berikan kode OTP kepada siapa pun.</Text>

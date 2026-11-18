@@ -1,5 +1,13 @@
 import React from 'react';
-import {KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {AppButton, AppCard, AppTextInput} from '../../components/ui';
 import {useAndroidKeyboardLift} from '../../hooks/useAndroidKeyboardLift';

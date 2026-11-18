@@ -280,17 +280,11 @@ const TasksScreen: React.FC = () => {
                       numberOfLines={1}
                       adjustsFontSizeToFit
                       minimumFontScale={0.75}
-                      style={[
-                        styles.taskFilterLabel,
-                        selected && styles.taskFilterLabelSelected,
-                      ]}>
+                      style={[styles.taskFilterLabel, selected && styles.taskFilterLabelSelected]}>
                       {option.label}
                     </Text>
                     <Text
-                      style={[
-                        styles.taskFilterCount,
-                        selected && styles.taskFilterCountSelected,
-                      ]}>
+                      style={[styles.taskFilterCount, selected && styles.taskFilterCountSelected]}>
                       {option.count}
                     </Text>
                   </TouchableOpacity>

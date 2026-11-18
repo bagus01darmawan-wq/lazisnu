@@ -317,7 +317,9 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
                 <>
                   {'Kondisi terakhir yang dapat dipercaya tidak tersedia; '}
                   <Text style={styles.confirmationCondition}>{GOOD_CAN_CONDITION_LABEL}</Text>
-                  {' dipilih sebagai asumsi awal. Periksa kondisi fisik yang Anda lihat sebelum mengirim.'}
+                  {
+                    ' dipilih sebagai asumsi awal. Periksa kondisi fisik yang Anda lihat sebelum mengirim.'
+                  }
                 </>
               )}
             </Text>

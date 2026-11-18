@@ -1,5 +1,13 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {ActivityIndicator, Linking, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {
+  ActivityIndicator,
+  Linking,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import {
   c1Service,
   type BaTextDto,
@@ -308,9 +316,7 @@ export const KeuanganScreen: React.FC = () => {
               <Icon name={'history'} size={28} color={Colors.brand.deepGreen} />
               <View style={styles.placeholderTextWrap}>
                 <Text style={styles.placeholderTitle}>Riwayat Berita Acara</Text>
-                <Text style={styles.placeholderNote}>
-                  Unduh BA final ranting per periode
-                </Text>
+                <Text style={styles.placeholderNote}>Unduh BA final ranting per periode</Text>
               </View>
               <Icon name={'chevron-right'} size={22} color={Colors.brand.emerald} />
             </View>
