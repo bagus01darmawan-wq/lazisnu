@@ -19,13 +19,15 @@ import LinearGradient from 'react-native-linear-gradient';
 import type {Task} from '@lazisnu/shared-types';
 import {CanCondition} from '@lazisnu/shared-types';
 import {useTasksStore, useSyncStore, usePeriodStore} from '../stores';
-import {Colors, ComponentSizes, Layout, Radius, Spacing, Typography} from '../theme';
+import {Colors, ComponentSizes, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
 import type {MainNavigationProp} from '../navigation/types';
 import {TaskItem, TaskSearchBar} from './tasks';
-import {SegmentedControl} from '../components/ui';
 import {SyncIssuesSheet} from '../components/SyncIssuesSheet';
+import {SyncStatusModal} from '../components/SyncStatusModal';
 import {useTabSwipeSwitch} from '../hooks/useTabSwipeSwitch';
 import {matchesTaskQuery} from '../utils';
+
+const TASK_FILTERS_HEIGHT = 54;
 
 type TaskTab = 'aktif' | 'nonaktif';
 
@@ -63,6 +65,9 @@ const TasksScreen: React.FC = () => {
   const refreshPeriod = usePeriodStore(state => state.refresh);
   const [searchQuery, setSearchQuery] = useState('');
   const [issuesVisible, setIssuesVisible] = useState(false);
+  const [syncStatusVisible, setSyncStatusVisible] = useState(false);
+  const syncWaiting = pendingCount + pendingCorrectionsCount + pendingActionsCount;
+  const syncReview = permanentFailedCount + failedCorrectionsCount + failedActionsCount;
   const [taskTab, setTaskTab] = useState<TaskTab>('aktif');
 
   // Geser samping untuk berpindah tab Aktif ↔ Non-Aktif (urutan pill).
@@ -148,10 +153,9 @@ const TasksScreen: React.FC = () => {
   );
 
   const renderTaskItem = useCallback(
-    ({item, index}: {item: Task; index: number}) => (
+    ({item}: {item: Task}) => (
       <TaskItem
         item={item}
-        index={index}
         onCopy={copyToClipboard}
         onPress={task => navigation.navigate('TaskDetail', {task})}
         onLongPressDrag={() => showReorderMenu(item)}
@@ -164,7 +168,6 @@ const TasksScreen: React.FC = () => {
     ({item}: {item: Task}) => (
       <TaskItem
         item={item}
-        index={0}
         onCopy={copyToClipboard}
         onPress={task => navigation.navigate('TaskDetail', {task})}
       />
@@ -215,19 +218,7 @@ const TasksScreen: React.FC = () => {
             }
             disabled={!totalSyncIssues}
             activeOpacity={totalSyncIssues ? 0.8 : 1}
-            onPress={() => {
-              const waiting = pendingCount + pendingCorrectionsCount + pendingActionsCount;
-              const review = permanentFailedCount + failedCorrectionsCount + failedActionsCount;
-              Alert.alert(
-                'Status Sinkronisasi',
-                `${waiting} menunggu dikirim · ${review} perlu diperiksa. Catatan yang perlu diperiksa tidak dikirim ulang secara otomatis.`,
-                [
-                  {text: 'Nanti', style: 'cancel'},
-                  {text: 'Lihat Detail', onPress: () => setIssuesVisible(true)},
-                  ...(waiting > 0 ? [{text: 'Coba Kirim Lagi', onPress: () => triggerSync()}] : []),
-                ],
-              );
-            }}
+            onPress={() => setSyncStatusVisible(true)}
             style={styles.iconButton}>
             <Icon
               name={
@@ -255,18 +246,6 @@ const TasksScreen: React.FC = () => {
         />
       </LinearGradient>
 
-      {/* Filter tab — gaya pill yang sama dengan halaman Riwayat, di bawah hero. */}
-      <View style={styles.filterWrap}>
-        <SegmentedControl
-          options={[
-            {label: `Aktif (${filteredTasks.length})`, value: 'aktif'},
-            {label: `Non-Aktif (${visitTasks.length})`, value: 'nonaktif'},
-          ]}
-          value={taskTab}
-          onChange={setTaskTab}
-        />
-      </View>
-
       {!!error && !isLoading && (
         <TouchableOpacity
           accessibilityRole={'button'}
@@ -281,6 +260,44 @@ const TasksScreen: React.FC = () => {
 
       <GestureDetector gesture={tabSwipeGesture}>
         <View style={styles.listWrap}>
+          {/* Filter melayang di atas daftar — kartu terlihat lewat celah antar tombol. */}
+          <View style={styles.filterWrap}>
+            <View style={styles.taskFilters}>
+              {[
+                {label: 'Aktif', count: filteredTasks.length, value: 'aktif' as const},
+                {label: 'Non-Aktif', count: visitTasks.length, value: 'nonaktif' as const},
+              ].map(option => {
+                const selected = taskTab === option.value;
+                return (
+                  <TouchableOpacity
+                    key={option.value}
+                    accessibilityRole="tab"
+                    accessibilityState={{selected}}
+                    onPress={() => setTaskTab(option.value)}
+                    activeOpacity={0.8}
+                    style={[styles.taskFilter, selected && styles.taskFilterSelected]}>
+                    <Text
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.75}
+                      style={[
+                        styles.taskFilterLabel,
+                        selected && styles.taskFilterLabelSelected,
+                      ]}>
+                      {option.label}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.taskFilterCount,
+                        selected && styles.taskFilterCountSelected,
+                      ]}>
+                      {option.count}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
           <FlatList
             data={taskTab === 'aktif' ? filteredTasks : visitTasks}
             renderItem={taskTab === 'aktif' ? renderTaskItem : renderVisitItem}
@@ -333,6 +350,14 @@ const TasksScreen: React.FC = () => {
           />
         </View>
       </GestureDetector>
+      <SyncStatusModal
+        visible={syncStatusVisible}
+        onClose={() => setSyncStatusVisible(false)}
+        waiting={syncWaiting}
+        review={syncReview}
+        onRetry={triggerSync}
+        onDetail={() => setIssuesVisible(true)}
+      />
       <SyncIssuesSheet visible={issuesVisible} onClose={() => setIssuesVisible(false)} />
     </View>
   );
@@ -395,16 +420,65 @@ const styles = StyleSheet.create({
     opacity: 0.86,
     marginTop: Spacing.xs,
   },
-  filterWrap: {
-    paddingHorizontal: Layout.screenPadding,
-    marginTop: Spacing.md,
-    marginBottom: Spacing.xs,
-  },
   listWrap: {
     flex: 1,
+    position: 'relative',
+  },
+  filterWrap: {
+    position: 'absolute',
+    top: Spacing.sm,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    paddingHorizontal: Layout.screenPadding,
+  },
+  taskFilters: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+  },
+  taskFilter: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: TASK_FILTERS_HEIGHT,
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: Spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border.warm,
+    backgroundColor: Colors.surface.card,
+    ...Shadows.medium,
+  },
+  taskFilterSelected: {
+    borderColor: Colors.brand.deepGreen,
+    backgroundColor: Colors.brand.deepGreen,
+  },
+  taskFilterLabel: {
+    ...Typography.caption,
+    color: Colors.text.secondary,
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  taskFilterLabelSelected: {
+    color: Colors.text.inverse,
+  },
+  taskFilterCount: {
+    ...Typography.label,
+    color: Colors.text.primary,
+    fontSize: 13,
+    lineHeight: 17,
+    marginTop: 1,
+    fontVariant: ['tabular-nums'],
+  },
+  taskFilterCountSelected: {
+    color: Colors.brand.mutedSand,
   },
   listContainer: {
     paddingHorizontal: Layout.screenPadding,
+    paddingTop: TASK_FILTERS_HEIGHT + Spacing.xl,
     paddingBottom: ComponentSizes.bottomTabHeight + Spacing.xxl,
     flexGrow: 1,
   },

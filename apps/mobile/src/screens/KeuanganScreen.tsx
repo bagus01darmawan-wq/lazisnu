@@ -1,6 +1,11 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
-import {c1Service, type BaTextDto, type KeuanganInboxItemDto} from '../services/api';
+import {ActivityIndicator, Linking, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {
+  c1Service,
+  type BaTextDto,
+  type KeuanganHistoryItemDto,
+  type KeuanganInboxItemDto,
+} from '../services/api';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {AppCard} from '../components/ui/AppCard';
 import {AppHeader} from '../components/ui/AppHeader';
@@ -8,10 +13,11 @@ import {AppPressable} from '../components/ui/AppPressable';
 import {StatusBadge} from '../components/ui/StatusBadge';
 import {SignSheet} from '../components/SignSheet';
 import {BaPreviewSheet} from '../components/BaPreviewSheet';
-import {Colors, ComponentSizes, Radius, Spacing, Typography} from '../theme';
 import {formatCurrency, formatPeriod, getInitials} from '../utils/format';
+import {Colors, ComponentSizes, Radius, Spacing, Typography} from '../theme';
 import {getErrorMessage} from '../utils/error';
 import {usePeriodStore} from '../stores';
+import {KeuanganHistorySheet, currentJakartaPeriod} from '../components/KeuanganHistorySheet';
 
 /**
  * Laporan menampilkan antrean tanda tangan BA PPK oleh Bendahara Ranting.
@@ -44,6 +50,74 @@ export const KeuanganScreen: React.FC = () => {
   const [baText, setBaText] = useState<string[] | null>(null);
   const [baNumber, setBaNumber] = useState<string | null>(null);
   const [baLoading, setBaLoading] = useState(false);
+
+  // Riwayat BA final ranting — sheet unduh per periode (default display_period).
+  const [historyVisible, setHistoryVisible] = useState(false);
+  const [historyPeriod, setHistoryPeriod] = useState(() => {
+    const fallback = currentJakartaPeriod();
+    return {year: displayYear ?? fallback.year, month: displayMonth ?? fallback.month};
+  });
+  const [historyItems, setHistoryItems] = useState<KeuanganHistoryItemDto[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!historyVisible) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setHistoryLoading(true);
+      setHistoryError(null);
+      try {
+        const res = await c1Service.getKeuanganHistory(historyPeriod.year, historyPeriod.month);
+        if (cancelled) {
+          return;
+        }
+        if (res.success && res.data) {
+          setHistoryItems(res.data.items);
+        } else {
+          setHistoryError(res.error?.message || 'Gagal memuat riwayat berita acara');
+        }
+      } catch (loadError: unknown) {
+        if (!cancelled) {
+          setHistoryError(getErrorMessage(loadError, 'Gagal memuat riwayat berita acara'));
+        }
+      } finally {
+        if (!cancelled) {
+          setHistoryLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [historyVisible, historyPeriod]);
+
+  const openHistory = () => {
+    const fallback = currentJakartaPeriod();
+    setHistoryPeriod({year: displayYear ?? fallback.year, month: displayMonth ?? fallback.month});
+    setHistoryVisible(true);
+  };
+
+  const downloadBa = async (submissionId: string) => {
+    setDownloadingId(submissionId);
+    setDownloadError(null);
+    try {
+      const res = await c1Service.getPdf(submissionId);
+      if (!res.success || !res.data) {
+        throw new Error(res.error?.message || 'Gagal menyiapkan unduhan');
+      }
+      // Sengaja tanpa canOpenURL — pola sama dengan SetoranScreen.
+      await Linking.openURL(res.data.download_url);
+    } catch (downloadErr: unknown) {
+      setDownloadError(getErrorMessage(downloadErr, 'Tidak dapat mengunduh berita acara'));
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -225,17 +299,36 @@ export const KeuanganScreen: React.FC = () => {
             onClose={() => setSigning(null)}></SignSheet>
         ) : null}
         {isLoading && items.length === 0 ? <ActivityIndicator size="large" /> : null}
-        <AppCard>
-          <View style={styles.placeholderRow}>
-            <Icon name={'history'} size={28} color={Colors.text.muted} />
-            <View style={styles.placeholderTextWrap}>
-              <Text style={styles.placeholderTitle}>Riwayat Berita Acara</Text>
-              <Text style={styles.placeholderNote}>
-                Menyusul — riwayat BA untuk bendahara belum ada endpointnya. Menunggu backend.
-              </Text>
+        <AppPressable
+          accessibilityRole="button"
+          accessibilityLabel="Buka riwayat berita acara yang sudah ditandatangani"
+          onPress={openHistory}>
+          <AppCard>
+            <View style={styles.placeholderRow}>
+              <Icon name={'history'} size={28} color={Colors.brand.deepGreen} />
+              <View style={styles.placeholderTextWrap}>
+                <Text style={styles.placeholderTitle}>Riwayat Berita Acara</Text>
+                <Text style={styles.placeholderNote}>
+                  Unduh BA final ranting per periode
+                </Text>
+              </View>
+              <Icon name={'chevron-right'} size={22} color={Colors.brand.emerald} />
             </View>
-          </View>
-        </AppCard>
+          </AppCard>
+        </AppPressable>
+        <KeuanganHistorySheet
+          visible={historyVisible}
+          period={historyPeriod}
+          onPeriodChange={setHistoryPeriod}
+          items={historyItems}
+          loading={historyLoading}
+          error={historyError}
+          downloadingId={downloadingId}
+          downloadError={downloadError}
+          onDownload={downloadBa}
+          onRetry={() => setHistoryPeriod(p => ({...p}))}
+          onClose={() => setHistoryVisible(false)}
+        />
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Laporan</Text>

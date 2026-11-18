@@ -39,6 +39,7 @@ export const AppTextInput: React.FC<AppTextInputProps> = ({
         <TextInput
           style={[styles.input, restProps.multiline && styles.inputMultiline, style]}
           placeholderTextColor={Colors.text.muted}
+          {...restProps}
           onFocus={event => {
             setIsFocused(true);
             restProps.onFocus?.(event);
@@ -47,7 +48,6 @@ export const AppTextInput: React.FC<AppTextInputProps> = ({
             setIsFocused(false);
             restProps.onBlur?.(event);
           }}
-          {...restProps}
         />
         {!!icon && onIconPress ? (
           <Pressable

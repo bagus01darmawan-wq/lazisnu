@@ -1,6 +1,5 @@
 import React, {useCallback, useState} from 'react';
 import {
-  Alert,
   Image,
   RefreshControl,
   ScrollView,
@@ -24,6 +23,7 @@ import {
 import {Colors, ComponentSizes, Layout, Radius, Shadows, Spacing, Typography} from '../theme';
 import {formatCurrency, formatPeriod, getInitials, periodKeyOf} from '../utils';
 import {AppPressable, SegmentedControl} from '../components/ui';
+import {SyncStatusModal} from '../components/SyncStatusModal';
 import {SyncIssuesSheet} from '../components/SyncIssuesSheet';
 import type {MainNavigationProp} from '../navigation/types';
 
@@ -107,6 +107,7 @@ const DashboardScreen: React.FC = () => {
   } = useSyncStore();
   const totalWaiting = pendingCount + pendingCorrectionsCount + pendingActionsCount;
   const totalReview = permanentFailedCount + failedCorrectionsCount + failedActionsCount;
+  const [syncStatusVisible, setSyncStatusVisible] = useState(false);
   const totalSyncIssues = totalWaiting + totalReview;
   const [issuesVisible, setIssuesVisible] = useState(false);
   const [period, setPeriod] = useState<PeriodFilter>('today');
@@ -175,22 +176,12 @@ const DashboardScreen: React.FC = () => {
     month: 'long',
     year: 'numeric',
   }).format(new Date());
-
   const openSyncIssue = () => {
     if (!totalSyncIssues) {
       return;
     }
-    Alert.alert(
-      'Status Sinkronisasi',
-      `${totalWaiting} menunggu dikirim · ${totalReview} perlu diperiksa. Catatan yang perlu diperiksa tidak dikirim ulang secara otomatis.`,
-      [
-        {text: 'Nanti', style: 'cancel'},
-        {text: 'Lihat Detail', onPress: () => setIssuesVisible(true)},
-        ...(totalWaiting > 0 ? [{text: 'Coba Kirim Lagi', onPress: () => triggerSync()}] : []),
-      ],
-    );
+    setSyncStatusVisible(true);
   };
-
   return (
     <View style={styles.screen}>
       <ScrollView
@@ -390,6 +381,14 @@ const DashboardScreen: React.FC = () => {
           </AppPressable>
         </View>
       </ScrollView>
+      <SyncStatusModal
+        visible={syncStatusVisible}
+        onClose={() => setSyncStatusVisible(false)}
+        waiting={totalWaiting}
+        review={totalReview}
+        onRetry={triggerSync}
+        onDetail={() => setIssuesVisible(true)}
+      />
       <SyncIssuesSheet visible={issuesVisible} onClose={() => setIssuesVisible(false)} />
     </View>
   );

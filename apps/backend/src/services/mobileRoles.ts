@@ -288,3 +288,58 @@ export async function getKeuanganInbox(
 
   return { period: periodKey(year, month), items };
 }
+
+export interface KeuanganHistoryItem {
+  id: string;
+  period: string;
+  period_year: number;
+  period_month: number;
+  officer_name: string | null;
+}
+
+/**
+ * Arsip Bendahara Ranting: BA PPK berstatus FINAL pada satu periode —
+ * satu baris per PPK di rantingnya. Dipakai kartu "Riwayat Berita Acara"
+ * untuk unduh PDF; antrean kerja tetap di getKeuanganInbox.
+ */
+export async function getKeuanganHistory(
+  actor: SubmissionActor,
+  year: number,
+  month: number,
+): Promise<{ period: string; items: KeuanganHistoryItem[] }> {
+  if (actor.role !== 'STAF_KEUANGAN') {
+    throw Errors.FORBIDDEN('Hanya Bendahara/Sekretaris');
+  }
+  try {
+    buildPeriodBoundaries(year, month);
+  } catch {
+    throw Errors.VALIDATION_ERROR('Periode tidak valid (year 2020–2100, month 1–12).');
+  }
+  if (!actor.branchId) {
+    throw Errors.FORBIDDEN_SCOPE('Akun keuangan tanpa scope ranting/distrik');
+  }
+
+  const subs = await db.query.ppkSubmissions.findMany({
+    where: and(
+      eq(schema.ppkSubmissions.branchId, actor.branchId),
+      eq(schema.ppkSubmissions.periodYear, year),
+      eq(schema.ppkSubmissions.periodMonth, month),
+      eq(schema.ppkSubmissions.status, 'FINAL'),
+    ),
+    with: {
+      officer: { columns: { fullName: true } },
+    },
+  });
+
+  const items = subs
+    .map(s => ({
+      id: s.id,
+      period: periodKey(year, month),
+      period_year: year,
+      period_month: month,
+      officer_name: s.officer?.fullName ?? null,
+    }))
+    .sort((a, b) => (a.officer_name ?? '').localeCompare(b.officer_name ?? '', 'id'));
+
+  return { period: periodKey(year, month), items };
+}

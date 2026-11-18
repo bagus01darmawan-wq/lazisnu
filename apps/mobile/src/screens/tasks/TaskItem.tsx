@@ -1,7 +1,6 @@
 import React, {memo} from 'react';
 import {StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import Animated, {FadeInUp, Layout as AnimatedLayout} from 'react-native-reanimated';
 import type {Task} from '@lazisnu/shared-types';
 import {CanCondition} from '@lazisnu/shared-types';
 import {AppCard, StatusBadge} from '../../components/ui';
@@ -10,7 +9,6 @@ import {formatCanAddress, formatCurrency, formatPeriod} from '../../utils';
 
 export interface TaskItemProps {
   item: Task;
-  index: number;
   onCopy: (text: string) => void;
   /** Bila disediakan, seluruh kartu dapat ditekan → halaman detail penjemputan. */
   onPress?: (task: Task) => void;
@@ -18,15 +16,13 @@ export interface TaskItemProps {
   onLongPressDrag?: () => void;
 }
 
-export const TaskItem = memo(({item, index, onCopy, onPress, onLongPressDrag}: TaskItemProps) => {
+export const TaskItem = memo(({item, onCopy, onPress, onLongPressDrag}: TaskItemProps) => {
   const active = item.status === 'ACTIVE';
   const nonActiveLifecycle =
     item.condition === CanCondition.NON_AKTIF || item.condition === CanCondition.DIKEMBALIKAN;
 
   const card = (
-    <Animated.View
-      entering={FadeInUp.delay(index * 40).duration(320)}
-      layout={AnimatedLayout.springify()}>
+    <View>
       <AppCard variant={'elevated'} style={styles.taskCard}>
         <View style={styles.taskHeading}>
           <View style={styles.taskIdentity}>
@@ -98,7 +94,7 @@ export const TaskItem = memo(({item, index, onCopy, onPress, onLongPressDrag}: T
           </View>
         )}
       </AppCard>
-    </Animated.View>
+    </View>
   );
 
   if (!onPress) {

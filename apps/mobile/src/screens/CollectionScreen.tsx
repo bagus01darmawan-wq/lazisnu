@@ -286,30 +286,6 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
             </>
           )}
         </AppCard>
-
-        <Text style={styles.sectionTitle}>Kondisi Fisik Kaleng</Text>
-        <AppCard variant={'default'} style={styles.formCard}>
-          <Text style={styles.label}>Pilih kondisi yang dilihat PPK</Text>
-          <SegmentedControl
-            options={[
-              {label: GOOD_CAN_CONDITION_LABEL, value: CanCondition.AKTIF},
-              {
-                label: 'Rusak',
-                value: CanCondition.RUSAK,
-                activeColor: Colors.status.warning,
-                activeBackgroundColor: Colors.surface.warningSoft,
-              },
-              {
-                label: 'Hilang',
-                value: CanCondition.HILANG,
-                activeColor: Colors.status.error,
-                activeBackgroundColor: Colors.surface.errorSoft,
-              },
-            ]}
-            value={condition}
-            onChange={setCondition}
-          />
-        </AppCard>
       </ScrollView>
 
       <View style={styles.submitContainer}>
@@ -331,10 +307,19 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
           <View style={styles.confirmationCard} accessibilityViewIsModal>
             <Text style={styles.confirmationTitle}>Konfirmasi Penjemputan</Text>
             <Text style={styles.confirmationText}>
-              Nominal: {formatCurrency(pendingNominal ?? 0)}.{' '}
-              {lastConditionIsTrusted
-                ? `Kondisi fisik terakhir tercatat: ${lastConditionLabel}. Periksa kondisi yang Anda lihat sebelum mengirim.`
-                : 'Kondisi terakhir yang dapat dipercaya tidak tersedia; Baik dipilih sebagai asumsi awal. Periksa kondisi fisik yang Anda lihat sebelum mengirim.'}
+              {lastConditionIsTrusted ? (
+                <>
+                  {'Kondisi fisik terakhir tercatat: '}
+                  <Text style={styles.confirmationCondition}>{lastConditionLabel}</Text>
+                  {'. Periksa kondisi yang Anda lihat sebelum mengirim.'}
+                </>
+              ) : (
+                <>
+                  {'Kondisi terakhir yang dapat dipercaya tidak tersedia; '}
+                  <Text style={styles.confirmationCondition}>{GOOD_CAN_CONDITION_LABEL}</Text>
+                  {' dipilih sebagai asumsi awal. Periksa kondisi fisik yang Anda lihat sebelum mengirim.'}
+                </>
+              )}
             </Text>
             <SegmentedControl
               options={[
@@ -356,23 +341,27 @@ const CollectionScreen: React.FC<Props> = ({navigation, route}) => {
               onChange={setCondition}
             />
             <View style={styles.confirmationActions}>
-              <AppButton
-                label="Batal"
-                variant="secondary"
-                onPress={() => setShowConditionConfirmation(false)}
-                fullWidth
-              />
-              <AppButton
-                label="Konfirmasi & Simpan"
-                onPress={async () => {
-                  if (confirmationSubmitted.current || pendingNominal === null) return;
-                  confirmationSubmitted.current = true;
-                  setShowConditionConfirmation(false);
-                  await doSubmit(pendingNominal);
-                }}
-                loading={isSubmitting}
-                fullWidth
-              />
+              <View style={styles.confirmationAction}>
+                <AppButton
+                  label="Batal"
+                  variant="outline"
+                  onPress={() => setShowConditionConfirmation(false)}
+                  fullWidth
+                />
+              </View>
+              <View style={styles.confirmationAction}>
+                <AppButton
+                  label="Konfirmasi & Simpan"
+                  onPress={async () => {
+                    if (confirmationSubmitted.current || pendingNominal === null) return;
+                    confirmationSubmitted.current = true;
+                    setShowConditionConfirmation(false);
+                    await doSubmit(pendingNominal);
+                  }}
+                  loading={isSubmitting}
+                  fullWidth
+                />
+              </View>
             </View>
           </View>
         </View>
@@ -472,7 +461,9 @@ const styles = StyleSheet.create({
   },
   confirmationTitle: {...Typography.heading2, color: Colors.brand.deepGreen},
   confirmationText: {...Typography.bodySmall, color: Colors.text.secondary},
-  confirmationActions: {gap: Spacing.sm},
+  confirmationCondition: {fontWeight: '700', color: Colors.text.primary},
+  confirmationActions: {flexDirection: 'row', gap: Spacing.sm},
+  confirmationAction: {flex: 1},
   submitContainer: {
     padding: Spacing.md,
     // Sisi bawah lebih tinggi: tombol terangkat dari gesture bar (edge-to-edge).

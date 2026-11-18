@@ -1,7 +1,8 @@
 import React from 'react';
-import {Modal, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
+import {KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {AppButton, AppCard, AppTextInput} from '../../components/ui';
+import {useAndroidKeyboardLift} from '../../hooks/useAndroidKeyboardLift';
 import {Colors, Spacing, Typography} from '../../theme';
 
 export interface HistoryCorrectionData {
@@ -30,13 +31,16 @@ export const HistoryCorrectionModal: React.FC<HistoryCorrectionModalProps> = ({
   onClose,
   onSubmit,
 }) => {
+  const keyboardHeight = useAndroidKeyboardLift();
   return (
     <Modal
       visible={Boolean(correction)}
       transparent
       animationType={'fade'}
       onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={[styles.modalOverlay, keyboardHeight > 0 && {paddingBottom: keyboardHeight}]}>
         <AppCard variant={'elevated'} style={styles.modalCard}>
           <View style={styles.modalHeading}>
             <View>
@@ -95,7 +99,7 @@ export const HistoryCorrectionModal: React.FC<HistoryCorrectionModalProps> = ({
             </View>
           </View>
         </AppCard>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };

@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useRef, useState} from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,8 @@ import {Colors, Radius, Spacing, Typography} from '../../theme';
 import {AppButton} from './AppButton';
 import {AppTextInput} from './AppTextInput';
 import {OptionList} from './OptionList';
+import {useAndroidKeyboardLift} from '../../hooks/useAndroidKeyboardLift';
+import {useFieldReveal} from '../../hooks/useFieldReveal';
 
 /** Empat alasan baku; alasan ini tidak mengubah kondisi kaleng. */
 export const SKIP_REASON_OPTIONS = [
@@ -48,6 +50,9 @@ export function SkipReasonSheet({
 }: SkipReasonSheetProps) {
   const [reasonCode, setReasonCode] = useState<SkipReasonCode | null>(null);
   const [notes, setNotes] = useState('');
+  const keyboardHeight = useAndroidKeyboardLift();
+  const {scrollRef, reveal} = useFieldReveal();
+  const notesFieldRef = useRef<React.ComponentRef<typeof View>>(null);
 
   const handleConfirm = () => {
     if (!reasonCode) return;
@@ -70,7 +75,7 @@ export function SkipReasonSheet({
       accessibilityViewIsModal>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.overlay}>
+        style={[styles.overlay, keyboardHeight > 0 && {paddingBottom: keyboardHeight}]}>
         <View style={styles.sheet}>
           <View style={styles.handle} />
 
@@ -84,7 +89,7 @@ export function SkipReasonSheet({
 
           <Text style={styles.question}>Kenapa tidak terjemput?</Text>
 
-          <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
+          <ScrollView ref={scrollRef} style={styles.list} keyboardShouldPersistTaps="handled">
             <OptionList
               options={SKIP_REASON_OPTIONS}
               value={reasonCode}
@@ -92,14 +97,17 @@ export function SkipReasonSheet({
             />
 
             <Text style={styles.notesLabel}>Catatan (opsional)</Text>
-            <AppTextInput
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Contoh: pemilik pindah rumah sementara"
-              multiline
-              numberOfLines={2}
-              maxLength={255}
-            />
+            <View ref={notesFieldRef} collapsable={false}>
+              <AppTextInput
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Contoh: pemilik pindah rumah sementara"
+                multiline
+                numberOfLines={2}
+                maxLength={255}
+                onFocus={() => reveal(notesFieldRef)}
+              />
+            </View>
           </ScrollView>
 
           <View style={styles.actions}>

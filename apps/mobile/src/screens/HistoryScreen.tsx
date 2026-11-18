@@ -339,6 +339,10 @@ const HistoryScreen: React.FC = () => {
     }, [checkStatus, fetchCollections, fetchUncollected, fetchVisits, refreshPeriod]),
   );
 
+  // Meninggalkan tab Riwayat menutup detail penjemputan yang terbuka —
+  // kembali ke tab selalu di daftar, bukan sisa layar detail sebelumnya.
+  useFocusEffect(useCallback(() => () => setSelectedCollection(null), []));
+
   const handleReopen = useCallback(
     (task: Task) => {
       Alert.alert(

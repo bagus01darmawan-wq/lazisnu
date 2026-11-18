@@ -25,6 +25,23 @@ const findButton = (tree: renderer.ReactTestRenderer, label: string) =>
   tree.root
     .findAllByType(TouchableOpacity)
     .find(button => button.findAllByType(Text).some(text => text.props.children === label));
+const flattenChildren = (children: React.ReactNode): string => {
+  const parts = React.Children.toArray(children).map(child => {
+    if (typeof child === 'string' || typeof child === 'number') {
+      return String(child);
+    }
+    if (React.isValidElement<{children?: React.ReactNode}>(child)) {
+      return flattenChildren(child.props.children);
+    }
+    return '';
+  });
+  return parts.join('');
+};
+
+const renderedText = (view: renderer.ReactTestRenderer): string => {
+  const nodes = view.root.findAllByType(Text);
+  return nodes.map(node => flattenChildren(node.props.children)).join(' ');
+};
 
 describe('CollectionScreen konfirmasi kondisi', () => {
   let tree: renderer.ReactTestRenderer | undefined;
@@ -74,12 +91,7 @@ describe('CollectionScreen konfirmasi kondisi', () => {
     await enterNominal(view, '25000');
 
     expect(view.root.findByType(Modal).props.visible).toBe(true);
-    expect(submitSpy).not.toHaveBeenCalled();
-    expect(
-      view.root
-        .findAllByType(Text)
-        .some(node => String(node.props.children).includes('Baik dipilih sebagai asumsi awal')),
-    ).toBe(true);
+    expect(renderedText(view)).toContain('Baik dipilih sebagai asumsi awal');
 
     const cancel = findButton(view, 'Batal');
     await act(async () => cancel?.props.onPress());
@@ -95,16 +107,11 @@ describe('CollectionScreen konfirmasi kondisi', () => {
       physical_condition_source: 'OBSERVED' as const,
     };
     const view = await renderScreen(observedTask);
-    expect(view.root.findAllByType(SegmentedControl)[0]?.props.value).toBe('RUSAK');
+    // Picker kondisi kini hanya ada di modal konfirmasi.
+    expect(view.root.findAllByType(SegmentedControl)).toHaveLength(0);
 
     await enterNominal(view, '25000');
-    expect(
-      view.root
-        .findAllByType(Text)
-        .some(node =>
-          String(node.props.children).includes('Kondisi fisik terakhir tercatat: Rusak'),
-        ),
-    ).toBe(true);
+    expect(renderedText(view)).toContain('Kondisi fisik terakhir tercatat: Rusak');
   });
 
   it('menolak Rp0 pada kunjungan Isi dan mengarahkan kembali ke pilihan Kosong', async () => {

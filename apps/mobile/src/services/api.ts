@@ -1038,6 +1038,15 @@ export interface KeuanganInboxItemDto {
   needs_force: boolean;
 }
 
+export interface KeuanganHistoryItemDto {
+  id: string;
+  period: string;
+  period_year: number;
+  period_month: number;
+  /** Nama PPK pemilik BA — null bila akun petugas dihapus. */
+  officer_name: string | null;
+}
+
 export interface MwcRecapDto {
   period: string;
   kartu_ranting: {
@@ -1158,6 +1167,16 @@ export const c1Service = {
     month?: number,
   ): Promise<ApiResponse<{period: string; items: KeuanganInboxItemDto[]}>> => {
     return apiRequest(`/mobile/keuangan/inbox${periodQuery(year, month)}`);
+  },
+  /**
+   * Arsip BA PPK berstatus FINAL ranting untuk satu periode — satu baris per
+   * PPK. Dipakai kartu "Riwayat Berita Acara" di Laporan (Staf Keuangan).
+   */
+  getKeuanganHistory: async (
+    year?: number,
+    month?: number,
+  ): Promise<ApiResponse<{period: string; items: KeuanganHistoryItemDto[]}>> => {
+    return apiRequest(`/mobile/keuangan/history${periodQuery(year, month)}`);
   },
   /**
    * Daftar setoran ranting dalam cakupan akun (halaman Profil → Berita Acara).

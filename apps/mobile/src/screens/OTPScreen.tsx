@@ -3,6 +3,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -13,6 +14,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useAuthStore} from '../stores';
 import {AppButton, AppCard, AppHeader} from '../components/ui';
 import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
+import {useFieldReveal} from '../hooks/useFieldReveal';
 import type {AuthNavigationProp} from '../navigation/types';
 
 type OTPRoute = RouteProp<{OTP: {phone: string}}, 'OTP'>;
@@ -26,6 +28,8 @@ const OTPScreen: React.FC = () => {
   const [digits, setDigits] = useState([...EMPTY_OTP]);
   const [countdown, setCountdown] = useState(300);
   const inputs = useRef<Array<React.ComponentRef<typeof TextInput> | null>>([]);
+  const {scrollRef, reveal} = useFieldReveal();
+  const otpFieldRef = useRef<React.ComponentRef<typeof View>>(null);
 
   useEffect(() => {
     if (!countdown) {
@@ -103,7 +107,12 @@ const OTPScreen: React.FC = () => {
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.content}>
+        <ScrollView
+          ref={scrollRef}
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
           <View style={styles.messageIcon}>
             <Icon name={'whatsapp'} size={38} color={Colors.brand.whatsapp} />
           </View>
@@ -111,6 +120,7 @@ const OTPScreen: React.FC = () => {
           <Text style={styles.subtitle}>Kode 6 digit telah dikirim melalui WhatsApp ke</Text>
           <Text style={styles.phone}>{phone}</Text>
 
+          <View ref={otpFieldRef} collapsable={false}>
           <AppCard variant={'elevated'} style={styles.otpCard}>
             <View style={styles.otpRow}>
               {digits.map((digit, index) => (
@@ -132,7 +142,7 @@ const OTPScreen: React.FC = () => {
                   textAlign={'center'}
                   autoFocus={index === 0}
                   selectTextOnFocus
-                  selectionColor={Colors.brand.emerald}
+                  onFocus={() => reveal(otpFieldRef)}
                   accessibilityLabel={`Digit OTP ${index + 1}`}
                 />
               ))}
@@ -173,9 +183,10 @@ const OTPScreen: React.FC = () => {
               </View>
             )}
           </AppCard>
+          </View>
 
           <Text style={styles.helpText}>Jangan berikan kode OTP kepada siapa pun.</Text>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </View>
   );
@@ -184,8 +195,9 @@ const OTPScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: Colors.surface.page},
   keyboardView: {flex: 1},
+  scroll: {flex: 1},
   content: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
     paddingHorizontal: Layout.screenPadding,
     paddingTop: Spacing.xl,

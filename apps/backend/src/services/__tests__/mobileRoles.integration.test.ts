@@ -8,6 +8,7 @@ import * as schema from '../../database/schema';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { ErrorCode } from '../../utils/errorCatalog';
 import {
+  getKeuanganHistory,
   getKeuanganInbox,
   getPeriodInfo,
   getStafSummary,
@@ -333,5 +334,39 @@ describe('C1-T9 peran mobile server (DB, R2 mock)', () => {
         ),
       }),
     ).toBeUndefined();
+  });
+
+  test('keuangan history: hanya FINAL ranting periode tsb; gerbang peran & scope', async () => {
+    const keu2 = await db.query.users.findFirst({
+      where: eq(schema.users.email, 'keu2-t9@test.com'),
+    });
+    expect(keu2).toBeDefined();
+    const keu2Actor = {
+      userId: keu2!.id,
+      role: 'STAF_KEUANGAN',
+      branchId: bR2,
+      districtId: dt9,
+    };
+
+    const september = await getKeuanganHistory(keu2Actor, 2026, 9);
+    expect(september.period).toBe('2026-09');
+    expect(september.items.map(item => item.period)).toEqual(['2026-09']);
+    expect(september.items).toHaveLength(1);
+    expect(september.items[0]).toMatchObject({officer_name: 'Petugas T9-2'});
+
+    const october = await getKeuanganHistory(keu2Actor, 2026, 10);
+    expect(october.items).toHaveLength(1);
+
+    // R1 saat ini DRAFT (di-reopen di test riwayat versi) → arsip R1 kosong.
+    const rantingR1 = await getKeuanganHistory(keuActor, 2026, 9);
+    expect(rantingR1.items).toEqual([]);
+
+    // Peran salah / akun tanpa scope ranting.
+    await expect(getKeuanganHistory(stafActor, 2026, 9)).rejects.toMatchObject({
+      code: ErrorCode.FORBIDDEN,
+    });
+    await expect(getKeuanganHistory(keuMwcActor, 2026, 9)).rejects.toMatchObject({
+      code: ErrorCode.FORBIDDEN_SCOPE,
+    });
   });
 });

@@ -5,6 +5,7 @@ import { sendSuccess, sendError, sendInternalError } from '../../utils/response'
 import { isAppError } from '../../utils/AppError';
 import { deviceTokenSchema } from './schemas';
 import {
+  getKeuanganHistory,
   getKeuanganInbox,
   getPeriodInfo,
   getStafSummary,
@@ -109,6 +110,19 @@ export async function rolesRoutes(fastify: FastifyInstance) {
       try {
         const { year, month } = periodOf(request);
         return sendSuccess(reply, await getKeuanganInbox(actorOf(request), year, month));
+      } catch (error: unknown) {
+        return sendAppError(reply, error, fastify.log);
+      }
+    },
+  );
+  // GET /mobile/keuangan/history — arsip BA PPK FINAL ranting (unduh PDF).
+  fastify.get(
+    '/keuangan/history',
+    { preHandler: [authorize('STAF_KEUANGAN')] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { year, month } = periodOf(request);
+        return sendSuccess(reply, await getKeuanganHistory(actorOf(request), year, month));
       } catch (error: unknown) {
         return sendAppError(reply, error, fastify.log);
       }

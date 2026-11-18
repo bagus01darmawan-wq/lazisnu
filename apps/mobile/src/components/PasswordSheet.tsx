@@ -1,10 +1,9 @@
-import React, {useEffect, useState} from 'react';
+import React, {useRef, useState} from 'react';
 import {
   View,
   Text,
   Modal,
   StyleSheet,
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -14,6 +13,8 @@ import {Colors, Radius, Spacing, Typography} from '../theme';
 import {AppButton} from './ui/AppButton';
 import {AppTextInput} from './ui/AppTextInput';
 import {authService} from '../services/api';
+import {useAndroidKeyboardLift} from '../hooks/useAndroidKeyboardLift';
+import {useFieldReveal} from '../hooks/useFieldReveal';
 
 type PasswordSheetProps = {
   visible: boolean;
@@ -51,25 +52,11 @@ export function PasswordSheet({
   const [sending, setSending] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Android edge-to-edge (RN 0.88, targetSdk 36): ADJUST_RESIZE pada jendela
-  // Modal tidak lagi menggeser layout, jadi tinggi keyboard ditambahkan
-  // manual sebagai padding bawah overlay — sheet (flex-end) terangkat di atas
-  // keyboard. iOS tetap memakai KeyboardAvoidingView.
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-
-  useEffect(() => {
-    if (Platform.OS !== 'android') {
-      return;
-    }
-    const show = Keyboard.addListener('keyboardDidShow', e =>
-      setKeyboardHeight(e.endCoordinates.height),
-    );
-    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
+  const keyboardHeight = useAndroidKeyboardLift();
+  const {scrollRef, reveal} = useFieldReveal();
+  const otpFieldRef = useRef<React.ComponentRef<typeof View>>(null);
+  const passwordFieldRef = useRef<React.ComponentRef<typeof View>>(null);
+  const confirmPasswordFieldRef = useRef<React.ComponentRef<typeof View>>(null);
 
   const reset = () => {
     setOtpSent(false);
@@ -146,7 +133,7 @@ export function PasswordSheet({
             </Text>
           </View>
 
-          <ScrollView style={styles.body} keyboardShouldPersistTaps="handled">
+          <ScrollView ref={scrollRef} style={styles.body} keyboardShouldPersistTaps="handled">
             <Text style={styles.stepLabel}>1. Kode OTP via WhatsApp ke {maskPhone(phone)}</Text>
             <AppButton
               label={otpSent ? 'Kirim Ulang Kode' : 'Kirim Kode OTP'}
@@ -165,44 +152,53 @@ export function PasswordSheet({
             ) : null}
 
             <Text style={styles.stepLabel}>2. Masukkan kode OTP</Text>
-            <AppTextInput
-              value={otp}
-              onChangeText={value => setOtp(value.replace(/\D/g, '').slice(0, 6))}
-              placeholder="6 digit"
-              keyboardType="number-pad"
-              maxLength={6}
-              editable={otpSent}
-              accessibilityLabel="Kode OTP"
-            />
+            <View ref={otpFieldRef} collapsable={false}>
+              <AppTextInput
+                value={otp}
+                onChangeText={value => setOtp(value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="6 digit"
+                keyboardType="number-pad"
+                maxLength={6}
+                editable={otpSent}
+                accessibilityLabel="Kode OTP"
+                onFocus={() => reveal(otpFieldRef)}
+              />
+            </View>
 
             <Text style={styles.stepLabel}>3. Kata sandi baru</Text>
-            <AppTextInput
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Kata sandi bebas, tidak ada syarat karakter"
-              secureTextEntry={!showPassword}
-              autoCapitalize="none"
-              autoComplete="new-password"
-              editable={otpSent}
-              icon={showPassword ? 'eye-off-outline' : 'eye-outline'}
-              onIconPress={() => setShowPassword(prev => !prev)}
-              iconAccessibilityLabel={
-                showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'
-              }
-              accessibilityLabel="Kata sandi baru"
-            />
+            <View ref={passwordFieldRef} collapsable={false}>
+              <AppTextInput
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Kata sandi bebas, tidak ada syarat karakter"
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoComplete="new-password"
+                editable={otpSent}
+                icon={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                onIconPress={() => setShowPassword(prev => !prev)}
+                iconAccessibilityLabel={
+                  showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'
+                }
+                accessibilityLabel="Kata sandi baru"
+                onFocus={() => reveal(passwordFieldRef)}
+              />
+            </View>
 
             <Text style={styles.stepLabel}>4. Ulangi kata sandi</Text>
-            <AppTextInput
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              placeholder="Ketik ulang sandi yang sama"
-              secureTextEntry={!showPassword}
-              autoCapitalize="none"
-              autoComplete="new-password"
-              editable={otpSent}
-              accessibilityLabel="Ulangi kata sandi"
-            />
+            <View ref={confirmPasswordFieldRef} collapsable={false}>
+              <AppTextInput
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                placeholder="Ketik ulang sandi yang sama"
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoComplete="new-password"
+                editable={otpSent}
+                accessibilityLabel="Ulangi kata sandi"
+                onFocus={() => reveal(confirmPasswordFieldRef)}
+              />
+            </View>
             {confirmPassword.length > 0 && confirmPassword !== password ? (
               <Text style={styles.mismatch}>Kata sandi belum sama.</Text>
             ) : null}

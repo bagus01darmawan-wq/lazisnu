@@ -22,6 +22,7 @@ import {useAuthStore} from '../stores';
 import {AppButton, AppCard, AppTextInput, SegmentedControl} from '../components/ui';
 import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
 import type {AuthNavigationProp} from '../navigation/types';
+import {useFieldReveal} from '../hooks/useFieldReveal';
 
 const LoginScreen: React.FC = () => {
   const navigation = useNavigation<AuthNavigationProp>();
@@ -44,6 +45,9 @@ const LoginScreen: React.FC = () => {
   // Auto-prompt biometrik sekali saja saat panel pemulihan tampil —
   // menghindari prompt berulang setiap re-render.
   const autoBiometricAttempted = useRef(false);
+  const {scrollRef, reveal} = useFieldReveal();
+  const phoneFieldRef = useRef<React.ComponentRef<typeof View>>(null);
+  const passwordFieldRef = useRef<React.ComponentRef<typeof View>>(null);
 
   const validatePhone = () => {
     if (!phone.trim()) {
@@ -112,6 +116,7 @@ const LoginScreen: React.FC = () => {
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
+          ref={scrollRef}
           keyboardShouldPersistTaps={'handled'}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}>
@@ -169,35 +174,41 @@ const LoginScreen: React.FC = () => {
             />
 
             <View style={styles.formStart}>
-              <AppTextInput
-                label={'Nomor handphone'}
-                placeholder={'Contoh: 081234567890'}
-                value={phone}
-                onChangeText={value => {
-                  setPhone(value);
-                  if (error) {
-                    clearError();
-                  }
-                }}
-                keyboardType={'phone-pad'}
-                autoComplete={'tel'}
-                icon={'phone-outline'}
-              />
+              <View ref={phoneFieldRef} collapsable={false}>
+                <AppTextInput
+                  label={'Nomor handphone'}
+                  placeholder={'Contoh: 081234567890'}
+                  value={phone}
+                  onChangeText={value => {
+                    setPhone(value);
+                    if (error) {
+                      clearError();
+                    }
+                  }}
+                  keyboardType={'phone-pad'}
+                  autoComplete={'tel'}
+                  icon={'phone-outline'}
+                  onFocus={() => reveal(phoneFieldRef)}
+                />
+              </View>
 
               {method === 'password' && (
-                <AppTextInput
-                  label={'Kata sandi'}
-                  placeholder={'Masukkan kata sandi'}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  autoComplete={'password'}
-                  icon={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  onIconPress={() => setShowPassword(current => !current)}
-                  iconAccessibilityLabel={
-                    showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'
-                  }
-                />
+                <View ref={passwordFieldRef} collapsable={false}>
+                  <AppTextInput
+                    label={'Kata sandi'}
+                    placeholder={'Masukkan kata sandi'}
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    autoComplete={'password'}
+                    icon={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    onIconPress={() => setShowPassword(current => !current)}
+                    iconAccessibilityLabel={
+                      showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'
+                    }
+                    onFocus={() => reveal(passwordFieldRef)}
+                  />
+                </View>
               )}
             </View>
 
