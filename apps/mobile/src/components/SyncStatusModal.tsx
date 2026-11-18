@@ -42,7 +42,10 @@ export const SyncStatusModal: React.FC<SyncStatusModalProps> = ({
         <View style={styles.card} accessibilityViewIsModal>
           <View style={styles.titleRow}>
             <View
-              style={[styles.iconBadge, reviewFirst ? styles.iconBadgeError : styles.iconBadgePending]}>
+              style={[
+                styles.iconBadge,
+                reviewFirst ? styles.iconBadgeError : styles.iconBadgePending,
+              ]}>
               <Icon
                 name={reviewFirst ? 'cloud-alert' : 'cloud-sync-outline'}
                 size={26}
@@ -99,9 +102,7 @@ export const SyncStatusModal: React.FC<SyncStatusModalProps> = ({
               onPress={handleDetail}
               activeOpacity={0.7}
               style={styles.detailLink}>
-              <Text style={styles.detailLinkText}>
-                Lihat detail masalah yang perlu diperiksa
-              </Text>
+              <Text style={styles.detailLinkText}>Lihat detail masalah yang perlu diperiksa</Text>
             </TouchableOpacity>
           )}
         </View>
