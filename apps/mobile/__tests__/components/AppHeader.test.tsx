@@ -45,11 +45,21 @@ if (validRoles.size === 0) {
 }
 
 function auditRoles(source: string, file: string): string[] {
-  const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const sourceFile = ts.createSourceFile(
+    file,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
   const errors: string[] = [];
 
   function checkValue(value: ts.Expression) {
-    if (ts.isParenthesizedExpression(value) || ts.isAsExpression(value) || ts.isNonNullExpression(value)) {
+    if (
+      ts.isParenthesizedExpression(value) ||
+      ts.isAsExpression(value) ||
+      ts.isNonNullExpression(value)
+    ) {
       checkValue(value.expression);
     } else if (ts.isConditionalExpression(value)) {
       checkValue(value.whenTrue);
@@ -58,8 +68,10 @@ function auditRoles(source: string, file: string): string[] {
       if (!validRoles.has(value.text.toLowerCase())) {
         errors.push(`Role tidak valid: ${value.text}`);
       }
-    } else if (value.kind !== ts.SyntaxKind.NullKeyword &&
-      !(ts.isIdentifier(value) && value.text === 'undefined')) {
+    } else if (
+      value.kind !== ts.SyntaxKind.NullKeyword &&
+      !(ts.isIdentifier(value) && value.text === 'undefined')
+    ) {
       errors.push(`Role dinamis tidak dapat diverifikasi: ${value.getText(sourceFile)}`);
     }
   }
@@ -125,8 +137,7 @@ describe('AppHeader banner periode basi', () => {
     expect(texts).toContain('Periode dari penyimpanan');
 
     const banner = tree!.root.findByProps({
-      accessibilityLabel:
-        'Periode dari penyimpanan, sedang menyinkronkan data terbaru',
+      accessibilityLabel: 'Periode dari penyimpanan, sedang menyinkronkan data terbaru',
     });
     expect(banner.props.accessibilityLiveRegion).toBe('polite');
     expect(banner.props.accessibilityRole).toBeUndefined();
@@ -135,30 +146,30 @@ describe('AppHeader banner periode basi', () => {
 
 describe('audit atribut accessibilityRole eksplisit', () => {
   it('menerima role native termasuk viewgroup dan kedua cabang yang aman', () => {
-    expect(auditRoles(
-      `<View accessibilityRole={ready ? 'viewgroup' : undefined} />`,
-      'example.tsx',
-    )).toEqual([]);
+    expect(
+      auditRoles(`<View accessibilityRole={ready ? 'viewgroup' : undefined} />`, 'example.tsx'),
+    ).toEqual([]);
   });
 
   it('menolak role invalid pada literal dan kedua cabang conditional', () => {
-    expect(auditRoles(
-      `<><View accessibilityRole="status" /><View accessibilityRole={ready ? 'button' : 'status'} /></>`,
-      'example.tsx',
-    )).toEqual(['Role tidak valid: status', 'Role tidak valid: status']);
+    expect(
+      auditRoles(
+        `<><View accessibilityRole="status" /><View accessibilityRole={ready ? 'button' : 'status'} /></>`,
+        'example.tsx',
+      ),
+    ).toEqual(['Role tidak valid: status', 'Role tidak valid: status']);
   });
 
   it('menolak role dinamis yang tidak dapat dibuktikan aman', () => {
-    expect(auditRoles(
-      `<View accessibilityRole={role} />`,
-      'example.tsx',
-    )).toEqual(['Role dinamis tidak dapat diverifikasi: role']);
+    expect(auditRoles(`<View accessibilityRole={role} />`, 'example.tsx')).toEqual([
+      'Role dinamis tidak dapat diverifikasi: role',
+    ]);
   });
 
   it('memeriksa atribut JSX eksplisit di seluruh src', () => {
     const errors = Array.from(walkTsx(SRC_DIR)).flatMap(file =>
-      auditRoles(fs.readFileSync(file, 'utf8'), file).map(error =>
-        `${path.relative(SRC_DIR, file)}: ${error}`,
+      auditRoles(fs.readFileSync(file, 'utf8'), file).map(
+        error => `${path.relative(SRC_DIR, file)}: ${error}`,
       ),
     );
     expect(errors).toEqual([]);
