@@ -81,8 +81,8 @@ importers:
         specifier: ^11.4.0
         version: 11.4.0
       '@fastify/jwt':
-        specifier: ^10.2.6
-        version: 10.2.6
+        specifier: ^10.2.7
+        version: 10.2.7
       '@fastify/rate-limit':
         specifier: ^11.2.0
         version: 11.2.0
@@ -1814,8 +1814,8 @@ packages:
   '@fastify/forwarded@3.1.2':
     resolution: {integrity: sha512-89WiRG+hW3VQSfCwg4Hb8b43PeyEX15K5+lEfsZ4EUth/FyOjS/lv8HsVuswUNXWiSnxMGNouE/fq/0w3VumHQ==}
 
-  '@fastify/jwt@10.2.6':
-    resolution: {integrity: sha512-tnhl0U6foEHz9v/eGh8zh+tMiJlX867h+yv0sCpWAvWcXYCdjt2Ji/szfD1gDWLy/EQKwYt4OZCKCKIjvenwXw==}
+  '@fastify/jwt@10.2.7':
+    resolution: {integrity: sha512-NU0yXeoQdcK2jbQZPl1JE/FoRSEeNWRlSqmmnXEXg7gXC964FIVA0XeKGbFaTJ+O7wyg9yfEfc0TCCrGQKfcgw==}
 
   '@fastify/merge-json-schemas@0.2.2':
     resolution: {integrity: sha512-d/gx9sRbUCVgGRGzma46wLcwiY8noTqO2Nmjg/vbTARxHRE5bdh5PIL8s97Lt1X7ScRWRW52eVYxwIoPwIdVUA==}
@@ -9891,7 +9891,7 @@ snapshots:
 
   '@fastify/forwarded@3.1.2': {}
 
-  '@fastify/jwt@10.2.6':
+  '@fastify/jwt@10.2.7':
     dependencies:
       '@fastify/error': 4.2.1
       '@lukeed/ms': 2.0.2
