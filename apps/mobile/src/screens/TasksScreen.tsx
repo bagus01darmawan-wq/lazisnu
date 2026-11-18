@@ -4,6 +4,7 @@ import {
   Alert,
   Clipboard,
   FlatList,
+  Platform,
   RefreshControl,
   StyleSheet,
   Text,
@@ -69,6 +70,9 @@ const TasksScreen: React.FC = () => {
   const syncWaiting = pendingCount + pendingCorrectionsCount + pendingActionsCount;
   const syncReview = permanentFailedCount + failedCorrectionsCount + failedActionsCount;
   const [taskTab, setTaskTab] = useState<TaskTab>('aktif');
+  const [pulling, setPulling] = useState(false);
+  const [refreshingByPull, setRefreshingByPull] = useState(false);
+  const refreshing = refreshingByPull || (isLoading && page === 1);
 
   // Geser samping untuk berpindah tab Aktif ↔ Non-Aktif (urutan pill).
   const tabSwipeGesture = useTabSwipeSwitch({
@@ -195,6 +199,39 @@ const TasksScreen: React.FC = () => {
     </View>
   );
 
+  const filters = (
+    <View style={styles.filterWrap}>
+      <View style={styles.taskFilters}>
+        {[
+          {label: 'Aktif', count: filteredTasks.length, value: 'aktif' as const},
+          {label: 'Non-Aktif', count: visitTasks.length, value: 'nonaktif' as const},
+        ].map(option => {
+          const selected = taskTab === option.value;
+          return (
+            <TouchableOpacity
+              key={option.value}
+              accessibilityRole="tab"
+              accessibilityState={{selected}}
+              onPress={() => setTaskTab(option.value)}
+              activeOpacity={0.8}
+              style={[styles.taskFilter, selected && styles.taskFilterSelected]}>
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
+                style={[styles.taskFilterLabel, selected && styles.taskFilterLabelSelected]}>
+                {option.label}
+              </Text>
+              <Text style={[styles.taskFilterCount, selected && styles.taskFilterCountSelected]}>
+                {option.count}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -211,6 +248,13 @@ const TasksScreen: React.FC = () => {
                   : `${visitTasks.length} kaleng non-aktif`}
             </Text>
           </View>
+          {(refreshing || pulling) && (
+            <ActivityIndicator
+              accessibilityLabel="Memuat ulang tugas"
+              color={Colors.text.white}
+              style={styles.heroRefresh}
+            />
+          )}
           <TouchableOpacity
             accessibilityRole={totalSyncIssues ? 'button' : undefined}
             accessibilityLabel={
@@ -260,71 +304,58 @@ const TasksScreen: React.FC = () => {
 
       <GestureDetector gesture={tabSwipeGesture}>
         <View style={styles.listWrap}>
-          {/* Filter melayang di atas daftar — kartu terlihat lewat celah antar tombol. */}
-          <View style={styles.filterWrap}>
-            <View style={styles.taskFilters}>
-              {[
-                {label: 'Aktif', count: filteredTasks.length, value: 'aktif' as const},
-                {label: 'Non-Aktif', count: visitTasks.length, value: 'nonaktif' as const},
-              ].map(option => {
-                const selected = taskTab === option.value;
-                return (
-                  <TouchableOpacity
-                    key={option.value}
-                    accessibilityRole="tab"
-                    accessibilityState={{selected}}
-                    onPress={() => setTaskTab(option.value)}
-                    activeOpacity={0.8}
-                    style={[styles.taskFilter, selected && styles.taskFilterSelected]}>
-                    <Text
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.75}
-                      style={[styles.taskFilterLabel, selected && styles.taskFilterLabelSelected]}>
-                      {option.label}
-                    </Text>
-                    <Text
-                      style={[styles.taskFilterCount, selected && styles.taskFilterCountSelected]}>
-                      {option.count}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
+          {Platform.OS !== 'android' && filters}
           <FlatList
             data={taskTab === 'aktif' ? filteredTasks : visitTasks}
-            renderItem={taskTab === 'aktif' ? renderTaskItem : renderVisitItem}
-            keyExtractor={item => item.id}
-            contentContainerStyle={styles.listContainer}
-            ListHeaderComponent={
-              // B2: kaleng NON_AKTIF — bukan penjemputan, tapi kunjungan penyelesaian.
-              taskTab === 'nonaktif' && visitTasks.length > 0 ? (
-                <Text style={styles.listSectionTitle}>Perlu Dikunjungi ({visitTasks.length})</Text>
-              ) : undefined
+            renderItem={
+              taskTab === 'aktif'
+                ? renderTaskItem
+                : info => (
+                    <>
+                      {info.index === 0 && (
+                        <Text style={styles.listSectionTitle}>
+                          Perlu Dikunjungi ({visitTasks.length})
+                        </Text>
+                      )}
+                      {renderVisitItem(info)}
+                    </>
+                  )
             }
+            keyExtractor={item => item.id}
+            contentContainerStyle={[
+              styles.listContainer,
+              Platform.OS === 'android' && styles.androidListContainer,
+            ]}
+            alwaysBounceVertical
+            onScroll={
+              Platform.OS === 'ios'
+                ? event => setPulling(event.nativeEvent.contentOffset.y < 0)
+                : undefined
+            }
+            onScrollEndDrag={() => setPulling(false)}
+            scrollEventThrottle={16}
+            ListHeaderComponent={Platform.OS === 'android' ? filters : undefined}
+            stickyHeaderIndices={Platform.OS === 'android' ? [0] : undefined}
             ListEmptyComponent={
-              isLoading ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size={'large'} color={Colors.brand.emerald} />
-                  <Text style={styles.loadingText}>Memuat tugas...</Text>
-                </View>
-              ) : taskTab === 'aktif' ? (
-                renderEmpty
-              ) : (
-                renderEmptyVisit
-              )
+              isLoading ? undefined : taskTab === 'aktif' ? renderEmpty : renderEmptyVisit
             }
             refreshControl={
               <RefreshControl
-                refreshing={isLoading && page === 1}
-                onRefresh={() => {
-                  fetchTasks();
-                  fetchStats();
-                  checkStatus();
+                refreshing={refreshing}
+                onRefresh={async () => {
+                  setRefreshingByPull(true);
+                  try {
+                    const request = fetchTasks();
+                    fetchStats();
+                    checkStatus();
+                    await request;
+                  } finally {
+                    setRefreshingByPull(false);
+                  }
                 }}
-                colors={[Colors.brand.emerald]}
-                tintColor={Colors.brand.emerald}
+                colors={[refreshing ? 'transparent' : Colors.brand.emerald]}
+                progressBackgroundColor={refreshing ? 'transparent' : undefined}
+                tintColor="transparent"
               />
             }
             onEndReached={() => {
@@ -378,6 +409,10 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: Spacing.sm,
   },
+  heroRefresh: {
+    marginRight: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
   iconButton: {
     width: 44,
     height: 44,
@@ -419,12 +454,19 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   filterWrap: {
-    position: 'absolute',
-    top: Spacing.sm,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-    paddingHorizontal: Layout.screenPadding,
+    ...(Platform.OS === 'android'
+      ? {
+          height: TASK_FILTERS_HEIGHT + Spacing.xl,
+          paddingTop: Spacing.sm,
+        }
+      : {
+          position: 'absolute' as const,
+          top: Spacing.sm,
+          left: 0,
+          right: 0,
+          zIndex: 10,
+          paddingHorizontal: Layout.screenPadding,
+        }),
   },
   taskFilters: {
     flexDirection: 'row',
@@ -476,6 +518,9 @@ const styles = StyleSheet.create({
     paddingBottom: ComponentSizes.bottomTabHeight + Spacing.xxl,
     flexGrow: 1,
   },
+  androidListContainer: {
+    paddingTop: 0,
+  },
   listSectionTitle: {
     ...Typography.heading3,
     color: Colors.brand.deepGreen,
@@ -501,17 +546,6 @@ const styles = StyleSheet.create({
   retryText: {
     ...Typography.label,
     color: Colors.status.error,
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: 80,
-  },
-  loadingText: {
-    ...Typography.bodySmall,
-    color: Colors.text.secondary,
-    marginTop: Spacing.sm,
   },
   emptyContainer: {
     flex: 1,

@@ -40,6 +40,12 @@ halaman Riwayat; ingin kartu yang digulir terlihat di celah antar tombol.
 - Aksesibilitas dipertahankan: `accessibilityRole="tab"`, `accessibilityState.selected`,
   gestur geser-tab tidak berubah; `SegmentedControl` tetap dipakai Collection/Dashboard/Login.
 
+**Pembaruan refresh:** saat pemuatan aktif, indikator Tugas dan Riwayat ditampilkan
+di hero. Di Android filter menjadi sticky header daftar agar indikator native saat
+tarikan dapat tergambar di depannya; ketika pemuatan dimulai indikator native dibuat
+transparan. Di iOS hero juga memberi umpan balik saat tarikan. Posisi dan perilaku
+masih perlu diverifikasi pada perangkat.
+
 ## 2. Animasi kartu Tugas dihapus total
 
 **Konfirmasi dahulu**: animasi "muncul" saat kartu di-render adalah `FadeInUp`
@@ -100,11 +106,14 @@ wajar dari "otomatis tertutup").
 
 ## 7. Diagnosis & perbaikan: kolom Kata sandi tertutup keyboard (login)
 
-**Akar masalah**: bukan keyboard "menimpa" isi. `windowSoftInputMode="adjustResize"` sudah
-benar (jendela menyusut), tetapi konten `ScrollView` top-anchored di `LoginScreen`, dan
-RN tidak auto-scroll ke input fokus di Android — kolom Kata sandi di tengah konten
-(~500 dp) tertinggal di bawah garis keyboard. `KeyboardAvoidingView` tidak menolong
-(`behavior: undefined` di Android = view biasa).
+**Pembaruan:** pengguna masih mengalami kolom sandi tertutup keyboard pada perangkat.
+Perbaikan awal di bawah belum memadai. Login kini mengukur tumpang tindih viewport dan
+keyboard di Android, serta mencoba menggulir ulang field yang fokus setelah keyboard atau
+layout berubah. Hasil perubahan lanjutan ini masih harus diverifikasi pada perangkat.
+
+**Diagnosis awal (belum terkonfirmasi pada perangkat):** `windowSoftInputMode="adjustResize"`
+diaktifkan, tetapi konten `ScrollView` dan waktu pengguliran saat fokus dapat membuat kolom
+tertinggal di bawah keyboard. Perilaku resize bergantung pada konfigurasi perangkat.
 
 **Perbaikan**:
 - `LoginScreen.tsx`: `ScrollView` + wrapper field diberi ref; `onFocus` field memanggil
@@ -129,7 +138,8 @@ hanya menyusutkan jendela utama; **jendela `Modal` tidak ikut menyusut** (koment
   keyboard (0 di iOS; iOS tetap `KeyboardAvoidingView`).
 
 **Penerapan**:
-- `LoginScreen` — refactor memakai kedua hook.
+- `LoginScreen` — semula memakai reveal saat fokus; sekarang memakai `useLoginKeyboard`
+  khusus untuk memperhitungkan keyboard dan perubahan viewport.
 - `PasswordSheet` — refactor agar memakai `useAndroidKeyboardLift` (dedup logika inline) +
   `useFieldReveal` untuk 3 inputnya (OTP, sandi baru, ulangi sandi) — sheet terangkat di
   atas keyboard **dan** auto-scroll ke input fokus.

@@ -22,7 +22,7 @@ import {useAuthStore} from '../stores';
 import {AppButton, AppCard, AppTextInput, SegmentedControl} from '../components/ui';
 import {Colors, Layout, Radius, Spacing, Typography} from '../theme';
 import type {AuthNavigationProp} from '../navigation/types';
-import {useFieldReveal} from '../hooks/useFieldReveal';
+import {useLoginKeyboard} from '../hooks/useLoginKeyboard';
 
 const LoginScreen: React.FC = () => {
   const navigation = useNavigation<AuthNavigationProp>();
@@ -45,7 +45,8 @@ const LoginScreen: React.FC = () => {
   // Auto-prompt biometrik sekali saja saat panel pemulihan tampil —
   // menghindari prompt berulang setiap re-render.
   const autoBiometricAttempted = useRef(false);
-  const {scrollRef, reveal} = useFieldReveal();
+  const {viewportRef, scrollRef, bottomInset, reveal, blur, onViewportLayout, onScrollLayout} =
+    useLoginKeyboard();
   const phoneFieldRef = useRef<React.ComponentRef<typeof View>>(null);
   const passwordFieldRef = useRef<React.ComponentRef<typeof View>>(null);
 
@@ -110,13 +111,18 @@ const LoginScreen: React.FC = () => {
   }, [showRecoveryPanel, isLoading, handleBiometricLogin]);
 
   return (
-    <View style={styles.container}>
+    <View
+      ref={viewportRef}
+      collapsable={false}
+      style={styles.container}
+      onLayout={onViewportLayout}>
       <StatusBar barStyle={'light-content'} />
       <KeyboardAvoidingView
-        style={styles.keyboardView}
+        style={[styles.keyboardView, {paddingBottom: bottomInset}]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           ref={scrollRef}
+          onLayout={onScrollLayout}
           keyboardShouldPersistTaps={'handled'}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}>
@@ -189,6 +195,7 @@ const LoginScreen: React.FC = () => {
                   autoComplete={'tel'}
                   icon={'phone-outline'}
                   onFocus={() => reveal(phoneFieldRef)}
+                  onBlur={() => blur(phoneFieldRef)}
                 />
               </View>
 
@@ -207,6 +214,7 @@ const LoginScreen: React.FC = () => {
                       showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'
                     }
                     onFocus={() => reveal(passwordFieldRef)}
+                    onBlur={() => blur(passwordFieldRef)}
                   />
                 </View>
               )}

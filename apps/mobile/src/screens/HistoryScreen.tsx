@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Platform,
   RefreshControl,
   StyleSheet,
   Text,
@@ -164,6 +165,14 @@ const HistoryScreen: React.FC = () => {
   const uncollectedRef = useRef<Task[]>([]);
   uncollectedRef.current = uncollected;
   const [uncollectedLoading, setUncollectedLoading] = useState(false);
+  const [pulling, setPulling] = useState(false);
+  const [refreshingCollectionsByPull, setRefreshingCollectionsByPull] = useState(false);
+  const refreshing =
+    historyTab === 'terjemput'
+      ? refreshingCollectionsByPull || (isLoading && page === 1)
+      : historyTab === 'tidak'
+        ? uncollectedLoading
+        : visitsLoading;
   const [reopeningId, setReopeningId] = useState<string | null>(null);
   const [uncollectedCount, setUncollectedCount] = useState(0);
   const [correction, setCorrection] = useState<HistoryCorrectionData | null>(null);
@@ -572,6 +581,55 @@ const HistoryScreen: React.FC = () => {
     );
   }
 
+  const filters = (
+    <View style={styles.filterWrap}>
+      <View style={styles.historyFilters}>
+        {[
+          {label: 'Dijemput', count: collectionCountThisPeriod, value: 'terjemput' as const},
+          {label: 'Gagal', count: uncollectedCount, value: 'tidak' as const},
+          {
+            label: 'Kunjungan',
+            count: visitsError ? '!' : (visitCountThisPeriod ?? (visitsLoading ? '…' : '—')),
+            value: 'kunjungan' as const,
+          },
+        ].map(option => {
+          const selected = historyTab === option.value;
+          return (
+            <TouchableOpacity
+              key={option.value}
+              accessibilityRole="tab"
+              accessibilityState={{selected}}
+              onPress={() => setHistoryTab(option.value)}
+              activeOpacity={0.8}
+              style={[styles.historyFilter, selected && styles.historyFilterSelected]}>
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
+                style={[styles.historyFilterLabel, selected && styles.historyFilterLabelSelected]}>
+                {option.label}
+              </Text>
+              <Text
+                style={[styles.historyFilterCount, selected && styles.historyFilterCountSelected]}>
+                {option.count}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+  const visitHeader = (
+    <View style={styles.visitListHeader}>
+      <Text style={styles.visitListTitle}>Daftar kunjungan</Text>
+      <Text style={styles.visitListSubtitle}>
+        {visitsLoadedForDisplayPeriod && visitCacheFetchedAt
+          ? `Riwayat tersimpan · diperbarui ${new Date(visitCacheFetchedAt).toLocaleString('id-ID')} · ${visitCacheComplete ? 'lengkap' : 'belum lengkap'}`
+          : 'Catatan kunjungan tanpa penjemputan'}
+      </Text>
+    </View>
+  );
+
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -579,6 +637,13 @@ const HistoryScreen: React.FC = () => {
         style={[styles.header, {paddingTop: insets.top + Spacing.lg}]}>
         <Text style={styles.headerTitle}>Riwayat Tugas</Text>
         <Text style={styles.headerSubtitle}>Data tugas yang sudah tersimpan</Text>
+        {(refreshing || pulling) && (
+          <ActivityIndicator
+            accessibilityLabel="Memuat ulang riwayat"
+            color={Colors.text.white}
+            style={[styles.heroRefresh, {top: insets.top + Spacing.lg}]}
+          />
+        )}
         <View style={styles.headerSummary}>
           <Icon
             name={'history'}
@@ -618,54 +683,27 @@ const HistoryScreen: React.FC = () => {
 
       <GestureDetector gesture={tabSwipeGesture}>
         <View style={styles.listWrap}>
-          <View style={styles.filterWrap}>
-            <View style={styles.historyFilters}>
-              {[
-                {label: 'Dijemput', count: collectionCountThisPeriod, value: 'terjemput' as const},
-                {label: 'Gagal', count: uncollectedCount, value: 'tidak' as const},
-                {
-                  label: 'Kunjungan',
-                  count: visitsError ? '!' : (visitCountThisPeriod ?? (visitsLoading ? '…' : '—')),
-                  value: 'kunjungan' as const,
-                },
-              ].map(option => {
-                const selected = historyTab === option.value;
-                return (
-                  <TouchableOpacity
-                    key={option.value}
-                    accessibilityRole="tab"
-                    accessibilityState={{selected}}
-                    onPress={() => setHistoryTab(option.value)}
-                    activeOpacity={0.8}
-                    style={[styles.historyFilter, selected && styles.historyFilterSelected]}>
-                    <Text
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.75}
-                      style={[
-                        styles.historyFilterLabel,
-                        selected && styles.historyFilterLabelSelected,
-                      ]}>
-                      {option.label}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.historyFilterCount,
-                        selected && styles.historyFilterCountSelected,
-                      ]}>
-                      {option.count}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
+          {Platform.OS !== 'android' && filters}
           {historyTab === 'terjemput' ? (
             <FlatList
               data={collectionsThisMonth}
               renderItem={renderItem}
               keyExtractor={item => item.id}
-              contentContainerStyle={[styles.listContent, {paddingBottom: listBottomPadding}]}
+              contentContainerStyle={[
+                styles.listContent,
+                Platform.OS === 'android' && styles.androidListContent,
+                {paddingBottom: listBottomPadding},
+              ]}
+              ListHeaderComponent={Platform.OS === 'android' ? filters : undefined}
+              stickyHeaderIndices={Platform.OS === 'android' ? [0] : undefined}
+              alwaysBounceVertical
+              onScroll={
+                Platform.OS === 'ios'
+                  ? event => setPulling(event.nativeEvent.contentOffset.y < 0)
+                  : undefined
+              }
+              onScrollEndDrag={() => setPulling(false)}
+              scrollEventThrottle={16}
               ListEmptyComponent={
                 !isLoading ? (
                   <View style={styles.emptyContainer}>
@@ -681,13 +719,20 @@ const HistoryScreen: React.FC = () => {
               }
               refreshControl={
                 <RefreshControl
-                  refreshing={isLoading && page === 1}
-                  onRefresh={() => {
-                    fetchCollections();
-                    checkStatus();
+                  refreshing={refreshing}
+                  onRefresh={async () => {
+                    setRefreshingCollectionsByPull(true);
+                    try {
+                      const request = fetchCollections();
+                      checkStatus();
+                      await request;
+                    } finally {
+                      setRefreshingCollectionsByPull(false);
+                    }
                   }}
-                  colors={[Colors.brand.emerald]}
-                  tintColor={Colors.brand.emerald}
+                  colors={[refreshing ? 'transparent' : Colors.brand.emerald]}
+                  progressBackgroundColor={refreshing ? 'transparent' : undefined}
+                  tintColor="transparent"
                 />
               }
               onEndReached={() => {
@@ -707,7 +752,21 @@ const HistoryScreen: React.FC = () => {
             <FlatList
               data={uncollected}
               keyExtractor={item => item.id}
-              contentContainerStyle={[styles.listContent, {paddingBottom: listBottomPadding}]}
+              contentContainerStyle={[
+                styles.listContent,
+                Platform.OS === 'android' && styles.androidListContent,
+                {paddingBottom: listBottomPadding},
+              ]}
+              ListHeaderComponent={Platform.OS === 'android' ? filters : undefined}
+              stickyHeaderIndices={Platform.OS === 'android' ? [0] : undefined}
+              alwaysBounceVertical
+              onScroll={
+                Platform.OS === 'ios'
+                  ? event => setPulling(event.nativeEvent.contentOffset.y < 0)
+                  : undefined
+              }
+              onScrollEndDrag={() => setPulling(false)}
+              scrollEventThrottle={16}
               renderItem={({item}) => {
                 const reasonLabel = item.skip_reason_code
                   ? (SKIP_REASON_OPTIONS.find(o => o.value === item.skip_reason_code)?.label ??
@@ -749,8 +808,9 @@ const HistoryScreen: React.FC = () => {
                 <RefreshControl
                   refreshing={uncollectedLoading}
                   onRefresh={fetchUncollected}
-                  colors={[Colors.brand.emerald]}
-                  tintColor={Colors.brand.emerald}
+                  colors={[refreshing ? 'transparent' : Colors.brand.emerald]}
+                  progressBackgroundColor={refreshing ? 'transparent' : undefined}
+                  tintColor="transparent"
                 />
               }
               showsVerticalScrollIndicator={false}
@@ -759,39 +819,50 @@ const HistoryScreen: React.FC = () => {
             <FlatList
               data={visitsThisPeriod}
               keyExtractor={item => item.id}
-              contentContainerStyle={[styles.listContent, {paddingBottom: listBottomPadding}]}
-              renderItem={renderVisitItem}
-              ListHeaderComponent={
-                <View style={styles.visitListHeader}>
-                  <Text style={styles.visitListTitle}>Daftar kunjungan</Text>
-                  <Text style={styles.visitListSubtitle}>
-                    {visitsLoadedForDisplayPeriod && visitCacheFetchedAt
-                      ? `Riwayat tersimpan · diperbarui ${new Date(visitCacheFetchedAt).toLocaleString('id-ID')} · ${visitCacheComplete ? 'lengkap' : 'belum lengkap'}`
-                      : 'Catatan kunjungan tanpa penjemputan'}
-                  </Text>
-                </View>
+              contentContainerStyle={[
+                styles.listContent,
+                Platform.OS === 'android' && styles.androidListContent,
+                {paddingBottom: listBottomPadding},
+              ]}
+              ListHeaderComponent={Platform.OS === 'android' ? filters : undefined}
+              stickyHeaderIndices={Platform.OS === 'android' ? [0] : undefined}
+              alwaysBounceVertical
+              onScroll={
+                Platform.OS === 'ios'
+                  ? event => setPulling(event.nativeEvent.contentOffset.y < 0)
+                  : undefined
               }
+              onScrollEndDrag={() => setPulling(false)}
+              scrollEventThrottle={16}
+              renderItem={info => (
+                <>
+                  {info.index === 0 && visitHeader}
+                  {renderVisitItem(info)}
+                </>
+              )}
               ListEmptyComponent={
-                visitsLoading ? (
-                  <ActivityIndicator style={styles.loadingFooter} color={Colors.brand.emerald} />
-                ) : visitsError ? undefined : (
-                  <View style={styles.emptyContainer}>
-                    <View style={styles.emptyIcon}>
-                      <Icon name="eye-check-outline" size={42} color={Colors.brand.deepGreen} />
+                <>
+                  {visitHeader}
+                  {!visitsLoading && !visitsError && (
+                    <View style={styles.emptyContainer}>
+                      <View style={styles.emptyIcon}>
+                        <Icon name="eye-check-outline" size={42} color={Colors.brand.deepGreen} />
+                      </View>
+                      <Text style={styles.emptyTitle}>Belum ada kunjungan</Text>
+                      <Text style={styles.emptyText}>
+                        Catatan kunjungan non-penjemputan pada {periodLabel} akan muncul di sini.
+                      </Text>
                     </View>
-                    <Text style={styles.emptyTitle}>Belum ada kunjungan</Text>
-                    <Text style={styles.emptyText}>
-                      Catatan kunjungan non-penjemputan pada {periodLabel} akan muncul di sini.
-                    </Text>
-                  </View>
-                )
+                  )}
+                </>
               }
               refreshControl={
                 <RefreshControl
                   refreshing={visitsLoading}
                   onRefresh={fetchVisits}
-                  colors={[Colors.brand.emerald]}
-                  tintColor={Colors.brand.emerald}
+                  colors={[refreshing ? 'transparent' : Colors.brand.emerald]}
+                  progressBackgroundColor={refreshing ? 'transparent' : undefined}
+                  tintColor="transparent"
                 />
               }
               showsVerticalScrollIndicator={false}
@@ -842,6 +913,10 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: Radius.hero,
     borderBottomRightRadius: Radius.hero,
   },
+  heroRefresh: {
+    position: 'absolute',
+    right: Layout.screenPadding,
+  },
   headerTitle: {
     ...Typography.heading1,
     color: Colors.text.white,
@@ -872,12 +947,19 @@ const styles = StyleSheet.create({
   summaryValue: {...Typography.heading2, color: Colors.brand.deepGreen},
   summaryLabel: {...Typography.caption, color: Colors.brand.deepGreen, marginLeft: Spacing.sm},
   filterWrap: {
-    position: 'absolute',
-    top: Spacing.sm,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-    paddingHorizontal: Layout.screenPadding,
+    ...(Platform.OS === 'android'
+      ? {
+          height: HISTORY_FILTERS_HEIGHT + Spacing.xl,
+          paddingTop: Spacing.sm,
+        }
+      : {
+          position: 'absolute' as const,
+          top: Spacing.sm,
+          left: 0,
+          right: 0,
+          zIndex: 10,
+          paddingHorizontal: Layout.screenPadding,
+        }),
   },
   historyFilters: {
     flexDirection: 'row',
@@ -944,6 +1026,7 @@ const styles = StyleSheet.create({
     paddingTop: HISTORY_FILTERS_HEIGHT + Spacing.xl,
     flexGrow: 1,
   },
+  androidListContent: {paddingTop: 0},
   sectionTitle: {
     ...Typography.heading3,
     color: Colors.brand.deepGreen,
